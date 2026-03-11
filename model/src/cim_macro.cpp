@@ -1,6 +1,13 @@
 #include "cim_macro.h"
-#include <cstring>  // for memcpy in bf16_truncate
 #include <cmath>
+#include <algorithm>
+#include <cstdint>
+
+static inline int8_t quantize_int8(double val, double scale) {
+    long q = std::lround(val * scale);
+    q = std::max(-127L, std::min(127L, q));
+    return static_cast<int8_t>(q);
+}
 
 void CIM_Macro::compute_thread() {
     // Reset state
@@ -46,7 +53,7 @@ void CIM_Macro::compute_thread() {
                 // Bank A/B = 512 rows each
                 
                 // Concurrency
-                int concurrent_elements = (prec == 0) ? 512 : ((prec == 2) ? 256 : 128); // BF16/FP32/FP64
+                int concurrent_elements = (prec == 0) ? 512 : ((prec == 2) ? 256 : ((prec == 3) ? 1024 : 128));
                 
                 // Effective rows after zero skipping
                 int effective_rows = (int)(rows * (1.0 - sparsity));
@@ -70,10 +77,24 @@ void CIM_Macro::compute_thread() {
                     int M = weight_rows;
                     int K = weight_cols;
                     int N = input_cols;
+                    double max_w_abs = 0.0;
+                    double max_x_abs = 0.0;
+                    if (prec == 3) {
+                        for (int idx = 0; idx < M * K; idx++) {
+                            max_w_abs = std::max(max_w_abs, std::abs(weight_data[idx]));
+                        }
+                        for (int idx = 0; idx < K * N; idx++) {
+                            max_x_abs = std::max(max_x_abs, std::abs(input_data[idx]));
+                        }
+                    }
+                    const double w_scale = (prec == 3 && max_w_abs > 0.0) ? (127.0 / max_w_abs) : 1.0;
+                    const double x_scale = (prec == 3 && max_x_abs > 0.0) ? (127.0 / max_x_abs) : 1.0;
+                    const double inv_int8_scale = (prec == 3) ? (1.0 / (w_scale * x_scale)) : 1.0;
                     
                     for (int i = 0; i < M; i++) {
                         for (int j = 0; j < N; j++) {
                             double acc = 0.0;
+                            int64_t acc_int8 = 0;
                             for (int kk = 0; kk < K; kk++) {
                                 double w = weight_data[i * K + kk];
                                 double x = input_data[kk * N + j];
@@ -95,6 +116,13 @@ void CIM_Macro::compute_thread() {
                                     if ((kk & 0xF) == 0xF) {
                                         acc = fp32_truncate(acc);
                                     }
+                                } else if (prec == 3) {
+                                    // Ozaki-inspired first-order int8 array emulation.
+                                    // This models "quantize -> int8 MAC -> dequantize" at block scope,
+                                    // but does not implement the full modular reconstruction path.
+                                    int8_t qw = quantize_int8(w, w_scale);
+                                    int8_t qx = quantize_int8(x, x_scale);
+                                    acc_int8 += static_cast<int32_t>(qw) * static_cast<int32_t>(qx);
                                 } else {
                                     // FP64 mode: exact computation
                                     acc += w * x;
@@ -105,6 +133,8 @@ void CIM_Macro::compute_thread() {
                                 acc = bf16_truncate(acc);
                             } else if (prec == 2) {
                                 acc = fp32_truncate(acc);
+                            } else if (prec == 3) {
+                                acc = static_cast<double>(acc_int8) * inv_int8_scale;
                             }
                             
                             result_data[i * N + j] = acc;
@@ -112,8 +142,8 @@ void CIM_Macro::compute_thread() {
                     }
                     
                     // Compute accumulated noise: sum of |result_bf16 - result_fp64|
-                    // (only meaningful in BF16 mode; in FP64 noise = 0)
-                    if (prec == 0 || prec == 2) {
+                    // (only meaningful in reduced-precision modes; in FP64 noise = 0)
+                    if (prec == 0 || prec == 2 || prec == 3) {
                         // Re-compute FP64 reference inline and measure total error
                         double total_err = 0.0;
                         for (int i = 0; i < M; i++) {

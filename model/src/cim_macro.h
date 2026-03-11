@@ -4,6 +4,7 @@
 #include <systemc.h>
 #include <vector>
 #include <cstdint>
+#include <cstring>
 
 // BF16 truncation: keep only top 8 bits of mantissa (drop 44 bits for FP64)
 // Simulates the quantization noise of BF16 precision
@@ -33,7 +34,7 @@ SC_MODULE(CIM_Macro) {
     // Commands and data
     sc_in<bool>   cmd_valid;
     sc_in<int>    cmd_type;       // 0: write_a, 1: write_b, 2: compute_a, 3: compute_b
-    sc_in<int>    precision_mode; // 0: BF16, 1: FP64, 2: FP32
+    sc_in<int>    precision_mode; // 0: BF16, 1: FP64, 2: FP32, 3: INT8_EMU
     sc_in<int>    rows_to_process;
     sc_in<int>    cols_to_process;
     sc_in<double> sparsity_ratio; // Emulate actual zero skipping

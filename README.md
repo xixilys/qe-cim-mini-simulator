@@ -33,4 +33,6 @@ headers and libraries to be reachable from a local toolchain configuration.
 
 - The code in `model/` is a prototype, not a drop-in QE plugin.
 - The current design document is in [docs/design.md](/Volumes/remote/phd/year_2/project/dft加速/docs/design.md).
+- The complex subspace behavioral validation flow is documented in [model/docs/complex_subspace_validation.md](/Volumes/remote/phd/year_2/project/dft加速/model/docs/complex_subspace_validation.md).
+- The dedicated validation executable is `model/bin/complex_subspace_eval`.
 - QE-specific benchmark helpers and tiny example inputs are kept under `docs/`.

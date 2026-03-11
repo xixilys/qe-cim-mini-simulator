@@ -1,230 +1,298 @@
-# QE Subspace Diagonalization CIM Accelerator Design
+# 面向 QE 子空间问题的复数 CIM 系统设计
 
-## Scope
+## 1. 设计背景
 
-This document describes a first-pass hardware and software split for accelerating
-the small dense eigenproblems generated inside the Quantum ESPRESSO `pw.x`
-subspace solvers.
+本项目的目标不是替换 Quantum ESPRESSO `pw.x` 中完整的平面波哈密顿量求解流程，而是面向其内部反复出现的**小规模复数稠密子空间算子**进行加速。典型目标包括：
 
-The target is not the full plane-wave Hamiltonian. The target is the projected
-problem built inside Davidson / related eigensolvers:
-
-- Standard problem: `H_sub c = lambda c`
-- Generalized problem: `H_sub c = lambda S_sub c`
-
-where:
-
+- `Y_H = H_sub X`
+- `Y_S = S_sub X`
 - `H_sub = V^H H V`
 - `S_sub = V^H S V`
-- `V` is the current reduced basis
 
-For general `k` points, `H_sub` is complex Hermitian. For `Gamma-only`,
-`H_sub` is real symmetric. For ultrasoft / PAW calculations, `S_sub` is
-Hermitian positive definite and the problem is generalized.
+其中：
 
-This design therefore prioritizes:
+- `H_sub` 在一般 `k` 点路径下是复数 Hermitian 矩阵
+- `S_sub` 在 USPP / PAW 路径下是复数 Hermitian 正定矩阵
+- `X`、`V` 是当前子空间中的 block vector
 
-- Small dense complex Hermitian matrices
-- Repeated solve of only the lowest `m` eigenpairs
-- Tight coupling to a complex matrix-vector or matrix-block-vector engine
-- A software path that remains compatible with QE's existing outer Davidson flow
+因此，当前系统面对的核心问题不是“大矩阵一次性全谱对角化”，而是**复数 Hermitian / generalized Hermitian 小矩阵上的反复矩阵-块向量乘与子空间构造**。
 
-## Constraints From QE
+师兄的参考设计 [`Ozaki_CIM_20260312014000.pdf`](/Volumes/remote/phd/year_2/project/dft加速/docs/Ozaki_CIM_20260312014000.pdf) 给出的重点是：
 
-The hardware target should be derived from QE behavior, not from a fixed
-mathematical toy problem.
+- 以实数乘法器为基础单元
+- 将高精度实数乘法映射到 INT8/CIM 友好的路径
+- 在阵列外完成取模、重构、归一化等控制和恢复操作
 
-- The reduced basis dimension is solver dependent.
-- For Davidson in `pw.x`, the subspace dimension grows from roughly `nbnd` to
-  `nbndx`, with `nbndx = diago_david_ndim * nbnd`.
-- With QE defaults, `diago_david_ndim = 2`, so a common upper bound is
-  about `2 * nbnd`.
-- This means the practical dimension is not universally `N <= 100`; for some
-  systems it can be a few hundred or larger.
+这与我们当前的系统目标是兼容的：**我们不重新发明复数乘法器，而是在实数乘法 primitive 之上构造复数块乘路径。**
 
-The first implementation should therefore define an explicit operating envelope,
-for example:
+## 2. 参考设计对当前系统的启发
 
-- Preferred fast path: `N <= 128`
-- Degraded or fallback path: `128 < N <= 256`
-- Software fallback above hardware capacity
+Ozaki Scheme II 对我们的启发不在于“直接照搬实数 FP64 精确重构的全部流程”，而在于它给出了一个清晰的分层原则：
 
-If the deployed hardware is physically capped at `N <= 100`, then the runtime
-must include a guard that declines unsupported QE subspace sizes.
+1. **阵列内只做高吞吐、规则的实数乘加**
+2. **阵列外承担前处理、重构、归一化、控制流**
+3. **尽量把复杂数值问题分解成多个可复用的实数子问题**
 
-## Problem Formulation
+这三个原则直接决定了当前复数子空间系统的设计方向：
 
-The accelerator should be built around these primitives:
+- 复数运算不在 CIM 阵列内原生实现
+- 复数矩阵乘由多个实数 GEMM / GEMV 组成
+- 近存逻辑负责复数组装、Hermitian 约束维护、误差监控和调度
 
-- Complex matrix-vector multiply: `y = H_sub x`
-- Optional complex matrix-vector multiply: `z = S_sub x`
-- Block form:
-  `Y = H_sub X`, `Z = S_sub X`
+## 3. 当前系统的目标边界
 
-These are the dominant structured operations that recur inside subspace methods.
-The accelerator should not try to perform arbitrary matrix rewriting in place.
-That rules out schemes whose inner loop repeatedly updates matrix elements
-through rotations.
+### 3.1 加速对象
 
-## Recommended Algorithm Direction
+第一阶段加速对象限定为 QE 子空间求解中最规则、最稳定的两类操作：
 
-### Standard problem
+- 复数矩阵-块向量乘：`Y = A X`
+- 复数小矩阵构造：`A_sub = X^H Y`
 
-For the standard Hermitian problem, the most compatible outer methods are block
-subspace iterations that repeatedly consume:
-
-- `H_sub X`
-- orthogonalization
-- small Ritz or Rayleigh-Ritz projection
-
-Examples:
-
-- Block Davidson
-- LOBPCG-style updates
-- block power or filtered subspace iteration
-
-For this hardware, the useful observation is that the expensive part is the
-repeated dense complex multiply, while the control-heavy part remains small.
-
-### Generalized problem
-
-For the generalized Hermitian problem, there are two viable implementation
-strategies:
-
-1. Transform to a standard problem in near-memory logic:
-   - factor `S_sub = L L^H`
-   - form `A = L^{-1} H_sub L^{-H}`
-   - solve `A y = lambda y`
-2. Keep the problem in generalized form and build the iteration around
-   repeated evaluation of:
-   - `H_sub x`
-   - `S_sub x`
-
-For a first hardware generation, option 2 is often cleaner if the system
-already has efficient support for both `H_sub x` and `S_sub x`, while option 1
-is cleaner if the near-memory logic can comfortably handle dense factorizations
-at the supported matrix size.
-
-The key requirement is that the design must not assume `S_sub = I`. In QE,
-that assumption is invalid for ultrasoft and PAW runs.
-
-## Hardware / Software Split
-
-### CIM array
-
-The CIM block should only handle the dense linear algebra kernels that match its
-strengths:
-
-- complex dense matrix-vector multiply
-- complex dense matrix-block-vector multiply
-
-It should store:
+这里的 `A` 可以是：
 
 - `H_sub`
-- optionally `S_sub`
+- `S_sub`
+- `V^H H`
+- `V^H S`
 
-depending on the pseudopotential path and current solver mode.
+### 3.2 不作为第一阶段目标的内容
 
-### Near-memory logic
+第一阶段不试图完成以下任务：
 
-The near-memory logic should handle:
+- 完整替换 QE 现有 `diaghg` 密集小矩阵求解器
+- 在行为级模型中精确模拟 Ozaki 的多模取模与 CRT/Garner 重构
+- 直接改写 `h_psi` 的 FFT 主路径
+- 构造一个通用复数 LAPACK 加速器
 
-- vector normalization
-- orthogonalization or QR
-- residual formation
-- Rayleigh quotient evaluation
-- construction of small projected problems
-- convergence checks
-- optional Cholesky / triangular solves for generalized problems
+这意味着第一版验证重点是：
 
-This keeps matrix reads mostly static and avoids turning the CIM into a slow
-random-update engine.
+- **复数乘法的映射正确性**
+- **复数子空间构造误差是否可控**
+- **`S_sub` 的正定性在低精度路径下是否仍能维持**
 
-### Host side
+## 4. 从实数乘法器到复数矩阵块乘
 
-The host runtime should handle:
+### 4.1 四实乘法（4M）基线
 
-- receiving `H_sub` and `S_sub` from the QE side
-- dispatch policy
-- size guardrails
-- fallback to CPU when the matrix is outside supported bounds
-- result marshaling back into the QE solver
+对复数乘法：
 
-## Data Representation
+`(A_r + i A_i)(X_r + i X_i)`
 
-For a first implementation, use explicit full-matrix storage.
+最直接的映射是四次实数乘法：
 
-Reasons:
+- `T1 = A_r X_r`
+- `T2 = A_i X_i`
+- `T3 = A_r X_i`
+- `T4 = A_i X_r`
 
-- the matrices are small
-- full storage simplifies control and validation
-- first silicon risk is lower
+然后在近存逻辑中重组：
 
-Although Hermitian symmetry can eventually be used to halve storage, that
-optimization should be deferred until the baseline path is stable.
+- `Y_r = T1 - T2`
+- `Y_i = T3 + T4`
 
-For complex data layout, keep real and imaginary parts in a regular,
-address-stable format that minimizes packing overhead. Whether that is
-row-interleaved or bank-split is an implementation detail, but the interface
-must expose deterministic complex matrix and vector reads and writes.
+优点：
 
-## Non-goals For First Revision
+- 数学形式最直接
+- 误差传播最好分析
+- 最适合作为第一版硬件和行为模型的“保守基线”
 
-The first revision should not attempt to be:
+缺点：
 
-- a full dense LAPACK replacement
-- a full-spectrum eigensolver
-- a generic matrix-rotation engine
-- a large-scale sparse solver
-- a direct substitute for all QE diagonalization paths
+- 需要 4 次实数 GEMM / GEMV
+- 对阵列调用次数最高
 
-The target remains narrow:
+### 4.2 三实乘法（3M）高吞吐变体
 
-- repeated small dense Hermitian or generalized Hermitian subspace problems
-- lowest `m` eigenpairs only
-- complex `k`-point path first, `Gamma-only` as a natural simplification
+为了减少一次实数乘法，可以使用 Gauss 型三乘法：
 
-## Integration Notes For QE
+- `T1 = A_r X_r`
+- `T2 = A_i X_i`
+- `T3 = (A_r + A_i)(X_r + X_i)`
 
-The QE-facing interface should be designed around the projected matrices, not
-around the full `H|psi>` path.
+然后重组：
 
-That means the preferred insertion point is after the reduced matrices are built
-and before the local dense eigensolver call, for example around the existing
-`diaghg` usage in the subspace solvers.
+- `Y_r = T1 - T2`
+- `Y_i = T3 - T1 - T2`
 
-This has two advantages:
+优点：
 
-- it minimizes intrusion into the much larger `h_psi` and FFT machinery
-- it gives a well-bounded dense problem with stable dimensions
+- 实数阵列调用从 4 次降到 3 次
+- 更适合在阵列吞吐受限时提升 effective throughput
 
-If the hardware path later proves more effective for repeated `H_sub x` and
-`S_sub x` than for one-shot dense diagonalization, a second-stage integration
-can move upward into the iterative small-matrix solve itself.
+缺点：
 
-## Validation Plan
+- 额外的加法与抵消会放大量化误差
+- 对低精度路径特别敏感
+- 更容易破坏 Hermitian 子空间矩阵的数值对称性
 
-The first validation milestone should check:
+因此，本设计建议：
 
-1. Correct eigenvalues against QE CPU reference for standard Hermitian cases.
-2. Correct eigenvalues and eigenvectors against QE CPU reference for generalized
-   Hermitian cases.
-3. Stability under complex `k`-point matrices.
-4. Proper fallback when the subspace size exceeds hardware capacity.
-5. End-to-end reintegration into a QE-like reduced solver harness before any
-   direct QE patching.
+- **4M 作为默认精度优先路径**
+- **3M 作为吞吐优先可选路径**
+- 是否启用 3M 由误差监控和矩阵条件数评估决定
 
-## Summary
+## 5. 面向 QE 的系统分层
 
-The correct design target is not "general small-matrix diagonalization" in the
-abstract. It is:
+### 5.1 Host / QE 侧
 
-- QE reduced subspace matrices
-- complex Hermitian first
-- generalized Hermitian included in the design boundary
-- lowest `m` eigenpairs only
-- repeated invocation inside an outer eigensolver
+Host 侧负责：
 
-Under that framing, the CIM should be treated as a dense complex MVM engine,
-while the near-memory logic retains the factorization, orthogonalization, and
-control-heavy tasks that do not map well to static in-memory arrays.
+- 从 QE 中截获复数 `H_sub`、`S_sub` 或对应 block 乘请求
+- 识别当前是标准问题还是广义问题
+- 根据矩阵维度、`k` 点类型和精度策略选择 4M 或 3M
+- 在超出硬件边界时回退到 CPU
+
+### 5.2 近存控制逻辑
+
+近存控制逻辑负责：
+
+- 将复数矩阵拆分为实部和虚部
+- 生成 4M / 3M 所需的中间矩阵
+- 调度实数 CIM macro
+- 重组复数输出
+- 维护 Hermitian 对称化
+- 监控误差、残差和 `S_sub` 的 Cholesky 可行性
+
+### 5.3 实数 CIM Macro
+
+实数 CIM macro 只承担最擅长的规则操作：
+
+- 实数矩阵-块向量乘
+- 实数 GEMM/GEMV
+- 固定精度或近似整数路径的高吞吐 MAC
+
+从架构职责上看，师兄 PDF 里的实数乘法器正适合作为这里的底层 primitive。
+
+## 6. 与 Ozaki 实数乘法器的关系
+
+### 6.1 可以直接复用的部分
+
+对于参考设计中的实数路径，当前系统可以直接继承其分工理念：
+
+- 前预对齐 / 缩放
+- 实数乘法核心
+- 结果重组与归一化
+
+若后续实现完整 Ozaki 路径，则每一路实数乘法可以替换为：
+
+- 取模拆分
+- INT8 CIM 乘加
+- 余数结果重构
+- 归一化恢复
+
+### 6.2 需要新增的部分
+
+为了支持 QE 复数子空间问题，必须补上以下机制：
+
+- 复数 4M / 3M 调度器
+- 共轭转置数据路径 `X^H`
+- Hermitian / generalized Hermitian 的数值检查
+- `S_sub` 正定性检测
+- 对 3M 路径的误差门控
+
+换句话说，Ozaki 实数乘法器是**底层 primitive**，而不是完整系统。
+
+## 7. 第一版行为级模型的验证对象
+
+第一版行为级模型不直接验证完整 Ozaki 模运算链，而是验证更靠近系统架构决策的问题：
+
+1. 复数乘法拆分为 4M / 3M 后是否数学正确
+2. 在低精度实数 primitive 下，`H X` / `S X` 的误差有多大
+3. 由 `X^H (H X)` 和 `X^H (S X)` 构造的子空间矩阵误差有多大
+4. `S_sub` 在误差存在时是否仍然能够通过 Cholesky 检查
+
+当前行为模型中的实数 primitive 使用三类模式：
+
+- `FP64`：参考路径
+- `BF16` / `FP32`：低精度浮点近似路径
+- `INT8_EMU`：Ozaki 风格整数阵列的第一版近似替身
+
+需要强调：`INT8_EMU` 只是在行为级上模拟“实数阵列量化 + 累加”的效果，还不是完整的 Ozaki Scheme II 精确重构实现。
+
+## 8. 推荐的数据流
+
+### 8.1 计算 `Y = H_sub X`
+
+1. Host 给出复数 `H_sub` 与 `X`
+2. 近存逻辑拆分为 `H_r`、`H_i`、`X_r`、`X_i`
+3. 按 4M 或 3M 生成实数乘法任务
+4. 实数 CIM macro 完成各路 GEMM
+5. 近存逻辑重组 `Y_r`、`Y_i`
+6. 若需要，执行数值对称化或残差监控
+
+### 8.2 构造 `H_sub = X^H (H X)`
+
+1. 先执行 `Y = H X`
+2. 生成 `X^H`
+3. 对 `X^H` 与 `Y` 继续执行 4M / 3M 复数块乘
+4. 对得到的 `H_sub` 做 Hermitian 化：
+   - `H_sub <- 0.5 * (H_sub + H_sub^H)`
+
+### 8.3 构造 `S_sub = X^H (S X)`
+
+与 `H_sub` 路径类似，但在输出端增加：
+
+- 对角实部检查
+- Cholesky 可行性检查
+
+若 `S_sub` 不能通过正定性检查，则强制回退到高精度 4M 或 CPU。
+
+## 9. 硬件/算法协同策略
+
+### 9.1 默认策略
+
+- 复杂 `k` 点路径：优先 4M
+- `Gamma-only` 且实对称：退化为实数路径
+- `S_sub` 构造：优先 4M，高精度优先
+- `H_sub` / `H X`：可在误差许可时尝试 3M
+
+### 9.2 策略切换规则
+
+建议用以下指标作为切换依据：
+
+- 输出相对 Frobenius 误差
+- Hermitian 缺陷 `||A - A^H|| / ||A||`
+- `S_sub` 的 Cholesky 成功率
+- 外层 Davidson / RMM 迭代残差
+
+当任一指标超阈值时：
+
+- 3M -> 4M
+- 低精度 -> 高精度
+- CIM -> CPU fallback
+
+## 10. 当前实现建议
+
+结合仓库现状，建议分两步推进：
+
+### 第一步：行为级验证
+
+- 保留现有 `CIM_Macro` 作为实数 primitive
+- 在 SystemC 中新增一个独立测试程序
+- 对比 4M 与 3M 的输出误差、子空间矩阵误差和 `S_sub` 可分解性
+
+### 第二步：Ozaki 实数 primitive 替换
+
+在第一步完成后，再把 `CIM_Macro` 的实数计算核心逐步替换为：
+
+- 更接近 Ozaki 的实数取模/重构模型
+- 或者更精细的 INT8 多切片行为模型
+
+这样可以把“复数系统架构正确性”与“实数乘法器细节实现”拆开验证，降低联调复杂度。
+
+## 11. 结论
+
+基于师兄的实数 Ozaki 乘法器设计，当前系统最合理的路线不是直接造一个“原生复数 CIM”，而是：
+
+- 以实数乘法器为底层 primitive
+- 在近存逻辑中完成复数 4M / 3M 编排
+- 面向 QE 的 `H_sub` / `S_sub` 与 block-vector 乘建立专用数据流
+- 用行为级模型先验证 4M/3M 的正确性、误差率和 `S_sub` 数值稳定性
+
+在这个框架下：
+
+- **4M 是默认可靠路径**
+- **3M 是吞吐优化路径**
+- **Ozaki 实数阵列是底层可替换部件**
+
+这条路线与 QE 的实际问题结构、与参考 PDF 的硬件分层思想、以及当前仓库已有的 SystemC 原型三者是一致的。
