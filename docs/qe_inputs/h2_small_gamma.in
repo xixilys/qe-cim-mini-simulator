@@ -1,0 +1,27 @@
+&CONTROL
+  calculation = 'scf',
+  prefix = 'h2_small',
+  pseudo_dir = 'soft/qe-7.5/external/wannier90/pseudo',
+  outdir = './tmp_qe_h2_small'
+/
+&SYSTEM
+  ibrav = 1,
+  celldm(1) = 10.0,
+  nat = 2,
+  ntyp = 1,
+  ecutwfc = 10.0,
+  ecutrho = 40.0,
+  nbnd = 2,
+  occupations = 'fixed',
+  assume_isolated = 'martyna-tuckerman'
+/
+&ELECTRONS
+  conv_thr = 1.0d-8,
+  mixing_beta = 0.5
+/
+ATOMIC_SPECIES
+  H  1.00794  H.pbe-rrkjus.UPF
+ATOMIC_POSITIONS {bohr}
+  H  0.000000  0.000000  -0.700000
+  H  0.000000  0.000000   0.700000
+K_POINTS gamma

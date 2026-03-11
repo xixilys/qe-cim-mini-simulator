@@ -1,0 +1,16 @@
+.DS_Store
+*.log
+*.o
+
+model/bin/
+model/logs/
+
+soft/
+fft_ifft_actual_data/
+fft_ifft_actual_data.zip
+tmp_qe_h2_small/
+tmp_qe_h2_tiny/
+ppt/
+full_transcription.txt
+
+model/docs/.DS_Store
