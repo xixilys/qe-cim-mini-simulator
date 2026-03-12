@@ -438,6 +438,7 @@
 样本来源：
 
 - 从实际 `QE` 路径截取 representative matrices
+- 具体采样入口与字段定义见 [`qe_subspace_sampling.md`](/Volumes/remote/phd/year_2/project/dft加速/docs/qe_subspace_sampling.md)
 
 至少要记录：
 
