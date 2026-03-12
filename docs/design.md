@@ -515,6 +515,7 @@
 
 - [`model/src/tb_complex_ozaki.cpp`](/Volumes/remote/phd/year_2/project/dft加速/model/src/tb_complex_ozaki.cpp)
 - [`model/docs/complex_ozaki_fp64_validation.md`](/Volumes/remote/phd/year_2/project/dft加速/model/docs/complex_ozaki_fp64_validation.md)
+- [`docs/complex_fp64_gemm_spec_v0.md`](/Volumes/remote/phd/year_2/project/dft加速/docs/complex_fp64_gemm_spec_v0.md)
 
 它们服务于：
 
