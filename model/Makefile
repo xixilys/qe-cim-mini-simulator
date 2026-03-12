@@ -7,8 +7,9 @@ OBJ = $(SRC:.cpp=.o)
 EXEC = bin/mini_qe_cim_sim
 SOCK_EXEC = bin/cim_socket_server
 SUBSPACE_EXEC = bin/complex_subspace_eval
+OZAKI_EXEC = bin/complex_ozaki_eval
 
-all: $(EXEC) $(SOCK_EXEC) $(SUBSPACE_EXEC)
+all: $(EXEC) $(SOCK_EXEC) $(SUBSPACE_EXEC) $(OZAKI_EXEC)
 
 $(EXEC): $(OBJ)
 	mkdir -p bin
@@ -22,11 +23,15 @@ $(SUBSPACE_EXEC): src/tb_complex_subspace.o src/cim_macro.o
 	mkdir -p bin
 	$(CXX) src/tb_complex_subspace.o src/cim_macro.o -o $@ $(LDFLAGS)
 
+$(OZAKI_EXEC): src/tb_complex_ozaki.o
+	mkdir -p bin
+	$(CXX) src/tb_complex_ozaki.o -o $@ $(LDFLAGS)
+
 %.o: %.cpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 clean:
-	rm -f src/*.o $(EXEC) $(SOCK_EXEC) $(SUBSPACE_EXEC) logs/*.log
+	rm -f src/*.o $(EXEC) $(SOCK_EXEC) $(SUBSPACE_EXEC) $(OZAKI_EXEC) logs/*.log
 
 run: $(EXEC)
 	mkdir -p logs
