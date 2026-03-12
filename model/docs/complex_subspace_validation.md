@@ -111,5 +111,13 @@ cd /Volumes/remote/phd/year_2/project/dft加速/model
 当前验证程序使用的是 `INT8_EMU` 行为模型，还不是完整的 Ozaki 模取/重构实现。下一步建议是：
 
 1. 将 `INT8_EMU` 替换为更接近师兄设计的 Ozaki 实数 primitive
-2. 把当前 4M / 3M 复数调度器接到更真实的阵列延迟与带宽模型
-3. 将 `S_sub` 的 Hermitian 化与 Cholesky 检查并入统一近存控制逻辑
+2. 在 NML 侧补上 direct dense 微求解器或 `3m x 3m` 微型广义本征求解器模型
+3. 把当前 4M / 3M 复数调度器接到更真实的阵列延迟与带宽模型
+4. 将 `S_sub` 的 Hermitian 化与 Cholesky 检查并入统一近存控制逻辑
+
+当前结果需要特别说明的一点是：
+
+- 本文档验证的是**乘法与子空间矩阵构造路径**
+- 还没有把 LOBPCG / Rayleigh-Ritz / `diaghg` 风格微对角化器并入同一个行为级闭环
+
+也就是说，这一版已经回答了“复数阵列怎么给对子空间求解器喂 `H X` 和 `S X`”，但还没有回答“近存逻辑里的微型 eigensolver 具体怎么建模”。这一部分已经在新版设计手册中单独展开。
