@@ -128,14 +128,19 @@ OZAKI_EXP_SPAN=64 OZAKI_TRIALS=4 ./bin/complex_ozaki_eval
 
 ## 7. 对系统设计的直接影响
 
-有了这条行为级原型之后，系统设计应当明确分成两条路：
-
-- **近似子空间模式**
-  - 服务于 `H_sub X / S_sub X`
-  - 强调 block MVM、误差门控、Hermitian 化
+有了这条行为级原型之后，系统设计的主路线已经可以明确收敛为：
 
 - **完整 FP64 complex GEMM emulation 模式**
   - 服务于需要 `FP64` 复数输出的高精度路径
   - 强调缩放、模数管理、Karatsuba 模乘和 CRT 重构
 
-这也是新版 [`docs/design.md`](/Volumes/remote/phd/year_2/project/dft加速/docs/design.md) 已经采用的组织方式。
+仓库中仍保留一条探索性支线：
+
+- **近似子空间验证模式**
+  - 服务于 `H_sub X / S_sub X` 的数据流研究
+  - 强调 block MVM、误差门控、Hermitian 化
+
+也就是说，当前主设计已经不是“两条并列路线”，而是：
+
+- 主线：Ozaki-II / CRT
+- 支线：近似子空间验证

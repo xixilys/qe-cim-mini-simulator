@@ -2,6 +2,8 @@
 
 ## 1. 验证目的
 
+这份文档对应的是**探索性支线验证**，不是当前系统的主设计路线。当前主设计已经明确为完整的 Ozaki-II / CRT `FP64` 复数 GEMM，见 [model/docs/complex_ozaki_fp64_validation.md](/Volumes/remote/phd/year_2/project/dft加速/model/docs/complex_ozaki_fp64_validation.md)。
+
 本验证针对 [`docs/design.md`](/Volumes/remote/phd/year_2/project/dft加速/docs/design.md) 中提出的复数子空间数据通路，检查以下问题：
 
 - 以实数 CIM primitive 组合出的复数 4M / 3M 路径是否正确
@@ -105,6 +107,13 @@ cd /Volumes/remote/phd/year_2/project/dft加速/model
 - `S X`、`S_sub`：默认 4M，并在输出端固定执行 Hermitian 化
 - `3M`：只作为可选模式，不作为默认调度策略
 - `INT8` 路径：可以继续推进，但必须配合误差门控和对称化
+
+这组结论只服务于探索性支线，也就是：
+
+- `H_sub X / S_sub X` 的数据流研究
+- 低精度 block MVM 的数值行为观察
+
+它不应被误读为当前主设计的复数 `FP64` 乘法方案。
 
 ## 6. 后续工作
 
