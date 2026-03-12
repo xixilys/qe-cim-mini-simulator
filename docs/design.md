@@ -1,658 +1,550 @@
-# 面向 QE 子空间问题的复数 CIM 系统设计
+# 面向 QE / PySCF 的 DFT 科学计算加速系统设计
 
-## 1. 设计背景
+## 1. 系统目标
 
-本项目的目标不是替换 Quantum ESPRESSO `pw.x` 中完整的平面波哈密顿量求解流程，而是面向其内部反复出现的**小规模复数稠密子空间算子**进行加速。典型目标包括：
+这份文档必须被理解为一份**系统设计文档**，而不是单个乘法器、单个算子或单条数值公式的说明书。
 
-- `Y_H = H_sub X`
-- `Y_S = S_sub X`
-- `H_sub = V^H H V`
-- `S_sub = V^H S V`
+本项目的最高目标是：
+
+- 面向 `Quantum ESPRESSO (QE)`、`PySCF` 等 DFT 科学计算软件
+- 设计一套能够真正提升科学计算吞吐、能效和可扩展性的专用加速系统
+- 让系统既能服务当前论文切入点，也能支撑后续更大范围的 DFT 工作负载
+
+因此，系统层面要回答的核心问题不是“如何实现一个复数矩阵乘法器”，而是：
+
+- 真实 DFT 软件的热点算子到底是什么
+- 哪些热点值得提取成硬件主路径
+- `Host / runtime / NML / CIM / micro-solver` 应该如何分工
+- 当前论文先切哪一块，才能形成一篇对 `VLSI` 这类 IC 顶会有说服力的系统故事
+
+## 2. 论文定位与边界
+
+### 2.1 长期目标
+
+长期目标是构建一个**面向 DFT 软件栈的复数高精度科学计算加速系统**，重点支持：
+
+- `QE` 的平面波 DFT 主路径
+- `PySCF` 的高精度电子结构计算路径
+- 复数 `FP64` 密集矩阵乘法
+- Hermitian / generalized Hermitian 子空间本征问题
+
+### 2.2 当前论文切入点
+
+如果直接宣称“完整加速整个 DFT 软件”，论文边界会过大，也很难在一篇 `VLSI` 论文里把系统、算法和硬件都讲清楚。  
+因此当前论文采用的是**系统目标不变、工作负载先切一块**的策略：
+
+- 从真实 DFT 软件中做算子提取
+- 当前已经提取到 `QE Davidson` 子空间中的 Hermitian / generalized Hermitian 对角化问题
+- 同时确认这一子问题内部天然包含高频复数矩阵乘法需求
+
+所以当前论文的正确定位应该是：
+
+- **系统目标**：加速 `QE / PySCF` 这类 DFT 科学计算软件
+- **当前切口**：`QE Davidson` 子空间里的 Hermitian / generalized Hermitian 对角化
+- **当前关键能力**：原生支持该子问题内部用到的复数 `FP64` 矩阵乘法
+
+### 2.3 为什么这个切口成立
+
+这个切口对系统论文是成立的，因为它同时满足 4 个条件：
+
+- 来自真实软件，而不是人造 benchmark
+- 数值结构清晰，便于形成可验证的硬件数据流
+- 同时覆盖“矩阵乘法”和“对角化”两类核心科学计算算子
+- 可以自然扩展到 `PySCF` 等其他电子结构软件
+
+因此，我们当前并不是在写一篇“单个复数乘法器设计”，而是在写一篇：
+
+- 以 `QE` 为工作负载来源
+- 以 Davidson 子空间对角化为论文切口
+- 以复数 `FP64` GEMM 为关键硬件能力
+- 面向 `QE / PySCF` 长期落地的 DFT 加速系统设计
+
+## 3. 系统级创新点
+
+从 `VLSI` 论文叙事出发，当前系统最关键的创新点应当强调为以下几项，而不是只强调 `Ozaki-II` 本身。
+
+### 3.1 创新点一：面向真实 DFT 软件的算子级系统提取
+
+创新不只是“做了一个快的矩阵乘法器”，而是：
+
+- 从 `QE / PySCF` 真实软件栈出发
+- 定位出对性能与能效最敏感的科学计算热点
+- 把这些热点抽象成可落硬件的数据流和算子接口
+
+这使论文不是孤立的电路设计，而是**面向 DFT 软件的系统级协同设计**。
+
+### 3.2 创新点二：复数 GEMM 与子空间对角化的一体化系统闭环
+
+对 DFT 软件而言，只加速 `GEMM` 还不够。  
+当前设计强调的是：
+
+- 一方面系统能原生计算复数 `FP64` 矩阵乘法
+- 另一方面系统能支撑当前提取出来的 Hermitian / generalized Hermitian 子空间对角化
+
+这意味着系统不是单算子 IP，而是：
+
+- 复数高精度 GEMM 引擎
+- NML 侧对角化与投影子系统
+- 上层软件接口与调度逻辑
+
+三者共同组成的科学计算加速系统。
+
+### 3.3 创新点三：面向复数 `FP64` 的 Ozaki-II / CRT 主路径
+
+师兄的参考工作主要是实数 `Ozaki-II` 路线。  
+当前系统把这个方向推进到：
+
+- 复数 `FP64` 矩阵乘法
+- 面向科学计算软件可直接使用的 `ZGEMM` 级接口
+- 通过 `Ozaki-II + CRT + Karatsuba 3M` 在实数阵列上完成高精度复数 GEMM
+
+这里要强调的是：这条主路径不是系统的全部，但它是系统里的**关键创新子系统**。
+
+### 3.4 创新点四：NML 主导的对角化闭环
+
+当前论文不能只写“GEMM 能算”，还必须回答“对角化如何完成”。  
+本设计里的答案是：
+
+- `CIM` 负责高吞吐矩阵乘法与 trailing update
+- `NML` 负责 Hermitian 化、广义到标准问题变换、三对角化控制、微型本征求解与回代
+
+也就是说，对角化不是外挂在系统外部的一段软件，而是整个架构中的**原生子系统**。
+
+### 3.5 创新点五：对 QE / PySCF 兼容的软件接口设计
+
+系统不应只在 toy benchmark 上成立，而应具备明确的软件接入方式：
+
+- 对 `QE`，通过 `BLAS/GEMM` 拦截和算子语义调度接入
+- 对 `PySCF`，通过相同的复数 BLAS 接口或更高层 kernel 包装接入
+- 对无法获益的情形保留 CPU fallback
+
+这样论文中的硬件设计才有清晰的系统落地路径。
+
+## 4. 工作负载画像与问题规模
+
+### 4.1 大目标工作负载
+
+面向 DFT 软件，典型热点包括：
+
+- 复数 `GEMM/GEMV`
+- 子空间投影与子空间矩阵构造
+- Hermitian / generalized Hermitian 本征问题
+- FFT 及与波函数相关的数据搬运
+
+### 4.2 当前已提取工作负载
+
+当前已提取并准备形成论文主线的工作负载是：
+
+- `QE Davidson` 子空间里的 Hermitian / generalized Hermitian 对角化
+
+其数学对象可写为：
+
+- 标准问题：`H_sub c = lambda c`
+- 广义问题：`H_sub c = lambda S_sub c`
 
 其中：
 
-- `H_sub` 在一般 `k` 点路径下是复数 Hermitian 矩阵
-- `S_sub` 在 USPP / PAW 路径下是复数 Hermitian 正定矩阵
-- `X`、`V` 是当前子空间中的 block vector
+- `H_sub` 在一般 `k` 点路径下是复数 Hermitian
+- `S_sub` 在 `USPP / PAW` 路径下是复数 Hermitian 正定
 
-因此，当前系统面对的核心问题不是“大矩阵一次性全谱对角化”，而是**复数 Hermitian / generalized Hermitian 小矩阵上的反复矩阵-块向量乘与子空间构造**。
+围绕这个子问题，系统需要支持：
 
-师兄的参考设计 [`Ozaki_CIM_20260312014000.pdf`](/Volumes/remote/phd/year_2/project/dft加速/docs/Ozaki_CIM_20260312014000.pdf) 给出的重点是：
+- `H_sub X`
+- `S_sub X`
+- `Q^H H Q`
+- `Q^H S Q`
+- 小规模 Hermitian / generalized Hermitian 对角化
 
-- 以实数乘法器为基础单元
-- 将高精度实数乘法映射到 INT8/CIM 友好的路径
-- 在阵列外完成取模、重构、归一化等控制和恢复操作
+### 4.3 规模特征
 
-这与我们当前的系统目标是兼容的：**我们不重新发明复数乘法器，而是在实数乘法 primitive 之上构造复数块乘路径。**
+在 `QE Davidson` 中，当前子空间矩阵维度通常与 `nbnd` 同量级，并常落在：
 
-## 2. 参考设计对当前系统的启发
+- `N_sub ~= nbnd`
+- 扩展子空间后 `N_sub ~= 2 * nbnd`
 
-Ozaki Scheme II 对我们的启发不在于“直接照搬实数 FP64 精确重构的全部流程”，而在于它给出了一个清晰的分层原则：
+因此当前论文应重点覆盖的代表性规模是：
 
-1. **阵列内只做高吞吐、规则的实数乘加**
-2. **阵列外承担前处理、重构、归一化、控制流**
-3. **尽量把复杂数值问题分解成多个可复用的实数子问题**
+- `32 x 32`
+- `64 x 64`
+- `128 x 128`
+- `256 x 256`
 
-这三个原则直接决定了当前复数子空间系统的设计方向：
+这几个规模足以覆盖“当前 paper cut”的主要工程区间，也更适合作为 `VLSI` 论文的实验点。
 
-- 复数运算不在 CIM 阵列内原生实现
-- 复数矩阵乘由多个实数 GEMM / GEMV 组成
-- 近存逻辑负责复数组装、Hermitian 约束维护、误差监控和调度
+## 5. 总体系统架构
 
-## 3. 当前系统的目标边界
+当前系统应当被描述为一个五层结构，而不是单个算子模块。
 
-### 3.1 加速对象
+### 5.1 软件层
 
-第一阶段加速对象限定为 QE 子空间求解中最规则、最稳定的两类操作：
+软件层对应：
 
-- 复数矩阵-块向量乘：`Y = A X`
-- 复数小矩阵构造：`A_sub = X^H Y`
+- `QE`
+- `PySCF`
+- 上层 DFT 工作流
 
-这里的 `A` 可以是：
+这一层负责产生真实的科学计算负载，并通过 runtime / bridge 把关键算子送入加速系统。
 
-- `H_sub`
-- `S_sub`
-- `V^H H`
-- `V^H S`
+### 5.2 Runtime / Bridge 层
 
-### 3.2 不作为第一阶段目标的内容
+这一层负责：
 
-第一阶段不试图完成以下任务：
+- 拦截复数 `GEMM`
+- 识别当前 kernel 是否属于已提取的 DFT 热点
+- 决定是走硬件主路径还是 CPU fallback
+- 在 `QE / PySCF` 与加速器之间做协议转换
 
-- 完整替换 QE 现有 `diaghg` 密集小矩阵求解器
-- 直接改写 `h_psi` 的 FFT 主路径
-- 构造一个通用复数 LAPACK 加速器
+从当前原型看，这一层已经可以对应到现有桥接路径：
 
-这意味着第一版验证重点是：
+- `qe_cim_bridge.c`
+- socket 协议
+- SystemC server
 
-- **复数乘法的映射正确性**
-- **复数子空间构造误差是否可控**
-- **`S_sub` 的正定性在低精度路径下是否仍能维持**
+因此，这一层既是软件兼容性的入口，也是系统论文里很重要的“落地路径”。
 
-### 3.3 主设计路线
+### 5.3 NML / Controller 层
 
-当前系统的**主设计路线**就是复数 Ozaki-II / CRT 方案：
+`NML` 是系统的大脑，负责：
 
-- `FP64 complex input`
-- `缩放/截断 -> CRT residue -> Karatsuba 模乘 -> CRT 重构 -> 反缩放`
+- 任务编排
+- 缩放向量生成
+- residue 调度
+- CRT 重构
+- 子空间投影
+- 正交化
+- 对角化控制
+- 微型本征求解
 
-目标是实现 `ZGEMM` 级别的 `FP64` 复数矩阵乘法。
+如果没有 `NML`，这个系统就只是一个“会做乘法的阵列”，无法形成完整闭环。
 
-当前仓库里保留的 4M/3M 子空间验证，只是为了：
+### 5.4 CIM / 实数阵列层
 
-- 做 block MVM 数据流探索
-- 给子空间求解器接口做前期原型
+这一层是算力核心，负责：
 
-它不是主设计，也不是最终的复数 `FP64` 乘法方案。
+- 实数 `INT8` 或模域 `GEMM`
+- `Karatsuba 3M` 所需的实数子乘法
+- 支撑 `Ozaki-II / CRT` 的高吞吐 residue 运算
+- 支撑对角化过程中 trailing update 所需的密集矩阵运算
 
-## 4. 探索性复数矩阵块乘路径
+对外暴露的是“复数高精度矩阵运算能力”，但底层实现依然是：
 
-### 4.1 四实乘法（4M）基线
+- 实数阵列
+- 模域 residue 运算
+- 高吞吐矩阵乘加
 
-对复数乘法：
+### 5.5 片上存储与互连层
 
-`(A_r + i A_i)(X_r + i X_i)`
+这一层负责：
 
-最直接的映射是四次实数乘法：
+- residue block 缓冲
+- 多模结果收集
+- `Host / NML / CIM` 间搬运
+- 为 `CRT` 重构与对角化提供带宽
 
-- `T1 = A_r X_r`
-- `T2 = A_i X_i`
-- `T3 = A_r X_i`
-- `T4 = A_i X_r`
+这部分在 `VLSI` 论文里不能被省略，因为它直接决定系统可实现性。
 
-然后在近存逻辑中重组：
+## 6. 从 QE / PySCF 到加速器的映射
 
-- `Y_r = T1 - T2`
-- `Y_i = T3 + T4`
+### 6.1 QE 的当前切入点
 
-特点：
+对 `QE` 而言，当前论文关注的调用链可以抽象为：
 
-- 数学形式直接
-- 需要 4 次实数 GEMM / GEMV
+`electrons -> c_bands -> cegterg -> reduced matrix -> diaghg`
 
-### 4.2 三实乘法（3M）高吞吐变体
+也就是说，当前 paper cut 不是整个 `H|psi>` 大路径，而是：
 
-为了减少一次实数乘法，可以使用 Gauss 型三乘法：
+- Davidson 已经形成 reduced subspace
+- 接下来要对 `H_sub / S_sub` 做 Hermitian / generalized Hermitian 对角化
 
-- `T1 = A_r X_r`
-- `T2 = A_i X_i`
-- `T3 = (A_r + A_i)(X_r + X_i)`
+这正是当前系统切入的最合适位置。
 
-然后重组：
+### 6.2 QE 侧的系统映射
 
-- `Y_r = T1 - T2`
-- `Y_i = T3 - T1 - T2`
+对应到系统实现上，`QE` 侧的映射应描述为：
 
-特点：
+1. `QE` 运行到 Davidson 子空间阶段
+2. runtime 识别当前已进入已提取的 Hermitian / generalized Hermitian kernel
+3. 将 `H_sub`、`S_sub` 与相关 block vector 发给加速器
+4. 加速器完成：
+   - `H_sub X`
+   - `S_sub X`
+   - `Q^H H Q`
+   - `Q^H S Q`
+   - 子空间对角化
+5. 本征对回送给 `QE`
+6. `QE` 继续其外层 Davidson / SCF 流程
 
-- 实数阵列调用从 4 次降到 3 次
-- 是复数乘法的一种标准分解方法
+### 6.3 PySCF 的扩展路径
 
-这里必须强调：
+对 `PySCF`，当前文档不需要过度承诺具体函数名，但应明确两点：
 
-- 从**代数上**讲，本节的 `3M` 与 `4M` 完全等价
+- 系统的第一层接口可以复用 `BLAS/LAPACK` 兼容路径
+- 当前复数 `FP64` GEMM 能力和小规模 Hermitian 求解能力可以自然扩展到 `PySCF` 中的密集线性代数热点
 
-这与后文完整 FP64 Ozaki-II 路线中的 `Karatsuba` 不是同一层概念。  
-在 CRT 模式里，Karatsuba 作用在**模域整数矩阵**上，每个模乘本身是精确的，因此与 `4M` 在数学上完全等价。
+这使 `PySCF` 不是“另一个独立系统”，而是同一加速架构的第二个软件落点。
 
-## 5. 面向 QE 的系统分层
+## 7. 复数 `FP64` GEMM 主路径：Ozaki-II / CRT
 
-### 5.1 Host / QE 侧
+这是当前系统设计里最重要的一个创新点，但它只是系统中的**一个关键子系统**，不是整篇设计文档的全部。
 
-Host 侧负责：
-- 从 QE 中截获复数 `H_sub`、`S_sub` 或对应 block 乘请求
-- 识别当前是标准问题还是广义问题
-- 对主路径优先调度 Ozaki-II / CRT 模式
-- 只有在探索性验证时才比较 4M 与 3M
-- 在超出硬件边界时回退到 CPU
-
-### 5.2 近存控制逻辑
-
-近存控制逻辑负责：
-
-- 将复数矩阵拆分为实部和虚部
-- 在探索性验证模式中生成 4M / 3M 所需的中间矩阵
-- 调度实数 CIM macro
-- 重组复数输出
-- 维护 Hermitian 对称化
-- 监控误差、残差和 `S_sub` 的 Cholesky 可行性
-
-### 5.3 实数 CIM Macro
-
-实数 CIM macro 只承担最擅长的规则操作：
-
-- 实数矩阵-块向量乘
-- 实数 GEMM/GEMV
-- 固定精度或近似整数路径的高吞吐 MAC
-
-从架构职责上看，师兄 PDF 里的实数乘法器正适合作为这里的底层 primitive。
-
-## 6. 与 Ozaki 实数乘法器的关系
-
-### 6.1 可以直接复用的部分
-
-对于参考设计中的实数路径，当前系统可以直接继承其分工理念：
-
-- 前预对齐 / 缩放
-- 实数乘法核心
-- 结果重组与归一化
-
-若后续实现完整 Ozaki 路径，则每一路实数乘法可以替换为：
-
-- 取模拆分
-- INT8 CIM 乘加
-- 余数结果重构
-- 归一化恢复
-
-### 6.2 需要新增的部分
-
-为了支持 QE 复数子空间问题，必须补上以下机制：
-
-- Ozaki-II / CRT 调度器
-- 在验证模式中保留 4M / 3M 调度器
-- 共轭转置数据路径 `X^H`
-- Hermitian / generalized Hermitian 的数值检查
-- `S_sub` 正定性检测
-
-换句话说，Ozaki 实数乘法器是**底层 primitive**，而不是完整系统。
-
-## 7. 基于 Uchino 2025 的完整 FP64 复数 GEMM 路线
-
-Uchino 等 2025 的论文 [`Emulation of Complex Matrix Multiplication based on the Chinese Remainder Theorem.pdf`](/Volumes/remote/phd/year_2/project/dft加速/docs/Uchino%20%E7%AD%89%20-%202025%20-%20Emulation%20of%20Complex%20Matrix%20Multiplication%20based%20on%20the%20Chinese%20Remainder%20Theorem.pdf) 补齐了我们之前设计里最关键的一块：**如何基于 Ozaki-II 真实地把 `FP64` 复数矩阵乘法映射到 INT8/模域阵列，并在输出端重构回 `FP64` 复数结果。**
-
-这条路线不再是“近似算一个差不多的复数乘法”，而是完整的高精度 emulation 链。
-
-### 7.1 计算目标
+### 7.1 目标
 
 给定：
 
 - `A = A_R + i A_I`
 - `B = B_R + i B_I`
 
-目标是输出：
+系统要输出：
 
 - `C = C_R + i C_I = A B`
 
-并保持 `ZGEMM` 级别精度。
+并达到 `ZGEMM` 级别精度。
 
-### 7.2 三步主流程
+### 7.2 三步算法主线
 
-完整复数 Ozaki-II 路线包含三步：
+完整复数 `Ozaki-II` 路线包含：
 
 1. **缩放与截断**
-   - 为 `A` 的每一行和 `B` 的每一列选择缩放向量 `mu`、`nu`
-   - 将 `A_R`、`A_I`、`B_R`、`B_I` 转换为整数矩阵 `A'_R`、`A'_I`、`B'_R`、`B'_I`
+   - 为 `A` 的每一行和 `B` 的每一列生成 `mu`、`nu`
+   - 转换得到整数矩阵 `A'_R`、`A'_I`、`B'_R`、`B'_I`
 
 2. **基于 CRT 的模域复数矩阵乘法**
-   - 选择一组两两互素的模 `p_l <= 256`
-   - 对每个模生成 residue matrix
+   - 选择一组互素模数 `p_l <= 256`
+   - 构造 residue matrices
    - 在每个模上执行复数矩阵乘法
-   - 论文推荐在模域使用 **Karatsuba 3M + n-blocking**
+   - 默认采用 `Karatsuba 3M + n-blocking`
 
 3. **CRT 重构与反缩放**
-   - 将每个模上的结果按 CRT 重构为整数矩阵 `C'_R`、`C'_I`
-   - 再对每个输出元素除以对应的 `mu_i * nu_j`
-   - 得到最终 `FP64` 复数输出
+   - 将每个模上的结果重构为 `C'_R`、`C'_I`
+   - 再除以 `mu_i * nu_j`
+   - 得到最终 `FP64 complex` 输出
 
-### 7.3 复数模乘的具体形式
+### 7.3 为什么主路径选择 Karatsuba 3M
 
-论文比较了三种复杂数处理方式：
+在主设计里，`3M` 不是“近似路线”，而是：
 
-- 扩展成单次实数大 GEMM
-- 另一种等价扩展形式
-- Karatsuba 三乘法
+- 复数乘法的一种标准分解
+- 在模域整数矩阵上精确执行
+- 用于减少底层实数 `GEMM` 次数
 
-最终结论是：对于足够大的问题规模，**Karatsuba + n 方向 blocking** 最稳妥，因而应作为系统默认方案。
+因此，在 `Ozaki-II / CRT` 路线里：
 
-在每个模 `p_l` 上执行：
+- `Karatsuba 3M` 与 `4M` 在数学上完全等价
+- 论文和当前系统都把它视为默认的复数模乘方法
 
-- `D_l = A_R,l B_R,l`
-- `E_l = A_I,l B_I,l`
-- `F_l = (A_R,l + A_I,l)(B_R,l + B_I,l)`
+### 7.4 这条主路径在系统中的价值
 
-然后重组：
+对当前系统来说，`Ozaki-II / CRT` 的意义不只是“做出一个复数乘法器”，而是：
 
-- `C_R,l = D_l - E_l`
-- `C_I,l = F_l - D_l - E_l`
+- 让实数阵列能够原生支撑复数 `FP64` 科学计算
+- 为 Davidson 子空间投影、trailing update、回代等环节提供统一的矩阵运算底座
+- 把“复数高精度”从软件库层面下沉为架构能力
 
-由于这里的运算对象已经是模域整数矩阵，`Karatsuba 3M` 是**精确整数运算**，不是近似低精度浮点变形。
+### 7.5 模数与代价
 
-### 7.4 缩放策略
-
-论文给出两种缩放模式：
-
-- `fast mode`
-  - 基于 Cauchy-Schwarz 上界
-  - 预处理更轻
-  - 往往需要更多模数
-
-- `accurate mode`
-  - 先把输入预缩放到 6-bit / 7-bit 上界矩阵
-  - 通过辅助整数矩阵乘法更紧地估计输出上界
-  - 通常可以减少所需模数
-
-对我们的系统设计，建议如下：
-
-- **硬件默认支持 accurate mode**
-- fast mode 作为面积/时延受限时的回退策略
-
-因为 accurate mode 虽然前处理稍重，但能减少模数数量，等价于减少后续的模域 GEMM 次数。
-
-### 7.5 模数数量与系统代价
-
-论文结果表明，对 `ZGEMM` 级别精度，典型需要：
+对 `ZGEMM` 级别精度，当前系统应按论文经验预留：
 
 - `13` 到 `17` 个模数
 
-这意味着一轮完整的复数 Ozaki-II 计算，若采用 Karatsuba，则大致需要：
+这意味着一轮完整计算的主要代价来自：
 
-- `3N` 次实数 INT8 GEMM
-
-其中 `N` 是模数数量。
-
-因此，对我们当前的复数阵列系统来说，完整 FP64 路线的核心代价不是“一个复数 GEMM”，而是：
-
+- 多模 residue 运算
+- residue buffer
 - 多模并行度
-- residue 存储带宽
-- CRT 重构带宽
-- NML 侧缩放与重构时延
+- `CRT` 重构
 
-### 7.6 当前系统中的软硬件分工
+因此，主设计真正要优化的是整个模域数据流，而不是把问题简化成“一个复数乘法公式选 `3M` 还是 `4M`”。
 
-基于该论文，完整 FP64 路线的职责划分应为：
+## 8. 子空间对角化子系统
 
-#### Host / NML
+因为当前论文切入的是 `QE Davidson` 子空间对角化，所以系统必须同时给出这一层设计，而不能只停留在“外部有个 eigensolver”。
 
-- 选择模数集合 `p_l`
-- 计算 `P/p_l` 与乘法逆元 `q_l`
-- 生成缩放向量 `mu`、`nu`
-- 生成 residue matrices
-- 执行 CRT 重构和最终反缩放
+### 8.1 目标问题
 
-#### CIM 阵列
+当前目标不是全 DFT 全谱求解，而是：
 
-- 执行每个模上的 INT8 实数 GEMM
-- 支持 Karatsuba 所需的三次实数乘法路径
-- 对 `n` 方向执行 block 化调度
+- 小规模 Hermitian / generalized Hermitian reduced problem
+- 面向 Davidson 提取出来的 `H_sub / S_sub`
 
-#### 片上缓冲 / NoC
+这也是当前 paper cut 最适合的范围。
 
-- 缓存多模 residue block
-- 支撑 `3N` 次模域乘法结果的回收
-- 给 CRT 重构单元提供稳定带宽
+### 8.2 选定的对角化主流程
 
-### 7.7 对 QE 的意义
+对子空间对角化，系统采用如下主流程：
 
-引入这条完整 FP64 路线后，我们的系统不再只有“近似子空间 block MVM”这一个答案，而是具备了：
+1. **输入整形**
+   - 对 `H_sub` 做 Hermitian 一致性检查与必要的对称化
+   - 对 `S_sub` 做 Hermitian 检查与正定性检查
 
-- **近似模式**：用于架构探索和容错 block MVM
-- **完整模式**：用于需要 `FP64` 复数输出的 GEMM 主路径
+2. **广义问题标准化**
+   - 若存在 `S_sub`，先在 `NML` 中执行 Cholesky：`S_sub = L L^H`
+   - 将问题转换为标准 Hermitian 问题：
+     `A = L^{-1} H_sub L^{-H}`
 
-这对 QE 特别重要，因为：
+3. **块化三对角化**
+   - 对标准 Hermitian 矩阵 `A` 执行 blocked Householder tridiagonalization
+   - panel factorization 由 `NML` 控制
+   - trailing matrix update 交给 `CIM` 上的高吞吐复数 `GEMM`
 
-- 某些子空间步骤可以容忍近似
-- 但某些复数 GEMM 主路径、参考验证路径和精度敏感路径需要完整 `FP64` 输出
+4. **三对角本征求解**
+   - 对得到的 tridiagonal matrix 在 `NML` 微求解器中执行 QR / bisection 类小规模本征求解
 
-## 8. 第一版行为级模型的验证对象
+5. **本征向量回代**
+   - 通过 Householder reflector 回代恢复标准问题的本征向量
+   - 若原问题为广义本征问题，再乘 `L^{-H}` 回到原空间
 
-第一版行为级模型不直接验证完整 Ozaki 模运算链，而是验证更靠近系统架构决策的问题：
+这个流程的好处是：
 
-1. 复数乘法拆分为 4M / 3M 后是否数学正确
-2. 在低精度实数 primitive 下，`H X` / `S X` 的误差有多大
-3. 由 `X^H (H X)` 和 `X^H (S X)` 构造的子空间矩阵误差有多大
-4. `S_sub` 在误差存在时是否仍然能够通过 Cholesky 检查
+- 计算主负载依然可以落到 `GEMM` 主路径上
+- 对角化真正成为系统中的一个原生数据流，而不是外挂的软件库调用
 
-当前行为模型中的实数 primitive 使用三类模式：
+### 8.3 软硬分工
 
-- `FP64`：参考路径
-- `BF16` / `FP32`：低精度浮点近似路径
-- `INT8_EMU`：Ozaki 风格整数阵列的第一版近似替身
+在当前系统里：
 
-需要强调：`INT8_EMU` 只是在行为级上模拟“实数阵列量化 + 累加”的效果，还不是完整的 Ozaki Scheme II 精确重构实现。
+- `CIM` 负责：
+  - `H_sub X`
+  - `S_sub X`
+  - `Q^H H Q`
+  - `Q^H S Q`
+  - 三对角化过程中的 trailing update
+  - 回代过程中的大块矩阵乘法
 
-## 9. 推荐的数据流
+- `NML` 负责：
+  - Hermitian 化与检查
+  - `S_sub` 的 Cholesky
+  - 广义到标准问题的变换控制
+  - Householder panel 生成
+  - tridiagonal eigensolver
+  - 残差判定与结果整理
 
-### 8.1 计算 `Y = H_sub X`
+这样切分的关键在于：
 
-1. Host 给出复数 `H_sub` 与 `X`
-2. 近存逻辑拆分为 `H_r`、`H_i`、`X_r`、`X_i`
-3. 按 4M 或 3M 生成实数乘法任务
-4. 实数 CIM macro 完成各路 GEMM
-5. 近存逻辑重组 `Y_r`、`Y_i`
-6. 若需要，执行数值对称化或残差监控
+- 把密集矩阵运算留给阵列
+- 把控制流强、规模较小、依赖复杂的步骤留给 `NML`
 
-### 8.2 构造 `H_sub = X^H (H X)`
+### 8.4 为什么这层对 VLSI 论文重要
 
-1. 先执行 `Y = H X`
-2. 生成 `X^H`
-3. 对 `X^H` 与 `Y` 继续执行 4M / 3M 复数块乘
-4. 对得到的 `H_sub` 做 Hermitian 化：
-   - `H_sub <- 0.5 * (H_sub + H_sub^H)`
+如果只写“我们能做一个很好的复数 `GEMM`”，论文会更像一个算术单元设计。  
+而把它放进当前提取出来的 Davidson 子空间对角化闭环里，论文才真正变成：
 
-### 8.3 构造 `S_sub = X^H (S X)`
+- 面向 DFT 软件的系统架构
+- 有明确 workload
+- 有明确 software-to-hardware path
+- 有明确 end-to-end story
 
-与 `H_sub` 路径类似，但在输出端增加：
+### 8.5 当前原型与完整对角化的关系
 
-- 对角实部检查
-- Cholesky 可行性检查
+当前仓库里已经验证的是：
 
-若 `S_sub` 不能通过正定性检查，则强制回退到高精度 4M 或 CPU。
+- `Ozaki-II / CRT` 复数 `FP64` GEMM 行为正确性
+- 子空间数据流构造与 block 运算语义
 
-## 10. 主设计的硬件/算法协同策略
+下一阶段需要补齐的是：
 
-### 9.1 默认策略
+- blocked Hermitian tridiagonalization 的行为级模型
+- generalized Hermitian 路径中的 Cholesky 与 back-transform
+- 与 `QE Davidson` reduced matrix 的闭环联调
 
-- 复数 `FP64` 主路径：优先 Ozaki-II / CRT + Karatsuba 模乘
-- `Gamma-only` 且实对称：可退化为实数 Ozaki-II
-- 只有在探索性验证时，才比较 4M 与 3M 的近似 block MVM
+因此，当前论文文档应当明确：
 
-### 9.2 策略切换规则
+- **系统设计已经包含完整的对角化子系统方案**
+- **当前原型处于“GEMM 主路径已验证，对角化闭环继续实现”的阶段**
 
-对主设计，建议用以下指标作为切换依据：
+## 9. 当前论文主线的数据流
 
-- CRT 唯一性条件是否满足
-- 所需模数数量是否在硬件支持范围内
-- 缩放向量与 residue buffer 是否超出片上资源预算
-- 外层 Davidson / RMM 迭代残差
+对于当前论文提取的 `QE Davidson` 子空间问题，系统级数据流可以描述为：
 
-当任一指标超阈值时：
+1. `QE` 运行到 Davidson 子空间对角化阶段
+2. runtime 识别出当前 kernel 属于已提取的 Hermitian / generalized Hermitian 子问题
+3. 将 `H_sub`、`S_sub` 及相关 block vector 发送到加速器
+4. `Ozaki-II / CRT` 主路径负责：
+   - `H_sub X`
+   - `S_sub X`
+   - 投影矩阵构造
+   - 三对角化和回代中的密集矩阵更新
+5. `NML` 负责：
+   - Hermitian 化
+   - Cholesky
+   - Householder 控制
+   - tridiagonal eigensolver
+   - 回代控制
+6. 得到的本征对回送给 `QE`
+7. `QE` 继续其外层 Davidson / SCF 流程
 
-- accurate mode 优先于 fast mode
-- 模数数量不足时回退到更高资源配置或 CPU
-- 只有在探索性验证模式中才存在 `3M -> 4M`
-- CIM -> CPU fallback
+这个数据流非常重要，因为它说明：
 
-## 11. 子空间对角化设计
+- 当前论文虽然只切入了一个算子簇
+- 但它已经嵌在真实 DFT 软件的运行闭环里
 
-前面的章节解决的是“复数子空间矩阵如何高效做块乘与构造”。但对 QE 来说，系统还需要回答另一个关键问题：**这些小矩阵最后怎么完成本征求解或对角化？**
+## 10. 面向 VLSI 论文的实验组织
 
-这里不能只写“送回 CPU 调 `diaghg`”，否则整套 CIM 方案就只覆盖了乘法通路，没有形成完整闭环。
+如果目标是 `VLSI` 这类 IC 顶会，实验组织不能只给算子误差或只给电路面积，而应同时覆盖以下层次。
 
-### 10.1 为什么要单独讨论对角化
+### 10.1 系统价值
 
-在 QE 的主路径里，当前 reduced problem 的维度记为 `N`，实际想要的最低本征对数记为 `m`。
+- 面向 `QE / PySCF` 的真实工作负载
+- 当前提取出的 Davidson 子空间对角化热点
+- 对上层软件运行时间与能耗的潜在影响
 
-- `N`：当前 reduced basis 维度
-- `m`：当前需要保留的最低本征对个数
+### 10.2 架构价值
 
-对标准问题：
+- `Ozaki-II / CRT` 主路径的吞吐、面积、能效
+- residue buffer / `NML` / `CRT` 重构代价
+- 对角化子系统的控制与存储开销
 
-- `H_sub c = lambda c`
+### 10.3 数值价值
 
-对广义问题：
+- `ZGEMM` 级精度
+- Hermitian / generalized Hermitian 子空间数据流正确性
+- 本征值和本征向量误差
+- 广义本征问题下的稳定性
 
-- `H_sub c = lambda S_sub c`
+### 10.4 软件协同价值
 
-如果只从数学上看，最直接的办法当然是对 `N x N` 的小矩阵直接做 dense generalized Hermitian eigensolve；但如果我们已经有一块复数 CIM 阵列，并且它最擅长做的是 `H_sub X` / `S_sub X`，那么就可以进一步考虑把“求最低 `m` 个本征对”改写成一个**基于 block MVM 的迭代求解器**。
+- `QE` 接口映射
+- `PySCF` 接口映射
+- fallback 策略与兼容性
+- 从桥接层到加速器的数据流完整性
 
-### 10.2 两条候选路线
+## 11. 当前原型与文档的关系
 
-当前系统建议保留两条路线，而不是只押注一种：
+当前仓库里的原型分成两类。
 
-#### 路线 A：NML 直接 dense 对角化
+### 11.1 主线原型
 
-这条路线对应传统 `diaghg` 风格：
+- [`model/src/tb_complex_ozaki.cpp`](/Volumes/remote/phd/year_2/project/dft加速/model/src/tb_complex_ozaki.cpp)
+- [`model/docs/complex_ozaki_fp64_validation.md`](/Volumes/remote/phd/year_2/project/dft加速/model/docs/complex_ozaki_fp64_validation.md)
 
-1. NML 接收 `H_sub`、`S_sub`
-2. 若是广义问题，先做 `S_sub = L L^H`
-3. 化为标准 Hermitian 问题
-4. 对 `N x N` 小矩阵直接做 dense eigensolve
+它们服务于：
 
-这条路线的优点是：
+- 复数 `FP64` GEMM 主路径
+- `Ozaki-II / CRT` 系统能力验证
 
-- 算法最成熟
-- 控制流简单
-- 当 `N` 很小或者 `m` 接近 `N` 时最直接
+### 11.2 支撑原型
 
-这条路线的缺点是：
+- [`model/src/tb_complex_subspace.cpp`](/Volumes/remote/phd/year_2/project/dft加速/model/src/tb_complex_subspace.cpp)
+- [`model/docs/complex_subspace_validation.md`](/Volumes/remote/phd/year_2/project/dft加速/model/docs/complex_subspace_validation.md)
+- [`model/docs/hardware_architecture.md`](/Volumes/remote/phd/year_2/project/dft加速/model/docs/hardware_architecture.md)
+- [`model/docs/qe_operator_mapping.md`](/Volumes/remote/phd/year_2/project/dft加速/model/docs/qe_operator_mapping.md)
 
-- 需要 NML 具备完整的小型 complex Hermitian generalized eigensolver
-- 会弱化 CIM 阵列的价值，因为主要算力落在 NML 上
+它们服务于：
 
-#### 路线 B：CIM + NML 协同的 block LOBPCG
+- 子空间数据流探索
+- 软件到硬件映射说明
+- 系统落地路径整理
 
-这条路线对应 Gemini 提到的架构思路。它不是让 CIM 去做所有事情，而是严格切分：
+这些原型不是系统设计本身，但它们为当前论文的系统故事提供了可验证支撑。
 
-- **CIM**：负责 `H X`、`S X`、`H W`、`S W`、`H P`、`S P`
-- **NML**：负责投影、正交化、微型广义本征问题和块更新
+## 12. 当前设计结论
 
-这条路线的关键不是“CIM 会不会对角化”，而是：
+当前设计文档的核心结论应当明确为：
 
-- CIM 提供高吞吐复数 block MVM
-- NML 在一个很小的投影子空间里完成真正的 Ritz / Rayleigh-Ritz 步
+- **最大的目标是加速 `QE / PySCF` 这类 DFT 科学计算软件**
+- **当前论文切入点是从 `QE` 中提取出的 Davidson 子空间 Hermitian / generalized Hermitian 对角化**
+- **`Ozaki-II / CRT` 复数 `FP64` 矩阵乘法是系统里的关键创新点之一，但不是系统设计的全部**
+- **系统最终要同时覆盖软件接口、复数高精度 GEMM、子空间对角化、以及 `NML / CIM` 协同**
 
-### 10.3 block LOBPCG 在当前架构中的具体映射
+用一句话概括当前论文的正确定位：
 
-设：
-
-- `X`：当前近似特征向量块，维度 `N x m`
-- `W`：当前预条件残差块，维度 `N x m`
-- `P`：上一轮共轭方向块，维度 `N x m`
-
-对广义问题可写作：
-
-- `R = H_sub X - S_sub X Lambda`
-- `W = T^{-1} R`
-
-其中 `T^{-1}` 是预条件器。
-
-当前一轮迭代的数据流如下：
-
-1. 将 `H_sub`、`S_sub` 写入 CIM 阵列并在本轮求解期间驻留  
-   注意：这里的“驻留”只在**当前 reduced problem 求解阶段**成立。外层 Davidson 子空间扩展或下一轮 SCF 之后，矩阵仍可能需要重写。
-
-2. NML 把 `X`、`W`、`P` 作为 activation 送入 CIM  
-   若采用 block 调度，可一次送入 `Q = [X, W, P]`
-
-3. CIM 计算：
-   - `H Q`
-   - `S Q`
-
-4. NML 计算投影矩阵：
-   - `A_Q = Q^H H Q`
-   - `B_Q = Q^H S Q`
-
-5. NML 在 `3m x 3m` 小问题上做 generalized Hermitian eigensolve：
-   - `A_Q C = B_Q C Theta`
-
-6. NML 利用系数矩阵 `C` 更新：
-   - `X_new = Q C_x`
-   - `P_new = Q C_p`
-
-7. 若残差未收敛，继续下一轮
-
-这里真正“对角化”的地方不是 CIM 阵列本身，而是 NML 中的 **`3m x 3m` 微型广义本征问题**。
-
-### 10.4 这条路线为什么适合 CIM
-
-Gemini 给出的核心判断是成立的，原因主要有三点：
-
-1. `H_sub`、`S_sub` 可以在一轮迭代求解中保持 weight stationary  
-   对 CIM 来说，静态矩阵 + 流式输入块向量正是最舒服的数据流。
-
-2. LOBPCG 的主耗时确实集中在 block MVM  
-   对 `Q = [X, W, P]` 来说，最重的部分是 `H Q` 与 `S Q`，这正好映射到复数阵列。
-
-3. 正交化和 Rayleigh-Ritz 都被限制在小窗口里  
-   NML 不需要处理长历史向量链条，这比把大量全局正交化强塞给 CIM 要现实得多。
-
-### 10.5 但这条路线也有一个必须写清楚的边界
-
-Gemini 那套叙述隐含了一个非常重要的前提：
-
-- `m` 要明显小于 `N`
-
-例如：
-
-- `N = 100`
-- `m = 4`
-- 则 `3m = 12`
-
-这时 `3m x 3m` 的小问题确实非常小，LOBPCG 很漂亮。
-
-但在 QE 的常见 Davidson 子空间里，情况经常是：
-
-- `N = nbase`
-- `m = nbnd`
-- 而 `nbase` 典型上只比 `nbnd` 大一倍左右
-
-也就是说很多时候：
-
-- `N ~ 2m`
-
-这时 `3m` 已经不再是“极小常数”，甚至会接近或超过 `N`。  
-在这种 regime 下，LOBPCG 的 Rayleigh-Ritz 小问题不一定比直接对 `N x N` 的 reduced matrix 做 dense solve 更划算。
-
-所以这部分必须写进设计手册：
-
-- **LOBPCG 不是对所有 QE 子空间都天然优于 direct dense solve**
-- 它更适合 `m << N`、只求少量最低本征对、并且矩阵在一个 solve 窗口内能稳定驻留的场景
-
-### 10.6 当前推荐的混合方案
-
-因此，设计上建议采用**双路径对角化架构**：
-
-#### 模式 A：直接 dense 微求解器
-
-适用条件：
-
-- `N` 很小
-- `m` 与 `N` 同量级
-- 或 NML 已经可以容纳一个小型 `diaghg` 风格单元
-
-执行方式：
-
-- NML 直接解 `N x N` 标准/广义 Hermitian 本征问题
-- CIM 主要用于矩阵构造与前序 block 乘
-
-#### 模式 B：LOBPCG 协同求解器
-
-适用条件：
-
-- `m << N`
-- 只求少量最低本征对
-- `H_sub`、`S_sub` 在一个求解窗口内可驻留
-- NML 面积预算只够做 `3m x 3m` 微型 eigensolve
-
-执行方式：
-
-- CIM 做 `H Q` / `S Q`
-- NML 做投影、正交化、`3m x 3m` 微型广义本征求解与块更新
-
-### 10.7 NML 需要具备的最低能力
-
-如果走 LOBPCG 路线，NML 至少要能完成：
-
-- 复数向量内积与 block Gram 矩阵计算
-- 小规模 QR / 正交化
-- `3m x 3m` complex Hermitian generalized eigensolve
-- 必要时对 `B_Q` 做 Cholesky
-- 残差评估与收敛控制
-
-如果这些能力塞不进 NML，那么系统就不该强行走 LOBPCG，而应该回退到 direct dense 微求解器或 CPU。
-
-## 12. 当前实现建议
-
-结合仓库现状，建议按“主线 + 支线”的方式推进：
-
-### 第一步：以完整 FP64 Ozaki-II 路线为主线
-
-- 完善 `FP64 complex GEMM emulation`
-- 明确 residue buffer、CRT 重构、Karatsuba 3M 的时延模型
-- 让 Host/NML/CIM 的职责围绕这条主链闭环
-
-### 第二步：把对子空间求解器的接口接到这条主线
-
-- 在需要高精度复数乘法的 QE 路径上优先使用 Ozaki-II / CRT
-- 对 `H_sub` / `S_sub` 相关 kernel 明确是否采用完整模式还是 CPU fallback
-
-### 第三步：保留当前 block MVM 验证作为支线
-
-这一阶段已经完成的内容是：
-
-- 复数 4M / 3M 路径
-- `H X` / `S X`
-- `X^H (H X)` / `X^H (S X)` 构造
-- `S_sub` 的 Hermitian 化与 Cholesky 检查
-
-### 第四步：补一个 NML 侧微对角化原型
-
-- 对 direct dense 路线：
-  - 先实现一个小规模标准/广义 Hermitian 微求解器模型
-- 对 LOBPCG 路线：
-  - 先实现 `Q=[X,W,P]` 的投影与 `3m x 3m` 小问题求解
-
-### 第五步：再继续细化底层 primitive
-
-在前两步完成后，再把 `CIM_Macro` 的实数计算核心逐步替换为：
-
-- 更接近 Ozaki 的实数取模/重构模型
-- 或者更精细的 INT8 多切片行为模型
-
-这样可以把：
-
-- 完整 FP64 复数 Ozaki-II 链
-- 子空间对角化/NML 闭环
-- 复数系统架构正确性
-- 实数乘法器细节实现
-
-这三件事拆开验证，降低联调复杂度。
-
-## 13. 结论
-
-基于师兄的实数 Ozaki 乘法器设计和 Uchino 2025 的复数扩展，当前系统的主路线应当明确为：
-
-- 以实数乘法器为底层 primitive
-- 基于 Ozaki-II / CRT 实现完整的 `FP64 complex GEMM emulation`
-- 在模域默认采用 Karatsuba 3M
-- 面向 QE 的 `H_sub` / `S_sub` 与 block-vector 乘建立专用数据流
-- 在对角化层保留“direct dense 微求解器”和“LOBPCG 协同求解器”两条路线
-- 用行为级模型验证 CRT 重构精度，并将 4M/3M 近似路径保留为探索性支线
-
-在这个框架下：
-
-- **Karatsuba 3M 是完整 FP64 CRT 模式下的默认模乘路径**
-- **Ozaki 实数阵列不再只是“可替换部件”，而是完整 FP64 复数 GEMM 模式的计算核心**
-- **LOBPCG 是特定维度比例下的高吞吐方案，不是所有 QE 子空间都优于 direct solve 的通用答案**
-
-这条路线与 QE 的实际问题结构、与参考 PDF 的硬件分层思想、以及当前仓库已有的 SystemC 原型三者是一致的。
+**我们不是在写一篇“复数矩阵乘法器设计”，而是在写一套面向 DFT 软件、以 Davidson 子空间对角化为当前切入点、并原生支持复数 `FP64` GEMM 的科学计算加速系统。**
