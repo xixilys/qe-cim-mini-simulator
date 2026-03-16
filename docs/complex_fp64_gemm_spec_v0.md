@@ -104,6 +104,22 @@
 
 这一定义避免了一开始就把芯片目标写成“无限大矩阵通吃”，也保证 contract 与当前 workload 一致。
 
+当前已经拿到的 `QE` 真实样本也给出了一个更具体的低维窗口：
+
+- [`qe_subspace_profile_20260312.md`](/Volumes/remote/phd/year_2/project/dft加速/docs/benchmarks/qe_subspace_profile_20260312.md)
+
+其中 `Si` 样本显示：
+
+- `nbnd = 8` 时主导维度点是 `(n, m) = (8, 8)` 与 `(16, 8)`
+- `nbnd = 16` 时主导维度点是 `(n, m) = (16, 16)` 与 `(32, 16)`
+
+因此，当前行为模型和微对角化器的第一优先级应先覆盖：
+
+- `N = 16`
+- `N = 32`
+
+而 `64 / 128 / 256` 保持为 tile-composable 的架构目标。
+
 ### 3.5 支持算子模式
 
 `v0` 明确支持以下模式：
@@ -251,6 +267,113 @@
 
 这保证了阵列职责足够纯粹，避免 datapath 被控制流污染。
 
+### 5.4.1 当前 tile 组织结论
+
+当前 `v0` 不再把主 `SRAM` 组织冻结为“全量 residue 预存”的形式，而是冻结为一版 near-memory 复数 tile：
+
+- 两块主 bank：
+  - `real bank`
+  - `imag bank`
+- 主 bank 中保存当前 tile 的原始复数数据行块
+- 每个 tile 配一套本地 `mod encode unit`
+- 每个 tile 配一套按整行粒度组织的 `row residue buffer`
+- tile 内配置 `3M residue MAC engine`
+- tile 输出侧配置 `CRT / reconstruction` 单元
+
+这样定义的原因是：
+
+- 对 `FP64` 来说，如果把主存储直接扩成全量 residue 多模副本，`SRAM` 面积与 banking 开销会明显增大
+- 因而更合理的 `v0` 主线是：主 `SRAM` 保留原始数据，热点行按需取模并在 tile 内复用
+- 这样既保留了模域 `3M` 的计算意义，也避免过早把面积锁死在全模预存方案上
+
+### 5.4.2 主 bank 与复数布局
+
+`v0` 的 tile 内复数布局冻结为：
+
+- 一块 bank 只存实部行
+- 一块 bank 只存虚部行
+- 一次 tile 调度默认同时激活一行实部和对应一行虚部
+
+这样做的目的有三点：
+
+- 与 `Karatsuba 3M` 路径自然对齐
+- 避免在 tile 内再做复数拆包
+- 便于对实部与虚部的 residue reuse 分别统计
+
+### 5.4.3 Per-Tile Mod Encode Unit
+
+每个 tile 的 `mod encode unit` 负责：
+
+- 将读出的实部 / 虚部原始行按当前模数集合转换为 residue 表示
+- 为 `3M` 所需的三路输入准备模域数据
+- 在 cache miss 时把新生成的 residue 行写入 `row residue buffer`
+
+这里的设计约束是：
+
+- 编码粒度按整行，而不是按单元素零散触发
+- 编码单元属于 tile 本地资源，而不是全局共享资源
+- 其目标不是替代主存储，而是降低热点行的重复取模开销
+
+### 5.4.4 Row Residue Buffer
+
+`row residue buffer` 的当前冻结组织为：
+
+- 缓存粒度：整行
+- 缓存内容：
+  - 行号 / tag
+  - 实部 residue 行
+  - 虚部 residue 行
+  - valid / replacement 元信息
+- 作用：
+  - 复用高频激活行
+  - 降低 `mod encode` 压力
+  - 避免同一行在 block 运算中被重复取模
+
+`v0` 当前不把它建模成通用 cache，而是把它定义成一类 tile-local 的热点行 residue buffer。
+
+### 5.4.5 3M Residue MAC Engine
+
+tile 内复数乘法与累加默认采用 `Karatsuba 3M`：
+
+- `t1 = A_R * B_R`
+- `t2 = A_I * B_I`
+- `t3 = (A_R + A_I) * (B_R + B_I)`
+
+组合得到：
+
+- `C_R = t1 - t2`
+- `C_I = t3 - t1 - t2`
+
+这里需要明确两点：
+
+- `3M residue MAC engine` 不只是做单次模乘，还要完成单个输出元素所需的模空间 dot-product 累加
+- `v0` 的重构粒度按输出元素或极小输出块进行，而不是把更大块的长程累加一直拖在 residue 域里
+
+也就是说，当前 tile 主计算路径是：
+
+- 行读出
+- 取模 / 命中复用
+- 模域 `3M`
+- 模域累加
+- 当前输出元素完成后再重构
+
+### 5.4.6 Reconstruction Boundary
+
+当前 `v0` 的重构边界冻结为：
+
+- 在模空间内完成单个输出元素的完整 dot-product 累加
+- 然后由 tile 侧 `CRT / reconstruction` 单元恢复到普通数值域
+
+当前不采用以下两种作为主设计：
+
+- 每次模乘后立刻恢复
+- 将更大块输出长期保留在 residue 域后再统一重构
+
+原因是：
+
+- 前者会使 residue 域计算价值过低
+- 后者会迅速抬高 residue 累加器位宽、buffer 与控制复杂度
+
 ### 5.5 Residue Accumulator
 
 该模块负责：
@@ -284,11 +407,13 @@
 
 1. runtime 切 tile
 2. `NML` 预处理与缩放
-3. residue generator 生成各模输入块
-4. modulus scheduler 发起 `3M` 模域 `GEMM`
-5. residue accumulator 回收中间结果
-6. `CRT` engine 重构
-7. output formatter 反缩放并写回
+3. `real/imag bank` 按行读出当前工作行
+4. tile 查询 `row residue buffer`
+5. miss 时由 `mod encode unit` 生成 residue 行并写回 buffer
+6. modulus scheduler 发起 `3M` 模域 `GEMM/MAC`
+7. residue accumulator 完成当前输出元素所需的模空间累加
+8. `CRT` engine 在输出边界执行重构
+9. output formatter 反缩放并写回
 
 ### 6.2 Buffer 分层
 
@@ -296,10 +421,16 @@
 
 - `Input staging buffer`
   - 存 `A/B` 当前 tile 的实部和虚部
-- `Residue buffer`
-  - 存各模数下的 residue tiles
+- `Row residue buffer`
+  - 存热点行的实部 / 虚部 residue 表示
 - `Output / reconstruction buffer`
   - 存重构前的 residue accumulation 和重构后的 `C`
+
+在当前 `v0` 里，这里有一个重要边界：
+
+- 不把主 `SRAM` 直接冻结成全量 residue 副本存储
+- residue 作为 tile 内派生表示存在于 `row residue buffer` 和结果累加路径上
+- 这样主存储面积、热点复用和模域计算收益之间能取得更合理的平衡
 
 ### 6.3 实虚部布局
 
@@ -450,6 +581,20 @@
 
 这是后续系统论文中“不是玩具 workload”的关键证据。
 
+当前已经有两组真实 `Si` 样本可直接使用：
+
+- [`qe_si_medium_trace.csv`](/Volumes/remote/phd/year_2/project/dft加速/docs/benchmarks/results/qe_si_medium_trace.csv)
+- [`qe_si_large_trace.csv`](/Volumes/remote/phd/year_2/project/dft加速/docs/benchmarks/results/qe_si_large_trace.csv)
+
+它们已经证明：
+
+- 当前主路径是 `cdiaghg` 的复数 generalized Hermitian
+- generalized-like 调用在样本中占比达到 `77.8%` 到 `85.2%`
+- Davidson 子空间主导分布符合 `n ≈ m` 到 `n ≈ 2m`
+- `S_sub` 明显经常不是单位阵
+
+这些事实会直接约束后续 `NML` generalized 微对角化器与 complex `FP64 GEMM` 子系统的主设计。
+
 ### 8.4 压力测试集
 
 用途：验证坏情况下的稳健性。
@@ -502,3 +647,16 @@
 4. 最后才下探更细的 datapath 和物理实现细节
 
 如果这份文档没有先立住，后面的微架构图和 datapath 很容易越画越细、越画越偏。
+
+当前第 6 项“代价拆账”已经单独整理为：
+
+- [`complex_fp64_gemm_cost_model_v0.md`](/Volumes/remote/phd/year_2/project/dft加速/docs/complex_fp64_gemm_cost_model_v0.md)
+
+后续关于：
+
+- 模数数量
+- `3M/4M` 实数 GEMM 次数
+- residue buffer
+- `CRT` 重构项数
+
+都应以这份 cost model 为准，而不要再在不同文档里各自估一遍。

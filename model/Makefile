@@ -1,38 +1,53 @@
 CXX = g++
-CXXFLAGS = -O3 -Wall -std=c++17 -I/opt/homebrew/include
+CXXFLAGS = -O3 -Wall -std=c++17 -Iinclude -I/opt/homebrew/include
 LDFLAGS = -L/opt/homebrew/lib -lsystemc -lm
+ACCEL_LDFLAGS = -framework Accelerate
+BUILD_DIR = build
+OBJ_DIR = $(BUILD_DIR)/obj
+ITERATIVE_CXXFLAGS = $(filter-out -O3,$(CXXFLAGS)) -O2
 
-SRC = src/fft_engine.cpp src/cim_macro.cpp src/fpga_controller.cpp src/tb_mini_qe.cpp
-OBJ = $(SRC:.cpp=.o)
-EXEC = bin/mini_qe_cim_sim
-SOCK_EXEC = bin/cim_socket_server
-SUBSPACE_EXEC = bin/complex_subspace_eval
 OZAKI_EXEC = bin/complex_ozaki_eval
+GEN_SUBSPACE_EXEC = bin/generalized_subspace_eval
+ITER_SUBSPACE_EXEC = bin/iterative_subspace_eval
+ITER_TILE_GEMM_EXEC = bin/iterative_tile_gemm_eval
+ITER_MICRO_COMPARE_EXEC = bin/iterative_micro_compare_eval
+ITER_QE_REGRESSION_EXEC = bin/iterative_qe_regression_eval
 
-all: $(EXEC) $(SOCK_EXEC) $(SUBSPACE_EXEC) $(OZAKI_EXEC)
+all: $(OZAKI_EXEC) $(GEN_SUBSPACE_EXEC) $(ITER_SUBSPACE_EXEC) $(ITER_TILE_GEMM_EXEC) $(ITER_MICRO_COMPARE_EXEC) $(ITER_QE_REGRESSION_EXEC)
 
-$(EXEC): $(OBJ)
+$(OZAKI_EXEC): $(OBJ_DIR)/tb_complex_ozaki.o
 	mkdir -p bin
-	$(CXX) $(OBJ) -o $@ $(LDFLAGS)
+	$(CXX) $(OBJ_DIR)/tb_complex_ozaki.o -o $@ $(LDFLAGS)
 
-$(SOCK_EXEC): src/cim_socket_server.o
+$(GEN_SUBSPACE_EXEC): $(OBJ_DIR)/tb_generalized_subspace.o
 	mkdir -p bin
-	$(CXX) src/cim_socket_server.o src/cim_macro.o src/fft_engine.o -o $@ $(LDFLAGS)
+	$(CXX) $(OBJ_DIR)/tb_generalized_subspace.o -o $@ $(LDFLAGS) $(ACCEL_LDFLAGS)
 
-$(SUBSPACE_EXEC): src/tb_complex_subspace.o src/cim_macro.o
+$(ITER_SUBSPACE_EXEC): $(OBJ_DIR)/tb_iterative_subspace.o $(OBJ_DIR)/iterative_subspace_engine.o
 	mkdir -p bin
-	$(CXX) src/tb_complex_subspace.o src/cim_macro.o -o $@ $(LDFLAGS)
+	$(CXX) $(OBJ_DIR)/tb_iterative_subspace.o $(OBJ_DIR)/iterative_subspace_engine.o -o $@ $(LDFLAGS)
 
-$(OZAKI_EXEC): src/tb_complex_ozaki.o
+$(ITER_TILE_GEMM_EXEC): $(OBJ_DIR)/tb_iterative_tile_gemm.o $(OBJ_DIR)/iterative_subspace_engine.o
 	mkdir -p bin
-	$(CXX) src/tb_complex_ozaki.o -o $@ $(LDFLAGS)
+	$(CXX) $(OBJ_DIR)/tb_iterative_tile_gemm.o $(OBJ_DIR)/iterative_subspace_engine.o -o $@ $(LDFLAGS)
 
-%.o: %.cpp
+$(ITER_MICRO_COMPARE_EXEC): $(OBJ_DIR)/tb_iterative_micro_compare.o $(OBJ_DIR)/iterative_subspace_engine.o
+	mkdir -p bin
+	$(CXX) $(OBJ_DIR)/tb_iterative_micro_compare.o $(OBJ_DIR)/iterative_subspace_engine.o -o $@ $(LDFLAGS) $(ACCEL_LDFLAGS)
+
+$(ITER_QE_REGRESSION_EXEC): $(OBJ_DIR)/tb_iterative_qe_regression.o $(OBJ_DIR)/iterative_subspace_engine.o
+	mkdir -p bin
+	$(CXX) $(OBJ_DIR)/tb_iterative_qe_regression.o $(OBJ_DIR)/iterative_subspace_engine.o -o $@ $(LDFLAGS) $(ACCEL_LDFLAGS)
+
+$(OBJ_DIR)/iterative_subspace_engine.o: CXXFLAGS := $(ITERATIVE_CXXFLAGS)
+$(OBJ_DIR)/tb_iterative_subspace.o: CXXFLAGS := $(ITERATIVE_CXXFLAGS)
+$(OBJ_DIR)/tb_iterative_tile_gemm.o: CXXFLAGS := $(ITERATIVE_CXXFLAGS)
+$(OBJ_DIR)/tb_iterative_micro_compare.o: CXXFLAGS := $(ITERATIVE_CXXFLAGS)
+$(OBJ_DIR)/tb_iterative_qe_regression.o: CXXFLAGS := $(ITERATIVE_CXXFLAGS)
+
+$(OBJ_DIR)/%.o: src/%.cpp
+	mkdir -p $(OBJ_DIR)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 clean:
-	rm -f src/*.o $(EXEC) $(SOCK_EXEC) $(SUBSPACE_EXEC) $(OZAKI_EXEC) logs/*.log
-
-run: $(EXEC)
-	mkdir -p logs
-	./$(EXEC) > logs/sim.log
+	rm -rf $(OBJ_DIR) $(OZAKI_EXEC) $(GEN_SUBSPACE_EXEC) $(ITER_SUBSPACE_EXEC) $(ITER_TILE_GEMM_EXEC) $(ITER_MICRO_COMPARE_EXEC) $(ITER_QE_REGRESSION_EXEC) logs/*.log

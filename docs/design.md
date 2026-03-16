@@ -100,15 +100,16 @@
 
 这里要强调的是：这条主路径不是系统的全部，但它是系统里的**关键创新子系统**。
 
-### 3.4 创新点四：NML 主导的对角化闭环
+### 3.4 创新点四：固定矩阵负载的近存迭代对角化闭环
 
 当前论文不能只写“GEMM 能算”，还必须回答“对角化如何完成”。  
 本设计里的答案是：
 
-- `CIM` 负责高吞吐矩阵乘法与 trailing update
-- `NML` 负责 Hermitian 化、广义到标准问题变换、三对角化控制、微型本征求解与回代
+- `H_sub / S_sub` 作为本地固定矩阵驻留在 near-memory tile
+- tile 反复执行 `H_sub X`、`S_sub X` 这类块向量乘法
+- `NML` 负责 reduced-space 构造、正交化、微型广义本征求解与固定步长控制
 
-也就是说，对角化不是外挂在系统外部的一段软件，而是整个架构中的**原生子系统**。
+也就是说，对角化不是外挂在系统外部的一段软件，而是整个架构中的**原生子系统**；同时，`CIM` 不再只是 trailing update 的配角，而是直接进入迭代微对角化主回路。
 
 ### 3.5 创新点五：对 QE / PySCF 兼容的软件接口设计
 
@@ -355,6 +356,42 @@
 
 因此，主设计真正要优化的是整个模域数据流，而不是把问题简化成“一个复数乘法公式选 `3M` 还是 `4M`”。
 
+### 7.6 近存 tile 的当前组织结论
+
+针对 `complex FP64` 科学计算，我们当前不再把 `CIM tile` 理解为“直接在主 `SRAM` 中长期存放全量 residue 矩阵”的极端存算形式，而是收敛到更现实的 near-memory 组织：
+
+- 主 `SRAM` 仍保存原始复数矩阵数据的实部 / 虚部行块
+- 每个 tile 内设置一套本地 `mod encode` 单元，将被激活的行按需转换到 residue 域
+- tile 内保留小容量的 `row residue buffer`，缓存高重用热点行的 residue 结果
+- 复数乘法主路径仍采用 `Karatsuba 3M`
+- `3M` 的实数子乘法与 dot-product 累加在模空间内完成，最后再由 tile 侧重构单元恢复到普通数值域
+
+这条结论的意义是：
+
+- 对 `FP64` 而言，如果直接把主存储整体翻译成全量 residue 形式，`SRAM` 面积和 banking 开销会明显上升
+- 因而更合理的主线不是“纯 residue 常驻阵列”，而是“原始数据近存 + 热点行按需取模 + 模空间完成主乘加 + 最终重构”
+- 这让系统保留了模域 `3M` 的计算价值，同时避免把主 `SRAM` 容量膨胀直接固定为全量多模副本
+
+### 7.7 当前复数 tile 数据流
+
+当前选定的复数 `FP64` tile 数据流为：
+
+1. `real bank` 与 `imag bank` 同时按行读出
+2. 查询 tile 内 `row residue buffer`
+3. 若命中，则直接复用该行的 residue 表示
+4. 若未命中，则送入 tile 内 `mod encode` 单元完成取模编码，并写回 `row residue buffer`
+5. residue 形式的实部 / 虚部行送入 `3M residue MAC` 单元
+6. 在模空间内完成单个输出元素所需的复数乘法与 dot-product 累加
+7. 当前输出元素完成后，由 tile 侧 `CRT / reconstruction` 单元恢复到普通数值域
+
+因此，系统在这一层的正确表述应是：
+
+- `SRAM` 负责近数据存储与高带宽行供给
+- tile 侧编码、buffer 和 `3M` 单元承担模空间主计算
+- 最终重构留在 tile 外围或 tile 侧重构单元完成
+
+这比把全部语义都压成“纯存算 bitcell”更符合当前 `FP64 complex` 目标，也更适合后续面积与数据流分析。
+
 ## 8. 子空间对角化子系统
 
 因为当前论文切入的是 `QE Davidson` 子空间对角化，所以系统必须同时给出这一层设计，而不能只停留在“外部有个 eigensolver”。
@@ -368,37 +405,88 @@
 
 这也是当前 paper cut 最适合的范围。
 
-### 8.2 选定的对角化主流程
+### 8.2 当前主候选：固定矩阵负载的迭代微对角化
 
-对子空间对角化，系统采用如下主流程：
+当前更符合系统创新点的主候选路线，不再是“先 standardize、再完整 direct dense 解全谱”的纯数字主线，而是：
+
+- `H_sub / S_sub` 固定驻留在 near-memory complex tile
+- 反复将 block vector `X` 流过 tile，计算：
+  - `H_sub X`
+  - `S_sub X`
+- 在 `NML` 中构造 reduced-space generalized problem
+- 通过固定步长的 block iterative / Rayleigh-Ritz refinement 得到最小 `m` 个本征对
+
+这一主候选的关键点是：
+
+- `CIM` / tile 直接承担对角化迭代中的主算子
+- `NML` 只负责小规模、控制流强的 reduced solver 和正交化
+- 算法天然匹配“本地固定矩阵 + 流式向量块”的硬件负载模型
+
+### 8.3 固定矩阵负载算法流程
+
+在当前版本中，这条路线可细化为：
 
 1. **输入整形**
    - 对 `H_sub` 做 Hermitian 一致性检查与必要的对称化
    - 对 `S_sub` 做 Hermitian 检查与正定性检查
 
-2. **广义问题标准化**
-   - 若存在 `S_sub`，先在 `NML` 中执行 Cholesky：`S_sub = L L^H`
-   - 将问题转换为标准 Hermitian 问题：
-     `A = L^{-1} H_sub L^{-H}`
+2. **矩阵驻留**
+   - 将 `H_sub` 与 `S_sub` 的实部 / 虚部行块写入 tile 内 `real/imag bank`
+   - 之后在若干固定步迭代中保持矩阵常驻
 
-3. **块化三对角化**
-   - 对标准 Hermitian 矩阵 `A` 执行 blocked Householder tridiagonalization
-   - panel factorization 由 `NML` 控制
-   - trailing matrix update 交给 `CIM` 上的高吞吐复数 `GEMM`
+3. **初始块向量输入**
+   - runtime / `NML` 提供初始 block vector `X`
+   - 其列数对应目标低端本征空间大小 `m` 或扩展块维度
 
-4. **三对角本征求解**
-   - 对得到的 tridiagonal matrix 在 `NML` 微求解器中执行 QR / bisection 类小规模本征求解
+4. **tile 主算子计算**
+   - tile 反复计算 `HX = H_sub X`
+   - generalized 路径同时计算 `SX = S_sub X`
+   - 这一层复用当前选定的 dual-bank + row residue buffer + `3M` residue MAC 主路径
 
-5. **本征向量回代**
-   - 通过 Householder reflector 回代恢复标准问题的本征向量
-   - 若原问题为广义本征问题，再乘 `L^{-H}` 回到原空间
+5. **reduced-space 构造**
+   - `NML` 构造：
+     - `X^H H X`
+     - `X^H S X`
+   - 或在扩展子空间 `Q = [X, W]` / `Q = [X, W, P]` 上构造：
+     - `Q^H H Q`
+     - `Q^H S Q`
 
-这个流程的好处是：
+6. **微型广义本征求解**
+   - `NML` 对 reduced generalized Hermitian 问题求解
+   - 得到当前 Ritz 值与 Ritz 向量
 
-- 计算主负载依然可以落到 `GEMM` 主路径上
-- 对角化真正成为系统中的一个原生数据流，而不是外挂的软件库调用
+7. **搜索子空间更新**
+   - 形成 residual / correction block
+   - 执行 `S`-正交化
+   - 更新下一轮 block vector 或扩展子空间
 
-### 8.3 软硬分工
+8. **固定步长终止**
+   - 按固定 `T` 步结束
+   - 输出最小 `m` 个候选本征对给外层 `QE Davidson`
+
+这条流程的本质不是让近存模块单独承担整个全局收敛，而是把它定义成：
+
+- `QE Davidson` 外层中的一个 near-memory subspace refinement engine
+
+### 8.4 当前 baseline：direct dense generalized solver
+
+虽然当前主候选是固定矩阵负载迭代路线，但系统仍保留一条 direct dense baseline：
+
+- `Hermitianize`
+- `SPD check`
+- `Cholesky`
+- generalized 到 standard
+- tridiagonalization
+- implicit QR
+- back-transform
+
+这条路线的作用是：
+
+- 作为数值 reference / golden flow
+- 为后续 iterative 路线提供误差、残差与正交性对照
+- 在早期验证阶段提供 fallback 与行为基线
+
+### 8.5 软硬分工
 
 在当前系统里：
 
@@ -407,49 +495,48 @@
   - `S_sub X`
   - `Q^H H Q`
   - `Q^H S Q`
-  - 三对角化过程中的 trailing update
-  - 回代过程中的大块矩阵乘法
+  - 在 tile 内完成实部 / 虚部分离读出、热点行 residue 复用、`3M` 模域乘加与结果重构
 
 - `NML` 负责：
   - Hermitian 化与检查
-  - `S_sub` 的 Cholesky
-  - 广义到标准问题的变换控制
-  - Householder panel 生成
-  - tridiagonal eigensolver
+  - 初始块向量与 fixed-step 控制
+  - reduced-space generalized matrix 构造
+  - `S`-正交化
+  - 微型广义本征求解
   - 残差判定与结果整理
 
 这样切分的关键在于：
 
-- 把密集矩阵运算留给阵列
-- 把控制流强、规模较小、依赖复杂的步骤留给 `NML`
+- 把固定矩阵负载下最重的 `HX / SX` 主算子留给 tile
+- 把 reduced-space 的小规模高依赖步骤留给 `NML`
 
-### 8.4 为什么这层对 VLSI 论文重要
+### 8.6 为什么这层对 VLSI 论文重要
 
 如果只写“我们能做一个很好的复数 `GEMM`”，论文会更像一个算术单元设计。  
-而把它放进当前提取出来的 Davidson 子空间对角化闭环里，论文才真正变成：
+而把它放进当前提取出来的 Davidson 子空间对角化闭环里，并且让 `CIM` 真正承担固定矩阵负载下的迭代主算子，论文才真正变成：
 
 - 面向 DFT 软件的系统架构
 - 有明确 workload
 - 有明确 software-to-hardware path
 - 有明确 end-to-end story
 
-### 8.5 当前原型与完整对角化的关系
+### 8.7 当前原型与完整对角化的关系
 
 当前仓库里已经验证的是：
 
 - `Ozaki-II / CRT` 复数 `FP64` GEMM 行为正确性
-- 子空间数据流构造与 block 运算语义
+- generalized reduced problem 的 direct dense baseline 行为正确性
 
 下一阶段需要补齐的是：
 
-- blocked Hermitian tridiagonalization 的行为级模型
-- generalized Hermitian 路径中的 Cholesky 与 back-transform
-- 与 `QE Davidson` reduced matrix 的闭环联调
+- fixed-step block iterative 路线的行为级模型
+- 本地固定矩阵负载下 `HX / SX` 与 reduced-space 更新的闭环验证
+- 与 `QE Davidson` reduced matrix 的迭代式闭环联调
 
 因此，当前论文文档应当明确：
 
-- **系统设计已经包含完整的对角化子系统方案**
-- **当前原型处于“GEMM 主路径已验证，对角化闭环继续实现”的阶段**
+- **系统设计已经包含以 fixed-matrix iterative 为主候选、以 direct dense 为 baseline 的双路线对角化方案**
+- **当前原型处于“GEMM 主路径已验证，iterative diagonalization 闭环继续实现”的阶段**
 
 ## 9. 当前论文主线的数据流
 
@@ -458,17 +545,16 @@
 1. `QE` 运行到 Davidson 子空间对角化阶段
 2. runtime 识别出当前 kernel 属于已提取的 Hermitian / generalized Hermitian 子问题
 3. 将 `H_sub`、`S_sub` 及相关 block vector 发送到加速器
-4. `Ozaki-II / CRT` 主路径负责：
+4. near-memory tile 主路径负责：
    - `H_sub X`
    - `S_sub X`
-   - 投影矩阵构造
-   - 三对角化和回代中的密集矩阵更新
+   - reduced-space 构造所需的主矩阵乘法
 5. `NML` 负责：
    - Hermitian 化
-   - Cholesky
-   - Householder 控制
-   - tridiagonal eigensolver
-   - 回代控制
+   - fixed-step 调度
+   - `S`-正交化
+   - reduced generalized eigensolve
+   - 候选本征对整理
 6. 得到的本征对回送给 `QE`
 7. `QE` 继续其外层 Davidson / SCF 流程
 
@@ -524,16 +610,17 @@
 
 ### 11.2 支撑原型
 
-- [`model/src/tb_complex_subspace.cpp`](/Volumes/remote/phd/year_2/project/dft加速/model/src/tb_complex_subspace.cpp)
-- [`model/docs/complex_subspace_validation.md`](/Volumes/remote/phd/year_2/project/dft加速/model/docs/complex_subspace_validation.md)
-- [`model/docs/hardware_architecture.md`](/Volumes/remote/phd/year_2/project/dft加速/model/docs/hardware_architecture.md)
-- [`model/docs/qe_operator_mapping.md`](/Volumes/remote/phd/year_2/project/dft加速/model/docs/qe_operator_mapping.md)
+- [`model/src/tb_generalized_subspace.cpp`](/Volumes/remote/phd/year_2/project/dft加速/model/src/tb_generalized_subspace.cpp)
+- [`model/docs/generalized_subspace_validation.md`](/Volumes/remote/phd/year_2/project/dft加速/model/docs/generalized_subspace_validation.md)
+- [`model/src/tb_iterative_subspace.cpp`](/Volumes/remote/phd/year_2/project/dft加速/model/src/tb_iterative_subspace.cpp)
+- [`model/src/tb_iterative_tile_gemm.cpp`](/Volumes/remote/phd/year_2/project/dft加速/model/src/tb_iterative_tile_gemm.cpp)
+- [`model/docs/iterative_subspace_flow.md`](/Volumes/remote/phd/year_2/project/dft加速/model/docs/iterative_subspace_flow.md)
 
 它们服务于：
 
-- 子空间数据流探索
-- 软件到硬件映射说明
-- 系统落地路径整理
+- generalized Hermitian 微对角化验证
+- 固定矩阵负载的 iterative 子空间流程验证
+- residue / CRT 复数 GEMM 在迭代引擎里的接入验证
 
 这些原型不是系统设计本身，但它们为当前论文的系统故事提供了可验证支撑。
 

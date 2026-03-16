@@ -10,6 +10,10 @@ fft_ifft_actual_data/
 fft_ifft_actual_data.zip
 tmp_qe_h2_small/
 tmp_qe_h2_tiny/
+tmp_qe_*/
+tmp_qe_*.in
+tmp_*_out/
+tmp_*_run.out
 ppt/
 full_transcription.txt
 

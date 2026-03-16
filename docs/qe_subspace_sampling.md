@@ -216,3 +216,21 @@ export QE_SUBSPACE_MIN_N=32
    - 至少保存每个主要维度点的一组 `H/S` 样本
 
 只要这一步先做好，后面的 `Ozaki-II` 模数选择、buffer 设计、坏案例压力测试，都会更有依据。
+
+## 9. 当前已拿到的真实样本
+
+截至 `2026-03-12`，已经在工作区副本 `soft/qe-7.5` 上完成了两组 `Si` SCF 样本的采样：
+
+- [`qe_si_medium_trace.csv`](/Volumes/remote/phd/year_2/project/dft加速/docs/benchmarks/results/qe_si_medium_trace.csv)
+- [`qe_si_large_trace.csv`](/Volumes/remote/phd/year_2/project/dft加速/docs/benchmarks/results/qe_si_large_trace.csv)
+
+对应的整理结论见：
+
+- [`qe_subspace_profile_20260312.md`](/Volumes/remote/phd/year_2/project/dft加速/docs/benchmarks/qe_subspace_profile_20260312.md)
+
+当前这两组样本已经足够支持几个重要判断：
+
+- 非 `Gamma` `Si` SCF 路径全部命中 `cdiaghg`
+- 主路径是复数 generalized Hermitian，而不是标准实对称问题
+- Davidson 子空间的主导维度点符合 `n ≈ m` 到 `n ≈ 2m`
+- `S_sub` 经常明显偏离单位阵，因此 generalized 路径必须作为主系统路径设计

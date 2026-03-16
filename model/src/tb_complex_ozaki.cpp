@@ -68,19 +68,13 @@ static ErrorStats compare_complex(const ComplexMatrix& ref, const ComplexMatrix&
 }
 
 static std::vector<int> default_zgemm_moduli() {
-    return {251, 241, 239, 233, 229, 227, 223, 211, 199, 197, 193, 191, 181};
+    return {251, 241, 239, 233, 229, 227, 223, 211,
+            199, 197, 193, 191, 181, 179, 173, 167};
 }
 
 static i128 mod_positive(i128 x, i128 p) {
     i128 r = x % p;
     if (r < 0) r += p;
-    return r;
-}
-
-static i128 sym_mod_i128(i128 x, i128 p) {
-    i128 r = mod_positive(x, p);
-    i128 half = p / 2;
-    if (r > half) r -= p;
     return r;
 }
 
@@ -106,6 +100,35 @@ static int inverse_mod(int a, int mod) {
     if (r != 1) return 0;
     if (t < 0) t += mod;
     return t;
+}
+
+static long double i128_to_long_double(i128 value) {
+    const bool neg = value < 0;
+    const u128 mag = neg ? static_cast<u128>(-(value + 1)) + 1 : static_cast<u128>(value);
+    const uint64_t lo = static_cast<uint64_t>(mag);
+    const uint64_t hi = static_cast<uint64_t>(mag >> 64);
+    long double out = std::ldexpl(static_cast<long double>(hi), 64);
+    out += static_cast<long double>(lo);
+    return neg ? -out : out;
+}
+
+static i128 crt_reconstruct_signed(const std::vector<long long>& residues,
+                                   const std::vector<int>& moduli) {
+    i128 value = mod_positive(residues[0], moduli[0]);
+    i128 prod = moduli[0];
+    for (size_t i = 1; i < moduli.size(); i++) {
+        const int mod = moduli[i];
+        const int value_mod = static_cast<int>(value % mod);
+        const int delta = static_cast<int>(mod_positive(residues[i] - value_mod, mod));
+        const int prod_mod = static_cast<int>(prod % mod);
+        const int inv = inverse_mod(prod_mod, mod);
+        const int step = static_cast<int>(mod_positive(static_cast<i128>(delta) * inv, mod));
+        value += prod * step;
+        prod *= mod;
+    }
+    const i128 half = prod / 2;
+    if (value > half) value -= prod;
+    return value;
 }
 
 static long double pow2_floor(long double x) {
@@ -214,12 +237,6 @@ static long double product_long_double(const std::vector<int>& moduli) {
     return p;
 }
 
-static i128 product_i128(const std::vector<int>& moduli) {
-    i128 p = 1;
-    for (int mod : moduli) p *= mod;
-    return p;
-}
-
 static std::vector<long long> quantize_real(const std::vector<double>& vals,
                                             const std::vector<long double>& scale,
                                             int rows, int cols, bool row_scale) {
@@ -295,7 +312,6 @@ static ComplexMatrix ozaki_complex_gemm(const ComplexMatrix& a, const ComplexMat
     const int k = a.cols;
     const int n = b.cols;
     const long double P_ld = product_long_double(cfg.moduli);
-    const i128 P = product_i128(cfg.moduli);
 
     std::vector<long double> mu_bar = compute_mu_bar(a);
     std::vector<long double> nu_bar = compute_nu_bar(b);
@@ -337,15 +353,6 @@ static ComplexMatrix ozaki_complex_gemm(const ComplexMatrix& a, const ComplexMat
         if (extra < std::numeric_limits<long double>::min() * 2.0L) break;
     }
 
-    std::vector<i128> crt_coeff(cfg.moduli.size());
-    std::vector<int> inv(cfg.moduli.size(), 0);
-    for (size_t l = 0; l < cfg.moduli.size(); l++) {
-        i128 p = cfg.moduli[l];
-        crt_coeff[l] = P / p;
-        int rem = static_cast<int>(mod_positive(crt_coeff[l], p));
-        inv[l] = inverse_mod(rem, cfg.moduli[l]);
-    }
-
     std::vector<std::vector<long long>> real_res(cfg.moduli.size(), std::vector<long long>(m * n, 0));
     std::vector<std::vector<long long>> imag_res(cfg.moduli.size(), std::vector<long long>(m * n, 0));
 
@@ -369,19 +376,19 @@ static ComplexMatrix ozaki_complex_gemm(const ComplexMatrix& a, const ComplexMat
     }
 
     ComplexMatrix c(m, n);
+    std::vector<long long> residues_r(cfg.moduli.size(), 0);
+    std::vector<long long> residues_i(cfg.moduli.size(), 0);
     for (int i = 0; i < m; i++) {
         for (int j = 0; j < n; j++) {
-            i128 sum_r = 0;
-            i128 sum_i = 0;
             for (size_t l = 0; l < cfg.moduli.size(); l++) {
-                sum_r += static_cast<i128>(real_res[l][i * n + j]) * crt_coeff[l] * inv[l];
-                sum_i += static_cast<i128>(imag_res[l][i * n + j]) * crt_coeff[l] * inv[l];
+                residues_r[l] = real_res[l][i * n + j];
+                residues_i[l] = imag_res[l][i * n + j];
             }
-            i128 c_r = sym_mod_i128(sum_r, P);
-            i128 c_i = sym_mod_i128(sum_i, P);
-            long double scale = mu[i] * nu[j];
-            c.real[c.idx(i, j)] = static_cast<long double>(c_r) / scale;
-            c.imag[c.idx(i, j)] = static_cast<long double>(c_i) / scale;
+            const i128 c_r = crt_reconstruct_signed(residues_r, cfg.moduli);
+            const i128 c_i = crt_reconstruct_signed(residues_i, cfg.moduli);
+            const long double scale = mu[i] * nu[j];
+            c.real[c.idx(i, j)] = static_cast<double>(i128_to_long_double(c_r) / scale);
+            c.imag[c.idx(i, j)] = static_cast<double>(i128_to_long_double(c_i) / scale);
         }
     }
     return c;
