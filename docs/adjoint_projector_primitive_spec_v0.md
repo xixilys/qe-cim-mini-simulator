@@ -1,173 +1,215 @@
-# Adjoint-Aware Projector Primitive Spec v0
+# Adjoint-Aware Projector Primitive 规格说明 v0
 
-## 1. Purpose
+## 1. 文档目的
 
-This document defines the primitive we want to explore as the next main hardware direction.
+这份文档用来定义我们下一阶段要重点探索的硬件原语。
 
-It is **not**:
+它**不是**：
 
-- a generic `GEMM` replacement
-- a full eigensolver
-- a precision-only story
-- a paper title yet
+- 一个通用 `GEMM` 替代品
+- 一个完整的特征值求解器
+- 一个只讲精度格式的故事
+- 一篇论文标题的最终版本
 
-It **is**:
+它**是**：
 
-- a workload-native primitive for projector / basis / subspace style operators
-- a hardware contract that sits between plain `GEMM` and a full iterative solver
-- a candidate circuit-level innovation point for `QE / VASP / PySCF`-like workloads
+- 一个面向 `projector / basis / subspace` 类负载的 workload-native 原语
+- 一个位于普通 `GEMM` 与完整迭代求解器之间的硬件契约
+- 一个面向 `QE / VASP / PySCF` 类负载的候选电路创新点
 
-The core idea is to capture a recurring pattern:
+这份文档要固定的核心思想是：
 
 ```text
-project -> small transform -> back-project
+投影 -> 小矩阵变换 -> 回投
 ```
 
-instead of treating every step as disconnected `GEMM` or `transpose` support.
+也就是不再把整条数据流拆成若干个互相脱节的 `GEMM`、`transpose` 或软件 glue，而是把它视为一个完整的硬件原语。
 
-## 2. Primitive Name
+## 2. 原语名称
 
-Working name:
+当前工作名：
 
 - `Adjoint-Aware Projector Primitive`
 
-Short aliases:
+中文可表述为：
+
+- `伴随感知型投影原语`
+- `Bra-Ket 融合型投影原语`
+
+简称可以使用：
 
 - `AAP primitive`
 - `Bra-Ket fused primitive`
 
-The name emphasizes that the hardware must support:
+这个名字强调的是硬件必须同时支持：
 
-- a resident projector/basis `P`
-- both `P` and `P^H`
-- optional local reduction
-- a small center transform `M`
+- 常驻的投影矩阵 / 基矩阵 `P`
+- `P` 与 `P^H` 两种视图
+- 可选的局部 reduced accumulation
+- 一个局部的小中心矩阵 `M`
 
-The name deliberately does **not** emphasize:
+这个名字**故意不强调**：
 
 - `FP64`
 - `transpose`
 - `Davidson`
 - `QE`
 
-because those are implementation choices or upper-layer use cases, not the primitive itself.
+因为这些要么是实现细节，要么是上层算法场景，不应该取代原语本体。
 
-## 3. Core Mathematical Semantics
+## 3. 核心数学语义
 
-## 3.1 Main operator
+## 3.1 主算子
 
-The primitive is centered on the operator
+这个原语的中心语义是：
 
 ```text
 Y = P M P^H X
 ```
 
-where:
+其中：
 
 - `P ∈ C^(N×K)`
-  - resident projector / basis / ACE vectors / beta projectors / subspace basis
+  - 常驻的 projector / basis / ACE 向量 / beta projector / 子空间基
 - `X ∈ C^(N×B)`
-  - streamed input block
+  - 流式输入的 block
 - `M ∈ C^(K×K)`
-  - a small center matrix stored locally near the macro
+  - 片上就地存放的小中心矩阵
 - `Y ∈ C^(N×B)`
-  - output block
+  - 输出 block
 
-The operation is decomposed as:
+这个算子可以拆成三步：
 
 ```text
-C = P^H X      (forward projection)
-T = M C        (small center transform)
-Y = P T        (adjoint/back projection)
+C = P^H X      （前向投影）
+T = M C        （小矩阵中心变换）
+Y = P T        （回投 / 合成）
 ```
 
-This is the fundamental semantic contract.
+这三步合起来，就是这个原语的最基本契约。
 
-## 3.2 Optional reduced output
+## 3.2 可选的 reduced 输出
 
-Many workloads do not need only `Y`; they also need a reduced matrix.
-
-The primitive therefore also supports:
+很多工作负载不只需要 `Y`，还需要一个 reduced matrix。  
+因此这个原语还应支持：
 
 ```text
 G = X^H Y = X^H P M P^H X
 ```
 
-Since `C = P^H X`, this can be rewritten as:
+因为已经有：
+
+```text
+C = P^H X
+```
+
+所以：
 
 ```text
 G = C^H M C
 ```
 
-This matters because it means the reduced result can often be built **without writing back the full `Y`**.
+这点非常重要，因为它意味着很多情况下：
 
-## 3.3 Real and complex cases
+- 并不需要把完整的 `Y` 先写回片外
+- 再重新读回来做 reduced accumulation
 
-For the real case:
+而是可以直接在原语内部把 `G` 做出来。
+
+## 3.3 实数与复数情况
+
+实数情形下：
 
 ```text
 P^H = P^T
 ```
 
-For the complex case:
+复数情形下：
 
 ```text
 P^H = conj(P)^T
 ```
 
-This distinction is important.  
-The primitive is **adjoint-aware**, not merely transpose-aware.
+这说明这个原语真正需要的是：
 
-That is why “support transpose” is only one hardware mechanism inside this story, not the story itself.
+- `adjoint-aware`
 
-## 4. Operand Roles
+而不是简单的：
 
-## 4.1 Resident operand: `P`
+- `transpose-aware`
 
-`P` is the key resident operand.
+所以“支持转置”只是这个原语里的一项硬件机制，不是这个原语的最终语义。
 
-Typical meanings:
+## 4. 操作数角色
 
-- `QE` nonlocal projector bank `vkb`
-- `QE` ACE projector `xi`
-- subspace basis `Q`
-- localized basis blocks
-- compressed low-rank basis or screened auxiliary basis
+## 4.1 常驻操作数：`P`
 
-The primitive only makes sense if `P` has strong temporal reuse across many `X`.
+`P` 是最关键的常驻操作数。
 
-## 4.2 Streamed operand: `X`
+典型含义包括：
 
-`X` is the moving operand.
+- `QE` 的非局域 projector bank `vkb`
+- `QE` 的 ACE projector `xi`
+- 子空间基 `Q`
+- 一组局域化 basis block
+- 压缩后的低秩 basis 或辅助 basis
 
-Typical meanings:
+这个原语是否成立，首先取决于：
 
-- a wavefunction block `psi`
-- a trial subspace block
-- a residual/update block
-- a batch of orbitals
-- a density-pair or orbital-pair block
+- `P` 能不能在一段时间内稳定常驻
+- 它对多个 `X` 是否具有足够高的复用率
 
-The hardware assumption is that `X` changes much more frequently than `P`.
+如果 `P` 自己也是高频变化的大矩阵，那这个原语很可能会退化回普通 `GEMM`。
 
-## 4.3 Local center operand: `M`
+## 4.2 流式操作数：`X`
 
-`M` is intentionally small and local.
+`X` 是移动的输入操作数。
 
-Typical meanings:
+典型含义包括：
 
-- nonlocal pseudopotential coefficient block `D`
-- a reduced rotation matrix `U`
-- a reduced basis transform
-- a small diagonal or block-diagonal weight
-- a compact screened kernel block
+- 一批波函数 `psi`
+- 一批 trial vectors
+- 一批 residual / update block
+- 一批 orbitals
+- 一批 pair-density / orbital-pair block
 
-`M` is **not** the resident large matrix.  
-If `M` becomes large and dynamic, the primitive collapses back toward generic `GEMM`.
+这个原语默认的硬件假设是：
 
-## 5. Primitive Family
+- `X` 的变化频率显著高于 `P`
 
-The fully fused primitive is `Y = P M P^H X`, but hardware should expose a small family of modes around the same resident data organization.
+也就是说：
+
+- `P` 更像权重/基
+- `X` 更像激活/流入 block
+
+## 4.3 局部中心操作数：`M`
+
+`M` 是刻意设计成“小而局部”的中心矩阵。
+
+典型含义包括：
+
+- 非局域赝势系数块 `D`
+- reduced rotation matrix `U`
+- reduced basis transform
+- 小的对角 / 分块对角权重
+- 压缩后的 screened kernel block
+
+这里必须强调：
+
+- `M` 不是那个大而重的常驻矩阵
+- `M` 的价值在于它小，可以近原语就地计算
+
+如果 `M` 本身也变成一个大而动态的矩阵，这个原语就会显著失去意义。
+
+## 5. 原语模式族
+
+完整的融合模式是：
+
+```text
+Y = P M P^H X
+```
+
+但为了让硬件复用同一套 resident organization，这个原语应该暴露一组模式，而不是只有一个模式。
 
 ## 5.1 `FWD_PROJ`
 
@@ -175,13 +217,13 @@ The fully fused primitive is `Y = P M P^H X`, but hardware should expose a small
 C = P^H X
 ```
 
-Meaning:
+语义：
 
-- forward projection
+- 前向投影
 - bra-side contraction
-- coefficient extraction
+- 系数提取
 
-Typical use:
+典型用途：
 
 - `<vkb|psi>`
 - `<xi|phi>`
@@ -193,15 +235,15 @@ Typical use:
 T = M C
 ```
 
-Meaning:
+语义：
 
-- local dense transform in the small projected space
+- 在投影后的小空间中做一次局部 dense 变换
 
-Typical use:
+典型用途：
 
 - `D * becp`
-- local rotation/update on reduced coefficients
-- applying small block transforms without leaving the near-macro domain
+- reduced coefficient update
+- 在不离开近原语区域的情况下应用小矩阵
 
 ## 5.3 `BACK_PROJ`
 
@@ -209,12 +251,12 @@ Typical use:
 Y = P T
 ```
 
-Meaning:
+语义：
 
 - ket-side synthesis
-- back-projection to the large space
+- 从小空间回投到大空间
 
-Typical use:
+典型用途：
 
 - `vkb * ps`
 - `xi * coeff`
@@ -226,11 +268,11 @@ Typical use:
 Y = P M P^H X
 ```
 
-Meaning:
+语义：
 
-- full projector sandwich
+- 完整的 projector sandwich
 
-This is the most important fused mode because it avoids exposing the large intermediate tensors `C` and `T` off-macro.
+这是最重要的融合模式，因为它避免把中间大张量 `C`、`T` 暴露到片外或更高层 buffer。
 
 ## 5.5 `FUSED_REDUCE`
 
@@ -238,44 +280,49 @@ This is the most important fused mode because it avoids exposing the large inter
 G = X^H P M P^H X = C^H M C
 ```
 
-Meaning:
+语义：
 
-- reduced matrix build
-- Gram/overlap/projection result generation
+- reduced matrix 构造
+- Gram / overlap / projection result 生成
 
-This mode is critical for subspace workloads because it can eliminate a writeback-and-readback round trip.
+这对 subspace 类工作负载尤其关键，因为它可以直接省掉一次：
 
-## 6. Hardware Boundary
+- 完整写回
+- 再完整读回
 
-## 6.1 What the primitive is responsible for
+的往返搬运。
 
-The primitive is responsible for:
+## 6. 硬件边界
 
-- resident storage of `P`
-- reading `P` in both forward and adjoint views
-- optional on-the-fly conjugation
-- streamed input consumption for `X`
-- local formation of `C = P^H X`
-- local application of small `M`
-- local synthesis of `Y = P T`
-- optional reduced accumulation for `G`
+## 6.1 这个原语负责什么
 
-## 6.2 What the primitive is not responsible for
+这个原语负责：
 
-The primitive is not responsible for:
+- `P` 的常驻存储
+- 以 forward / adjoint 两种视图读出 `P`
+- 必要时对复数路径做 on-the-fly conjugation
+- 消费流式输入 `X`
+- 本地形成 `C = P^H X`
+- 本地执行 `T = M C`
+- 本地形成 `Y = P T`
+- 可选地本地形成 reduced result `G`
 
-- outer-loop convergence
-- residual generation policy
-- orthogonalization policy
-- full eigensolver control
-- host runtime decisions
-- global scheduling across the entire application
+## 6.2 这个原语不负责什么
 
-Those belong to the engine/controller level above the primitive.
+这个原语不负责：
 
-## 7. Abstract Hardware Interface
+- 外层收敛判断
+- residual 生成策略
+- 正交化策略
+- 完整 eigensolver 控制流
+- host runtime 决策
+- 整个应用级全局调度
 
-One possible abstract interface is:
+这些职责属于原语上层的 engine / controller。
+
+## 7. 抽象接口
+
+一个中性的抽象接口可以写成：
 
 ```text
 bind_projector(tag_P, N, K, layout, datatype)
@@ -294,168 +341,181 @@ run_aap(
 )
 ```
 
-where:
+其中：
 
 - `mode`
   - `FWD_PROJ`
+  - `CENTER_APPLY`
   - `BACK_PROJ`
   - `FUSED_APPLY`
   - `FUSED_REDUCE`
 - `output_mask`
-  - emit `C`
-  - emit `Y`
-  - emit `G`
+  - 是否输出 `C`
+  - 是否输出 `Y`
+  - 是否输出 `G`
 - `flags`
-  - real vs complex
+  - real / complex
   - conjugate enable
   - triangular compression enable
   - reduced-only writeback
 
-This interface is intentionally neutral with respect to analog/digital CIM implementation.
+这个接口刻意保持抽象，不预设：
 
-## 8. Minimal Microarchitecture
+- 模拟 CIM
+- 数字 CIM
+- SRAM / ReRAM / mixed
 
-## 8.1 Resident projector banks
+这样后续可以独立探索实现。
 
-Need:
+## 8. 最小微架构
 
-- storage for `P`
-- stable indexing by row/column tile
-- the ability to feed both projection and back-projection phases
+## 8.1 常驻 projector banks
 
-This may be implemented using:
+最基本需要：
 
-- single stored copy plus dual-view read support
-- or explicitly stored layout variants if the cost model says that is better
+- 用于存放 `P` 的常驻 bank
+- 稳定的行/列 tile 索引方式
+- 能同时服务 projection 和 back-projection 两个阶段
 
-The architectural point is:
+这里可以有两种实现思路：
 
-- the primitive must expose both `P` and `P^H`
-- not necessarily that it stores two full physical copies
+- 只存一份 `P`，但提供 dual-view read
+- 显式存多个 layout 变体
 
-## 8.2 Adjoint/transpose access path
+架构层真正要固定的是：
 
-This is where “transpose support” actually lives.
+- 原语必须同时暴露 `P` 与 `P^H` 的能力
 
-Required capabilities:
+而不是提前规定：
 
-- read the resident projector in forward view for `P T`
-- read the same resident projector in adjoint view for `P^H X`
-- apply conjugation when complex mode is enabled
+- 一定得物理存两份
 
-This block is a **mechanism**, not the final innovation claim.
+## 8.2 Adjoint / transpose access path
+
+这就是“转置能力”真正所在的位置。
+
+它至少需要支持：
+
+- 为 `P T` 提供 forward-view read
+- 为 `P^H X` 提供 adjoint-view read
+- 在 complex mode 下进行共轭
+
+这块是**机制**，不是我们最终要 claim 的整个创新点。
 
 ## 8.3 Projection accumulator
 
-This block forms:
+这块负责形成：
 
 ```text
 C = P^H X
 ```
 
-It must support:
+它需要支持：
 
-- blockwise accumulation over the large dimension `N`
-- local retention of `C`
-- optional compression if only a subset is needed
+- 沿大维度 `N` 的 block 累加
+- 本地保留 `C`
+- 在只需要部分系数时做压缩或裁剪
 
 ## 8.4 Small center matrix engine
 
-This block applies:
+这块负责：
 
 ```text
 T = M C
 ```
 
-Requirements:
+要求是：
 
-- optimized for small `K×K`
-- low setup overhead
-- able to consume local `C` directly
+- 专门优化小 `K×K` 运算
+- setup 开销低
+- 能直接消费本地 `C`
 
-This can live in:
+它可以实现为：
 
-- near-memory logic
-- a compact digital dense unit
-- or a local specialized datapath
+- 近存逻辑里的小 dense 单元
+- 一个紧凑的数字矩阵路径
+- 或者一个特化的局部 datapath
 
-It does not need a large matrix engine.
+这块不需要长成一个“大矩阵乘法引擎”。
 
 ## 8.5 Back-projection engine
 
-This block forms:
+这块负责：
 
 ```text
 Y = P T
 ```
 
-It reuses the resident `P` bank, now in forward mode.
+它复用前面的 resident `P` bank，但此时使用的是 forward view。
 
 ## 8.6 Reduced-result accumulator
 
-This optional block forms:
+这块是可选但很重要的。
+
+它负责：
 
 ```text
 G = X^H Y
 ```
 
-or, when `C` is already present:
+或者在 `C` 已经存在时，直接负责：
 
 ```text
 G = C^H M C
 ```
 
-This block should exploit:
+这块应尽量利用：
 
-- Hermitian symmetry when applicable
-- triangular writeout
-- local accumulation and reduced writeback
+- Hermitian 对称性
+- 三角压缩写出
+- 局部累加
+- reduced-only writeback
 
-## 9. Dataflow
+## 9. 数据流
 
-## 9.1 Full fused flow
+## 9.1 完整融合数据流
 
-The intended full fused flow is:
+理想的完整融合数据流是：
 
 ```text
 X stream in
--> adjoint-view read of P
--> local projection C = P^H X
--> local center transform T = M C
--> forward-view read of P
--> back-project Y = P T
--> optional reduced accumulation G
--> selective writeback of Y and/or G
+-> 以 adjoint 视图读取 P
+-> 本地投影得到 C = P^H X
+-> 本地小矩阵变换得到 T = M C
+-> 以 forward 视图读取 P
+-> 回投得到 Y = P T
+-> 可选本地累加得到 G
+-> 选择性写回 Y 和/或 G
 ```
 
-## 9.2 Why this matters
+## 9.2 为什么这值得做
 
-Compared with a naive decomposition into separate kernels:
+如果按朴素方式拆成分立 kernel：
 
 1. `C = P^H X`
-2. write `C`
+2. 写回 `C`
 3. `T = M C`
-4. write `T`
+4. 写回 `T`
 5. `Y = P T`
-6. write `Y`
-7. read `Y`
-8. build `G = X^H Y`
+6. 写回 `Y`
+7. 再读回 `Y`
+8. 构造 `G = X^H Y`
 
-the fused primitive can save:
+那么会出现大量不必要的：
 
-- repeated input encoding
-- repeated projector fetch
-- repeated intermediate writeback
-- repeated intermediate readback
-- unnecessary full-size output traffic
+- 中间写回
+- 中间读回
+- 重复 projector 访问
+- 重复编码和激活
+- 不必要的全尺寸输出搬运
 
-This is the main reason the primitive could be worth defining at all.
+这个原语之所以值得定义，核心就在于它有机会减少这些代价。
 
-## 10. Detailed Relation to QE / VASP / PySCF
+## 10. 与 QE / VASP / PySCF 的关系
 
-## 10.1 QE nonlocal pseudopotential / PAW-like path
+## 10.1 QE 非局域赝势 / PAW 类路径
 
-The nonlocal path in `QE` looks like:
+`QE` 的非局域路径非常接近这个原语：
 
 ```text
 becp = <vkb | psi>
@@ -463,197 +523,206 @@ ps   = D * becp
 hpsi = hpsi + vkb * ps
 ```
 
-This maps directly to:
+它可以直接映射成：
 
 - `P = vkb`
 - `X = psi`
 - `M = D`
 - `Y = vkb * D * vkb^H * psi`
 
-This is the cleanest example of the primitive.
+这是目前最干净、最标准的例子。
 
-## 10.2 QE ACE / EXX path
+## 10.2 QE ACE / EXX 路径
 
-The ACE-style path has the same outer shape:
+`ACE` 类路径外形也一致：
 
 ```text
 coeff = <xi | phi>
 vv    = xi * coeff
 ```
 
-This is the special case:
+它对应的是一个特例：
 
 ```text
 Y = P I P^H X
 ```
 
-with:
+这里：
 
 - `P = xi`
-- `M = I` or a small coefficient transform near identity
+- `M = I` 或一个接近单位阵的小系数变换
 
-The key hardware lesson is the same:
+它给我们的硬件启发仍然是：
 
-- very high reuse of a resident projector bank
-- streamed input block
-- local coefficient generation
-- back-projection
+- `P` 复用很高
+- `X` 流式输入
+- 系数先在本地形成
+- 再从小空间回投
 
-## 10.3 QE / VASP subspace rotation and basis update
+## 10.3 QE / VASP 子空间旋转与 basis update
 
-For subspace work, the primitive is not always used as a single full `P M P^H X` kernel, but the same hardware family still applies.
+对 subspace 工作负载，这个原语不一定总是以完整 `P M P^H X` 的形式出现，但同一套模式族仍然成立。
 
-Examples:
+例如：
 
 ```text
 X <- QY
 ```
 
-is just:
+就是：
 
 ```text
 BACK_PROJ with P = Q
 ```
 
-and:
+而：
 
 ```text
 Q^H Z
 ```
 
-is:
+就是：
 
 ```text
 FWD_PROJ with P = Q
 ```
 
-Reduced builds such as:
+进一步地，像下面这些 reduced build：
 
 ```text
 Q^H H Q
 Q^H S Q
 ```
 
-can be formed by composing:
+可以拆成：
 
-1. an operator-apply primitive producing `Z = H Q` or `Z = S Q`
-2. this primitive in `FWD_PROJ` / reduced mode to build `Q^H Z`
+1. 先由别的原语形成 `Z = H Q` 或 `Z = S Q`
+2. 再由这个原语做 `Q^H Z`
 
-So the primitive is still relevant even when the full sandwich is split across two hardware stages.
+也就是说，即便完整 sandwich 被拆开，这个原语仍然是主路径的一部分。
 
-## 10.4 PySCF FFTDF / pair-density style path
+## 10.4 PySCF FFTDF / pair-density 类路径
 
-PySCF does not always match the full `P M P^H X` form exactly, but it repeatedly exhibits the same skeleton:
+`PySCF` 不一定总是精确符合完整的 `P M P^H X` 形式，但它反复出现同样的骨架：
 
-- build projected/pair coefficients
-- apply a small/structured kernel
-- use conjugate-related inverse/adjoint reconstruction
-- accumulate a reduced result
+- 先形成 projected / paired coefficient
+- 再作用一个结构化 kernel
+- 再走 conjugate-related inverse / reconstruction
+- 最后做 reduced accumulation
 
-Therefore the primitive family is still relevant, especially the ideas of:
+因此，这个原语族仍然 relevant，特别是在下面几个点上：
 
 - adjoint-aware resident data
 - local center transform
 - reduced-only writeback
 
-## 11. Why This Is Not “Just Transpose Support”
+## 11. 为什么它不是“支持转置”
 
-If the claim is only:
+如果最后的 claim 只是：
 
-- “the macro supports transpose”
+- “这个宏支持 transpose”
 
-then the hardware contribution is too shallow.
+那这个故事太浅了。
 
-The actual intended claim is:
+我们真正想定义的是：
 
-- the macro supports a fused projector sandwich
-- with resident `P`
-- shared data movement for forward and adjoint phases
-- local center transform
-- optional reduced-result emission
+- 一个 fused projector sandwich 原语
+- 常驻的是 `P`
+- 共用的是 forward / adjoint 两条数据通路
+- 本地保留的是中间系数
+- 可选本地输出 reduced result
 
-In this story:
+在这个故事里：
 
-- transpose/adjoint access is necessary
-- but it is only one sub-mechanism
+- transpose / adjoint access path 是必要机制
+- 但它只是一部分，不是原语本体
 
-## 12. Why This Is Not “Just GEMM”
+## 12. 为什么它不是“普通 GEMM”
 
-Generic `GEMM` can of course implement this pattern.
+当然，普通 `GEMM` 在功能上可以分步实现这件事。
 
-But the primitive is still distinct because it assumes and exploits:
+但这个原语仍然与 `GEMM` 不同，因为它明确假设并利用了：
 
-- one large operand `P` is resident and heavily reused
-- the center matrix `M` is small
-- intermediate coefficient blocks `C` and `T` are local
-- reduced result `G` is often more valuable than the full output `Y`
-- Hermitian and conjugate structure can be exploited
+- 大操作数 `P` 是常驻且高复用的
+- 中心矩阵 `M` 很小
+- 中间系数 `C` 与 `T` 最好留在本地
+- 很多时候 reduced result `G` 比完整 `Y` 更值钱
+- Hermitian / conjugate / triangular 结构可以直接被利用
 
-When these assumptions hold, `GEMM` is functionally sufficient but not semantically efficient.
+当这些假设成立时：
 
-## 13. Where the Cost Advantage Must Come From
+- `GEMM` 在功能上足够
+- 但在语义和流量上未必高效
 
-For the primitive to be worth building, its measured or modeled advantages must come from at least some of the following:
+## 13. 成本优势必须来自哪里
 
-1. fewer projector reads than a decomposed implementation
-2. fewer intermediate SRAM/DRAM writes
-3. fewer intermediate SRAM/DRAM reads
-4. lower activation cost through shared forward/adjoint scheduling
-5. lower output traffic when only `G` is needed
-6. smaller energy per useful reduced result
+如果这个原语最终要成立，它的优势必须至少来自下面几项中的一部分：
 
-If none of these hold, the primitive should be rejected and the design should stay at `GEMM + transpose support`.
+1. 比分解实现更少的 projector 读出次数
+2. 更少的中间 SRAM / DRAM 写回
+3. 更少的中间 SRAM / DRAM 读回
+4. 共享 forward / adjoint 数据流带来的激活成本下降
+5. 在只需要 `G` 时显著减少输出搬运
+6. 单位有效 reduced result 的能耗更低
 
-## 14. Required Comparators
+如果这些优势都拿不出来，那这个方向就不该继续坚持，而应退回：
 
-Any future paper built on this primitive should compare against:
+- `GEMM + transpose/adjoint support`
+
+## 14. 必须比较的基线
+
+后续如果要写论文，至少需要和下面三类基线对比：
 
 1. `GEMM baseline`
-   - decompose into explicit `P^H X`, `M C`, `P T`
+   - 显式拆成 `P^H X`、`M C`、`P T`
 
 2. `GEMM + transpose-aware macro`
-   - same algebraic decomposition, but with improved transpose support
+   - 仍然显式拆分
+   - 但阵列提供更好的 transpose / adjoint 支持
 
 3. `Fused AAP primitive`
-   - local `C/T`
-   - local reduced accumulation
+   - 本地保留 `C/T`
+   - 本地 reduced accumulation
    - selective writeback
 
-This is critical because it isolates whether the gain comes from:
+这样才能把收益来源区分清楚：
 
-- better transpose support
-- or from primitive-level fusion
+- 到底是来自更好的 transpose 能力
+- 还是来自 primitive 级别的融合
 
-## 15. Non-goals for v0
+## 15. v0 非目标
 
-To keep this primitive manageable, v0 should **not** try to solve:
+为了不把边界拉爆，v0 阶段**不打算**解决：
 
-- full FFT-integrated flow
-- global sparse/dense mixed scheduling
-- full host runtime and compiler stack
-- all DFT kernels at once
-- all possible projector families
+- 完整 FFT-integrated flow
+- 全局 sparse/dense 混合调度
+- 完整 host runtime / compiler stack
+- 一次覆盖所有 DFT kernel
+- 一次覆盖所有 projector family
 
-v0 only needs to make the primitive precise and testable.
+v0 的任务只是：
 
-## 16. v0 Research Questions
+- 把原语定义得足够精确
+- 让它可以被建模、比较、验证
 
-The next concrete questions should be:
+## 16. v0 需要回答的研究问题
 
-1. Which `QE` paths most cleanly instantiate `P M P^H X`?
-2. Can we quantify reuse for `vkb`, `xi`, and `Q` on real traces?
-3. What is the best resident layout for supporting both `P` and `P^H`?
-4. Is local reduced accumulation more valuable than full-output writeback?
-5. Does the primitive remain beneficial once realistic buffer and control cost are included?
+下一步最具体的问题应该是：
 
-## 17. One-Sentence Definition
+1. `QE` 里哪些路径最干净地符合 `P M P^H X`？
+2. `vkb`、`xi`、`Q` 在真实 trace 上的复用率到底有多高？
+3. 同时支持 `P` 与 `P^H` 的最佳 resident layout 是什么？
+4. 本地 reduced accumulation 相比完整 `Y` 写回到底更值多少？
+5. 一旦把真实 buffer / control 开销加进去，这个原语还划算吗？
 
-The primitive can be summarized in one sentence as:
+## 17. 一句话定义
+
+这条原语当前最简洁的一句话定义是：
 
 ```text
-An adjoint-aware resident-projector primitive that maps streamed blocks X to
-Y = P M P^H X, with optional reduced output G = X^H P M P^H X and local
-retention of the projected coefficients.
+一个伴随感知型的常驻投影原语：对流式输入块 X 执行
+Y = P M P^H X，并可选地输出 reduced result
+G = X^H P M P^H X，同时在原语内部保留投影系数。
 ```
 
-That is the definition we should treat as the current working contract.
+这句话就是我们当前应该采用的工作定义。
