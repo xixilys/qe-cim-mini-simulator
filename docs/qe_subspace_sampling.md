@@ -224,9 +224,9 @@ export QE_SUBSPACE_MIN_N=32
 - [`qe_si_medium_trace.csv`](/Volumes/remote/phd/year_2/project/dft加速/docs/benchmarks/results/qe_si_medium_trace.csv)
 - [`qe_si_large_trace.csv`](/Volumes/remote/phd/year_2/project/dft加速/docs/benchmarks/results/qe_si_large_trace.csv)
 
-对应的整理结论见：
+对应的阶段性整理已经并入：
 
-- [`qe_subspace_profile_20260312.md`](/Volumes/remote/phd/year_2/project/dft加速/docs/benchmarks/qe_subspace_profile_20260312.md)
+- [`project_development_timeline.md`](/Volumes/remote/phd/year_2/project/dft加速/docs/project_development_timeline.md)
 
 当前这两组样本已经足够支持几个重要判断：
 
