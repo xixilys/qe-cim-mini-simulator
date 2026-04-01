@@ -1,0 +1,26 @@
+{
+  "argv": [
+    "/Volumes/remote/phd/year_2/project/dft\u52a0\u901f/soft/qe-7.5/build_subspace_trace/bin/pw.x",
+    "-in",
+    "/Volumes/remote/phd/year_2/project/dft\u52a0\u901f/docs/qe_inputs/benzene_workload_small.in"
+  ],
+  "bandsolver_trace_file": "/Volumes/remote/phd/year_2/project/dft\u52a0\u901f/docs/benchmarks/results/qe_workload_revalidation/benzene/bandsolver_trace.csv",
+  "case_id": "benzene",
+  "cwd": "/Volumes/remote/phd/year_2/project/dft\u52a0\u901f",
+  "duration_sec": 0.7034659385681152,
+  "environment": {
+    "OMP_NUM_THREADS": "1",
+    "QE_BANDSOLVER_TRACE_FILE": "/Volumes/remote/phd/year_2/project/dft\u52a0\u901f/docs/benchmarks/results/qe_workload_revalidation/benzene/bandsolver_trace.csv",
+    "QE_HPSI_TRACE_FILE": "/Volumes/remote/phd/year_2/project/dft\u52a0\u901f/docs/benchmarks/results/qe_workload_revalidation/benzene/hpsi_trace.csv",
+    "QE_SUBSPACE_MIN_N": "0",
+    "QE_SUBSPACE_TRACE_FILE": "/Volumes/remote/phd/year_2/project/dft\u52a0\u901f/docs/benchmarks/results/qe_workload_revalidation/benzene/subspace_trace.csv"
+  },
+  "exit_code": 82,
+  "finished_epoch_sec": 1774024520.833209,
+  "hpsi_trace_file": "/Volumes/remote/phd/year_2/project/dft\u52a0\u901f/docs/benchmarks/results/qe_workload_revalidation/benzene/hpsi_trace.csv",
+  "input_file": "/Volumes/remote/phd/year_2/project/dft\u52a0\u901f/docs/qe_inputs/benzene_workload_small.in",
+  "pw_bin": "/Volumes/remote/phd/year_2/project/dft\u52a0\u901f/soft/qe-7.5/build_subspace_trace/bin/pw.x",
+  "started_epoch_sec": 1774024520.129743,
+  "stdout_file": "/Volumes/remote/phd/year_2/project/dft\u52a0\u901f/docs/benchmarks/results/qe_workload_revalidation/benzene/stdout.out",
+  "subspace_trace_file": "/Volumes/remote/phd/year_2/project/dft\u52a0\u901f/docs/benchmarks/results/qe_workload_revalidation/benzene/subspace_trace.csv"
+}

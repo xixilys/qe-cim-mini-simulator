@@ -1,0 +1,26 @@
+{
+  "argv": [
+    "/Volumes/remote/phd/year_2/project/dft\u52a0\u901f/soft/qe-7.5/build_subspace_trace/bin/pw.x",
+    "-in",
+    "/Volumes/remote/phd/year_2/project/dft\u52a0\u901f/docs/qe_inputs/h2_tiny_gamma.in"
+  ],
+  "bandsolver_trace_file": "/Volumes/remote/phd/year_2/project/dft\u52a0\u901f/docs/benchmarks/results/qe_workload_revalidation/h2_tiny/bandsolver_trace.csv",
+  "case_id": "h2_tiny",
+  "cwd": "/Volumes/remote/phd/year_2/project/dft\u52a0\u901f",
+  "duration_sec": 0.33963513374328613,
+  "environment": {
+    "OMP_NUM_THREADS": "1",
+    "QE_BANDSOLVER_TRACE_FILE": "/Volumes/remote/phd/year_2/project/dft\u52a0\u901f/docs/benchmarks/results/qe_workload_revalidation/h2_tiny/bandsolver_trace.csv",
+    "QE_HPSI_TRACE_FILE": "/Volumes/remote/phd/year_2/project/dft\u52a0\u901f/docs/benchmarks/results/qe_workload_revalidation/h2_tiny/hpsi_trace.csv",
+    "QE_SUBSPACE_MIN_N": "0",
+    "QE_SUBSPACE_TRACE_FILE": "/Volumes/remote/phd/year_2/project/dft\u52a0\u901f/docs/benchmarks/results/qe_workload_revalidation/h2_tiny/subspace_trace.csv"
+  },
+  "exit_code": 0,
+  "finished_epoch_sec": 1774024351.169508,
+  "hpsi_trace_file": "/Volumes/remote/phd/year_2/project/dft\u52a0\u901f/docs/benchmarks/results/qe_workload_revalidation/h2_tiny/hpsi_trace.csv",
+  "input_file": "/Volumes/remote/phd/year_2/project/dft\u52a0\u901f/docs/qe_inputs/h2_tiny_gamma.in",
+  "pw_bin": "/Volumes/remote/phd/year_2/project/dft\u52a0\u901f/soft/qe-7.5/build_subspace_trace/bin/pw.x",
+  "started_epoch_sec": 1774024350.8298728,
+  "stdout_file": "/Volumes/remote/phd/year_2/project/dft\u52a0\u901f/docs/benchmarks/results/qe_workload_revalidation/h2_tiny/stdout.out",
+  "subspace_trace_file": "/Volumes/remote/phd/year_2/project/dft\u52a0\u901f/docs/benchmarks/results/qe_workload_revalidation/h2_tiny/subspace_trace.csv"
+}

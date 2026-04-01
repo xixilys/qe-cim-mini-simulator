@@ -29,7 +29,7 @@
 - No `.cursorrules` file was found.
 - No `.cursor/rules/` directory was found.
 - No `.github/copilot-instructions.md` file was found.
-- The main repo-specific agent guidance currently comes from `docs/agent_handoff_20260312.md`; follow it when choosing priorities.
+- The main repo-specific agent guidance currently comes from `docs/overview/agent_handoff_20260312.md`; follow it when choosing priorities.
 
 ## Build Prerequisites
 
@@ -180,7 +180,7 @@
 
 ## Good Agent Behavior In This Repo
 
-- Read `docs/agent_handoff_20260312.md` before making large design or documentation changes.
+- Read `docs/overview/agent_handoff_20260312.md` before making large design or documentation changes.
 - Preserve existing numerical contracts and reported metrics.
 - Make focused edits, then run the smallest relevant build or evaluator.
 - In final reports, mention exactly which executable or script you ran and which file paths you changed.

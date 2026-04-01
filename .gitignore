@@ -5,6 +5,8 @@
 
 model/bin/
 model/logs/
+model/qe_band_solver_model/build/
+model/qe_band_solver_model/build-systemc/
 
 soft/
 fft_ifft_actual_data/

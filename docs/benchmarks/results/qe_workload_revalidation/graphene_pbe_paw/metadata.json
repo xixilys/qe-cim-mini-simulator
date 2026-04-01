@@ -1,0 +1,26 @@
+{
+  "argv": [
+    "/Volumes/remote/phd/year_2/project/dft\u52a0\u901f/soft/qe-7.5/build_subspace_trace/bin/pw.x",
+    "-in",
+    "/Volumes/remote/phd/year_2/project/dft\u52a0\u901f/docs/qe_inputs/graphene_pbe_paw_scf.in"
+  ],
+  "bandsolver_trace_file": "/Volumes/remote/phd/year_2/project/dft\u52a0\u901f/docs/benchmarks/results/qe_workload_revalidation/graphene_pbe_paw/bandsolver_trace.csv",
+  "case_id": "graphene_pbe_paw",
+  "cwd": "/Volumes/remote/phd/year_2/project/dft\u52a0\u901f",
+  "duration_sec": 0.887578010559082,
+  "environment": {
+    "OMP_NUM_THREADS": "1",
+    "QE_BANDSOLVER_TRACE_FILE": "/Volumes/remote/phd/year_2/project/dft\u52a0\u901f/docs/benchmarks/results/qe_workload_revalidation/graphene_pbe_paw/bandsolver_trace.csv",
+    "QE_HPSI_TRACE_FILE": "/Volumes/remote/phd/year_2/project/dft\u52a0\u901f/docs/benchmarks/results/qe_workload_revalidation/graphene_pbe_paw/hpsi_trace.csv",
+    "QE_SUBSPACE_MIN_N": "0",
+    "QE_SUBSPACE_TRACE_FILE": "/Volumes/remote/phd/year_2/project/dft\u52a0\u901f/docs/benchmarks/results/qe_workload_revalidation/graphene_pbe_paw/subspace_trace.csv"
+  },
+  "exit_code": 0,
+  "finished_epoch_sec": 1774024519.501463,
+  "hpsi_trace_file": "/Volumes/remote/phd/year_2/project/dft\u52a0\u901f/docs/benchmarks/results/qe_workload_revalidation/graphene_pbe_paw/hpsi_trace.csv",
+  "input_file": "/Volumes/remote/phd/year_2/project/dft\u52a0\u901f/docs/qe_inputs/graphene_pbe_paw_scf.in",
+  "pw_bin": "/Volumes/remote/phd/year_2/project/dft\u52a0\u901f/soft/qe-7.5/build_subspace_trace/bin/pw.x",
+  "started_epoch_sec": 1774024518.613885,
+  "stdout_file": "/Volumes/remote/phd/year_2/project/dft\u52a0\u901f/docs/benchmarks/results/qe_workload_revalidation/graphene_pbe_paw/stdout.out",
+  "subspace_trace_file": "/Volumes/remote/phd/year_2/project/dft\u52a0\u901f/docs/benchmarks/results/qe_workload_revalidation/graphene_pbe_paw/subspace_trace.csv"
+}

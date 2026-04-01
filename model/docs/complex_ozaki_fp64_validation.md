@@ -20,11 +20,20 @@
 
 当前实现包含：
 
-- 13 个互素模数的 `ZGEMM` 风格配置
+- 16 个互素模数的 `ZGEMM` 风格配置
 - 对复数实部/虚部分别缩放
 - 模域下的 Karatsuba 三乘法
 - `n` 方向 block 化接口
 - CRT 重构与反缩放
+
+另外，这个 evaluator 现在还包含一条单独的乘法流程验证模式：
+
+- `fused digit-residue scalar` 模式
+  - 用 `8` 个常驻 `8-bit` 模存储输入尾数
+  - 采用 `8 -> 11 -> 14` 的两次 promotion schedule
+  - promotion 边界采用 `mixed-radix / Garner` 形式的 pure base extension
+  - 用冗余模只做 signed range 判定，不再回到大整数 snapshot
+  - 也就是说，当前验证版已经是“模域表示 -> 模域扩展 -> 新模 residue”的 datapath
 
 当前还没有做的部分：
 
@@ -50,6 +59,13 @@ cd /Volumes/remote/phd/year_2/project/dft加速/model
 ./bin/complex_ozaki_eval
 ```
 
+运行 fused digit-residue 单乘验证：
+
+```bash
+cd /Volumes/remote/phd/year_2/project/dft加速/model
+OZAKI_MODE=fused_scalar ./bin/complex_ozaki_eval
+```
+
 更宽指数范围压力测试：
 
 ```bash
@@ -57,7 +73,106 @@ cd /Volumes/remote/phd/year_2/project/dft加速/model
 OZAKI_EXP_SPAN=64 OZAKI_TRIALS=4 ./bin/complex_ozaki_eval
 ```
 
-## 4. 默认配置结果
+更宽指数范围下运行 fused digit-residue 单乘验证：
+
+```bash
+cd /Volumes/remote/phd/year_2/project/dft加速/model
+OZAKI_MODE=fused_scalar OZAKI_EXP_SPAN=64 OZAKI_TRIALS=256 ./bin/complex_ozaki_eval
+```
+
+## 4. fused digit-residue 单乘验证
+
+验证目标不是整块 `GEMM`，而是我们最近冻结下来的那条单乘流程：
+
+1. `FP64` 标量先按 `53-bit mantissa` 量化成整数
+2. resident operand 只常驻 `8` 个 base moduli
+3. streaming operand 以 `8-bit` digit、`7-stage`、`MSB-first` 注入
+4. `stage1` 结束后做一次 promotion，`8 -> 11`
+5. `stage4` 结束后再做一次 promotion，`11 -> 14`
+6. 末端用 `14` 个 active moduli 重构结果
+
+默认压力参数：
+
+- `trials = 512`
+- `exp_span = 24`
+
+实测输出：
+
+- `exact_integer_match = 512 / 512`
+- `direct_rns_match = 512 / 512`
+- `avg_rel_vs_double = 0`
+- `max_rel_vs_double = 0`
+- `max_abs_vs_double = 0`
+
+更宽指数范围压力参数：
+
+- `trials = 256`
+- `exp_span = 64`
+
+实测输出：
+
+- `exact_integer_match = 256 / 256`
+- `direct_rns_match = 256 / 256`
+- `avg_rel_vs_double = 0`
+- `max_rel_vs_double = 0`
+- `max_abs_vs_double = 0`
+
+这里的两个 match 指标分别表示：
+
+- `exact_integer_match`
+  - fused-digit 路径的整数结果是否与直接 `53b x 53b` 乘法完全一致
+- `direct_rns_match`
+  - fused-digit 路径的整数结果是否与“先完整分解到 `14` 个 active 模、再直接做纯 RNS 乘法”的结果完全一致
+
+这说明至少对“单次 mantissa 乘法 + 两次 promotion”这一层，当前 pure base extension 流程已经在行为级上完全打通。
+
+### 2026-03-19 精度跟踪记录
+
+本次记录对应的算法版本是：
+
+- `resident = 8 x 8bit` base moduli
+- `streaming = 7-stage, 8-bit, MSB-first digit`
+- `promotion schedule = 8 -> 11 -> 14`
+- `promotion datapath = pure base extension`
+- `signed range handling = redundant modulus`
+
+其中 promotion 已经不再使用“大整数 snapshot 重建 -> 再取新模”的过渡实现，而是：
+
+1. 先由 base residues 生成 mixed-radix digits
+2. 再直接在目标模上求值
+3. 用冗余模判断当前值位于 `x_unsigned` 还是 `x_unsigned - M`
+
+本次实际运行命令为：
+
+```bash
+cd /Volumes/remote/phd/year_2/project/dft加速
+make -C model bin/complex_ozaki_eval
+OZAKI_MODE=fused_scalar OZAKI_TRIALS=512 ./model/bin/complex_ozaki_eval
+OZAKI_MODE=fused_scalar OZAKI_EXP_SPAN=64 OZAKI_TRIALS=256 ./model/bin/complex_ozaki_eval
+```
+
+本次记录结果为：
+
+- 常规指数范围
+  - `exact_integer_match = 512 / 512`
+  - `direct_rns_match = 512 / 512`
+  - `avg_rel_vs_double = 0`
+  - `max_rel_vs_double = 0`
+  - `max_abs_vs_double = 0`
+- 宽指数范围
+  - `exact_integer_match = 256 / 256`
+  - `direct_rns_match = 256 / 256`
+  - `avg_rel_vs_double = 0`
+  - `max_rel_vs_double = 0`
+  - `max_abs_vs_double = 0`
+
+这条记录说明：
+
+- 单次 mantissa 乘法在当前 `8 -> 11 -> 14` schedule 下是正确的
+- pure base extension promotion 没有引入额外数值错误
+- 这条链已经可以作为后续接入更大 `GEMM / projector` 行为级路径的精度基线
+
+## 5. 默认配置结果
 
 默认参数：
 
@@ -66,29 +181,29 @@ OZAKI_EXP_SPAN=64 OZAKI_TRIALS=4 ./bin/complex_ozaki_eval
 - `k = 32`
 - `trials = 6`
 - `exp_span = 24`
-- `moduli = 13`
+- `moduli = 16`
 
 实测输出：
 
 | Trial | rel_frob | rms_abs | max_abs |
 |------:|---------:|--------:|--------:|
-| 1 | 1.870973e-14 | 1.465573e+00 | 4.440827e+00 |
-| 2 | 1.908101e-14 | 1.114226e+00 | 3.761654e+00 |
-| 3 | 1.514504e-14 | 9.911303e-01 | 3.690809e+00 |
-| 4 | 2.389939e-14 | 1.279113e+00 | 4.133649e+00 |
-| 5 | 2.241383e-14 | 1.051377e+00 | 4.824804e+00 |
-| 6 | 2.426961e-14 | 1.047751e+00 | 2.963612e+00 |
+| 1 | 2.040217e-16 | 1.598145e-02 | 7.370298e-02 |
+| 2 | 2.609567e-16 | 1.523844e-02 | 1.252439e-01 |
+| 3 | 1.874256e-16 | 1.226561e-02 | 9.504316e-02 |
+| 4 | 1.560375e-16 | 8.351241e-03 | 6.250191e-02 |
+| 5 | 1.974924e-16 | 9.263872e-03 | 6.250031e-02 |
+| 6 | 2.113235e-16 | 9.123116e-03 | 9.407496e-02 |
 
 汇总：
 
-- `avg_rel_frob = 2.058644e-14`
-- `avg_rms_abs = 1.158195e+00`
-- `max_rel_frob = 2.426961e-14`
-- `max_abs = 4.824804e+00`
+- `avg_rel_frob = 2.028762e-16`
+- `avg_rms_abs = 1.170395e-02`
+- `max_rel_frob = 2.609567e-16`
+- `max_abs = 1.252439e-01`
 
-这里 `rms_abs` 和 `max_abs` 看起来不是很小，是因为输入矩阵含有较大的指数跨度，输出绝对值本身也较大；从 `rel_frob` 看，整体相对误差已经稳定在 `1e-14` 量级。
+这里 `rms_abs` 和 `max_abs` 已经明显收敛，从 `rel_frob` 看，当前 `16` 模配置下整体相对误差稳定在 `1e-16` 量级。
 
-## 5. 更宽指数范围结果
+## 6. 更宽指数范围结果
 
 压力参数：
 
@@ -99,21 +214,21 @@ OZAKI_EXP_SPAN=64 OZAKI_TRIALS=4 ./bin/complex_ozaki_eval
 
 | Trial | rel_frob | rms_abs | max_abs |
 |------:|---------:|--------:|--------:|
-| 1 | 1.978542e-14 | 3.746664e+23 | 2.026734e+24 |
-| 2 | 1.191998e-14 | 2.045820e+23 | 9.279334e+23 |
-| 3 | 1.183744e-14 | 2.796067e+23 | 1.905695e+24 |
-| 4 | 1.034586e-14 | 1.846344e+23 | 8.329646e+23 |
+| 1 | 1.274929e-16 | 2.414268e+21 | 1.889004e+22 |
+| 2 | 1.111733e-16 | 1.908062e+21 | 1.889181e+22 |
+| 3 | 1.224126e-16 | 2.891451e+21 | 3.777934e+22 |
+| 4 | 5.700725e-17 | 1.017364e+21 | 9.518234e+21 |
 
 汇总：
 
-- `avg_rel_frob = 1.347218e-14`
-- `avg_rms_abs = 2.608724e+23`
-- `max_rel_frob = 1.978542e-14`
-- `max_abs = 2.026734e+24`
+- `avg_rel_frob = 1.045215e-16`
+- `avg_rms_abs = 2.057786e+21`
+- `max_rel_frob = 1.274929e-16`
+- `max_abs = 3.777934e+22`
 
-这说明在更宽的指数范围下，算法仍然保持了 `1e-14` 量级的相对误差。
+这说明在更宽的指数范围下，算法仍然保持了 `1e-16` 量级的相对误差。
 
-## 6. 结果解读
+## 7. 结果解读
 
 这组结果说明了三件事：
 
@@ -121,12 +236,12 @@ OZAKI_EXP_SPAN=64 OZAKI_TRIALS=4 ./bin/complex_ozaki_eval
    - 这不再是 `INT8_EMU` 式近似，而是真正打通了 `CRT + Karatsuba + 反缩放` 的复数 `FP64` 路径。
 
 2. **相对精度已经达到可接受的 `ZGEMM` 级别**
-   - 在两组测试下，`rel_frob` 都稳定在 `1e-14` 左右。
+   - 在两组测试下，`rel_frob` 都稳定在 `1e-16` 左右。
 
 3. **Karatsuba 在这里是安全的**
    - 因为它运行在模域整数上，属于 Ozaki-II / CRT 主设计中的精确复数乘法分解。
 
-## 7. 对系统设计的直接影响
+## 8. 对系统设计的直接影响
 
 有了这条行为级原型之后，系统设计的主路线已经可以明确收敛为：
 
