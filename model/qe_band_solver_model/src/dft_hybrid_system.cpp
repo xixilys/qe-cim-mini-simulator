@@ -9,7 +9,7 @@ DFTHybridSystem::DFTHybridSystem(sc_core::sc_module_name name)
       fpga_(sc_core::sc_module_name("fpga_orchestrator"), fabric_, chip_),
       host_(sc_core::sc_module_name("host_scf"), fabric_, fpga_) {}
 
-DFTRunReport DFTHybridSystem::run_full_flow(const SystemRunConfig& run_config) const {
+SCFRunReport DFTHybridSystem::run_full_flow(const SystemRunConfig& run_config) const {
   log_line(name(), "DFTHybridSystem starts run: " + run_config.brief());
   auto report = host_.run_full_flow(run_config);
   log_line(name(), "DFTHybridSystem complete: " + report.brief());

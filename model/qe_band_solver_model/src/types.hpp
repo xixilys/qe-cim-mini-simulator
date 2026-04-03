@@ -701,6 +701,281 @@ struct EpisodeSummary {
   }
 };
 
+struct EpisodeDescriptor {
+  int scf_iteration = 0;
+  int episode_id = 0;
+  int band_begin = 0;
+  int band_count = 16;
+  int panel_count = 3;
+  int panel_size = 8;
+  int resident_row_block_size = 4;
+  int max_inner_steps = 3;
+  int band_batch = 4;
+  bool enable_fft = true;
+  std::string software_family = "QE";
+  std::string flow_family = "CBANDS_DIAG";
+  std::string solver_mode = "DAVIDSON";
+  std::string support_grid_mode = "BYPASS";
+  std::string precision_mode = "fp64-constrained";
+  std::string workload_bucket = "medium";
+  std::string projector_mode = "USPP";
+  std::string preferred_diag_mode = "hardware";
+  ObjectRecord wave_object;
+  ObjectRecord density_object;
+  ObjectRecord potential_object;
+  ObjectRecord projector_object;
+  ObjectRecord history_object;
+
+  std::string brief() const {
+    std::ostringstream oss;
+    oss << "iter=" << scf_iteration
+        << ", episode=" << episode_id
+        << ", sw=" << software_family
+        << ", flow=" << flow_family
+        << ", solver=" << solver_mode
+        << ", bands=[" << band_begin << "," << (band_begin + band_count) << ")"
+        << ", panels=" << panel_count
+        << ", row_block=" << resident_row_block_size
+        << ", bucket=" << workload_bucket
+        << ", projector=" << projector_mode
+        << ", diag=" << preferred_diag_mode;
+    return oss.str();
+  }
+};
+
+struct EpisodeControllerState {
+  std::string controller_mode = "PERSISTENT_EPISODE_CONTROLLER";
+  std::string workload_bucket = "medium";
+  std::string projector_mode = "USPP";
+  std::string cdiaghg_mode_selected = "hardware";
+  bool resident_fit = true;
+  bool spill_active = false;
+  int fifo_ab_credit_limit = 2;
+  int fifo_bc_credit_limit = 1;
+  int fifo_cd_credit_limit = 1;
+  int controller_sync_ref_cycles = 2;
+  double resident_budget_kib = 256.0;
+  double estimated_resident_footprint_kib = 0.0;
+  double estimated_spill_kib = 0.0;
+
+  std::string brief() const {
+    std::ostringstream oss;
+    oss << "mode=" << controller_mode
+        << ", bucket=" << workload_bucket
+        << ", projector=" << projector_mode
+        << ", diag=" << cdiaghg_mode_selected
+        << ", resident_fit=" << (resident_fit ? "yes" : "no")
+        << ", spill_active=" << (spill_active ? "yes" : "no")
+        << ", fifo_ab=" << fifo_ab_credit_limit
+        << ", fifo_bc=" << fifo_bc_credit_limit
+        << ", fifo_cd=" << fifo_cd_credit_limit
+        << ", resident_budget_kib=" << std::fixed << std::setprecision(2)
+        << resident_budget_kib
+        << ", footprint_kib=" << estimated_resident_footprint_kib
+        << ", spill_kib=" << estimated_spill_kib;
+    return oss.str();
+  }
+};
+
+struct ClusterMetrics {
+  std::string cluster_name = "Cluster";
+  int invocations = 0;
+  int accounted_ref_cycles = 0;
+  int backpressure_ref_cycles = 0;
+  double data_movement_kib = 0.0;
+  std::string dominant_resource = "NONE";
+  std::string detail;
+
+  std::string brief() const {
+    std::ostringstream oss;
+    oss << cluster_name
+        << ": invocations=" << invocations
+        << ", ref_cycles=" << accounted_ref_cycles
+        << ", bp_ref_cycles=" << backpressure_ref_cycles
+        << ", move_kib=" << std::fixed << std::setprecision(4)
+        << data_movement_kib
+        << ", dominant=" << dominant_resource;
+    if (!detail.empty()) {
+      oss << ", detail=" << detail;
+    }
+    return oss.str();
+  }
+};
+
+struct DiagSolutionDescriptor {
+  int diag_dim_n = 0;
+  int eigenpair_count = 0;
+  double lambda_base = 0.0;
+  double coeff_norm = 0.0;
+  double residual_visibility_score = 0.0;
+  double emitted_kib = 0.0;
+  bool fallback_used = false;
+  std::string source_domain = "ClusterC";
+
+  std::string brief() const {
+    std::ostringstream oss;
+    oss << "diag_n=" << diag_dim_n
+        << ", eigenpairs=" << eigenpair_count
+        << ", lambda_base=" << std::fixed << std::setprecision(4) << lambda_base
+        << ", coeff_norm=" << coeff_norm
+        << ", residual_score=" << residual_visibility_score
+        << ", emitted_kib=" << emitted_kib
+        << ", fallback=" << (fallback_used ? "yes" : "no")
+        << ", source=" << source_domain;
+    return oss.str();
+  }
+};
+
+struct ClusterAInput {
+  EpisodeDescriptor descriptor;
+  int inner_step = 0;
+};
+
+struct ClusterAOutput {
+  std::vector<WavePanel> panels;
+  std::vector<PartialHS> partials;
+  ResidentContextDesc resident_context;
+  int lcw_words_issued = 0;
+  int row_blocks_processed = 0;
+  ClusterMetrics metrics;
+};
+
+struct ClusterBInput {
+  EpisodeDescriptor descriptor;
+  int inner_step = 0;
+  std::vector<PartialHS> partials;
+};
+
+struct ClusterBOutput {
+  FullHS full_hs;
+  ReducedMatrices reduced;
+  bool spill_flag = false;
+  ClusterMetrics metrics;
+};
+
+struct ClusterCInput {
+  EpisodeDescriptor descriptor;
+  int inner_step = 0;
+  ReducedMatrices reduced;
+  EpisodeControllerState controller_state;
+};
+
+struct ClusterCOutput {
+  DiagSolutionDescriptor diag_solution;
+  std::string cdiaghg_mode_selected = "hardware";
+  double crossover_margin = 0.0;
+  ClusterMetrics metrics;
+};
+
+struct ClusterDInput {
+  EpisodeDescriptor descriptor;
+  int inner_step = 0;
+  DiagSolutionDescriptor diag_solution;
+  EpisodeControllerState controller_state;
+};
+
+struct ClusterDOutput {
+  ObjectRecord p_next_object;
+  double residual_norm = 0.0;
+  double updated_vector_norm = 0.0;
+  bool episode_continue_flag = false;
+  ClusterMetrics metrics;
+};
+
+struct EpisodeResult {
+  EpisodeDescriptor descriptor;
+  EpisodeControllerState controller_state;
+  ClusterMetrics cluster_a;
+  ClusterMetrics cluster_b;
+  ClusterMetrics cluster_c;
+  ClusterMetrics cluster_d;
+  ResidentContextDesc resident_context;
+  FullHS full_hs;
+  ReducedMatrices reduced;
+  DiagSolutionDescriptor diag_solution;
+  ObjectRecord p_next_object;
+  double residual_norm = 0.0;
+  double updated_vector_norm = 0.0;
+  double crossover_margin = 0.0;
+  int lcw_words_issued = 0;
+  int row_blocks_processed = 0;
+  int completed_inner_steps = 0;
+  int total_ref_cycles = 0;
+  int total_backpressure_ref_cycles = 0;
+  double total_data_movement_kib = 0.0;
+  bool converged_inner_loop = false;
+  std::string status = "created";
+
+  std::string brief() const {
+    std::ostringstream oss;
+    oss << "status=" << status
+        << ", inner_steps=" << completed_inner_steps
+        << ", diag_mode=" << controller_state.cdiaghg_mode_selected
+        << ", residual=" << std::fixed << std::setprecision(4) << residual_norm
+        << ", updated_norm=" << updated_vector_norm
+        << ", p_next=" << p_next_object.object_handle
+        << ", lcw=" << lcw_words_issued
+        << ", row_blocks=" << row_blocks_processed
+        << ", ref_cycles=" << total_ref_cycles
+        << ", bp_ref_cycles=" << total_backpressure_ref_cycles
+        << ", move_kib=" << total_data_movement_kib;
+    return oss.str();
+  }
+};
+
+struct SCFIterationClusteredReport {
+  int scf_iteration = 0;
+  EpisodeDescriptor descriptor;
+  EpisodeResult episode;
+  double rho_out_norm = 0.0;
+  double potential_norm = 0.0;
+  double mixed_rho_norm = 0.0;
+  double density_delta = 0.0;
+  double energy_after_iteration = 0.0;
+  bool converged = false;
+
+  std::string brief() const {
+    std::ostringstream oss;
+    oss << "iter=" << scf_iteration
+        << ", solver=" << descriptor.solver_mode
+        << ", diag=" << episode.controller_state.cdiaghg_mode_selected
+        << ", mixed_rho=" << std::fixed << std::setprecision(4) << mixed_rho_norm
+        << ", density_delta=" << density_delta
+        << ", energy=" << energy_after_iteration
+        << ", converged=" << (converged ? "yes" : "no");
+    return oss.str();
+  }
+};
+
+struct SCFRunReport {
+  SystemRunConfig run_config;
+  std::vector<SCFIterationClusteredReport> iterations;
+  SCFState final_state;
+  int total_episodes = 0;
+  int total_lcw_words_issued = 0;
+  int total_row_blocks_processed = 0;
+  int total_ref_cycles = 0;
+  int total_backpressure_ref_cycles = 0;
+  double total_data_movement_kib = 0.0;
+  std::string convergence_reason = "max_scf_iters_reached";
+
+  std::string brief() const {
+    std::ostringstream oss;
+    oss << "software=" << run_config.software_family
+        << ", flow=" << run_config.flow_family
+        << ", iters=" << iterations.size()
+        << ", episodes=" << total_episodes
+        << ", lcw=" << total_lcw_words_issued
+        << ", row_blocks=" << total_row_blocks_processed
+        << ", ref_cycles=" << total_ref_cycles
+        << ", bp_ref_cycles=" << total_backpressure_ref_cycles
+        << ", move_kib=" << std::fixed << std::setprecision(4)
+        << total_data_movement_kib
+        << ", convergence=" << convergence_reason;
+    return oss.str();
+  }
+};
+
 struct Body10BundleRequest {
   int bundle_id = 0;
   std::string phase_family = "BODY_10_FAMILY";

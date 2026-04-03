@@ -13,6 +13,12 @@ add_executable(qe_band_solver_model
   src/host_scf.cpp
   src/dft_hybrid_system.cpp
   src/fpga_orchestrator.cpp
+  src/episode_controller.cpp
+  src/cluster_graph_executor.cpp
+  src/cluster_a_operator_sweep.cpp
+  src/cluster_b_reduced_build.cpp
+  src/cluster_c_hardware_diag.cpp
+  src/cluster_d_refresh_residual.cpp
   src/replay_bundle_executor.cpp
   src/body04_family_controller.cpp
   src/outer_update_runtime_domain.cpp

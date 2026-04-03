@@ -11,7 +11,7 @@ class DFTHybridSystem : public sc_core::sc_module {
  public:
   explicit DFTHybridSystem(sc_core::sc_module_name name);
   SCFState run_demo(const SystemRunConfig& run_config) const;
-  DFTRunReport run_full_flow(const SystemRunConfig& run_config) const;
+  SCFRunReport run_full_flow(const SystemRunConfig& run_config) const;
 
  private:
   Interconnect fabric_;

@@ -55,7 +55,7 @@ int main(int argc, char** argv) {
   qebs::DFTHybridSystem system(sc_core::sc_module_name("dft_hybrid_system"));
   const auto report = system.run_full_flow(run_config);
   const auto& state = report.final_state;
-  qebs::log_line("sc_main", "Full-flow report: " + report.brief());
+  qebs::log_line("sc_main", "Cluster-first full-flow report: " + report.brief());
   qebs::log_line("sc_main",
                  "Demo finished: software=" + state.software_family +
                      ", flow=" + state.flow_family +

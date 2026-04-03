@@ -6,60 +6,53 @@ This directory contains a **timed-functional SystemC-style demo** for a **DFT hy
 
 Implemented behavior-level flow:
 
-`DFTHybridSystem -> HostSCF -> FPGAOrchestrator -> ReplayBundleExecutor -> {ChipTop Phase B, optional BODY_10A/B/C under BODY_10_FAMILY, Body04FamilyController -> OuterUpdateRuntimeDomain} -> next SCF iteration`
+`DFTHybridSystem -> HostSCF -> FPGAOrchestrator -> ChipTop -> EpisodeController -> ClusterGraphExecutor -> Cluster A/B/C/D -> next SCF iteration`
 
-The promoted model keeps the existing **Phase B band-solver episode subsystem** as the core on-chip body, but now also models:
+The current promoted model treats the old replay/body path as a legacy compatibility layer and runs the main episode path through a **cluster-first control plane**:
 
-- a unified `ReplayBundleDescriptor -> ReplayBundleCompletion` runtime path;
-- a runtime-managed `BODY_04` family bundle with frozen `BODY_04A/B/C` sub-body catalog for outer update stages;
-- an explicit `OuterUpdateRuntimeDomain` with a `Body04LoweringPlan`;
-- a runtime-managed `BODY_10` family bundle with frozen `BODY_10A/B/C` sub-body catalog plus explicit `Body10StageRequest / Body10StageSummary / Body10LoweringPlan` for `CP2K/QS_OT`-style orbital-update extension;
+- `EpisodeDescriptor -> EpisodeControllerState -> EpisodeResult`
+- a persistent episode controller that owns workload bucket, resident-fit, FIFO-credit, spill, and diag-mode decisions
+- a `ClusterGraphExecutor` that drives:
+  - `Cluster A`: fused `h_psi + s_psi` operator sweep
+  - `Cluster B`: reduced `H_sub / S_sub` build
+  - `Cluster C`: hardware-first diagonalization proxy
+  - `Cluster D`: refresh / residual -> `P_next`
 - a single top-level `DFTHybridSystem` object;
 - software-family selection for `QE`, `CP2K/QS_DIAG`, `CP2K/QS_OT`, `VASP/BLOCKED_DAVIDSON`, and `VASP/FAST`-style flows.
 
-Current phase interpretation:
-
-- `Phase A` = setup / seed / object bind
-- `Phase B` = `BODY_01/BODY_02/BODY_03` on-chip replay bundle
-- `Phase Bx` = optional `BODY_10A/B/C` inside runtime-managed `BODY_10` family
-- `Phase C/D/E` = `BODY_04A/B/C` inside runtime-managed `BODY_04` family bundle
-- `Phase E exit` = `BODY_04C` convergence gate back to `BODY_05`
-
-This demo is still **not a numerically faithful DFT implementation**. It is a **system-level control / object-lifecycle model** that preserves the `Host -> FPGA/runtime -> Chip` transaction boundaries while extending the flow beyond one isolated band-solver episode. The current version emits an explicit `DFTRunReport` with per-iteration `Phase B`, optional `BODY_10`, and `BODY_04` bundle summaries, plus run-level `lcw`, `row_block`, data-movement, convergence-reason totals, `Phase B` reference-cycle/backpressure totals, and `BODY_04` reference-cycle/backpressure totals.
+This demo is still **not a numerically faithful DFT implementation**. It is a **timed-functional cluster-first system model** that preserves the `Host -> FPGA -> Chip` transaction boundaries while moving the main runnable path away from replay/body accounting and toward explicit `Cluster A/B/C/D` execution.
 
 ## QE shell-stage view
 
-For the `QE / CBANDS_DIAG` path, the current model now also exports a **shell-stage view** that remaps the internal `Phase B` plus `BODY_04` objects onto the frozen SCF-shell contract:
+For the `QE / CBANDS_DIAG` path, the current model still closes the same shell contract:
 
 - `rho -> Veff`
 - `while bands not converged { h_psi, s_psi, build H_sub / S_sub, cdiaghg, refresh / residual -> P_next }`
 - `psi -> rho_out`
 - `mix_rho / convergence gate`
 
-The purpose of this view is not to claim that the current demo already implements a frozen microarchitecture for each stage. Instead, it gives a shell-level accounting layer that keeps the `QE` software contract explicit while reusing the existing timed-functional bodies:
+What changed is the internal execution anchor:
 
-- `rho -> Veff` is mapped to `BODY_04B` and treated as a **loop-carried** stage;
-- `h_psi` and `s_psi` remain explicit shell stages, but the current `Phase B` proxy computes their partials in one fused row-block sweep, so `s_psi` is reported as a **fused-shadow** stage to avoid double counting;
-- `build H_sub / S_sub` is mapped to the `BODY_02` aggregate-plus-closure path;
-- `cdiaghg` is exposed as a **CPU / soft-core companion** boundary with explicit reduced-space traffic proxy;
-- `refresh / residual -> P_next` is kept explicit even though the current timed-functional proxy still shares one `VectorDiagCompanion` block with the reduced solve;
-- `psi -> rho_out` and `mix_rho` are mapped to `BODY_04A` and `BODY_04C`.
-
-The shell-stage layer lives in `ShellStageSummary` / `ShellIterationSummary` inside `src/types.hpp` and is emitted through `SCFIterationReport` and `DFTRunReport` for the `QE / CBANDS_DIAG` configuration.
+- `h_psi` + `s_psi` now live under `Cluster A`
+- `build H_sub / S_sub` now lives under `Cluster B`
+- `cdiaghg` now has an explicit hardware-first `Cluster C` proxy instead of being split out of `VectorDiagCompanion`
+- `refresh / residual -> P_next` now has an explicit `Cluster D`
+- `psi -> rho_out / rho -> Veff / mix_rho` are no longer the primary chip-side execution path; the old `BODY_04` runtime remains as legacy/phase-2 support code
 
 ## Modeling level
 
 Current modeling-level judgement:
 
-- `Host/FPGA/runtime` remains mainly **transaction/object-level**, while `BODY_10` is now a runtime-managed timed-functional subchain with explicit leaf modules `PreconditionedUpdateVector`, `WaveCandidateCommit`, `OrthogonalizeUnit`, `RebindCommit`, `HistoryIntegrator`, and `OTSummaryCommit`, plus stage-level summaries and leaf-block flow-control proxies;
-- `ChipTop Phase B` is now a **structured timed-functional model with a leaf-block `L2 proxy` flow-control layer**;
-- `OuterUpdateRuntimeDomain / BODY_04` is now also a **structured timed-functional runtime-domain model with leaf-block `L2 proxy` flow-control** across `DensityAccumulatorUnit`, `DensityCommitUnit`, `PotentialFieldUnit`, `ProjectorStateUpdater`, `DensityMixerUnit`, and `ConvergenceTracker`;
-- together they carry explicit `module occupancy`, `critical_domain` or `critical_stage`, `reference-cycle` busy totals, leaf-block queue depth, `accept/busy/complete`, ingress/egress ownership, arbitration domain, and dominant backpressure route or stage;
-- the system is **not yet** a finished hardware microarchitecture model because queue depths, arbitration policy, cross-body overlap, and chip-visible lowering boundaries are still provisional rather than frozen silicon contracts.
+- `Host/FPGA` remains mainly **transaction/object-level**
+- `ChipTop` is now a **cluster-first timed-functional executor**
+- `Cluster A/B` reuse the old Phase-B leaf modules as datapath blocks, but are no longer dispatched through `ReplayBundleExecutor`
+- `Cluster C` is a standalone hardware-first diagonalization proxy
+- `Cluster D` is a standalone refresh/residual cluster instead of a host-side accounting split
+- the legacy `BODY_04` and `BODY_10` code remains in-tree, but it is no longer the main executable path
 
 In short, this directory should be read as:
 
-> a `QE`-connected full-SCF system model with hardware-shaped module boundaries, Phase-B and BODY-04 structural timing summaries, and leaf-block `L2` flow-control proxies across the band-solver and outer-update subchains,
+> a `QE`-connected cluster-first timed-functional runnable model with explicit `EpisodeController + Cluster A/B/C/D` execution,
 > not as a numerically faithful DFT solver or a frozen RTL-level chip model.
 
 ## Top-level modules
@@ -68,25 +61,13 @@ In short, this directory should be read as:
   - `Interconnect`
   - `ChipTop`
   - `FPGAOrchestrator`
-    - `ReplayBundleExecutor`
-      - `Body04FamilyController`
-        - `OuterUpdateRuntimeDomain`
-          - `DensityAccumulationStage`
-            - `DensityAccumulatorUnit`
-            - `DensityCommitUnit`
-          - `PotentialRefreshStage`
-            - `PotentialFieldUnit`
-            - `ProjectorStateUpdater`
-          - `MixingConvergenceStage`
-            - `DensityMixerUnit`
-            - `ConvergenceTracker`
-      - `Body10FamilyController`
-        - `PreconditionedUpdateVector`
-        - `WaveCandidateCommit`
-        - `OrthogonalizeUnit`
-        - `RebindCommit`
-        - `HistoryIntegrator`
-        - `OTSummaryCommit`
+    - `ChipTop::run_episode(EpisodeDescriptor)`
+      - `EpisodeController`
+      - `ClusterGraphExecutor`
+        - `ClusterAOperatorSweep`
+        - `ClusterBReducedBuild`
+        - `ClusterCHardwareDiag`
+        - `ClusterDRefreshResidual`
   - `HostSCF`
 
 ## On-chip partition used in the current demo
@@ -136,11 +117,14 @@ In short, this directory should be read as:
 
 - `sc_main.cpp` — executable entry with env-configured software/flow selection
 - `src/dft_hybrid_system.*` — explicit full-system top module
-- `src/types.hpp` — transaction / object / resident-context / bundle structs, including `ReplayBundleDescriptor`, `ReplayBundleCompletion`, `Body10StageRequest`, `Body10PrecondStats`, `Body10PrecondSummary`, `Body10OrthoStats`, `Body10OrthoSummary`, `Body10HistoryStats`, `Body10HistorySummary`, `Body10StageSummary`, `Body10LoweringPlan`, `Body04StageRequest`, `ShellStageSummary`, `ShellIterationSummary`, `SCFIterationReport`, and `DFTRunReport`
-- `src/replay_bundle_executor.*` — unified runtime replay-bundle executor
-- `src/body04_family_controller.*` — runtime-managed `BODY_04` family facade
-- `src/outer_update_runtime_domain.*` — explicit outer-update runtime domain and lowering-plan owner
-- `src/body10_family_controller.*` — runtime-managed `BODY_10` OT/block-update controller with explicit stage/lowering summaries
+- `src/types.hpp` — current type home for both the new cluster-first types (`EpisodeDescriptor`, `EpisodeResult`, `SCFRunReport`, etc.) and the retained legacy replay/body types
+- `src/episode_controller.*` — persistent cluster-first controller
+- `src/cluster_graph_executor.*` — ordered A/B/C/D executor
+- `src/cluster_a_operator_sweep.*` — fused operator-sweep cluster
+- `src/cluster_b_reduced_build.*` — reduced-matrix build cluster
+- `src/cluster_c_hardware_diag.*` — hardware-first diagonalization proxy
+- `src/cluster_d_refresh_residual.*` — refresh / residual -> `P_next` cluster
+- `src/replay_bundle_executor.*`, `src/body04_family_controller.*`, `src/outer_update_runtime_domain.*`, `src/body10_family_controller.*` — retained legacy/runtime support path, no longer the primary runnable path
 - `src/preconditioned_update_vector.*` — `BODY_10A` preconditioned update leaf block
 - `src/wave_candidate_commit.*` — `BODY_10A` wave-candidate commit leaf block
 - `src/orthogonalize_unit.*` — `BODY_10B` orthogonalize leaf block
