@@ -38,6 +38,7 @@
 ## 3. Evidence
 
 - `docs/survey/`：外部路线与软件/行业调研
+- `docs/survey/system_level_modeling_methods_and_tools_reference_20260402.md`：系统级建模方法、建模层次与常用工具参考
 - `docs/benchmarks/`：工作负载、trace、baseline 与实验脚本
 - `docs/qe_inputs/`：`QE` 输入样例
 - `docs/patches/`：`QE` 采样 patch

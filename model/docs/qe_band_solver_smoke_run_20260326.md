@@ -185,3 +185,77 @@ QEBS_SOFTWARE_FAMILY=CP2K QEBS_FLOW_FAMILY=QS_OT ./model/qe_band_solver_model/bu
 - `STRUCTURAL_TIMED_FUNCTIONAL_WITH_PHASEB_AND_BODY04_LEAF_FLOW_CONTROL_PROXY`
 
 当前 canonical 命名应以第 `7` 节和主规格书为准。
+
+## 8. 2026-04-02 QE shell-stage 视图追加验证
+
+为了把当前 `Phase B + BODY_04` 的内部实现和实验阶段已经冻结的 `QE SCF shell` 比较合同对齐，这一版又追加了一层 `QE / CBANDS_DIAG` 专用的 shell-stage 视图。
+
+这层视图不是重写模型，而是在现有 full-flow 模型上追加一个显式映射层，把内部实现重投影到：
+
+- `rho -> Veff`
+- `while bands not converged { h_psi, s_psi, build H_sub / S_sub, cdiaghg, refresh / residual -> P_next }`
+- `psi -> rho_out`
+- `mix_rho / convergence gate`
+
+其中当前版本的关键约定是：
+
+- `rho -> Veff` 由 `BODY_04B_POTENTIAL_REFRESH` 提供，但在 shell 语义上被标成 **loop-carried** stage；
+- `h_psi` / `s_psi` 在 shell 级仍保持显式分离，但当前 `Phase B` 代理在同一 row-block projector sweep 中同时形成 `H/S` partial，因此 `s_psi` 作为 **fused-shadow** stage 报告而不重复记账；
+- `build H_sub / S_sub` 对应 `BODY_02` 的 aggregate + closure 路径；
+- `cdiaghg` 被显式留在 `CPU / soft-core companion` 域，同时带 reduced-space 小矩阵边界流量 proxy；
+- `refresh / residual -> P_next` 仍显式保留，但当前 timed-functional proxy 还是与 `VectorDiagCompanion` 共用一条 companion return 路径，因此这里只是 contract-preserving split，不是冻结微结构；
+- `psi -> rho_out` / `mix_rho` 分别对应 `BODY_04A` / `BODY_04C`。
+
+### 8.1 构建与运行
+
+构建命令：
+
+```bash
+cmake --build model/qe_band_solver_model/build -j4
+```
+
+运行命令：
+
+```bash
+./model/qe_band_solver_model/build/qe_band_solver_model
+```
+
+### 8.2 关键日志摘要
+
+本次追加验证确认当前可执行文件已经输出显式的 `QE shell-stage summary`：
+
+```text
+[992.0 ns] [host_scf] SCF iteration report => iter=1, solver=DAVIDSON, phase_b=episode done, body10=none, body10_move_kib=0, body10_ref_cycles=0, body10_bp_ref_cycles=0, body04_move_kib=484.8, body04_ref_cycles=36, body04_bp_ref_cycles=0, shell_stages=8, shell_ref_cycles=801, shell_bp_ref_cycles=54, iter_move_kib=484.8, energy=-11.308, converged=no
+[992.0 ns] [host_scf] QE shell-stage summary => family=QE_SCF_SHELL_V1, stages=8, cdiaghg_on_companion=yes, companion=CPU_OR_SOFTCORE, move_kib=486.0812, ref_cycles=801, bp_ref_cycles=54
+[992.0 ns] [host_scf] QE shell-stage => shell_order=1, exec_order=7, stage=rho -> Veff, anchor=BODY_04B_POTENTIAL_REFRESH, domain=FPGA_RUNTIME, mode=loop_carried, loop_carried=yes, in=qe_rho_seed, out=qe_veff_iter_1, residency=mixed-density resident, grid exchange visible, move_kib=196.8000, ref_cycles=14, bp_ref_cycles=0, dominant=PotentialFieldUnit.Build
+[992.0 ns] [host_scf] QE shell-stage => shell_order=2, exec_order=1, stage=h_psi, anchor=BODY_01_PROJECTOR_APPLY, domain=FPGA_RUNTIME, mode=fused_primary, loop_carried=no, in=qe_wave_seed, out=phase_b/full_hs.partial_h, residency=resident wave/projector sweep with on-chip row reuse, move_kib=0.0000, ref_cycles=690, bp_ref_cycles=54, dominant=CIM_PROJECT_BACKPROJECT_CHAIN
+[992.0 ns] [host_scf] QE shell-stage => shell_order=3, exec_order=2, stage=s_psi, anchor=BODY_01_PROJECTOR_APPLY, domain=FPGA_RUNTIME, mode=fused_shadow, loop_carried=no, in=qe_wave_seed, out=phase_b/full_hs.partial_s, residency=shares the same resident projector sweep as h_psi, move_kib=0.0000, ref_cycles=0, bp_ref_cycles=0, dominant=CIM_PROJECT_BACKPROJECT_CHAIN
+[992.0 ns] [host_scf] QE shell-stage => shell_order=4, exec_order=3, stage=build H_sub/S_sub, anchor=BODY_02_REDUCED_CLOSURE, domain=FPGA_RUNTIME, mode=exclusive, loop_carried=no, in=phase_b/full_hs, out=phase_b/reduced_matrices, residency=reduced matrices assembled on chip before companion handoff, move_kib=0.0000, ref_cycles=54, bp_ref_cycles=0, dominant=ReductionClosureEngine
+[992.0 ns] [host_scf] QE shell-stage => shell_order=5, exec_order=4, stage=cdiaghg, anchor=COMPANION_CDIAGHG_PROXY, domain=CPU_OR_SOFTCORE_COMPANION, mode=exclusive, loop_carried=no, in=phase_b/reduced_matrices, out=phase_b/ritz_coefficients, residency=small reduced-space handoff across FPGA-companion boundary, move_kib=1.2812, ref_cycles=12, bp_ref_cycles=0, dominant=VectorDiagCompanion.solve_proxy
+[992.0 ns] [host_scf] QE shell-stage => shell_order=6, exec_order=5, stage=refresh/residual -> P_next, anchor=BODY_03_REFRESH_COMMIT_PROXY, domain=FPGA_RUNTIME, mode=exclusive, loop_carried=no, in=phase_b/ritz_coefficients, out=qe_wave_seed:P_next, residency=updated search vectors return to resident episode context, move_kib=0.0000, ref_cycles=9, bp_ref_cycles=0, dominant=BODY_03.commit_boundary
+[992.0 ns] [host_scf] QE shell-stage => shell_order=7, exec_order=6, stage=psi -> rho_out, anchor=BODY_04A_DENSITY_ACCUM, domain=FPGA_RUNTIME, mode=exclusive, loop_carried=no, in=qe_wave_seed, out=qe_rho_iter_1, residency=band outputs reduced into shell-visible density object, move_kib=288.0000, ref_cycles=12, bp_ref_cycles=0, dominant=DensityAccumulatorUnit.Reduce
+[992.0 ns] [host_scf] QE shell-stage => shell_order=8, exec_order=8, stage=mix_rho / convergence gate, anchor=BODY_04C_MIX_CONVERGE, domain=HOST_VISIBLE_FPGA_RUNTIME, mode=exclusive, loop_carried=no, in=qe_rho_iter_1/qe_veff_iter_1, out=qe_rho_mixed_iter_1, residency=history-carrying density object survives across SCF iterations, move_kib=0.0000, ref_cycles=10, bp_ref_cycles=0, dominant=DensityMixerUnit.Mix
+```
+
+最终 run-level 汇总现在也带上了 shell 级 totals：
+
+```text
+[3466.0 ns] [host_scf] Full DFT run report => software=QE, flow=CBANDS_DIAG, iters=3, phase_b=3, body04=3, body10=0, lcw=18, row_blocks=66, phase_b_ref_cycles=2745, phase_b_bp_ref_cycles=372, body10_ref_cycles=0, body10_bp_ref_cycles=0, body04_ref_cycles=108, body04_bp_ref_cycles=0, total_move_kib=2238.4000, shell_move_kib=2242.2437, shell_ref_cycles=2853, shell_bp_ref_cycles=264, body04_move_kib=2238.4000, body10_move_kib=0.0000, reason=mix_gate_converged, final_density=qe_rho_mixed_iter_3, model_level=STRUCTURAL_TIMED_FUNCTIONAL_WITH_PHASEB_BODY10_BODY04_LEAF_FLOW_CONTROL_PROXY, converged=yes
+```
+
+### 8.3 当前解释边界
+
+这次追加验证说明的是：
+
+- 当前 full-flow SystemC-style 模型已经能够按 `QE shell` 合同输出一组稳定、可读、可比对的 stage records；
+- `Host / FPGA / companion / outer-update` 的边界已经能在 per-iteration 报告里显式看到；
+- `h_psi` / `s_psi` 的当前实现仍然更接近 **fused projector sweep**，这不是 bug，而是当前系统级建模层对实际数据流的一种明确表达；
+- `cdiaghg` 继续保留在 companion 域不会破坏 shell-level 汇总，反而让 v1 bring-up 路线在模型上更清楚。
+
+这次追加验证**不意味着**：
+
+- `h_psi` 与 `s_psi` 的最终硬件实现必须永远保持 fused；
+- `4/3` 的 companion split 已经是冻结的微结构结论；
+- 当前 `move_kib` proxy 已经等价于最终 FPGA 板级 DMA 字节统计。
+
+它的作用是把当前 full-flow 行为模型提升为一个可直接服务于 Task 5 / Task 6 的 shell-level 比较对象。

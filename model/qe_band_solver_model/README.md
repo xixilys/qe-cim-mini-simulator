@@ -27,6 +27,26 @@ Current phase interpretation:
 
 This demo is still **not a numerically faithful DFT implementation**. It is a **system-level control / object-lifecycle model** that preserves the `Host -> FPGA/runtime -> Chip` transaction boundaries while extending the flow beyond one isolated band-solver episode. The current version emits an explicit `DFTRunReport` with per-iteration `Phase B`, optional `BODY_10`, and `BODY_04` bundle summaries, plus run-level `lcw`, `row_block`, data-movement, convergence-reason totals, `Phase B` reference-cycle/backpressure totals, and `BODY_04` reference-cycle/backpressure totals.
 
+## QE shell-stage view
+
+For the `QE / CBANDS_DIAG` path, the current model now also exports a **shell-stage view** that remaps the internal `Phase B` plus `BODY_04` objects onto the frozen SCF-shell contract:
+
+- `rho -> Veff`
+- `while bands not converged { h_psi, s_psi, build H_sub / S_sub, cdiaghg, refresh / residual -> P_next }`
+- `psi -> rho_out`
+- `mix_rho / convergence gate`
+
+The purpose of this view is not to claim that the current demo already implements a frozen microarchitecture for each stage. Instead, it gives a shell-level accounting layer that keeps the `QE` software contract explicit while reusing the existing timed-functional bodies:
+
+- `rho -> Veff` is mapped to `BODY_04B` and treated as a **loop-carried** stage;
+- `h_psi` and `s_psi` remain explicit shell stages, but the current `Phase B` proxy computes their partials in one fused row-block sweep, so `s_psi` is reported as a **fused-shadow** stage to avoid double counting;
+- `build H_sub / S_sub` is mapped to the `BODY_02` aggregate-plus-closure path;
+- `cdiaghg` is exposed as a **CPU / soft-core companion** boundary with explicit reduced-space traffic proxy;
+- `refresh / residual -> P_next` is kept explicit even though the current timed-functional proxy still shares one `VectorDiagCompanion` block with the reduced solve;
+- `psi -> rho_out` and `mix_rho` are mapped to `BODY_04A` and `BODY_04C`.
+
+The shell-stage layer lives in `ShellStageSummary` / `ShellIterationSummary` inside `src/types.hpp` and is emitted through `SCFIterationReport` and `DFTRunReport` for the `QE / CBANDS_DIAG` configuration.
+
 ## Modeling level
 
 Current modeling-level judgement:
@@ -116,7 +136,7 @@ In short, this directory should be read as:
 
 - `sc_main.cpp` — executable entry with env-configured software/flow selection
 - `src/dft_hybrid_system.*` — explicit full-system top module
-- `src/types.hpp` — transaction / object / resident-context / bundle structs, including `ReplayBundleDescriptor`, `ReplayBundleCompletion`, `Body10StageRequest`, `Body10PrecondStats`, `Body10PrecondSummary`, `Body10OrthoStats`, `Body10OrthoSummary`, `Body10HistoryStats`, `Body10HistorySummary`, `Body10StageSummary`, `Body10LoweringPlan`, `Body04StageRequest`, `SCFIterationReport`, and `DFTRunReport`
+- `src/types.hpp` — transaction / object / resident-context / bundle structs, including `ReplayBundleDescriptor`, `ReplayBundleCompletion`, `Body10StageRequest`, `Body10PrecondStats`, `Body10PrecondSummary`, `Body10OrthoStats`, `Body10OrthoSummary`, `Body10HistoryStats`, `Body10HistorySummary`, `Body10StageSummary`, `Body10LoweringPlan`, `Body04StageRequest`, `ShellStageSummary`, `ShellIterationSummary`, `SCFIterationReport`, and `DFTRunReport`
 - `src/replay_bundle_executor.*` — unified runtime replay-bundle executor
 - `src/body04_family_controller.*` — runtime-managed `BODY_04` family facade
 - `src/outer_update_runtime_domain.*` — explicit outer-update runtime domain and lowering-plan owner

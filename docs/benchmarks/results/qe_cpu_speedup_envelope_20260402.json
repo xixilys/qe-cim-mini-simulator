@@ -1,0 +1,162 @@
+[
+  {
+    "case_id": "si4_pbe_uspp_small",
+    "source_type": "derived_from_measured_cpu_shell_aggregate",
+    "measured_source_file": "docs/benchmarks/results/qe_cpu_shell_aggregate_extract_20260402.json",
+    "electrons_wall_s": 0.35,
+    "c_bands_wall_s": 0.17,
+    "h_psi_wall_s": 0.1,
+    "fractions": {
+      "c_bands_of_electrons": 0.48571428571428577,
+      "h_psi_of_electrons": 0.28571428571428575,
+      "h_psi_of_c_bands": 0.5882352941176471
+    },
+    "upper_bounds": {
+      "if_c_bands_were_infinitely_fast": 1.9444444444444446,
+      "if_h_psi_were_infinitely_fast": 1.4000000000000001
+    },
+    "speedup_curves": {
+      "whole_scf_if_only_c_bands_is_accelerated": {
+        "2": 1.3207547169811322,
+        "4": 1.5730337078651686,
+        "8": 1.7391304347826089,
+        "16": 1.836065573770492
+      },
+      "whole_scf_if_only_h_psi_is_accelerated": {
+        "2": 1.1666666666666667,
+        "4": 1.272727272727273,
+        "8": 1.3333333333333335,
+        "16": 1.3658536585365855
+      }
+    },
+    "note": "This is an Amdahl-style envelope derived from measured CPU-only QE timing sections. It is not an FPGA measurement, not a cluster-model latency prediction, and not a claim that the proposed FPGA design already achieves these speedups."
+  },
+  {
+    "case_id": "si8_pbe_uspp",
+    "source_type": "derived_from_measured_cpu_shell_aggregate",
+    "measured_source_file": "docs/benchmarks/results/qe_cpu_shell_aggregate_extract_20260402.json",
+    "electrons_wall_s": 0.91,
+    "c_bands_wall_s": 0.47,
+    "h_psi_wall_s": 0.28,
+    "fractions": {
+      "c_bands_of_electrons": 0.5164835164835164,
+      "h_psi_of_electrons": 0.3076923076923077,
+      "h_psi_of_c_bands": 0.5957446808510639
+    },
+    "upper_bounds": {
+      "if_c_bands_were_infinitely_fast": 2.068181818181818,
+      "if_h_psi_were_infinitely_fast": 1.4444444444444444
+    },
+    "speedup_curves": {
+      "whole_scf_if_only_c_bands_is_accelerated": {
+        "2": 1.348148148148148,
+        "4": 1.632286995515695,
+        "8": 1.8245614035087718,
+        "16": 1.9387483355525963
+      },
+      "whole_scf_if_only_h_psi_is_accelerated": {
+        "2": 1.1818181818181819,
+        "4": 1.3,
+        "8": 1.368421052631579,
+        "16": 1.4054054054054053
+      }
+    },
+    "note": "This is an Amdahl-style envelope derived from measured CPU-only QE timing sections. It is not an FPGA measurement, not a cluster-model latency prediction, and not a claim that the proposed FPGA design already achieves these speedups."
+  },
+  {
+    "case_id": "graphene_pbe_uspp",
+    "source_type": "derived_from_measured_cpu_shell_aggregate",
+    "measured_source_file": "docs/benchmarks/results/qe_cpu_shell_aggregate_extract_20260402.json",
+    "electrons_wall_s": 0.41,
+    "c_bands_wall_s": 0.27,
+    "h_psi_wall_s": 0.15,
+    "fractions": {
+      "c_bands_of_electrons": 0.6585365853658537,
+      "h_psi_of_electrons": 0.36585365853658536,
+      "h_psi_of_c_bands": 0.5555555555555555
+    },
+    "upper_bounds": {
+      "if_c_bands_were_infinitely_fast": 2.928571428571429,
+      "if_h_psi_were_infinitely_fast": 1.5769230769230769
+    },
+    "speedup_curves": {
+      "whole_scf_if_only_c_bands_is_accelerated": {
+        "2": 1.490909090909091,
+        "4": 1.9759036144578312,
+        "8": 2.3597122302158273,
+        "16": 2.613545816733068
+      },
+      "whole_scf_if_only_h_psi_is_accelerated": {
+        "2": 1.2238805970149254,
+        "4": 1.3781512605042017,
+        "8": 1.4708520179372195,
+        "16": 1.5220417633410674
+      }
+    },
+    "note": "This is an Amdahl-style envelope derived from measured CPU-only QE timing sections. It is not an FPGA measurement, not a cluster-model latency prediction, and not a claim that the proposed FPGA design already achieves these speedups."
+  },
+  {
+    "case_id": "au_slab_subspace",
+    "source_type": "derived_from_measured_cpu_shell_aggregate",
+    "measured_source_file": "docs/benchmarks/results/qe_cpu_shell_aggregate_extract_20260402.json",
+    "electrons_wall_s": 8.87,
+    "c_bands_wall_s": 5.68,
+    "h_psi_wall_s": 4.03,
+    "fractions": {
+      "c_bands_of_electrons": 0.6403607666290868,
+      "h_psi_of_electrons": 0.45434047350620077,
+      "h_psi_of_c_bands": 0.7095070422535212
+    },
+    "upper_bounds": {
+      "if_c_bands_were_infinitely_fast": 2.780564263322884,
+      "if_h_psi_were_infinitely_fast": 1.832644628099174
+    },
+    "speedup_curves": {
+      "whole_scf_if_only_c_bands_is_accelerated": {
+        "2": 1.4709784411276947,
+        "4": 1.9240780911062907,
+        "8": 2.2743589743589743,
+        "16": 2.5021156558533146
+      },
+      "whole_scf_if_only_h_psi_is_accelerated": {
+        "2": 1.2939460247994166,
+        "4": 1.5168875587858062,
+        "8": 1.6598830409356728,
+        "16": 1.7419909169019272
+      }
+    },
+    "note": "This is an Amdahl-style envelope derived from measured CPU-only QE timing sections. It is not an FPGA measurement, not a cluster-model latency prediction, and not a claim that the proposed FPGA design already achieves these speedups."
+  },
+  {
+    "case_id": "sic32_subspace",
+    "source_type": "derived_from_measured_cpu_shell_aggregate",
+    "measured_source_file": "docs/benchmarks/results/qe_cpu_shell_aggregate_extract_20260402.json",
+    "electrons_wall_s": 13.83,
+    "c_bands_wall_s": 9.34,
+    "h_psi_wall_s": 7.05,
+    "fractions": {
+      "c_bands_of_electrons": 0.6753434562545192,
+      "h_psi_of_electrons": 0.509761388286334,
+      "h_psi_of_c_bands": 0.7548179871520343
+    },
+    "upper_bounds": {
+      "if_c_bands_were_infinitely_fast": 3.0801781737193767,
+      "if_h_psi_were_infinitely_fast": 2.0398230088495573
+    },
+    "speedup_curves": {
+      "whole_scf_if_only_c_bands_is_accelerated": {
+        "2": 1.5098253275109172,
+        "4": 2.0263736263736263,
+        "8": 2.444542642509943,
+        "16": 2.7257945306725797
+      },
+      "whole_scf_if_only_h_psi_is_accelerated": {
+        "2": 1.3420669577874818,
+        "4": 1.6189640035118524,
+        "8": 1.8051884483602545,
+        "16": 1.9153466632043623
+      }
+    },
+    "note": "This is an Amdahl-style envelope derived from measured CPU-only QE timing sections. It is not an FPGA measurement, not a cluster-model latency prediction, and not a claim that the proposed FPGA design already achieves these speedups."
+  }
+]

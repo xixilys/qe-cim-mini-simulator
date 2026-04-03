@@ -399,6 +399,48 @@ Phase E: mix_rho / convergence gate
     -> next SCF iteration or stop
 ```
 
+#### `QE` 主线的三层循环关系
+
+上面这张 `Phase A-E` 图只表达了 `SCF` 外层阶段顺序，**不代表每个 phase 在一次 `SCF` 里都只运行一次**。
+
+对当前最关键的 `QE` 主线，更准确的控制结构是三层嵌套：
+
+1. **最外层：`SCF` 自洽循环**
+   - `rho -> Veff -> c_bands -> rho_out -> mix_rho -> next SCF`
+2. **中间层：`k` 点循环**
+   - 每个 `k` 点都要各自完成一轮 band solver episode
+3. **最内层：`Davidson / bands not converged` 循环**
+   - 在单个 `k` 点内部反复执行 `operator apply -> subspace build -> reduced solve -> refresh/residual`
+
+当前阶段用于系统建模的最准确伪代码应该理解成：
+
+```text
+while SCF not converged:
+    rho -> Veff
+    for k in k_points:
+        while bands not converged:
+            h_psi
+            s_psi
+            build H_sub / S_sub
+            cdiaghg
+            refresh / residual -> P_next
+    psi -> rho_out
+    mix_rho
+```
+
+这里要特别强调两点：
+
+- `Phase B` 不是一个“一次进入、一次退出”的单次 body，而是一个在 `SCF` 迭代内部、按 `k` 点和 Davidson 内循环反复展开的 episode；
+- 当前 `Si8` workload 样本里虽然 `kpoints = 1`，但这只是这个 case 的实例，不应该把系统级控制合同写死成“没有 `k` 点循环”。
+
+#### 为什么这层循环关系对系统设计很关键
+
+把三层循环写清楚之后，系统切分的判断也会更稳定：
+
+- `rho -> Veff`、`psi -> rho_out`、`mix_rho` 更接近 **每个 `SCF` iteration 一次** 的对象；
+- `h_psi / s_psi / build H_sub,S_sub / cdiaghg / refresh,residual` 更接近 **`SCF` 内反复滚动的小循环体**；
+- 因此，硬件最值得抓住的不是某个孤立小算子，而是这个最内层反复回环的数据流壳层。
+
 ### 7.2 各 phase 的系统责任划分
 
 | Phase | Host 责任 | FPGA/runtime 责任 | Chip 责任 |

@@ -17,9 +17,12 @@ RESULTS_ROOT = ROOT / "docs/benchmarks/results/qe_workload_revalidation"
 
 CASE_INPUTS = {
     "h2_tiny": "docs/qe_inputs/h2_tiny_gamma.in",
+    "au_slab_subspace": "docs/qe_inputs/au_slab_subspace_trace.in",
+    "si4_pbe_uspp_small": "docs/qe_inputs/si4_pbe_uspp_small.in",
     "si8_pbe_uspp": "docs/qe_inputs/si8_pbe_uspp.in",
     "si8_pbe_nc": "docs/qe_inputs/si8_pbe_nc.in",
     "si8_pbe0_uspp": "docs/qe_inputs/si8_pbe0_uspp_cg.in",
+    "sic32_subspace": "docs/qe_inputs/sic32_subspace_trace.in",
     "benzene": "docs/qe_inputs/benzene_workload_small.in",
     "graphene_pbe_paw": "docs/qe_inputs/graphene_pbe_paw_scf.in",
     "graphene_pbe_uspp": "docs/qe_inputs/graphene_pbe_uspp_scf.in",

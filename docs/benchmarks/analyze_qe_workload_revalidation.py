@@ -15,9 +15,12 @@ RESULTS_ROOT = ROOT / "docs/benchmarks/results/qe_workload_revalidation"
 
 CASE_ORDER = [
     "h2_tiny",
+    "au_slab_subspace",
+    "si4_pbe_uspp_small",
     "si8_pbe_uspp",
     "si8_pbe_nc",
     "si8_pbe0_uspp",
+    "sic32_subspace",
     "graphene_pbe_paw",
     "graphene_pbe_uspp",
     "benzene",

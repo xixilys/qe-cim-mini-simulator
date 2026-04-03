@@ -1,0 +1,22 @@
+case_role,case_family,case_id,baseline_class,precision_mode,solver_path,npw,nkb,max_subspace_n,max_subspace_m,fft_grid,c_bands_episode_latency_ms,scf_iteration_latency_ms,shell_wall_time_ms,speedup_vs_cpu_only,speedup_vs_cpu_gpu,host_device_kib,off_chip_memory_kib,stall_ratio,overlap_efficiency,energy_per_episode_mj,ops_total,bytes_total,ai_total,t_compute_lb_ms,t_bw_lb_ms,residual_rel_err,density_rel_err,eigenspectrum_rel_err,scf_iteration_count_drift,reproducibility_class,notes
+primary,Si,si8_pbe_uspp,CPU only,strict-fp64-software,davidson,2945,144,32,16,36x36x36,58.75,113.75,1140,,,,0,,,,,,,,,,,,,Measured QE stdout aggregate; episode and SCF-iteration latencies are derived averages from 8 c_bands calls and 8 SCF iterations; run did not converge within the current limit.
+primary,Si,si8_pbe_uspp,CPU + GPU,strict-fp64-gpu-or-practical-gpu,,,,,,,,,,,,,,,,,,,,,,,,,,,
+primary,Si,si8_pbe_uspp,CPU + FPGA,strict-fp64-fpga-v1,,,,,,,,,,,,,,,,,,,,,,,,,,,
+primary,Si-small,si4_pbe_uspp_small,CPU only,strict-fp64-software,davidson,1473,72,16,8,36x36x18,24.285714285714285,50,530,,,,0,,,,,,,,,,,,,Measured QE stdout aggregate; episode and SCF-iteration latencies are derived averages from 7 c_bands calls and 7 SCF iterations; run converged.
+primary,Si-small,si4_pbe_uspp_small,CPU + GPU,strict-fp64-gpu-or-practical-gpu,,,,,,,,,,,,,,,,,,,,,,,,,,,Deferred GPU row; workload is ready but no local GPU shell result yet.
+primary,Si-small,si4_pbe_uspp_small,CPU + FPGA,strict-fp64-fpga-v1,,,,,,,,,,,,,,,,,,,,,,,,,,,Workload is ready; FPGA modeled/measured row still pending.
+auxiliary,Fe,fe_scf_old,CPU only,strict-fp64-software,,,,,,,,,,,,,,,,,,,,,,,,,,,
+auxiliary,Fe,fe_scf_old,CPU + GPU,strict-fp64-gpu-or-practical-gpu,,,,,,,,,,,,,,,,,,,,,,,,,,,
+auxiliary,Fe,fe_scf_old,CPU + FPGA,strict-fp64-fpga-v1,,,,,,,,,,,,,,,,,,,,,,,,,,,
+primary,graphene,graphene_pbe_uspp,CPU only,strict-fp64-software,davidson,1105,16,8,4,20x20x60,45,68.33333333333333,540,,,,0,,,,,,,,,,,,,Measured QE stdout aggregate; episode and SCF-iteration latencies are derived averages from 6 c_bands calls and 6 SCF iterations; run converged.
+primary,graphene,graphene_pbe_uspp,CPU + GPU,strict-fp64-gpu-or-practical-gpu,,,,,,,,,,,,,,,,,,,,,,,,,,,
+primary,graphene,graphene_pbe_uspp,CPU + FPGA,strict-fp64-fpga-v1,,,,,,,,,,,,,,,,,,,,,,,,,,,
+auxiliary,benzene/C6H6,benzene_pbe_uspp,CPU only,strict-fp64-software,,,,,,,,,,,,,,,,,,,,,,,,,,,
+auxiliary,benzene/C6H6,benzene_pbe_uspp,CPU + GPU,strict-fp64-gpu-or-practical-gpu,,,,,,,,,,,,,,,,,,,,,,,,,,,
+auxiliary,benzene/C6H6,benzene_pbe_uspp,CPU + FPGA,strict-fp64-fpga-v1,,,,,,,,,,,,,,,,,,,,,,,,,,,
+primary,Au slab,au_slab_subspace,CPU only,strict-fp64-software,davidson,4191,72,52,26,30x30x90,1136,2217.5,10250,,,,0,,,,,,,,,,,,,Measured QE stdout aggregate; episode and SCF-iteration latencies are derived averages from 5 c_bands calls and 4 SCF iterations; run did not converge within the current limit.
+primary,Au slab,au_slab_subspace,CPU + GPU,strict-fp64-gpu-or-practical-gpu,,,,,,,,,,,,,,,,,,,,,,,,,,,
+primary,Au slab,au_slab_subspace,CPU + FPGA,strict-fp64-fpga-v1,,,,,,,,,,,,,,,,,,,,,,,,,,,
+primary,SiC32,sic32_subspace,CPU only,strict-fp64-software,davidson,29039,416,128,64,80x80x80,2335,3457.5,16290,,,,0,,,,,,,,,,,,,Measured QE stdout aggregate; episode and SCF-iteration latencies are derived averages from 4 c_bands calls and 4 SCF iterations; run did not converge within the current limit.
+primary,SiC32,sic32_subspace,CPU + GPU,strict-fp64-gpu-or-practical-gpu,,,,,,,,,,,,,,,,,,,,,,,,,,,
+primary,SiC32,sic32_subspace,CPU + FPGA,strict-fp64-fpga-v1,,,,,,,,,,,,,,,,,,,,,,,,,,,

@@ -1,0 +1,285 @@
+
+     Program PWSCF v.7.5 starts on  2Apr2026 at 19:43: 0 
+
+     This program is part of the open-source Quantum ESPRESSO suite
+     for quantum simulation of materials; please cite
+         "P. Giannozzi et al., J. Phys.:Condens. Matter 21 395502 (2009);
+         "P. Giannozzi et al., J. Phys.:Condens. Matter 29 465901 (2017);
+         "P. Giannozzi et al., J. Chem. Phys. 152 154105 (2020);
+          URL http://www.quantum-espresso.org", 
+     in publications or presentations arising from this work. More details at
+     http://www.quantum-espresso.org/quote
+
+     Parallel version (MPI), running on     1 processors
+
+     MPI processes distributed on     1 nodes
+     0 MiB available memory on the printing compute node when the environment starts
+
+     Reading input from /Volumes/remote/phd/year_2/project/dft加速/docs/qe_inputs/sic32_subspace_trace.in
+
+     Current dimensions of program PWSCF are:
+     Max number of different atomic species (ntypx) = 10
+     Max number of k-points (npk) =  40000
+     Max angular momentum in pseudopotentials (lmaxx) =  4
+     file C.pbe-n-kjpaw_psl.1.0.0.UPF: wavefunction(s)  2S 2P renormalized
+
+     IMPORTANT: XC functional enforced from input :
+     Exchange-correlation= PBE0
+                           (   6   4   8   4   0   0   0)
+     EXX-fraction              =        0.25
+     Any further DFT definition will be discarded
+     Please, verify this is what you really want
+
+     Message from routine setup :
+     BEWARE: nonlinear core correction is not consistent with hybrid XC
+     Found identity + (  0.1250  0.1250  0.0000) symmetry
+     This is a supercell, fractional translations are disabled
+
+     Subspace diagonalization in iterative solution of the eigenvalue problem:
+     a serial algorithm will be used
+
+     EXX: q-point mesh:     1    1    1
+     EXX: grid of k+q points same as grid of k-points
+
+     G-vector sticks info
+     --------------------
+     sticks:   dense  smooth     PW     G-vecs:    dense   smooth      PW
+     Sum        4581    4581   1137               233577   233577   29039
+
+     Using Slab Decomposition
+
+
+
+     bravais-lattice index     =            1
+     lattice parameter (alat)  =      24.0000  a.u.
+     unit-cell volume          =   13824.0000 (a.u.)^3
+     number of atoms/cell      =           32
+     number of atomic types    =            2
+     number of electrons       =       128.00
+     number of Kohn-Sham states=           64
+     kinetic-energy cutoff     =      25.0000  Ry
+     charge density cutoff     =     100.0000  Ry
+     cutoff for Fock operator  =     100.0000  Ry
+     scf convergence threshold =      1.0E-04
+     mixing beta               =       0.7000
+     number of iterations used =            8  plain     mixing
+     Exchange-correlation= PBE0
+                           (   6   4   8   4   0   0   0)
+     EXX-fraction              =        0.25
+
+     celldm(1)=  24.000000  celldm(2)=   0.000000  celldm(3)=   0.000000
+     celldm(4)=   0.000000  celldm(5)=   0.000000  celldm(6)=   0.000000
+
+     crystal axes: (cart. coord. in units of alat)
+               a(1) = (   1.000000   0.000000   0.000000 )  
+               a(2) = (   0.000000   1.000000   0.000000 )  
+               a(3) = (   0.000000   0.000000   1.000000 )  
+
+     reciprocal axes: (cart. coord. in units 2 pi/alat)
+               b(1) = (  1.000000  0.000000  0.000000 )  
+               b(2) = (  0.000000  1.000000  0.000000 )  
+               b(3) = (  0.000000  0.000000  1.000000 )  
+
+
+     PseudoPot. # 1 for Si read from file:
+     /Volumes/remote/phd/year_2/project/dft加速/soft/qe-7.5/benchmark/Si.pbe-n-rrkjus_psl.1.0.0.UPF
+     MD5 check sum: fa25574f73a70a4139f2adfbefec430c
+     Pseudo is Ultrasoft + core correction, Zval =  4.0
+     Generated using &quot;atomic&quot; code by A. Dal Corso  v.6.3
+     Using radial grid of 1141 points,  6 beta functions with: 
+                l(1) =   0
+                l(2) =   0
+                l(3) =   1
+                l(4) =   1
+                l(5) =   2
+                l(6) =   2
+     Q(r) pseudized with 0 coefficients 
+
+
+     PseudoPot. # 2 for C  read from file:
+     /Volumes/remote/phd/year_2/project/dft加速/soft/qe-7.5/benchmark/C.pbe-n-kjpaw_psl.1.0.0.UPF
+     MD5 check sum: 5f16ad9a65e90284d1d834d4ab3b0f7d
+     Pseudo is Projector augmented-wave + core cor, Zval =  4.0
+     Generated using &quot;atomic&quot; code by A. Dal Corso  v.6.3
+     Shape of augmentation charge: PSQ
+     Using radial grid of 1073 points,  4 beta functions with: 
+                l(1) =   0
+                l(2) =   0
+                l(3) =   1
+                l(4) =   1
+     Q(r) pseudized with 0 coefficients 
+
+
+     atomic species   valence    mass     pseudopotential
+     Si                4.00    28.08600     Si( 1.00)
+     C                 4.00    12.01100     C ( 1.00)
+
+      8 Sym. Ops., with inversion, found
+
+
+
+   Cartesian axes
+
+     site n.     atom                  positions (alat units)
+         1        Si     tau(   1) = (   0.0000000   0.0000000   0.0000000  )
+         2        Si     tau(   2) = (   0.1250000   0.1250000   0.0000000  )
+         3        Si     tau(   3) = (   0.2500000   0.2500000   0.0000000  )
+         4        Si     tau(   4) = (   0.3750000   0.3750000   0.0000000  )
+         5        Si     tau(   5) = (   0.5000000   0.5000000   0.0000000  )
+         6        Si     tau(   6) = (   0.6250000   0.6250000   0.0000000  )
+         7        Si     tau(   7) = (   0.7500000   0.7500000   0.0000000  )
+         8        Si     tau(   8) = (   0.8750000   0.8750000   0.0000000  )
+         9        Si     tau(   9) = (   0.0000000   0.5000000   0.0000000  )
+        10        Si     tau(  10) = (   0.1250000   0.6250000   0.0000000  )
+        11        Si     tau(  11) = (   0.2500000   0.7500000   0.0000000  )
+        12        Si     tau(  12) = (   0.3750000   0.8750000   0.0000000  )
+        13        Si     tau(  13) = (   0.5000000   0.0000000   0.0000000  )
+        14        Si     tau(  14) = (   0.6250000   0.1250000   0.0000000  )
+        15        Si     tau(  15) = (   0.7500000   0.2500000   0.0000000  )
+        16        Si     tau(  16) = (   0.8750000   0.3750000   0.0000000  )
+        17        C      tau(  17) = (   0.0625000   0.0625000   0.0000000  )
+        18        C      tau(  18) = (   0.1875000   0.1875000   0.0000000  )
+        19        C      tau(  19) = (   0.3125000   0.3125000   0.0000000  )
+        20        C      tau(  20) = (   0.4375000   0.4375000   0.0000000  )
+        21        C      tau(  21) = (   0.5625000   0.5625000   0.0000000  )
+        22        C      tau(  22) = (   0.6875000   0.6875000   0.0000000  )
+        23        C      tau(  23) = (   0.8125000   0.8125000   0.0000000  )
+        24        C      tau(  24) = (   0.9375000   0.9375000   0.0000000  )
+        25        C      tau(  25) = (   0.0625000   0.5625000   0.0000000  )
+        26        C      tau(  26) = (   0.1875000   0.6875000   0.0000000  )
+        27        C      tau(  27) = (   0.3125000   0.8125000   0.0000000  )
+        28        C      tau(  28) = (   0.4375000   0.9375000   0.0000000  )
+        29        C      tau(  29) = (   0.5625000   0.0625000   0.0000000  )
+        30        C      tau(  30) = (   0.6875000   0.1875000   0.0000000  )
+        31        C      tau(  31) = (   0.8125000   0.3125000   0.0000000  )
+        32        C      tau(  32) = (   0.9375000   0.4375000   0.0000000  )
+
+     number of k points=     1
+                       cart. coord. in units 2pi/alat
+        k(    1) = (   0.0000000   0.0000000   0.0000000), wk =   2.0000000
+
+     Dense  grid:   233577 G-vectors     FFT dimensions: (  80,  80,  80)
+
+     Estimated max dynamical RAM per process >       1.66 GB
+     EXX: ACE will be initialized later
+
+     Check: negative core charge=   -0.000214
+
+     Initial potential from superposition of free atoms
+
+     starting charge     127.9904, renormalised to     128.0000
+
+     negative rho (up, down):  2.438E-03 0.000E+00
+     Starting wfcs are  128 randomized atomic wfcs
+
+     total cpu time spent up to now is        2.5 secs
+
+     Self-consistent Calculation
+
+     iteration #  1     ecut=    25.00 Ry     beta= 0.70
+     Davidson diagonalization with overlap
+     ethr =  1.00E-02,  avg # of iterations =  3.0
+
+     negative rho (up, down):  1.929E-01 0.000E+00
+
+     total cpu time spent up to now is        5.9 secs
+
+     total energy              =    -419.18658532 Ry
+     estimated scf accuracy    <      52.12837341 Ry
+
+     iteration #  2     ecut=    25.00 Ry     beta= 0.70
+     Davidson diagonalization with overlap
+     ethr =  1.00E-02,  avg # of iterations =  3.0
+
+     negative rho (up, down):  1.464E-01 0.000E+00
+
+     total cpu time spent up to now is        9.7 secs
+
+     total energy              =    -433.54892228 Ry
+     estimated scf accuracy    <      19.10489593 Ry
+
+     iteration #  3     ecut=    25.00 Ry     beta= 0.70
+     Davidson diagonalization with overlap
+     ethr =  1.00E-02,  avg # of iterations =  2.0
+
+     negative rho (up, down):  1.523E-01 0.000E+00
+
+     total cpu time spent up to now is       12.7 secs
+
+     total energy              =    -437.43203611 Ry
+     estimated scf accuracy    <       0.20361465 Ry
+
+     iteration #  4     ecut=    25.00 Ry     beta= 0.70
+     Davidson diagonalization with overlap
+     ethr =  1.59E-04,  avg # of iterations =  5.0
+
+     negative rho (up, down):  2.897E-01 0.000E+00
+
+     total cpu time spent up to now is       16.3 secs
+
+     total energy              =    -437.56358387 Ry
+     estimated scf accuracy    <       0.18956334 Ry
+
+     End of self-consistent calculation
+
+     convergence NOT achieved after   4 iterations: stopping
+     Message from routine punch:
+     Nothing written, as per user request (disk_io='none')
+
+     init_run     :      2.00s CPU      2.39s WALL (       1 calls)
+     electrons    :     13.16s CPU     13.83s WALL (       1 calls)
+
+     Called by init_run:
+     aceinit0     :      0.00s CPU      0.00s WALL (       1 calls)
+     wfcinit      :      1.14s CPU      1.32s WALL (       1 calls)
+     potinit      :      0.30s CPU      0.32s WALL (       1 calls)
+     hinit0       :      0.22s CPU      0.23s WALL (       1 calls)
+
+     Called by electrons:
+     c_bands      :      8.86s CPU      9.34s WALL (       4 calls)
+     sum_band     :      2.18s CPU      2.27s WALL (       4 calls)
+     v_of_rho     :      0.42s CPU      0.45s WALL (       5 calls)
+     newd         :      1.25s CPU      1.46s WALL (       5 calls)
+     PAW_pot      :      0.99s CPU      1.03s WALL (       5 calls)
+     mix_rho      :      0.04s CPU      0.04s WALL (       4 calls)
+
+     Called by c_bands:
+     init_us_2    :      0.13s CPU      0.19s WALL (       9 calls)
+     cegterg      :      8.27s CPU      8.73s WALL (       4 calls)
+
+     Called by *egterg:
+     cdiaghg      :      0.06s CPU      0.07s WALL (      17 calls)
+     h_psi        :      6.67s CPU      7.05s WALL (      18 calls)
+     s_psi        :      0.92s CPU      0.97s WALL (      18 calls)
+     g_psi        :      0.02s CPU      0.02s WALL (      13 calls)
+
+     Called by h_psi:
+     h_psi:calbec :      0.88s CPU      0.99s WALL (      18 calls)
+     vloc_psi     :      4.84s CPU      5.05s WALL (      18 calls)
+                                        0.00s GPU  (      18 calls)
+     add_vuspsi   :      0.93s CPU      0.98s WALL (      18 calls)
+
+     General routines
+     calbec       :      1.08s CPU      1.20s WALL (      22 calls)
+     fft          :      0.27s CPU      0.28s WALL (      56 calls)
+     ffts         :      0.01s CPU      0.01s WALL (       4 calls)
+     fftw         :      4.89s CPU      5.10s WALL (    2224 calls)
+
+     Parallel routines
+
+     EXX routines
+     exx_grid     :      0.00s CPU      0.00s WALL (       1 calls)
+
+     EXX+US  routines
+
+     EXX+PAW routines
+
+     PWSCF        :     15.22s CPU     16.29s WALL
+
+
+   This run was terminated on:  19:43:16   2Apr2026            
+
+=------------------------------------------------------------------------------=
+   JOB DONE.
+=------------------------------------------------------------------------------=
+Note: The following floating-point exceptions are signalling: IEEE_INVALID_FLAG IEEE_DIVIDE_BY_ZERO IEEE_OVERFLOW_FLAG IEEE_UNDERFLOW_FLAG

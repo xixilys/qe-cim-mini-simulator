@@ -1,0 +1,289 @@
+{
+  "master": {
+    "tasks": [
+      {
+        "id": 1,
+        "title": "Freeze comparison objects and baseline classes",
+        "description": "Define the system under study as a QE-connected band-solver subsystem and lock the CPU-only, CPU+GPU, and CPU+FPGA comparison classes.",
+        "status": "completed",
+        "stage": "experiment",
+        "priority": "high",
+        "dependencies": [],
+        "taskType": "analysis",
+        "inputsNeeded": [
+          "sections.experiment.hypothesis_or_validation_goal"
+        ],
+        "suggestedSkills": [
+          "academic-researcher"
+        ],
+        "sourceBlueprintId": "experiment_freeze_comparison_objects",
+        "nextActionPrompt": "Task: Freeze comparison objects and baseline classes\nStage: experiment\nUser inputs: sections.experiment.hypothesis_or_validation_goal=Primary hypothesis: for QE SCF-shell workloads in which the iterative Davidson path is the dominant target and double-electron-integral acceleration is out of scope, an FPGA-first v1 design that hardwareizes `h_psi`, `s_psi`, `build H_sub/S_sub`, and `refresh/residual -> P_next`, while retaining `cdiaghg` on a host CPU or FPGA-local soft-core companion, can capture most of the system-relevant shell-level acceleration available to the first prototype without requiring an immediate chip implementation. The rationale is that the repeated full-space kernels and basis-refresh path operate on `npw x n`-scale objects across the convergence loop, whereas `cdiaghg` exchanges only small reduced matrices and coefficient blocks, so hardening `cdiaghg` is not expected to be the first-order determinant of v1 end-to-end benefit. Validation goal: the SystemC/FPGA study must close the full `rho -> Veff -> while bands not converged { h_psi, s_psi, build H_sub/S_sub, cdiaghg, refresh/residual -> P_next } -> psi -> rho_out` shell with explicit Host / FPGA / off-chip-memory boundaries, and must show that the recommended partition improves shell-level latency and/or traffic relative to a CPU-dominant baseline without introducing communication, buffering, or companion-solver overheads that erase the gain. This hypothesis is falsified if host-FPGA or FPGA-memory traffic dominates the loop, if shell-level convergence behavior deviates materially from the software reference, or if the FPGA integration cost outweighs the retained-CPU bring-up advantage.\nSuggested skills: academic-researcher\nQuality gate: Comparison objects, workload set, and metrics are frozen before architecture claims are made.; The accelerator is evaluated against fair `CPU only` and `CPU + GPU` shell-level baselines, not theoretical peak numbers.\nStage guidance: Freeze the comparison contract first, then the workload and metrics, then build analytical and SystemC models before claiming a CPU/GPU/FPGA win region.\nPlease produce a concrete next-step plan and execution output. If user inputs are provided, polish and make them concrete, then write updates back to .pipeline/docs/research_brief.json.",
+        "createdAt": "2026-04-01T11:50:50Z",
+        "updatedAt": "2026-04-01T12:10:00Z"
+      },
+      {
+        "id": 2,
+        "title": "Freeze the representative QE workload matrix",
+        "description": "Select the real QE cases and record the per-case `npw`, projector count, basis size, FFT-grid size, and iteration structure needed for fair comparison.",
+        "status": "completed",
+        "stage": "experiment",
+        "priority": "high",
+        "dependencies": [
+          1
+        ],
+        "taskType": "analysis",
+        "inputsNeeded": [
+          "sections.experiment.dataset_or_data_source"
+        ],
+        "suggestedSkills": [
+          "academic-researcher",
+          "inno-experiment-analysis"
+        ],
+        "sourceBlueprintId": "experiment_freeze_workload_matrix",
+        "nextActionPrompt": "Task: Freeze the representative QE workload matrix\nStage: experiment\nUser inputs: sections.experiment.dataset_or_data_source=Use real QE trace-backed cases rather than a single toy example. The initial comparison matrix should at least include the locally available representative families already emphasized in the workspace: `Si`, `Fe`, `graphene`, `benzene/C6H6`, and `Au slab`, with per-case summaries that capture `npw`, projector count, basis size, FFT-grid size, and iteration structure. These cases should be used both for operator-level accounting and for shell-level comparison across `CPU only`, `CPU + GPU library/kernel offload`, and `CPU + FPGA accelerator` baselines.\nSuggested skills: academic-researcher, inno-experiment-analysis\nQuality gate: Comparison objects, workload set, and metrics are frozen before architecture claims are made.; The accelerator is evaluated against fair `CPU only` and `CPU + GPU` shell-level baselines, not theoretical peak numbers.\nStage guidance: Freeze the comparison contract first, then the workload and metrics, then build analytical and SystemC models before claiming a CPU/GPU/FPGA win region.\nPlease produce a concrete next-step plan and execution output. If user inputs are provided, polish and make them concrete, then write updates back to .pipeline/docs/research_brief.json.",
+        "createdAt": "2026-04-01T11:50:50Z",
+        "updatedAt": "2026-04-02T10:20:00Z"
+      },
+      {
+        "id": 3,
+        "title": "Freeze shell-level comparison metrics",
+        "description": "Lock the latency, traffic, utilization, and energy metrics that every baseline and design point must report.",
+        "status": "completed",
+        "stage": "experiment",
+        "priority": "high",
+        "dependencies": [
+          1,
+          2
+        ],
+        "taskType": "analysis",
+        "inputsNeeded": [
+          "sections.experiment.evaluation_plan"
+        ],
+        "suggestedSkills": [
+          "academic-researcher",
+          "inno-experiment-analysis"
+        ],
+        "sourceBlueprintId": "experiment_freeze_metrics",
+        "nextActionPrompt": "Task: Freeze shell-level comparison metrics\nStage: experiment\nUser inputs: sections.experiment.evaluation_plan=The comparison must be fair and shell-level. For each representative QE case, record the per-stage and per-episode values for `Ops`, `Bytes`, arithmetic intensity, analytical lower-bound latency, modeled latency contribution, boundary traffic, off-chip-memory traffic, stall ratio, and estimated energy. Use the same QE shell semantics across all baselines, so that `CPU only`, `CPU + GPU`, and `CPU + FPGA` are compared at the level of the same `SCF iteration` and `c_bands episode`, not at isolated kernel peak throughput. The central question is not whether the accelerator beats an abstract GPU peak, but whether the proposed `QE-connected band-solver subsystem` reduces shell-level wall time and/or system traffic under realistic invocation patterns. A design point is favorable only if the modeled or measured gain survives Host/companion synchronization costs, does not collapse under off-chip-memory traffic, and continues to hold across multiple QE cases rather than a single hand-picked example.\nSuggested skills: academic-researcher, inno-experiment-analysis\nQuality gate: Comparison objects, workload set, and metrics are frozen before architecture claims are made.; The accelerator is evaluated against fair `CPU only` and `CPU + GPU` shell-level baselines, not theoretical peak numbers.\nStage guidance: Freeze the comparison contract first, then the workload and metrics, then build analytical and SystemC models before claiming a CPU/GPU/FPGA win region.\nPlease produce a concrete next-step plan and execution output. If user inputs are provided, polish and make them concrete, then write updates back to .pipeline/docs/research_brief.json.",
+        "createdAt": "2026-04-01T11:50:50Z",
+        "updatedAt": "2026-04-02T10:40:00Z"
+      },
+      {
+        "id": 4,
+        "title": "Build the per-stage analytical bounds model",
+        "description": "Compute `Ops`, `Bytes`, arithmetic intensity, lower-bound compute time, and lower-bound bandwidth time for each shell stage to classify compute-bound and bandwidth-bound regions.",
+        "status": "completed",
+        "stage": "experiment",
+        "priority": "high",
+        "dependencies": [
+          1,
+          2,
+          3
+        ],
+        "taskType": "analysis",
+        "inputsNeeded": [
+          "sections.experiment.method_or_protocol",
+          "sections.experiment.evaluation_plan"
+        ],
+        "suggestedSkills": [
+          "academic-researcher",
+          "inno-experiment-analysis"
+        ],
+        "sourceBlueprintId": "experiment_build_analytical_model",
+        "nextActionPrompt": "Task: Build the per-stage analytical bounds model\nStage: experiment\nUser inputs: sections.experiment.method_or_protocol=Run the evaluation in six ordered steps. Step 1: freeze the comparison objects, and define the system under study as a `QE-connected band-solver subsystem` rather than a full DFT SoC; require at least three baseline classes: `CPU only`, `CPU + GPU library/kernel offload`, and `CPU + FPGA accelerator`. Step 2: freeze the workload set using real QE trace cases rather than a single example, and ensure the chosen set spans different `npw`, projector counts, basis sizes, and FFT-grid sizes. Step 3: freeze the comparison metrics, including single `SCF iteration` latency, `c_bands episode` latency, end-to-end wall time, Host-device traffic, FPGA off-chip-memory traffic, stall/utilization, and energy per episode. Step 4: build an analytical per-stage model for the shell, computing `Ops`, `Bytes`, `AI = Ops / Bytes`, `T_compute_lb`, and `T_bw_lb`, so each stage can first be labeled as compute-bound or bandwidth-bound. Step 5: build a SystemC or equivalent shell-level model for `rho -> Veff -> while bands not converged { h_psi, s_psi, build H_sub/S_sub, cdiaghg, refresh/residual -> P_next } -> psi -> rho_out`, with explicit stage overlap, FIFO/double-buffer behavior, resident objects, and Host / FPGA / memory boundaries. Step 6: compare the modeled accelerator against the `CPU + GPU` baseline using the same QE shell and the same invocation semantics, rather than against a theoretical GPU peak. In the current v1 path, `cdiaghg` may remain on CPU or a soft-core companion while `h_psi`, `s_psi`, `build H_sub/S_sub`, and `refresh/residual -> P_next` form the hardware-dominant loop.; sections.experiment.evaluation_plan=The comparison must be fair and shell-level. For each representative QE case, record the per-stage and per-episode values for `Ops`, `Bytes`, arithmetic intensity, analytical lower-bound latency, modeled latency contribution, boundary traffic, off-chip-memory traffic, stall ratio, and estimated energy. Use the same QE shell semantics across all baselines, so that `CPU only`, `CPU + GPU`, and `CPU + FPGA` are compared at the level of the same `SCF iteration` and `c_bands episode`, not at isolated kernel peak throughput. The central question is not whether the accelerator beats an abstract GPU peak, but whether the proposed `QE-connected band-solver subsystem` reduces shell-level wall time and/or system traffic under realistic invocation patterns. A design point is favorable only if the modeled or measured gain survives Host/companion synchronization costs, does not collapse under off-chip-memory traffic, and continues to hold across multiple QE cases rather than a single hand-picked example.\nSuggested skills: academic-researcher, inno-experiment-analysis\nQuality gate: Comparison objects, workload set, and metrics are frozen before architecture claims are made.; The accelerator is evaluated against fair `CPU only` and `CPU + GPU` shell-level baselines, not theoretical peak numbers.\nStage guidance: Freeze the comparison contract first, then the workload and metrics, then build analytical and SystemC models before claiming a CPU/GPU/FPGA win region.\nPlease produce a concrete next-step plan and execution output. If user inputs are provided, polish and make them concrete, then write updates back to .pipeline/docs/research_brief.json.",
+        "createdAt": "2026-04-01T11:50:50Z",
+        "updatedAt": "2026-04-02T11:10:00Z"
+      },
+      {
+        "id": 5,
+        "title": "Build the SystemC shell-level model",
+        "description": "Model the full QE shell loop with explicit overlap, buffering, resident objects, and Host/FPGA/memory boundaries.",
+        "status": "completed",
+        "stage": "experiment",
+        "priority": "high",
+        "dependencies": [
+          4
+        ],
+        "taskType": "implementation",
+        "inputsNeeded": [
+          "sections.experiment.method_or_protocol"
+        ],
+        "suggestedSkills": [
+          "inno-experiment-dev",
+          "academic-researcher"
+        ],
+        "sourceBlueprintId": "experiment_build_systemc_shell_model",
+        "nextActionPrompt": "Task: Build the SystemC shell-level model\nStage: experiment\nUser inputs: sections.experiment.method_or_protocol=Run the evaluation in six ordered steps. Step 1: freeze the comparison objects, and define the system under study as a `QE-connected band-solver subsystem` rather than a full DFT SoC; require at least three baseline classes: `CPU only`, `CPU + GPU library/kernel offload`, and `CPU + FPGA accelerator`. Step 2: freeze the workload set using real QE trace cases rather than a single example, and ensure the chosen set spans different `npw`, projector counts, basis sizes, and FFT-grid sizes. Step 3: freeze the comparison metrics, including single `SCF iteration` latency, `c_bands episode` latency, end-to-end wall time, Host-device traffic, FPGA off-chip-memory traffic, stall/utilization, and energy per episode. Step 4: build an analytical per-stage model for the shell, computing `Ops`, `Bytes`, `AI = Ops / Bytes`, `T_compute_lb`, and `T_bw_lb`, so each stage can first be labeled as compute-bound or bandwidth-bound. Step 5: build a SystemC or equivalent shell-level model for `rho -> Veff -> while bands not converged { h_psi, s_psi, build H_sub/S_sub, cdiaghg, refresh/residual -> P_next } -> psi -> rho_out`, with explicit stage overlap, FIFO/double-buffer behavior, resident objects, and Host / FPGA / memory boundaries. Step 6: compare the modeled accelerator against the `CPU + GPU` baseline using the same QE shell and the same invocation semantics, rather than against a theoretical GPU peak. In the current v1 path, `cdiaghg` may remain on CPU or a soft-core companion while `h_psi`, `s_psi`, `build H_sub/S_sub`, and `refresh/residual -> P_next` form the hardware-dominant loop.\nSuggested skills: inno-experiment-dev, academic-researcher\nQuality gate: Comparison objects, workload set, and metrics are frozen before architecture claims are made.; The accelerator is evaluated against fair `CPU only` and `CPU + GPU` shell-level baselines, not theoretical peak numbers.\nStage guidance: Freeze the comparison contract first, then the workload and metrics, then build analytical and SystemC models before claiming a CPU/GPU/FPGA win region.\nPlease produce a concrete next-step plan and execution output. If user inputs are provided, polish and make them concrete, then write updates back to .pipeline/docs/research_brief.json.",
+        "createdAt": "2026-04-01T11:50:50Z",
+        "updatedAt": "2026-04-02T12:30:00Z"
+      },
+      {
+        "id": 6,
+        "title": "Compare CPU, CPU+GPU, and CPU+FPGA on the same QE shell",
+        "description": "Run the shell-level comparison only after the clustered FPGA architecture and hardware-`cdiaghg` direction are frozen, then determine where the updated FPGA design wins or loses.",
+        "status": "in_progress",
+        "stage": "experiment",
+        "priority": "high",
+        "dependencies": [
+          5,
+          11,
+          12
+        ],
+        "taskType": "analysis",
+        "inputsNeeded": [
+          "sections.experiment.evaluation_plan",
+          "sections.experiment.dataset_or_data_source"
+        ],
+        "suggestedSkills": [
+          "inno-experiment-analysis",
+          "academic-researcher"
+        ],
+        "sourceBlueprintId": "experiment_compare_cpu_gpu_fpga",
+        "nextActionPrompt": "Task: Compare CPU, CPU+GPU, and CPU+FPGA on the same QE shell\nStage: experiment\nUser inputs: sections.experiment.hypothesis_or_validation_goal=Primary hypothesis: for QE SCF-shell workloads in which the iterative Davidson path is the dominant target and double-electron-integral acceleration is out of scope, the better v1 direction is no longer a shell model that only hardwareizes `h_psi`, `s_psi`, `build H_sub/S_sub`, and `refresh/residual -> P_next` while leaving `cdiaghg` outside. Instead, the preferred v1 architecture is a cluster-based FPGA design that hardwareizes `h_psi`, `s_psi`, `build H_sub/S_sub`, `cdiaghg`, and `refresh/residual -> P_next` inside one hardware-dominant episode path, while retaining a CPU or soft-core companion route only as a fallback contingency. The system under study remains a `QE-connected band-solver subsystem`, not a full DFT SoC and not an isolated reduced-solver chip. The primary comparison object is still the `c_bands episode` under identical QE invocation semantics; the secondary comparison object is the enclosing `SCF iteration` wall time under the same software-visible contract. Validation goal: the SystemC/FPGA study must close the full `rho -> Veff -> while bands not converged { h_psi, s_psi, build H_sub/S_sub, cdiaghg, refresh/residual -> P_next } -> psi -> rho_out` shell with explicit Host / FPGA / off-chip-memory boundaries, and must show that the recommended clustered architecture improves shell-level latency and/or traffic relative to fair `CPU only` and `CPU + GPU` baselines without letting extra diagonalization control, buffering, or synchronization costs erase the gain. A secondary, explicitly testable claim is that `CPU + FPGA` may also offer a stricter and more reproducible `FP64` numerical path than some practical `CPU + GPU` deployments, but this must be validated against declared GPU precision modes and measured through residual, density, eigenspectrum, and iteration-count fidelity metrics. This hypothesis is falsified if hardware `cdiaghg` adds enough traffic, control complexity, or buffering pressure to remove the shell-level win region, or if shell-level convergence behavior deviates materially from the software reference.; sections.experiment.method_or_protocol=Run the evaluation in seven ordered steps. Step 1: freeze the comparison objects, and define the system under study as a `QE-connected band-solver subsystem` rather than a full DFT SoC. Step 2: freeze the workload set using real QE trace cases rather than a single example, and ensure the chosen set spans different `npw`, projector counts, basis sizes, and FFT-grid sizes. Step 3: freeze the comparison metrics, including single `SCF iteration` latency, `c_bands episode` latency, end-to-end wall time, Host-device traffic, FPGA off-chip-memory traffic, stall/utilization, and energy per episode. Step 4: build an analytical per-stage model for the shell, computing `Ops`, `Bytes`, `AI = Ops / Bytes`, `T_compute_lb`, and `T_bw_lb`, so each stage can first be labeled as compute-bound or bandwidth-bound. Step 5: retain the existing body-based SystemC shell model as the software-contract layer, but do not treat its `BODY_01/02/03/04` decomposition as the final hardware implementation. Step 6: freeze a cluster-based hardware architecture with a persistent episode controller, a fused `h_psi + s_psi` operator-sweep cluster, a reduced-matrix build cluster, a hardware `cdiaghg` cluster, and a refresh/residual cluster, together with explicit resident objects, inter-cluster FIFOs, and buffer contracts; keep a companion `cdiaghg` route only as fallback. Step 7: compare the updated `CPU + FPGA` architecture against `CPU only` and `CPU + GPU` baselines using the same QE shell semantics, rather than against theoretical peaks. The current runnable shell model remains `model/qe_band_solver_model`, but the next architecture phase must extend it beyond body-level accounting toward cluster-level design-space exploration.; sections.experiment.evaluation_plan=Freeze the shell-level comparison metrics under the contract defined in `docs/benchmarks/qe_shell_level_comparison_metrics_contract_v0.md`, use `docs/benchmarks/qe_cpu_gpu_fpga_shell_comparison_plan_v0.md` as the Task-6 comparison contract, and use the new clustered-architecture planning note as the implementation-planning contract. Because the proposed system is `CPU + FPGA`, the external baselines that must be beaten or characterized are `CPU only` and `CPU + GPU`; `CPU + FPGA` is the system under study and must be reported using the same shell semantics. Every baseline must report the same case descriptors (`npw`, projector count, subspace sizes, FFT grid, solver path), the same primary performance metrics (episode latency, SCF-iteration latency, wall time, and derived speedups), the same traffic metrics (Host-device traffic, accelerator off-chip-memory traffic, resident/spill accounting where relevant), the same utilization metrics (stall ratio, utilization, overlap efficiency where available), the same analytical quantities (`Ops`, `Bytes`, `AI`, `T_compute_lb`, `T_bw_lb`, bound type), and the same energy-per-episode breakdown when energy is estimated. In addition, the architecture phase must now report hardware-design parameters that were not explicit in the original body model: cluster boundaries, resident objects, buffer capacities, inter-cluster stream widths or queue assumptions, and the hardware-`cdiaghg` versus fallback-companion crossover point. For `CPU + GPU`, results must clearly distinguish `Strict-FP64` and more practical library-oriented GPU modes when both are available; no precision or fidelity advantage may be claimed for `CPU + FPGA` unless the GPU comparison mode is explicitly declared. Fairness is frozen at the shell boundary: count all launch, synchronization, transfer, layout-transform, companion-path, and off-chip-memory costs inside steady-state comparison, while excluding offline build/setup costs from the primary performance numbers. The central question is whether the proposed clustered `QE-connected band-solver subsystem` reduces shell-level wall time and/or system traffic under realistic invocation patterns, not whether it exceeds an abstract GPU peak on isolated kernels. The architecture-planning reference for this phase is `docs/architecture/qe_fpga_clustered_v1_planning_note_20260402.md`.\nSuggested skills: inno-experiment-analysis, academic-researcher\nQuality gate: Comparison objects, workload set, and metrics are frozen before architecture claims are made.; The accelerator is evaluated against fair `CPU only` and `CPU + GPU` shell-level baselines, not theoretical peak numbers.\nStage guidance: Finish the cluster-level architecture freeze and hardware-`cdiaghg` design-space pass before claiming a CPU/GPU/FPGA win region.\nPlease produce a concrete next-step plan and execution output. If user inputs are provided, polish and make them concrete, then write updates back to .pipeline/docs/research_brief.json.",
+        "createdAt": "2026-04-01T11:50:50Z",
+        "updatedAt": "2026-04-02T14:45:00Z"
+      },
+      {
+        "id": 7,
+        "title": "Review experiment-stage quality gate",
+        "description": "Check that the comparison objects, workload, metrics, analytical model, and shell-level SystemC model are all frozen and fairly compared before drawing architecture conclusions.",
+        "status": "pending",
+        "stage": "experiment",
+        "priority": "high",
+        "dependencies": [
+          6,
+          11,
+          12
+        ],
+        "taskType": "analysis",
+        "inputsNeeded": [
+          "sections.experiment.hypothesis_or_validation_goal",
+          "sections.experiment.method_or_protocol",
+          "sections.experiment.evaluation_plan"
+        ],
+        "suggestedSkills": [
+          "academic-researcher"
+        ],
+        "sourceBlueprintId": "quality_gate_experiment",
+        "nextActionPrompt": "Task: Review experiment-stage quality gate\nStage: experiment\nUser inputs: sections.experiment.hypothesis_or_validation_goal=Primary hypothesis: for QE SCF-shell workloads in which the iterative Davidson path is the dominant target and double-electron-integral acceleration is out of scope, the better v1 direction is no longer a shell model that only hardwareizes `h_psi`, `s_psi`, `build H_sub/S_sub`, and `refresh/residual -> P_next` while leaving `cdiaghg` outside. Instead, the preferred v1 architecture is a cluster-based FPGA design that hardwareizes `h_psi`, `s_psi`, `build H_sub/S_sub`, `cdiaghg`, and `refresh/residual -> P_next` inside one hardware-dominant episode path, while retaining a CPU or soft-core companion route only as a fallback contingency. The system under study remains a `QE-connected band-solver subsystem`, not a full DFT SoC and not an isolated reduced-solver chip. The primary comparison object is still the `c_bands episode` under identical QE invocation semantics; the secondary comparison object is the enclosing `SCF iteration` wall time under the same software-visible contract. Validation goal: the SystemC/FPGA study must close the full `rho -> Veff -> while bands not converged { h_psi, s_psi, build H_sub/S_sub, cdiaghg, refresh/residual -> P_next } -> psi -> rho_out` shell with explicit Host / FPGA / off-chip-memory boundaries, and must show that the recommended clustered architecture improves shell-level latency and/or traffic relative to fair `CPU only` and `CPU + GPU` baselines without letting extra diagonalization control, buffering, or synchronization costs erase the gain. A secondary, explicitly testable claim is that `CPU + FPGA` may also offer a stricter and more reproducible `FP64` numerical path than some practical `CPU + GPU` deployments, but this must be validated against declared GPU precision modes and measured through residual, density, eigenspectrum, and iteration-count fidelity metrics. This hypothesis is falsified if hardware `cdiaghg` adds enough traffic, control complexity, or buffering pressure to remove the shell-level win region, or if shell-level convergence behavior deviates materially from the software reference.; sections.experiment.method_or_protocol=Run the evaluation in seven ordered steps. Step 1: freeze the comparison objects, and define the system under study as a `QE-connected band-solver subsystem` rather than a full DFT SoC. Step 2: freeze the workload set using real QE trace cases rather than a single example, and ensure the chosen set spans different `npw`, projector counts, basis sizes, and FFT-grid sizes. Step 3: freeze the comparison metrics, including single `SCF iteration` latency, `c_bands episode` latency, end-to-end wall time, Host-device traffic, FPGA off-chip-memory traffic, stall/utilization, and energy per episode. Step 4: build an analytical per-stage model for the shell, computing `Ops`, `Bytes`, `AI = Ops / Bytes`, `T_compute_lb`, and `T_bw_lb`, so each stage can first be labeled as compute-bound or bandwidth-bound. Step 5: retain the existing body-based SystemC shell model as the software-contract layer, but do not treat its `BODY_01/02/03/04` decomposition as the final hardware implementation. Step 6: freeze a cluster-based hardware architecture with a persistent episode controller, a fused `h_psi + s_psi` operator-sweep cluster, a reduced-matrix build cluster, a hardware `cdiaghg` cluster, and a refresh/residual cluster, together with explicit resident objects, inter-cluster FIFOs, and buffer contracts; keep a companion `cdiaghg` route only as fallback. Step 7: compare the updated `CPU + FPGA` architecture against `CPU only` and `CPU + GPU` baselines using the same QE shell semantics, rather than against theoretical peaks. The current runnable shell model remains `model/qe_band_solver_model`, but the next architecture phase must extend it beyond body-level accounting toward cluster-level design-space exploration.; sections.experiment.evaluation_plan=Freeze the shell-level comparison metrics under the contract defined in `docs/benchmarks/qe_shell_level_comparison_metrics_contract_v0.md`, use `docs/benchmarks/qe_cpu_gpu_fpga_shell_comparison_plan_v0.md` as the Task-6 comparison contract, and use the new clustered-architecture planning note as the implementation-planning contract. Because the proposed system is `CPU + FPGA`, the external baselines that must be beaten or characterized are `CPU only` and `CPU + GPU`; `CPU + FPGA` is the system under study and must be reported using the same shell semantics. Every baseline must report the same case descriptors (`npw`, projector count, subspace sizes, FFT grid, solver path), the same primary performance metrics (episode latency, SCF-iteration latency, wall time, and derived speedups), the same traffic metrics (Host-device traffic, accelerator off-chip-memory traffic, resident/spill accounting where relevant), the same utilization metrics (stall ratio, utilization, overlap efficiency where available), the same analytical quantities (`Ops`, `Bytes`, `AI`, `T_compute_lb`, `T_bw_lb`, bound type), and the same energy-per-episode breakdown when energy is estimated. In addition, the architecture phase must now report hardware-design parameters that were not explicit in the original body model: cluster boundaries, resident objects, buffer capacities, inter-cluster stream widths or queue assumptions, and the hardware-`cdiaghg` versus fallback-companion crossover point. For `CPU + GPU`, results must clearly distinguish `Strict-FP64` and more practical library-oriented GPU modes when both are available; no precision or fidelity advantage may be claimed for `CPU + FPGA` unless the GPU comparison mode is explicitly declared. Fairness is frozen at the shell boundary: count all launch, synchronization, transfer, layout-transform, companion-path, and off-chip-memory costs inside steady-state comparison, while excluding offline build/setup costs from the primary performance numbers. The central question is whether the proposed clustered `QE-connected band-solver subsystem` reduces shell-level wall time and/or system traffic under realistic invocation patterns, not whether it exceeds an abstract GPU peak on isolated kernels. The architecture-planning reference for this phase is `docs/architecture/qe_fpga_clustered_v1_planning_note_20260402.md`.\nSuggested skills: academic-researcher\nQuality gate: Comparison objects, workload set, and metrics are frozen before architecture claims are made.; The accelerator is evaluated against fair `CPU only` and `CPU + GPU` shell-level baselines, not theoretical peak numbers.\nStage guidance: Review the analytical model, shell contract model, clustered architecture plan, and final baseline comparison together before drawing conclusions.\nPlease produce a concrete next-step plan and execution output. If user inputs are provided, polish and make them concrete, then write updates back to .pipeline/docs/research_brief.json.",
+        "createdAt": "2026-04-01T11:50:50Z",
+        "updatedAt": "2026-04-02T14:45:00Z"
+      },
+      {
+        "id": 8,
+        "title": "Define paper outline",
+        "description": "Create a later paper skeleton for the CPU/GPU/FPGA shell-level comparison story.",
+        "status": "pending",
+        "stage": "publication",
+        "priority": "medium",
+        "dependencies": [
+          7
+        ],
+        "taskType": "writing",
+        "inputsNeeded": [
+          "sections.publication.paper_outline"
+        ],
+        "suggestedSkills": [
+          "inno-paper-writing"
+        ],
+        "sourceBlueprintId": "required_sections.publication.paper_outline",
+        "nextActionPrompt": "Task: Define paper outline\nStage: publication\nUser inputs: sections.publication.paper_outline=<empty>\nSuggested skills: inno-paper-writing\nQuality gate: Experiment evidence is mature enough to support this stage.\nStage guidance: Proceed only after experiment evidence is mature.\nPlease produce a concrete next-step plan and execution output. If user inputs are provided, polish and make them concrete, then write updates back to .pipeline/docs/research_brief.json.",
+        "createdAt": "2026-04-01T11:50:50Z",
+        "updatedAt": "2026-04-01T11:50:50Z"
+      },
+      {
+        "id": 9,
+        "title": "Define submission checklist",
+        "description": "List the evidence, figures, artifacts, and reproducibility items the later paper must carry.",
+        "status": "pending",
+        "stage": "publication",
+        "priority": "medium",
+        "dependencies": [
+          7
+        ],
+        "taskType": "writing",
+        "inputsNeeded": [
+          "sections.publication.submission_checklist"
+        ],
+        "suggestedSkills": [
+          "inno-paper-writing"
+        ],
+        "sourceBlueprintId": "required_sections.publication.submission_checklist",
+        "nextActionPrompt": "Task: Define submission checklist\nStage: publication\nUser inputs: sections.publication.submission_checklist=<empty>\nSuggested skills: inno-paper-writing\nQuality gate: Experiment evidence is mature enough to support this stage.\nStage guidance: Proceed only after experiment evidence is mature.\nPlease produce a concrete next-step plan and execution output. If user inputs are provided, polish and make them concrete, then write updates back to .pipeline/docs/research_brief.json.",
+        "createdAt": "2026-04-01T11:50:50Z",
+        "updatedAt": "2026-04-01T11:50:50Z"
+      },
+      {
+        "id": 10,
+        "title": "Define slide outline",
+        "description": "Set up a future slide skeleton for the shell-level comparison and win-region story.",
+        "status": "pending",
+        "stage": "promotion",
+        "priority": "low",
+        "dependencies": [
+          9
+        ],
+        "taskType": "scripting",
+        "inputsNeeded": [
+          "sections.promotion.slide_outline"
+        ],
+        "suggestedSkills": [
+          "making-academic-presentations"
+        ],
+        "sourceBlueprintId": "required_sections.promotion.slide_outline",
+        "nextActionPrompt": "Task: Define slide outline\nStage: promotion\nUser inputs: sections.promotion.slide_outline=<empty>\nSuggested skills: making-academic-presentations\nQuality gate: Experiment evidence is mature enough to support this stage.\nStage guidance: Proceed only after experiment evidence is mature.\nPlease produce a concrete next-step plan and execution output. If user inputs are provided, polish and make them concrete, then write updates back to .pipeline/docs/research_brief.json.",
+        "createdAt": "2026-04-01T11:50:50Z",
+        "updatedAt": "2026-04-01T11:50:50Z"
+      },
+      {
+        "id": 11,
+        "title": "Freeze clustered FPGA architecture with hardware cdiaghg",
+        "description": "Replace the body-level implementation view with a clustered FPGA architecture: persistent episode controller, fused operator-sweep cluster, reduced-matrix build cluster, hardware `cdiaghg` cluster, refresh/residual cluster, and a clearly documented fallback companion path.",
+        "status": "completed",
+        "stage": "experiment",
+        "priority": "high",
+        "dependencies": [
+          5
+        ],
+        "taskType": "analysis",
+        "inputsNeeded": [
+          "sections.ideation.problem_framing",
+          "sections.experiment.hypothesis_or_validation_goal",
+          "sections.experiment.method_or_protocol"
+        ],
+        "suggestedSkills": [
+          "inno-idea-generation",
+          "academic-researcher"
+        ],
+        "sourceBlueprintId": "experiment_freeze_clustered_architecture",
+        "nextActionPrompt": "Task: Freeze clustered FPGA architecture with hardware cdiaghg\nStage: experiment\nUser inputs: sections.ideation.problem_framing and sections.experiment.method_or_protocol now require a cluster-based architecture with a persistent controller, fused `h_psi + s_psi`, reduced-matrix build, hardware `cdiaghg`, and refresh/residual clusters, while keeping a companion route only as fallback.\nSuggested skills: inno-idea-generation, academic-researcher\nQuality gate: The body model is retained only as a shell contract layer; the implementation-facing architecture is frozen in cluster form with explicit resident objects, buffers, and cluster boundaries.\nStage guidance: Decide the physical cluster partition before spending more effort on baseline comparison.\nPlease produce a concrete next-step plan and execution output. If user inputs are provided, polish and make them concrete, then write updates back to .pipeline/docs/research_brief.json.",
+        "createdAt": "2026-04-02T14:10:00Z",
+        "updatedAt": "2026-04-02T14:30:00Z"
+      },
+      {
+        "id": 12,
+        "title": "Build cluster-level architecture model beyond body view",
+        "description": "Extend the current shell model with architecture-facing parameters: resident objects, buffer capacities, inter-cluster FIFOs, hardware `cdiaghg` latency/traffic, and the crossover against the fallback companion path.",
+        "status": "completed",
+        "stage": "experiment",
+        "priority": "high",
+        "dependencies": [
+          11
+        ],
+        "taskType": "implementation",
+        "inputsNeeded": [
+          "sections.experiment.method_or_protocol",
+          "sections.experiment.evaluation_plan"
+        ],
+        "suggestedSkills": [
+          "inno-experiment-dev",
+          "academic-researcher"
+        ],
+        "sourceBlueprintId": "experiment_build_cluster_architecture_model",
+        "nextActionPrompt": "Task: Build cluster-level architecture model beyond body view\nStage: experiment\nUser inputs: sections.experiment.method_or_protocol and sections.experiment.evaluation_plan now require architecture-facing modeling beyond the existing body partition, including hardware `cdiaghg`, resident objects, and buffer/FIFO assumptions.\nSuggested skills: inno-experiment-dev, academic-researcher\nQuality gate: The updated model exposes architecture parameters that matter for actual FPGA realization rather than only body-level accounting.\nStage guidance: Convert the shell-contract model into a cluster-level design-space model before baseline comparison.\nPlease produce a concrete next-step plan and execution output. If user inputs are provided, polish and make them concrete, then write updates back to .pipeline/docs/research_brief.json.",
+        "createdAt": "2026-04-02T14:10:00Z",
+        "updatedAt": "2026-04-02T14:45:00Z"
+      }
+    ]
+  }
+}

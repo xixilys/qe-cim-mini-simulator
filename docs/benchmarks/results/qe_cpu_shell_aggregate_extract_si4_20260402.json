@@ -1,0 +1,25 @@
+[
+  {
+    "case_id": "si4_pbe_uspp_small",
+    "source_type": "measured_qe_stdout_and_metadata",
+    "metadata_file": "/Volumes/remote/phd/year_2/project/dft\u52a0\u901f/docs/benchmarks/results/qe_workload_revalidation/si4_pbe_uspp_small/metadata.json",
+    "stdout_file": "/Volumes/remote/phd/year_2/project/dft\u52a0\u901f/docs/benchmarks/results/qe_workload_revalidation/si4_pbe_uspp_small/stdout.out",
+    "duration_sec": 0.6246621608734131,
+    "exit_code": 0,
+    "omp_threads": "1",
+    "scf_iterations": 7,
+    "converged": true,
+    "pwscf_wall_s": 0.53,
+    "electrons_wall_s": 0.35,
+    "electrons_calls": 1,
+    "c_bands_wall_s": 0.17,
+    "c_bands_calls": 7,
+    "h_psi_wall_s": 0.1,
+    "h_psi_calls": 76,
+    "derived_metrics": {
+      "avg_c_bands_episode_wall_ms": 24.285714285714285,
+      "avg_scf_iteration_wall_ms_from_electrons": 50.0
+    },
+    "derived_metrics_note": "Derived averages are computed from measured aggregate timing sections in QE stdout; they are not direct per-episode or per-iteration timer outputs."
+  }
+]

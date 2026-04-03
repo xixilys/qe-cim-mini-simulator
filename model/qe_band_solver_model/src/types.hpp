@@ -1162,6 +1162,73 @@ struct ReplayBundleCompletion {
   }
 };
 
+struct ShellStageSummary {
+  int shell_order = 0;
+  int execution_order = 0;
+  std::string stage_kind = "rho -> Veff";
+  std::string phase_anchor = "BODY_04B_POTENTIAL_REFRESH";
+  std::string execution_domain = "FPGA_RUNTIME";
+  std::string accounting_mode = "exclusive";
+  bool loop_carried = false;
+  std::string input_handle;
+  std::string output_handle;
+  std::string residency_contract = "resident-on-chip";
+  double data_movement_kib = 0.0;
+  int accounted_ref_cycles = 0;
+  int backpressure_ref_cycles = 0;
+  std::string dominant_resource = "NONE";
+  std::string detail;
+
+  std::string brief() const {
+    std::ostringstream oss;
+    oss << "shell_order=" << shell_order
+        << ", exec_order=" << execution_order
+        << ", stage=" << stage_kind
+        << ", anchor=" << phase_anchor
+        << ", domain=" << execution_domain
+        << ", mode=" << accounting_mode
+        << ", loop_carried=" << (loop_carried ? "yes" : "no")
+        << ", in=" << input_handle
+        << ", out=" << output_handle
+        << ", residency=" << residency_contract
+        << ", move_kib=" << std::fixed << std::setprecision(4)
+        << data_movement_kib
+        << ", ref_cycles=" << accounted_ref_cycles
+        << ", bp_ref_cycles=" << backpressure_ref_cycles
+        << ", dominant=" << dominant_resource;
+    if (!detail.empty()) {
+      oss << ", detail=" << detail;
+    }
+    return oss.str();
+  }
+};
+
+struct ShellIterationSummary {
+  std::string shell_family = "QE_SCF_SHELL_V1";
+  std::string frozen_contract =
+      "rho -> Veff -> while bands not converged { h_psi, s_psi, build H_sub/S_sub, "
+      "cdiaghg, refresh/residual -> P_next } -> psi -> rho_out -> mix_rho";
+  bool cdiaghg_on_companion = true;
+  std::string companion_domain = "CPU_OR_SOFTCORE";
+  std::vector<ShellStageSummary> stages;
+  double accounted_data_movement_kib = 0.0;
+  int accounted_ref_cycles = 0;
+  int accounted_backpressure_ref_cycles = 0;
+
+  std::string brief() const {
+    std::ostringstream oss;
+    oss << "family=" << shell_family
+        << ", stages=" << stages.size()
+        << ", cdiaghg_on_companion=" << (cdiaghg_on_companion ? "yes" : "no")
+        << ", companion=" << companion_domain
+        << ", move_kib=" << std::fixed << std::setprecision(4)
+        << accounted_data_movement_kib
+        << ", ref_cycles=" << accounted_ref_cycles
+        << ", bp_ref_cycles=" << accounted_backpressure_ref_cycles;
+    return oss.str();
+  }
+};
+
 struct SCFIterationReport {
   int scf_iteration = 0;
   EpisodeConfig config;
@@ -1169,6 +1236,8 @@ struct SCFIterationReport {
   bool has_body10 = false;
   Body10BundleSummary body10;
   Body04BundleSummary body04;
+  bool has_shell_view = false;
+  ShellIterationSummary shell;
   double iteration_data_movement_kib = 0.0;
   double energy_after_iteration = 0.0;
   bool converged = false;
@@ -1186,6 +1255,10 @@ struct SCFIterationReport {
         << ", body04_move_kib=" << body04.bundle_data_movement_kib
         << ", body04_ref_cycles=" << body04.total_ref_cycles
         << ", body04_bp_ref_cycles=" << body04.total_backpressure_ref_cycles
+        << ", shell_stages=" << (has_shell_view ? shell.stages.size() : 0)
+        << ", shell_ref_cycles=" << (has_shell_view ? shell.accounted_ref_cycles : 0)
+        << ", shell_bp_ref_cycles="
+        << (has_shell_view ? shell.accounted_backpressure_ref_cycles : 0)
         << ", iter_move_kib=" << iteration_data_movement_kib
         << ", energy=" << energy_after_iteration
         << ", converged=" << (converged ? "yes" : "no");
@@ -1213,6 +1286,9 @@ struct DFTRunReport {
   int total_body10_ref_cycles = 0;
   int total_body10_backpressure_ref_cycles = 0;
   double total_data_movement_kib = 0.0;
+  double total_shell_data_movement_kib = 0.0;
+  int total_shell_ref_cycles = 0;
+  int total_shell_backpressure_ref_cycles = 0;
   std::string convergence_reason = "max_scf_iters_reached";
 
   std::string brief() const {
@@ -1233,6 +1309,9 @@ struct DFTRunReport {
         << ", body04_bp_ref_cycles=" << total_body04_backpressure_ref_cycles
         << ", total_move_kib=" << std::fixed << std::setprecision(4)
         << total_data_movement_kib
+        << ", shell_move_kib=" << total_shell_data_movement_kib
+        << ", shell_ref_cycles=" << total_shell_ref_cycles
+        << ", shell_bp_ref_cycles=" << total_shell_backpressure_ref_cycles
         << ", body04_move_kib=" << total_body04_data_movement_kib
         << ", body10_move_kib=" << total_body10_data_movement_kib
         << ", reason=" << convergence_reason
