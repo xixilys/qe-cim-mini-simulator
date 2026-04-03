@@ -58,7 +58,7 @@ add_executable(qe_band_solver_model
   src/fft_companion.cpp
 )
 
-target_include_directories(qe_band_solver_model PRIVATE src)
+target_include_directories(qe_band_solver_model PRIVATE include src)
 
 target_compile_definitions(qe_band_solver_model PRIVATE
   $<$<BOOL:${QE_BAND_SOLVER_USE_SYSTEMC}>:QE_BAND_SOLVER_USE_SYSTEMC=1>
