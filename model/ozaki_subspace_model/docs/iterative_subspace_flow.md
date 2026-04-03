@@ -8,10 +8,10 @@
 
 当前对应的主要代码为：
 
-- `model/include/iterative_subspace_engine.h`
-- `model/src/iterative_subspace_engine.cpp`
-- `model/src/tb_iterative_subspace.cpp`
-- `model/src/tb_iterative_qe_regression.cpp`
+- `model/ozaki_subspace_model/include/iterative_subspace_engine.h`
+- `model/ozaki_subspace_model/src/iterative_subspace_engine.cpp`
+- `model/ozaki_subspace_model/src/tb_iterative_subspace.cpp`
+- `model/ozaki_subspace_model/src/tb_iterative_qe_regression.cpp`
 
 ## 2. 当前模块划分
 
@@ -261,7 +261,7 @@ start/n/m/steps | 1) load H_sub / S_sub / X0                       |
 
 - `model/build/obj/`
 
-而不是继续把 `.o` 文件写进 `model/src/`。
+而不是继续把 `.o` 文件写进 `model/ozaki_subspace_model/src/`。
 
 当前目标：
 
@@ -271,31 +271,31 @@ start/n/m/steps | 1) load H_sub / S_sub / X0                       |
 对应命令：
 
 ```bash
-make -C model bin/iterative_subspace_eval
-./model/bin/iterative_subspace_eval
+make -C model/ozaki_subspace_model bin/iterative_subspace_eval
+./model/ozaki_subspace_model/bin/iterative_subspace_eval
 ```
 
 微求解器模式可通过环境变量切换：
 
 ```bash
-ITER_MICRO_SOLVER_MODE=0 ./model/bin/iterative_subspace_eval
-ITER_MICRO_SOLVER_MODE=1 ./model/bin/iterative_subspace_eval
-ITER_MICRO_SOLVER_MODE=2 ./model/bin/iterative_subspace_eval
+ITER_MICRO_SOLVER_MODE=0 ./model/ozaki_subspace_model/bin/iterative_subspace_eval
+ITER_MICRO_SOLVER_MODE=1 ./model/ozaki_subspace_model/bin/iterative_subspace_eval
+ITER_MICRO_SOLVER_MODE=2 ./model/ozaki_subspace_model/bin/iterative_subspace_eval
 ```
 
 单独比较 reduced solver 的命令：
 
 ```bash
-make -C model bin/iterative_micro_compare_eval
-./model/bin/iterative_micro_compare_eval
+make -C model/ozaki_subspace_model bin/iterative_micro_compare_eval
+./model/ozaki_subspace_model/bin/iterative_micro_compare_eval
 ```
 
 真实 `QE` dump 批量回归命令：
 
 ```bash
-make -C model bin/iterative_qe_regression_eval
+make -C model/ozaki_subspace_model bin/iterative_qe_regression_eval
 ITER_REG_DIRS=/Volumes/remote/phd/year_2/project/dft加速/tmp_qe_actual_medium_dump \
-ITER_REG_MAX_CASES=8 ./model/bin/iterative_qe_regression_eval
+ITER_REG_MAX_CASES=8 ./model/ozaki_subspace_model/bin/iterative_qe_regression_eval
 ```
 
 ## 5.1 当前性能快照

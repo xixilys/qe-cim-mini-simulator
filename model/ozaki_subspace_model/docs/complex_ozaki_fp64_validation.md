@@ -4,7 +4,7 @@
 
 本文档对应仓库中新加入的完整 `FP64` 复数矩阵乘法 emulation 原型：
 
-- [`tb_complex_ozaki.cpp`](/Volumes/remote/phd/year_2/project/dft加速/model/src/tb_complex_ozaki.cpp)
+- [`tb_complex_ozaki.cpp`](/Volumes/remote/phd/year_2/project/dft加速/model/ozaki_subspace_model/src/tb_complex_ozaki.cpp)
 
 它的目标不是近似求一个“差不多”的复数 GEMM，而是基于 Uchino 等 2025 的复数 Ozaki-II 思路，行为级打通这条完整链：
 
@@ -48,36 +48,32 @@
 构建：
 
 ```bash
-cd /Volumes/remote/phd/year_2/project/dft加速/model
-make bin/complex_ozaki_eval
+cd /Volumes/remote/phd/year_2/project/dft加速
+make -C model/ozaki_subspace_model bin/complex_ozaki_eval
 ```
 
 默认运行：
 
 ```bash
-cd /Volumes/remote/phd/year_2/project/dft加速/model
-./bin/complex_ozaki_eval
+./model/ozaki_subspace_model/bin/complex_ozaki_eval
 ```
 
 运行 fused digit-residue 单乘验证：
 
 ```bash
-cd /Volumes/remote/phd/year_2/project/dft加速/model
-OZAKI_MODE=fused_scalar ./bin/complex_ozaki_eval
+OZAKI_MODE=fused_scalar ./model/ozaki_subspace_model/bin/complex_ozaki_eval
 ```
 
 更宽指数范围压力测试：
 
 ```bash
-cd /Volumes/remote/phd/year_2/project/dft加速/model
-OZAKI_EXP_SPAN=64 OZAKI_TRIALS=4 ./bin/complex_ozaki_eval
+OZAKI_EXP_SPAN=64 OZAKI_TRIALS=4 ./model/ozaki_subspace_model/bin/complex_ozaki_eval
 ```
 
 更宽指数范围下运行 fused digit-residue 单乘验证：
 
 ```bash
-cd /Volumes/remote/phd/year_2/project/dft加速/model
-OZAKI_MODE=fused_scalar OZAKI_EXP_SPAN=64 OZAKI_TRIALS=256 ./bin/complex_ozaki_eval
+OZAKI_MODE=fused_scalar OZAKI_EXP_SPAN=64 OZAKI_TRIALS=256 ./model/ozaki_subspace_model/bin/complex_ozaki_eval
 ```
 
 ## 4. fused digit-residue 单乘验证
@@ -146,9 +142,9 @@ OZAKI_MODE=fused_scalar OZAKI_EXP_SPAN=64 OZAKI_TRIALS=256 ./bin/complex_ozaki_e
 
 ```bash
 cd /Volumes/remote/phd/year_2/project/dft加速
-make -C model bin/complex_ozaki_eval
-OZAKI_MODE=fused_scalar OZAKI_TRIALS=512 ./model/bin/complex_ozaki_eval
-OZAKI_MODE=fused_scalar OZAKI_EXP_SPAN=64 OZAKI_TRIALS=256 ./model/bin/complex_ozaki_eval
+make -C model/ozaki_subspace_model bin/complex_ozaki_eval
+OZAKI_MODE=fused_scalar OZAKI_TRIALS=512 ./model/ozaki_subspace_model/bin/complex_ozaki_eval
+OZAKI_MODE=fused_scalar OZAKI_EXP_SPAN=64 OZAKI_TRIALS=256 ./model/ozaki_subspace_model/bin/complex_ozaki_eval
 ```
 
 本次记录结果为：

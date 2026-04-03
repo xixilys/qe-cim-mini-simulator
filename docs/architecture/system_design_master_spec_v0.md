@@ -719,7 +719,7 @@ while SCF not converged:
 当前最重要的可运行系统模型位于：
 
 - `model/qe_band_solver_model/README.md`
-- `model/docs/qe_band_solver_smoke_run_20260326.md`
+- `model/qe_band_solver_model/docs/qe_band_solver_smoke_run_20260326.md`
 
 它表达的是：
 

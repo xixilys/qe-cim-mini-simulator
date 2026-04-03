@@ -117,7 +117,7 @@ In short, this directory should be read as:
 
 - `sc_main.cpp` — executable entry with env-configured software/flow selection
 - `src/dft_hybrid_system.*` — explicit full-system top module
-- `src/types.hpp` — current type home for both the new cluster-first types (`EpisodeDescriptor`, `EpisodeResult`, `SCFRunReport`, etc.) and the retained legacy replay/body types
+- `include/types.hpp` — current type home for both the new cluster-first types (`EpisodeDescriptor`, `EpisodeResult`, `SCFRunReport`, etc.) and the retained legacy replay/body types
 - `src/episode_controller.*` — persistent cluster-first controller
 - `src/cluster_graph_executor.*` — ordered A/B/C/D executor
 - `src/cluster_a_operator_sweep.*` — fused operator-sweep cluster
@@ -161,7 +161,7 @@ In short, this directory should be read as:
 - `src/reduction_closure_engine.*`
 - `src/vector_diag_companion.*`
 - `src/fft_companion.*`
-- `src/systemc_compat.hpp` — fallback compatibility layer when a real SystemC library is unavailable
+- `include/systemc_compat.hpp` — fallback compatibility layer when a real SystemC library is unavailable
 
 ## Build
 

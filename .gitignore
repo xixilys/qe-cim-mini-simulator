@@ -3,8 +3,9 @@
 *.log
 *.o
 
-model/bin/
-model/logs/
+model/ozaki_subspace_model/bin/
+model/ozaki_subspace_model/build/
+model/ozaki_subspace_model/logs/
 model/qe_band_solver_model/build/
 model/qe_band_solver_model/build-systemc/
 
@@ -21,4 +22,4 @@ tmp_*_run.out
 ppt/
 full_transcription.txt
 
-model/docs/.DS_Store
+model/ozaki_subspace_model/docs/.DS_Store

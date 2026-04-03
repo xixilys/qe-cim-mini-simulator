@@ -26,7 +26,7 @@
 - [`docs/survey/vasp_qe_gpu_support_evolution_20260330.md`](/Volumes/remote/phd/year_2/project/dft加速/docs/survey/vasp_qe_gpu_support_evolution_20260330.md)
 - [`docs/architecture/qe_band_solver_systemc_overview_20260325.md`](/Volumes/remote/phd/year_2/project/dft加速/docs/architecture/qe_band_solver_systemc_overview_20260325.md)
 - [`docs/architecture/qe_band_solver_transaction_semantics_20260326.md`](/Volumes/remote/phd/year_2/project/dft加速/docs/architecture/qe_band_solver_transaction_semantics_20260326.md)
-- [`model/docs/qe_band_solver_smoke_run_20260326.md`](/Volumes/remote/phd/year_2/project/dft加速/model/docs/qe_band_solver_smoke_run_20260326.md)
+- [`model/qe_band_solver_model/docs/qe_band_solver_smoke_run_20260326.md`](/Volumes/remote/phd/year_2/project/dft加速/model/qe_band_solver_model/docs/qe_band_solver_smoke_run_20260326.md)
 
 ## 2. 排序规则
 
@@ -85,7 +85,7 @@
 | 2026-03-21 | 系统级 workload 复核 | 真实 `QE` 全流程里到底应该抓哪个系统对象？ | `benchmarks/qe_system_workload_revalidation_report_20260321.md` |
 | 2026-03-22 ~ 2026-03-23 | 行业对照与软件范式梳理 | 当前主流到底在加速什么，我们的切口与 GPU 主流路线差在哪？ | `dft_acceleration_industry_survey_20260322.md`, `dft_acceleration_vasp_qe_pyscf_survey_20260323.md` |
 | 2026-03-23 | 系统对象提升到 band-solver subsystem | 为什么不能只讲 `diaghg`，而应该讲 `QE-connected band-solver subsystem`？ | `system_design_master_spec_v0.md` |
-| 2026-03-25 ~ 2026-03-26 | `v1` 系统架构与 SystemC v0 demo 落地 | 如何把当前 Host/FPGA/Chip 分工、chip 内部划分与 `c_bands episode` 执行机制固定成统一口径？ | `qe_band_solver_systemc_overview_20260325.md`, `qe_band_solver_transaction_semantics_20260326.md`, `model/docs/qe_band_solver_smoke_run_20260326.md` |
+| 2026-03-25 ~ 2026-03-26 | `v1` 系统架构与 SystemC v0 demo 落地 | 如何把当前 Host/FPGA/Chip 分工、chip 内部划分与 `c_bands episode` 执行机制固定成统一口径？ | `qe_band_solver_systemc_overview_20260325.md`, `qe_band_solver_transaction_semantics_20260326.md`, `model/qe_band_solver_model/docs/qe_band_solver_smoke_run_20260326.md` |
 | 2026-03-30 | VASP / QE GPU 历史补充 | 主流 DFT 软件究竟何时开始把 GPU / 异构加速纳入主线工程？ | `vasp_qe_gpu_support_evolution_20260330.md` |
 
 ## 6. 2026-03-12：先把系统边界和真实工作负载钉住
@@ -704,7 +704,7 @@ HostSCF(mock)
 
 - [`docs/architecture/qe_band_solver_systemc_overview_20260325.md`](/Volumes/remote/phd/year_2/project/dft加速/docs/architecture/qe_band_solver_systemc_overview_20260325.md)
 - [`docs/architecture/qe_band_solver_transaction_semantics_20260326.md`](/Volumes/remote/phd/year_2/project/dft加速/docs/architecture/qe_band_solver_transaction_semantics_20260326.md)
-- [`model/docs/qe_band_solver_smoke_run_20260326.md`](/Volumes/remote/phd/year_2/project/dft加速/model/docs/qe_band_solver_smoke_run_20260326.md)
+- [`model/qe_band_solver_model/docs/qe_band_solver_smoke_run_20260326.md`](/Volumes/remote/phd/year_2/project/dft加速/model/qe_band_solver_model/docs/qe_band_solver_smoke_run_20260326.md)
 - `model/qe_band_solver_model/`
 
 ## 17. 截至当前已经形成的稳定共识
@@ -826,7 +826,7 @@ HostSCF(mock)
    总结 `QE band-solver / c_bands episode subsystem` 的 `SystemC v0` 范围、分层和可替换边界。
 2. [`docs/architecture/qe_band_solver_transaction_semantics_20260326.md`](/Volumes/remote/phd/year_2/project/dft加速/docs/architecture/qe_band_solver_transaction_semantics_20260326.md)
    记录 `Host -> FPGA -> Chip` 请求、operator transaction 和 closure transaction 的最小语义。
-3. [`model/docs/qe_band_solver_smoke_run_20260326.md`](/Volumes/remote/phd/year_2/project/dft加速/model/docs/qe_band_solver_smoke_run_20260326.md)
+3. [`model/qe_band_solver_model/docs/qe_band_solver_smoke_run_20260326.md`](/Volumes/remote/phd/year_2/project/dft加速/model/qe_band_solver_model/docs/qe_band_solver_smoke_run_20260326.md)
    记录 merged demo 的构建、运行和 smoke-run 结果。
 4. `model/qe_band_solver_model/`
    当前 `QE band-solver subsystem` 的 timed-functional / `SystemC v0` 演示代码。

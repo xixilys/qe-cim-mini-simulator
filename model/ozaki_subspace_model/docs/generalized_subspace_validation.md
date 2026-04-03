@@ -4,7 +4,7 @@
 
 这份验证对应当前新增的行为级 testbench：
 
-- [`tb_generalized_subspace.cpp`](/Volumes/remote/phd/year_2/project/dft加速/model/src/tb_generalized_subspace.cpp)
+- [`tb_generalized_subspace.cpp`](/Volumes/remote/phd/year_2/project/dft加速/model/ozaki_subspace_model/src/tb_generalized_subspace.cpp)
 
 它验证的不是 `CIM` 阵列本身，而是我们在系统设计里定义的 `NML` 侧 generalized Hermitian 微对角化闭环：
 
@@ -50,15 +50,14 @@
 构建：
 
 ```bash
-cd /Volumes/remote/phd/year_2/project/dft加速/model
-make bin/generalized_subspace_eval
+cd /Volumes/remote/phd/year_2/project/dft加速
+make -C model/ozaki_subspace_model bin/generalized_subspace_eval
 ```
 
 运行：
 
 ```bash
-cd /Volumes/remote/phd/year_2/project/dft加速/model
-./bin/generalized_subspace_eval
+./model/ozaki_subspace_model/bin/generalized_subspace_eval
 ```
 
 可选环境变量：

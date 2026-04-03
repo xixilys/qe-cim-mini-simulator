@@ -8,11 +8,16 @@
 
 ## Repository Layout
 
-- `model/`: SystemC-based simulator, behavioral testbenches, and validation executables.
-- `model/include/`: project headers shared by SystemC modules and evaluators.
-- `model/src/`: C++ sources for the simulator and standalone evaluators.
-- `model/bin/`: build outputs created by `make`.
-- `model/docs/`: validation notes and architecture documents for the simulator.
+- `model/`: model index and submodel entrypoints.
+- `model/ozaki_subspace_model/`: standalone behavioral evaluators for Ozaki/CRT GEMM, reduced generalized subspace validation, and iterative subspace prototypes.
+- `model/ozaki_subspace_model/include/`: headers shared by the standalone evaluators.
+- `model/ozaki_subspace_model/src/`: C++ sources for the standalone evaluators.
+- `model/ozaki_subspace_model/bin/`: build outputs created by the standalone `Makefile`.
+- `model/ozaki_subspace_model/docs/`: validation notes for the standalone evaluator stack.
+- `model/qe_band_solver_model/`: cluster-first timed-functional QE shell runnable model.
+- `model/qe_band_solver_model/include/`: headers for the runnable QE shell model.
+- `model/qe_band_solver_model/src/`: implementation files for the runnable QE shell model.
+- `model/qe_band_solver_model/docs/`: validation notes for the QE shell runnable model.
 - `docs/`: project-level design notes, benchmark workflows, QE sampling notes, and handoff context.
 - `docs/benchmarks/`: Python scripts for trace summarization and CPU/PySCF baselines.
 - `soft/qe-7.5/`: workspace copy of QE used for trace instrumentation and local experiments.
@@ -34,57 +39,57 @@
 ## Build Prerequisites
 
 - macOS toolchain is assumed.
-- SystemC headers and libraries must be available at the paths referenced by `model/Makefile`.
-- The current `Makefile` uses `g++`, `-std=c++17`, `-O3`, `-Wall`, `/opt/homebrew/include`, `/opt/homebrew/lib`, `-lsystemc`, and `-framework Accelerate` for the generalized eigensolver executable.
+- SystemC headers and libraries must be available at the paths referenced by `model/ozaki_subspace_model/Makefile`.
+- The standalone evaluator `Makefile` uses `g++`, `-std=c++17`, `-O3`, `-Wall`, `/opt/homebrew/include`, `/opt/homebrew/lib`, `-lsystemc`, and `-framework Accelerate` for the generalized eigensolver executable.
 
 ## Primary Build Commands
 
 - Build everything:
-  - `make -C model`
+  - `make -C model/ozaki_subspace_model`
 - Build the complex Ozaki evaluator only:
-  - `make -C model bin/complex_ozaki_eval`
+  - `make -C model/ozaki_subspace_model bin/complex_ozaki_eval`
 - Build the generalized subspace evaluator only:
-  - `make -C model bin/generalized_subspace_eval`
+  - `make -C model/ozaki_subspace_model bin/generalized_subspace_eval`
 - Build the iterative subspace evaluator only:
-  - `make -C model bin/iterative_subspace_eval`
+  - `make -C model/ozaki_subspace_model bin/iterative_subspace_eval`
 - Build the iterative tile GEMM evaluator only:
-  - `make -C model bin/iterative_tile_gemm_eval`
+  - `make -C model/ozaki_subspace_model bin/iterative_tile_gemm_eval`
 - Clean build artifacts:
-  - `make -C model clean`
+  - `make -C model/ozaki_subspace_model clean`
 
 ## Run Commands
 
 - Run the complex Ozaki evaluator:
-  - `./model/bin/complex_ozaki_eval`
+  - `./model/ozaki_subspace_model/bin/complex_ozaki_eval`
 - Run the generalized subspace evaluator:
-  - `./model/bin/generalized_subspace_eval`
+  - `./model/ozaki_subspace_model/bin/generalized_subspace_eval`
 - Run the iterative subspace evaluator:
-  - `./model/bin/iterative_subspace_eval`
+  - `./model/ozaki_subspace_model/bin/iterative_subspace_eval`
 - Run the iterative tile GEMM evaluator:
-  - `./model/bin/iterative_tile_gemm_eval`
+  - `./model/ozaki_subspace_model/bin/iterative_tile_gemm_eval`
 
 ## Single-Test Guidance
 
 - This repository does not use a unit-test framework such as `pytest`, `ctest`, or GoogleTest.
 - A "single test" usually means building and running one standalone evaluator executable.
 - Use one of these focused commands:
-  - `make -C model bin/complex_ozaki_eval && ./model/bin/complex_ozaki_eval`
-  - `make -C model bin/generalized_subspace_eval && ./model/bin/generalized_subspace_eval`
-  - `make -C model bin/iterative_subspace_eval && ./model/bin/iterative_subspace_eval`
-  - `make -C model bin/iterative_tile_gemm_eval && ./model/bin/iterative_tile_gemm_eval`
+  - `make -C model/ozaki_subspace_model bin/complex_ozaki_eval && ./model/ozaki_subspace_model/bin/complex_ozaki_eval`
+  - `make -C model/ozaki_subspace_model bin/generalized_subspace_eval && ./model/ozaki_subspace_model/bin/generalized_subspace_eval`
+  - `make -C model/ozaki_subspace_model bin/iterative_subspace_eval && ./model/ozaki_subspace_model/bin/iterative_subspace_eval`
+  - `make -C model/ozaki_subspace_model bin/iterative_tile_gemm_eval && ./model/ozaki_subspace_model/bin/iterative_tile_gemm_eval`
 - For faster iteration, rebuild only the executable affected by the file you changed instead of running `make` for the whole directory.
 
 ## Parameterized Test Runs
 
 - `complex_ozaki_eval` supports environment overrides such as:
-  - `OZAKI_EXP_SPAN=64 OZAKI_TRIALS=4 ./model/bin/complex_ozaki_eval`
+  - `OZAKI_EXP_SPAN=64 OZAKI_TRIALS=4 ./model/ozaki_subspace_model/bin/complex_ozaki_eval`
 - `generalized_subspace_eval` supports environment overrides such as:
-  - `GEN_SUBSPACE_DIRS=/abs/path/dir1,/abs/path/dir2 ./model/bin/generalized_subspace_eval`
-  - `GEN_SUBSPACE_MAX_CASES=8 ./model/bin/generalized_subspace_eval`
+  - `GEN_SUBSPACE_DIRS=/abs/path/dir1,/abs/path/dir2 ./model/ozaki_subspace_model/bin/generalized_subspace_eval`
+  - `GEN_SUBSPACE_MAX_CASES=8 ./model/ozaki_subspace_model/bin/generalized_subspace_eval`
 - `iterative_subspace_eval` supports environment overrides such as:
-  - `ITER_USE_QE_CASE=0 ITER_STEPS=4 ./model/bin/iterative_subspace_eval`
+  - `ITER_USE_QE_CASE=0 ITER_STEPS=4 ./model/ozaki_subspace_model/bin/iterative_subspace_eval`
 - `iterative_tile_gemm_eval` supports environment overrides such as:
-  - `ITER_USE_QE_CASE=0 ITER_N=32 ITER_M=16 ./model/bin/iterative_tile_gemm_eval`
+  - `ITER_USE_QE_CASE=0 ITER_N=32 ITER_M=16 ./model/ozaki_subspace_model/bin/iterative_tile_gemm_eval`
 - When reporting results, include the executable name, environment variables, and dataset or dump directory used.
 
 ## Benchmark / Analysis Commands
@@ -160,15 +165,15 @@
 
 ## Testing Expectations For Changes
 
-- If you edit `model/src/tb_complex_ozaki.cpp`, rebuild and run `bin/complex_ozaki_eval`.
-- If you edit `model/src/tb_generalized_subspace.cpp`, rebuild and run `bin/generalized_subspace_eval`.
-- If you edit `model/src/tb_iterative_subspace.cpp` or `model/src/iterative_subspace_engine.cpp`, rebuild and run `bin/iterative_subspace_eval`.
-- If you edit `model/src/tb_iterative_tile_gemm.cpp` or `model/src/iterative_subspace_engine.cpp`, rebuild and run `bin/iterative_tile_gemm_eval`.
+- If you edit `model/ozaki_subspace_model/src/tb_complex_ozaki.cpp`, rebuild and run `bin/complex_ozaki_eval`.
+- If you edit `model/ozaki_subspace_model/src/tb_generalized_subspace.cpp`, rebuild and run `bin/generalized_subspace_eval`.
+- If you edit `model/ozaki_subspace_model/src/tb_iterative_subspace.cpp` or `model/ozaki_subspace_model/src/iterative_subspace_engine.cpp`, rebuild and run `bin/iterative_subspace_eval`.
+- If you edit `model/ozaki_subspace_model/src/tb_iterative_tile_gemm.cpp` or `model/ozaki_subspace_model/src/iterative_subspace_engine.cpp`, rebuild and run `bin/iterative_tile_gemm_eval`.
 - If you edit Python benchmark scripts, run the specific script with a known input file rather than adding unrelated tooling.
 
 ## Documentation Expectations
 
-- Keep design-facing rationale in `docs/` or `model/docs/`, not buried in source comments.
+- Keep design-facing rationale in `docs/`, `model/ozaki_subspace_model/docs/`, or `model/qe_band_solver_model/docs/`, not buried in source comments.
 - When behavior changes, update the corresponding validation note if the command, metric, or conclusion changes.
 - Prefer documenting reproducible commands with absolute or workspace-relative paths.
 

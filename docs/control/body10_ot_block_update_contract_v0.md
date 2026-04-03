@@ -187,7 +187,7 @@ BODY_05 / BODY_00
 
 当前仓库中已经有：
 
-- `model/qe_band_solver_model/src/body10_family_controller.hpp`
+- `model/qe_band_solver_model/include/body10_family_controller.hpp`
 - `model/qe_band_solver_model/src/body10_family_controller.cpp`
 - `Body10StageRequest / Body10StageSummary / Body10LoweringPlan`
 - `Body10BundleRequest / Body10BundleSummary`

@@ -9,7 +9,7 @@
 1. 在这个创新点里，一次乘法到底按什么数值 contract 进入硬件
 2. 单个 real / complex 乘法在 residue 宏里是怎么一步步完成的
 3. project kernel 中，`digit stage`、`row loop`、`modulus group promotion` 的先后关系是什么
-4. 现有原型里的 [`Complex_Row_Bank`](/Volumes/remote/phd/year_2/project/dft加速/model/include/iterative_subspace_engine.h:61)、[`Row_Residue_Buffer`](/Volumes/remote/phd/year_2/project/dft加速/model/include/iterative_subspace_engine.h:74)、[`Mod_Encode_Unit`](/Volumes/remote/phd/year_2/project/dft加速/model/include/iterative_subspace_engine.h:92)、[`Residue_3M_MAC`](/Volumes/remote/phd/year_2/project/dft加速/model/include/iterative_subspace_engine.h:97) 在这个流程里分别扮演什么角色
+4. 现有原型里的 [`Complex_Row_Bank`](/Volumes/remote/phd/year_2/project/dft加速/model/ozaki_subspace_model/include/iterative_subspace_engine.h:61)、[`Row_Residue_Buffer`](/Volumes/remote/phd/year_2/project/dft加速/model/ozaki_subspace_model/include/iterative_subspace_engine.h:74)、[`Mod_Encode_Unit`](/Volumes/remote/phd/year_2/project/dft加速/model/ozaki_subspace_model/include/iterative_subspace_engine.h:92)、[`Residue_3M_MAC`](/Volumes/remote/phd/year_2/project/dft加速/model/ozaki_subspace_model/include/iterative_subspace_engine.h:97) 在这个流程里分别扮演什么角色
 
 ## 2. 先固定这条创新点的正确边界
 
@@ -75,7 +75,7 @@ x = 2^{-s_x} * q_x
 - `q_B`, `q_x`
   - 进入 residue 主通路之前的有符号整数
 
-这和当前原型里的 `power-of-two scaling + truncation` 是一致的，现有 [`Mod_Encode_Unit::encode()`](/Volumes/remote/phd/year_2/project/dft加速/model/src/iterative_subspace_engine.cpp:454) 已经在做这类行为级整数化。
+这和当前原型里的 `power-of-two scaling + truncation` 是一致的，现有 [`Mod_Encode_Unit::encode()`](/Volumes/remote/phd/year_2/project/dft加速/model/ozaki_subspace_model/src/iterative_subspace_engine.cpp:454) 已经在做这类行为级整数化。
 
 ## 3.3 resident 与 streaming 的职责分离
 
@@ -254,7 +254,7 @@ Im_i = (U2_i - U0_i - U1_i) mod m_i
 - `Re_i`
 - `Im_i`
 
-这一步正好对应当前原型 [`Residue_3M_MAC::accumulate_row_block()`](/Volumes/remote/phd/year_2/project/dft加速/model/src/iterative_subspace_engine.cpp:460) 里对 `p0 / p1 / p2` 的模域重组。
+这一步正好对应当前原型 [`Residue_3M_MAC::accumulate_row_block()`](/Volumes/remote/phd/year_2/project/dft加速/model/ozaki_subspace_model/src/iterative_subspace_engine.cpp:460) 里对 `p0 / p1 / p2` 的模域重组。
 
 ## 7. 从单乘扩展到 project kernel
 
@@ -559,16 +559,16 @@ active residues + redundant residue
 
 如果把这条细化流程和当前原型对齐，可以这样理解：
 
-- [`Complex_Row_Bank`](/Volumes/remote/phd/year_2/project/dft加速/model/include/iterative_subspace_engine.h:61)
+- [`Complex_Row_Bank`](/Volumes/remote/phd/year_2/project/dft加速/model/ozaki_subspace_model/include/iterative_subspace_engine.h:61)
   - resident row read 边界
-- [`Row_Residue_Buffer`](/Volumes/remote/phd/year_2/project/dft加速/model/include/iterative_subspace_engine.h:74)
+- [`Row_Residue_Buffer`](/Volumes/remote/phd/year_2/project/dft加速/model/ozaki_subspace_model/include/iterative_subspace_engine.h:74)
   - 已编码 resident row 或 output row 的局部缓存
-- [`Mod_Encode_Unit`](/Volumes/remote/phd/year_2/project/dft加速/model/include/iterative_subspace_engine.h:92)
+- [`Mod_Encode_Unit`](/Volumes/remote/phd/year_2/project/dft加速/model/ozaki_subspace_model/include/iterative_subspace_engine.h:92)
   - 当前是“完整一行编码”的行为级模块
   - 对第一创新点来说，后续需要拆成：
     - resident pre-encode
     - streaming digit-slice ingress
-- [`Residue_3M_MAC`](/Volumes/remote/phd/year_2/project/dft加速/model/include/iterative_subspace_engine.h:97)
+- [`Residue_3M_MAC`](/Volumes/remote/phd/year_2/project/dft加速/model/ozaki_subspace_model/include/iterative_subspace_engine.h:97)
   - 当前是“完整 residue block -> full 3M -> CRT reconstruct”的行为级模块
   - 对第一创新点来说，后续需要拆成：
     - plane-local stage recurrence

@@ -7,7 +7,8 @@ subspace diagonalization and related dense kernels with a CIM-oriented backend.
 
 This repository currently contains:
 
-- `model/`: a SystemC-based mini QE / CIM co-simulation prototype
+- `model/`: model index plus two separate model stacks
+- `model/ozaki_subspace_model/`: standalone Ozaki/CRT GEMM and iterative subspace evaluator stack
 - `model/qe_band_solver_model/`: a timed-functional `c_bands` episode subsystem demo
 - `docs/`: design notes, benchmark helpers, and minimal QE inputs
 
@@ -23,8 +24,7 @@ It intentionally excludes:
 The simulator currently builds via:
 
 ```bash
-cd model
-make
+make -C model/ozaki_subspace_model
 ```
 
 This requires a working SystemC installation. The existing `Makefile` expects
@@ -61,11 +61,11 @@ For design review, the current key files are:
   - `model/qe_band_solver_model/src/chip_top.cpp`: chip-top execution skeleton
   - `model/qe_band_solver_model/src/body04_family_controller.cpp`: `BODY_04` family control path
   - `model/qe_band_solver_model/src/body10_family_controller.cpp`: `BODY_10` family control path
-  - `model/qe_band_solver_model/src/types.hpp`: shared descriptors, reports, and object summaries
+  - `model/qe_band_solver_model/include/types.hpp`: shared descriptors, reports, and object summaries
 - **Context and evidence**
   - `docs/overview/project_development_timeline.md`: long-form project development record
   - `docs/overview/agent_handoff_20260312.md`: current handoff and priority context
-  - `model/docs/qe_band_solver_smoke_run_20260326.md`: current `QE` / `CP2K` smoke validation notes
+  - `model/qe_band_solver_model/docs/qe_band_solver_smoke_run_20260326.md`: current `QE` / `CP2K` smoke validation notes
   - `docs/README.md`: fuller docs index by category
 
 ## Notes
@@ -74,8 +74,8 @@ For design review, the current key files are:
 - The canonical long-form development record is in [docs/overview/project_development_timeline.md](/Volumes/remote/phd/year_2/project/dft加速/docs/overview/project_development_timeline.md); newer stage notes are indexed there and should be folded back into it over time.
 - The merged `QE` band-solver SystemC overview is in [docs/architecture/qe_band_solver_systemc_overview_20260325.md](/Volumes/remote/phd/year_2/project/dft加速/docs/architecture/qe_band_solver_systemc_overview_20260325.md).
 - The merged `QE` band-solver transaction semantics are in [docs/architecture/qe_band_solver_transaction_semantics_20260326.md](/Volumes/remote/phd/year_2/project/dft加速/docs/architecture/qe_band_solver_transaction_semantics_20260326.md).
-- The complex subspace behavioral validation flow is documented in [model/docs/complex_subspace_validation.md](/Volumes/remote/phd/year_2/project/dft加速/model/docs/complex_subspace_validation.md).
-- The full FP64 complex Ozaki-II emulation flow is documented in [model/docs/complex_ozaki_fp64_validation.md](/Volumes/remote/phd/year_2/project/dft加速/model/docs/complex_ozaki_fp64_validation.md).
-- The dedicated validation executable is `model/bin/complex_subspace_eval`.
-- The dedicated FP64 complex Ozaki-II executable is `model/bin/complex_ozaki_eval`.
+- The standalone evaluator stack is summarized in [model/README.md](/Volumes/remote/phd/year_2/project/dft加速/model/README.md).
+- The generalized subspace behavioral validation flow is documented in [model/ozaki_subspace_model/docs/generalized_subspace_validation.md](/Volumes/remote/phd/year_2/project/dft加速/model/ozaki_subspace_model/docs/generalized_subspace_validation.md).
+- The full FP64 complex Ozaki-II emulation flow is documented in [model/ozaki_subspace_model/docs/complex_ozaki_fp64_validation.md](/Volumes/remote/phd/year_2/project/dft加速/model/ozaki_subspace_model/docs/complex_ozaki_fp64_validation.md).
+- The dedicated FP64 complex Ozaki-II executable is `model/ozaki_subspace_model/bin/complex_ozaki_eval`.
 - QE-specific benchmark helpers and tiny example inputs are kept under `docs/`.

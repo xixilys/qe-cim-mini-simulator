@@ -24,7 +24,7 @@
 
 ## 2. 当前原型的实际覆盖边界
 
-从 `model/qe_band_solver_model/README.md` 和 `model/docs/qe_band_solver_smoke_run_20260326.md` 可确认，当前原型已经不再是旧版本那种：
+从 `model/qe_band_solver_model/README.md` 和 `model/qe_band_solver_model/docs/qe_band_solver_smoke_run_20260326.md` 可确认，当前原型已经不再是旧版本那种：
 
 - `HostSCF(mock) -> FPGAOrchestrator -> ChipTop -> episode complete`
 - episode 返回后只做极简 `rho update / convergence check`

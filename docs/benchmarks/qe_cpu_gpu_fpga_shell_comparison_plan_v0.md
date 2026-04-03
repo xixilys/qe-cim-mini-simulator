@@ -287,7 +287,7 @@
 当前可直接复用：
 
 - `model/qe_band_solver_model/README.md`
-- `model/docs/qe_band_solver_smoke_run_20260326.md`
+- `model/qe_band_solver_model/docs/qe_band_solver_smoke_run_20260326.md`
 
 但这里必须加一个当前阶段限制：
 

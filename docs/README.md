@@ -12,7 +12,7 @@
 - `docs/control/long_control_word_isa_v0.md`
 - `docs/cim/cim_macro_block_and_timing_v0.md`
 - `model/qe_band_solver_model/README.md`
-- `model/docs/qe_band_solver_smoke_run_20260326.md`
+- `model/qe_band_solver_model/docs/qe_band_solver_smoke_run_20260326.md`
 - 根目录 `README.md` 里的 `Key Design Files` 小节
 
 ## 1. Canonical Path
@@ -33,7 +33,7 @@
 - `docs/architecture/qe_band_solver_systemc_overview_20260325.md`：当前 `SystemC` 骨架说明
 - `docs/architecture/qe_band_solver_transaction_semantics_20260326.md`：当前事务语义
 - `docs/architecture/qe_full_dft_systemc_extension_outline_v0.md`：从 band-solver 扩到 full-SCF 的行为级路线
-- `model/docs/qe_band_solver_smoke_run_20260326.md`：当前 smoke run 结果
+- `model/qe_band_solver_model/docs/qe_band_solver_smoke_run_20260326.md`：当前 smoke run 结果
 
 ## 3. Evidence
 

@@ -14,7 +14,7 @@ The modeling style is **system-level / timed-functional / loosely timed**. Numer
 
 - `model/qe_band_solver_model/README.md`
 - `model/qe_band_solver_model/sc_main.cpp`
-- `model/qe_band_solver_model/src/*.hpp/*.cpp`
+- `model/qe_band_solver_model/include/*.hpp` and `model/qe_band_solver_model/src/*.cpp`
 
 ## 3. Architectural mapping used in code
 
@@ -50,7 +50,7 @@ The modeling style is **system-level / timed-functional / loosely timed**. Numer
 
 ## 4. Core transaction/data structs
 
-The code defines these required structs in `src/types.hpp`:
+The code defines these required structs in `include/types.hpp`:
 
 - `EpisodeConfig`
 - `WavePanel`
