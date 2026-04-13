@@ -883,6 +883,7 @@ def build_bundle(
             "v1 sweep excludes DMA width, buffer depth, and final BRAM/URAM/HBM budget tuning.",
             "Projection fields are intentionally null in bootstrap output until the SystemC model is wired in.",
             "QE tolerance schema id is carried as metadata so the correctness gate can be frozen before execution.",
+            "QE gold summary artifacts add formal workload/family status reporting without changing compare semantics or thresholds.",
         ],
     }
 
@@ -1322,8 +1323,9 @@ def main() -> int:
     )
     if gold_summary["gold_rows"] > 0:
         print(
-            "[gold] rows={gold_rows} passed={gold_passed} mismatches={gold_mismatches} errors={gold_errors}".format(
-                **gold_summary
+            "[gold] rows={gold_rows} passed={gold_passed} mismatches={gold_mismatches} errors={gold_errors} pending={pending}".format(
+                pending=gold_summary["status_counts"].get("pending", 0),
+                **gold_summary,
             )
         )
 

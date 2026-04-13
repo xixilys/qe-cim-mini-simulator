@@ -386,6 +386,11 @@ def print_summary(report: dict[str, Any]) -> None:
     )
     if report.get("case_id"):
         print(f"case_id: {report['case_id']}")
+    if report["summary"]["failed_required_fields"]:
+        print(
+            "failed required fields: "
+            + ", ".join(report["summary"]["failed_required_fields"])
+        )
     for item in report["field_results"]:
         status = item["status"].upper()
         print(f"- {item['name']}: {status} | {item['message']}")
