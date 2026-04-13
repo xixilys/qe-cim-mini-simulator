@@ -27,15 +27,196 @@ struct ObjectRecord {
 struct SystemRunConfig {
   std::string software_family = "QE";
   std::string flow_family = "CBANDS_DIAG";
+  std::string architecture_family = "F2";
+  std::string assumption_set_id = "default-assumptions";
+  std::string offload_scope_override;
+  std::string resident_policy_override;
   int max_scf_iters = 3;
   bool enable_fft = true;
+  int device_diag_max_dim = 28;
+  bool force_host_diag = false;
+  bool allow_cpu_diag_fallback = true;
 
   std::string brief() const {
     std::ostringstream oss;
     oss << "software=" << software_family
         << ", flow=" << flow_family
+        << ", arch_family=" << architecture_family
+        << ", assumption_set=" << assumption_set_id
         << ", max_scf_iters=" << max_scf_iters
-        << ", fft=" << (enable_fft ? "on" : "off");
+        << ", fft=" << (enable_fft ? "on" : "off")
+        << ", device_diag_max_dim=" << device_diag_max_dim
+        << ", force_host_diag=" << (force_host_diag ? "yes" : "no")
+        << ", cpu_fallback=" << (allow_cpu_diag_fallback ? "yes" : "no");
+    return oss.str();
+  }
+};
+
+struct ArchitectureTemplateConfig {
+  std::string template_id = "F2";
+  std::string template_label = "BalancedHybrid";
+  std::string offload_scope = "balanced";
+  std::string resident_policy = "fit_first";
+  std::string diag_policy = "device_first_fallback";
+  std::string confidence_label = "medium";
+  bool enable_device_fft = true;
+  bool force_host_diag = false;
+  bool allow_cpu_diag_fallback = true;
+  bool algorithm_contract_deviation = false;
+  double resident_budget_scale = 1.0;
+  int device_diag_max_dim = 28;
+
+  std::string brief() const {
+    std::ostringstream oss;
+    oss << "template=" << template_id
+        << ", label=" << template_label
+        << ", offload_scope=" << offload_scope
+        << ", resident_policy=" << resident_policy
+        << ", diag_policy=" << diag_policy
+        << ", confidence=" << confidence_label
+        << ", fft=" << (enable_device_fft ? "device" : "host")
+        << ", force_host_diag=" << (force_host_diag ? "yes" : "no")
+        << ", cpu_fallback=" << (allow_cpu_diag_fallback ? "yes" : "no")
+        << ", resident_budget_scale=" << std::fixed << std::setprecision(2)
+        << resident_budget_scale
+        << ", algorithm_contract_deviation="
+        << (algorithm_contract_deviation ? "yes" : "no");
+    return oss.str();
+  }
+};
+
+struct ResidentSetDesc {
+  std::string resident_set_id = "resident-default";
+  int generation = 0;
+  std::string software_family = "QE";
+  std::string projector_mode = "USPP";
+  std::string support_grid_mode = "BYPASS";
+  ObjectRecord projector_object;
+  ObjectRecord potential_slice_object;
+  double resident_kib = 0.0;
+  double preload_kib = 0.0;
+  bool reuse_fft_support = false;
+
+  std::string brief() const {
+    std::ostringstream oss;
+    oss << "resident_set=" << resident_set_id
+        << ", gen=" << generation
+        << ", projector=" << projector_mode
+        << ", grid=" << support_grid_mode
+        << ", resident_kib=" << std::fixed << std::setprecision(2)
+        << resident_kib
+        << ", preload_kib=" << preload_kib
+        << ", fft_reuse=" << (reuse_fft_support ? "yes" : "no");
+    return oss.str();
+  }
+};
+
+struct BandBatchDesc {
+  int batch_id = 0;
+  int kpoint_id = 0;
+  int band_begin = 0;
+  int band_count = 16;
+  int band_batch = 4;
+  int panel_count = 3;
+  int panel_size = 8;
+  ObjectRecord wave_object;
+  double input_wave_kib = 0.0;
+  double output_wave_kib = 0.0;
+  bool double_buffered = true;
+
+  std::string brief() const {
+    std::ostringstream oss;
+    oss << "batch=" << batch_id
+        << ", k=" << kpoint_id
+        << ", bands=[" << band_begin << "," << (band_begin + band_count) << ")"
+        << ", band_batch=" << band_batch
+        << ", panels=" << panel_count
+        << ", panel_size=" << panel_size
+        << ", input_kib=" << std::fixed << std::setprecision(2)
+        << input_wave_kib
+        << ", output_kib=" << output_wave_kib
+        << ", double_buffered=" << (double_buffered ? "yes" : "no");
+    return oss.str();
+  }
+};
+
+struct DiagPolicy {
+  std::string preferred_device_mode = "hardware";
+  int max_device_diag_dim = 28;
+  double max_condition_estimate = 1.65;
+  bool require_resident_fit = true;
+  bool allow_cpu_fallback = true;
+  bool force_cpu_diag = false;
+
+  std::string brief() const {
+    std::ostringstream oss;
+    oss << "preferred=" << preferred_device_mode
+        << ", max_device_diag_dim=" << max_device_diag_dim
+        << ", max_condition=" << std::fixed << std::setprecision(2)
+        << max_condition_estimate
+        << ", require_fit=" << (require_resident_fit ? "yes" : "no")
+        << ", cpu_fallback=" << (allow_cpu_fallback ? "yes" : "no")
+        << ", force_cpu=" << (force_cpu_diag ? "yes" : "no");
+    return oss.str();
+  }
+};
+
+struct ScfIterationRequest {
+  int request_id = 0;
+  int scf_iteration = 0;
+  int episode_id = 0;
+  std::string software_family = "QE";
+  std::string flow_family = "CBANDS_DIAG";
+  std::string architecture_family = "F2";
+  std::string assumption_set_id = "default-assumptions";
+  std::string offload_scope = "balanced";
+  std::string resident_policy = "fit_first";
+  std::string confidence_label = "medium";
+  bool algorithm_contract_deviation = false;
+  bool enable_fft = true;
+  ResidentSetDesc resident_set;
+  BandBatchDesc band_batch;
+  DiagPolicy diag_policy;
+  ObjectRecord density_object;
+  ObjectRecord potential_object;
+  ObjectRecord history_object;
+  std::string completion_policy = "BLOCKING";
+
+  std::string brief() const {
+    std::ostringstream oss;
+    oss << "request=" << request_id
+        << ", iter=" << scf_iteration
+        << ", episode=" << episode_id
+        << ", sw=" << software_family
+        << ", flow=" << flow_family
+        << ", arch=" << architecture_family
+        << ", offload_scope=" << offload_scope
+        << ", resident_policy=" << resident_policy
+        << ", resident_set=" << resident_set.resident_set_id
+        << ", batch=" << band_batch.batch_id
+        << ", diag_policy={" << diag_policy.brief() << "}"
+        << ", completion=" << completion_policy;
+    return oss.str();
+  }
+};
+
+struct DmaTransferDesc {
+  std::string transfer_id = "dma-0";
+  std::string channel_kind = "H2D_DMA";
+  std::string payload_kind = "opaque";
+  std::string src_scope = "HOST_DRAM";
+  std::string dst_scope = "DEVICE_HBM";
+  double kib = 0.0;
+  bool double_buffered = false;
+
+  std::string brief() const {
+    std::ostringstream oss;
+    oss << transfer_id
+        << ", channel=" << channel_kind
+        << ", payload=" << payload_kind
+        << ", " << src_scope << "->" << dst_scope
+        << ", kib=" << std::fixed << std::setprecision(2) << kib
+        << ", double_buffered=" << (double_buffered ? "yes" : "no");
     return oss.str();
   }
 };
@@ -702,6 +883,7 @@ struct EpisodeSummary {
 };
 
 struct EpisodeDescriptor {
+  int request_id = 0;
   int scf_iteration = 0;
   int episode_id = 0;
   int band_begin = 0;
@@ -720,6 +902,18 @@ struct EpisodeDescriptor {
   std::string workload_bucket = "medium";
   std::string projector_mode = "USPP";
   std::string preferred_diag_mode = "hardware";
+  std::string architecture_family = "F2";
+  std::string assumption_set_id = "default-assumptions";
+  std::string offload_scope = "balanced";
+  std::string resident_policy = "fit_first";
+  std::string confidence_label = "medium";
+  bool algorithm_contract_deviation = false;
+  std::string resident_set_id = "resident-default";
+  double resident_budget_scale = 1.0;
+  int max_device_diag_dim = 28;
+  double max_diag_condition_estimate = 1.65;
+  bool force_cpu_diag = false;
+  bool allow_cpu_diag_fallback = true;
   ObjectRecord wave_object;
   ObjectRecord density_object;
   ObjectRecord potential_object;
@@ -728,17 +922,21 @@ struct EpisodeDescriptor {
 
   std::string brief() const {
     std::ostringstream oss;
-    oss << "iter=" << scf_iteration
+    oss << "request=" << request_id
+        << ", iter=" << scf_iteration
         << ", episode=" << episode_id
         << ", sw=" << software_family
         << ", flow=" << flow_family
+        << ", arch=" << architecture_family
         << ", solver=" << solver_mode
         << ", bands=[" << band_begin << "," << (band_begin + band_count) << ")"
         << ", panels=" << panel_count
         << ", row_block=" << resident_row_block_size
         << ", bucket=" << workload_bucket
+        << ", resident_set=" << resident_set_id
         << ", projector=" << projector_mode
-        << ", diag=" << preferred_diag_mode;
+        << ", diag=" << preferred_diag_mode
+        << ", max_device_diag_dim=" << max_device_diag_dim;
     return oss.str();
   }
 };
@@ -807,6 +1005,7 @@ struct DiagSolutionDescriptor {
   int eigenpair_count = 0;
   double lambda_base = 0.0;
   double coeff_norm = 0.0;
+  double condition_estimate = 0.0;
   double residual_visibility_score = 0.0;
   double emitted_kib = 0.0;
   bool fallback_used = false;
@@ -818,6 +1017,7 @@ struct DiagSolutionDescriptor {
         << ", eigenpairs=" << eigenpair_count
         << ", lambda_base=" << std::fixed << std::setprecision(4) << lambda_base
         << ", coeff_norm=" << coeff_norm
+        << ", condition=" << condition_estimate
         << ", residual_score=" << residual_visibility_score
         << ", emitted_kib=" << emitted_kib
         << ", fallback=" << (fallback_used ? "yes" : "no")
@@ -923,8 +1123,65 @@ struct EpisodeResult {
   }
 };
 
+struct CompletionSummary {
+  int request_id = 0;
+  int scf_iteration = 0;
+  int episode_id = 0;
+  std::string architecture_family = "F2";
+  std::string assumption_set_id = "default-assumptions";
+  std::string offload_scope = "balanced";
+  std::string resident_policy = "fit_first";
+  std::string confidence_label = "medium";
+  bool algorithm_contract_deviation = false;
+  bool gold_pass = false;
+  std::string status = "created";
+  std::string completion_reason = "device_complete";
+  std::string diag_path = "device";
+  bool resident_reused = false;
+  bool spill_active = false;
+  bool used_device_fft = false;
+  bool cpu_diag_fallback = false;
+  int inner_steps = 0;
+  int lcw_words_issued = 0;
+  int row_blocks_processed = 0;
+  int device_busy_ref_cycles = 0;
+  int dma_ref_cycles = 0;
+  int host_assist_ref_cycles = 0;
+  double dma_read_kib = 0.0;
+  double dma_write_kib = 0.0;
+  double total_data_movement_kib = 0.0;
+  double residual_norm = 0.0;
+  double updated_vector_norm = 0.0;
+  ObjectRecord exported_wave_object;
+  EpisodeResult episode_result;
+
+  std::string brief() const {
+    std::ostringstream oss;
+    oss << "request=" << request_id
+        << ", iter=" << scf_iteration
+        << ", episode=" << episode_id
+        << ", arch=" << architecture_family
+        << ", status=" << status
+        << ", reason=" << completion_reason
+        << ", diag_path=" << diag_path
+        << ", confidence=" << confidence_label
+        << ", gold_pass=" << (gold_pass ? "yes" : "no")
+        << ", resident_reused=" << (resident_reused ? "yes" : "no")
+        << ", spill=" << (spill_active ? "yes" : "no")
+        << ", dma_read_kib=" << std::fixed << std::setprecision(4)
+        << dma_read_kib
+        << ", dma_write_kib=" << dma_write_kib
+        << ", device_busy_ref_cycles=" << device_busy_ref_cycles
+        << ", host_assist_ref_cycles=" << host_assist_ref_cycles
+        << ", residual=" << residual_norm;
+    return oss.str();
+  }
+};
+
 struct SCFIterationClusteredReport {
   int scf_iteration = 0;
+  ScfIterationRequest request;
+  CompletionSummary completion;
   EpisodeDescriptor descriptor;
   EpisodeResult episode;
   double rho_out_norm = 0.0;
@@ -938,7 +1195,7 @@ struct SCFIterationClusteredReport {
     std::ostringstream oss;
     oss << "iter=" << scf_iteration
         << ", solver=" << descriptor.solver_mode
-        << ", diag=" << episode.controller_state.cdiaghg_mode_selected
+        << ", diag=" << completion.diag_path
         << ", mixed_rho=" << std::fixed << std::setprecision(4) << mixed_rho_norm
         << ", density_delta=" << density_delta
         << ", energy=" << energy_after_iteration
@@ -951,26 +1208,44 @@ struct SCFRunReport {
   SystemRunConfig run_config;
   std::vector<SCFIterationClusteredReport> iterations;
   SCFState final_state;
+  std::string architecture_family = "F2";
+  std::string assumption_set_id = "default-assumptions";
   int total_episodes = 0;
   int total_lcw_words_issued = 0;
   int total_row_blocks_processed = 0;
   int total_ref_cycles = 0;
   int total_backpressure_ref_cycles = 0;
+  int total_device_busy_ref_cycles = 0;
+  int total_dma_ref_cycles = 0;
+  int total_host_assist_ref_cycles = 0;
+  int total_cpu_fallbacks = 0;
+  int resident_reuse_hits = 0;
   double total_data_movement_kib = 0.0;
+  double total_dma_read_kib = 0.0;
+  double total_dma_write_kib = 0.0;
   std::string convergence_reason = "max_scf_iters_reached";
 
   std::string brief() const {
     std::ostringstream oss;
     oss << "software=" << run_config.software_family
         << ", flow=" << run_config.flow_family
+        << ", arch_family=" << architecture_family
+        << ", assumption_set=" << assumption_set_id
         << ", iters=" << iterations.size()
         << ", episodes=" << total_episodes
         << ", lcw=" << total_lcw_words_issued
         << ", row_blocks=" << total_row_blocks_processed
         << ", ref_cycles=" << total_ref_cycles
         << ", bp_ref_cycles=" << total_backpressure_ref_cycles
+        << ", device_busy_ref_cycles=" << total_device_busy_ref_cycles
+        << ", dma_ref_cycles=" << total_dma_ref_cycles
+        << ", host_assist_ref_cycles=" << total_host_assist_ref_cycles
+        << ", cpu_fallbacks=" << total_cpu_fallbacks
+        << ", resident_reuse_hits=" << resident_reuse_hits
         << ", move_kib=" << std::fixed << std::setprecision(4)
         << total_data_movement_kib
+        << ", dma_read_kib=" << total_dma_read_kib
+        << ", dma_write_kib=" << total_dma_write_kib
         << ", convergence=" << convergence_reason;
     return oss.str();
   }

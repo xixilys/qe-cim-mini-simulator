@@ -28,11 +28,17 @@ ClusterCOutput ClusterCHardwareDiag::run(const ClusterCInput& input) const {
   const int t_companion =
       24 + diag_dim * 5 +
       (input.descriptor.workload_bucket == "large" ? 12 : 0);
+  const double condition_estimate =
+      1.10 + 0.04 * static_cast<double>(diag_dim) /
+                 static_cast<double>(std::max(1, eigenpair_count)) +
+      0.12 * (input.reduced.closure_score < 0.75 ? 1.0 : 0.0);
 
-  const bool range_overflow =
-      diag_dim > (input.descriptor.workload_bucket == "large" ? 24 : 32);
+  const bool range_overflow = diag_dim > input.descriptor.max_device_diag_dim;
+  const bool condition_overflow =
+      condition_estimate > input.descriptor.max_diag_condition_estimate;
   const bool force_fallback =
-      !input.controller_state.resident_fit || range_overflow ||
+      input.descriptor.force_cpu_diag || !input.controller_state.resident_fit ||
+      range_overflow || condition_overflow ||
       t_hw_diag >= t_companion;
 
   sc_core::wait(static_cast<double>(t_hw_diag), sc_core::SC_NS);
@@ -50,6 +56,7 @@ ClusterCOutput ClusterCHardwareDiag::run(const ClusterCInput& input) const {
   output.diag_solution.coeff_norm =
       0.55 + 0.03 * static_cast<double>(eigenpair_count) +
       0.12 * input.reduced.closure_score;
+  output.diag_solution.condition_estimate = condition_estimate;
   output.diag_solution.residual_visibility_score =
       0.30 + 0.04 * static_cast<double>(input.inner_step + 1);
   output.diag_solution.emitted_kib =
@@ -57,7 +64,7 @@ ClusterCOutput ClusterCHardwareDiag::run(const ClusterCInput& input) const {
       8.0 / 1024.0;
   output.diag_solution.fallback_used = force_fallback;
   output.diag_solution.source_domain =
-      force_fallback ? "CompanionBoundary" : "ClusterCHardwareDiag";
+      force_fallback ? "HostCPUFallbackBoundary" : "ClusterCHardwareDiag";
   output.metrics.cluster_name = "ClusterC";
   output.metrics.invocations = 1;
   output.metrics.accounted_ref_cycles = t_hw_diag;
@@ -68,7 +75,8 @@ ClusterCOutput ClusterCHardwareDiag::run(const ClusterCInput& input) const {
   output.metrics.detail =
       "T_C_input=" + std::to_string(t_input) +
       ", T_C_compute=" + std::to_string(t_compute) +
-      ", T_C_emit=" + std::to_string(t_emit);
+      ", T_C_emit=" + std::to_string(t_emit) +
+      ", cond=" + std::to_string(condition_estimate);
 
   log_line(name(), "Cluster C complete => " + output.metrics.brief());
   return output;

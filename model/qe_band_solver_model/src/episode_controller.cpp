@@ -18,17 +18,21 @@ EpisodeControllerState EpisodeController::begin_episode(
     state.fifo_ab_credit_limit = 3;
     state.fifo_bc_credit_limit = 2;
     state.fifo_cd_credit_limit = 2;
-    state.resident_budget_kib = 192.0;
+    state.resident_budget_kib = 192.0 * descriptor.resident_budget_scale;
   } else if (descriptor.workload_bucket == "large") {
     state.fifo_ab_credit_limit = 2;
     state.fifo_bc_credit_limit = 1;
     state.fifo_cd_credit_limit = 1;
-    state.resident_budget_kib = 448.0;
+    state.resident_budget_kib = 448.0 * descriptor.resident_budget_scale;
   } else {
     state.fifo_ab_credit_limit = 2;
     state.fifo_bc_credit_limit = 1;
     state.fifo_cd_credit_limit = 1;
-    state.resident_budget_kib = 384.0;
+    state.resident_budget_kib = 384.0 * descriptor.resident_budget_scale;
+  }
+
+  if (descriptor.resident_policy == "spill_tolerant") {
+    state.fifo_cd_credit_limit += 1;
   }
 
   state.estimated_resident_footprint_kib =

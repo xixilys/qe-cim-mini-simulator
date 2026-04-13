@@ -1,5 +1,10 @@
 .DS_Store
 .vscode/
+.agents/
+.claude/
+.cursor/
+.dr-claw/
+.gemini/
 *.log
 *.o
 
@@ -20,6 +25,9 @@ tmp_qe_*.in
 tmp_*_out/
 tmp_*_run.out
 ppt/
+reference/
 full_transcription.txt
 
 model/ozaki_subspace_model/docs/.DS_Store
+.omx/
+tmp/

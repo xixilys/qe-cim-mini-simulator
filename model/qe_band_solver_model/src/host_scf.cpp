@@ -1,5 +1,7 @@
+#include <algorithm>
 #include <cmath>
 
+#include "architecture_template.hpp"
 #include "host_scf.hpp"
 
 namespace qebs {
@@ -37,16 +39,6 @@ std::string projector_mode_for(const std::string& software_family,
   return "USPP";
 }
 
-std::string workload_bucket_for(int band_count) {
-  if (band_count <= 12) {
-    return "small";
-  }
-  if (band_count <= 24) {
-    return "medium";
-  }
-  return "large";
-}
-
 }  // namespace
 
 HostSCF::HostSCF(sc_core::sc_module_name name, Interconnect& fabric,
@@ -73,85 +65,155 @@ SCFState HostSCF::initialize_state(const SystemRunConfig& run_config) const {
   state.projector_object = {prefix + "_proj_seed", 0, 103, "HOST_INIT", "episode-window"};
   state.history_object = {prefix + "_hist_seed", 0, 104, "HOST_INIT", "full-run"};
 
-  log_line(name(), "HostSCF seeds cluster-first run context for " +
+  log_line(name(), "Host CPU seeds host-managed run context for " +
                        run_config.brief());
   return state;
 }
 
-EpisodeDescriptor HostSCF::make_episode_descriptor(const SCFState& state,
-                                                   const SystemRunConfig& run_config,
-                                                   int episode_id) const {
-  EpisodeDescriptor descriptor;
-  descriptor.scf_iteration = state.scf_iteration;
-  descriptor.episode_id = episode_id;
-  descriptor.band_begin = 0;
-  descriptor.enable_fft = run_config.enable_fft;
-  descriptor.software_family = run_config.software_family;
-  descriptor.flow_family = run_config.flow_family;
-  descriptor.precision_mode = "fp64-constrained";
-  descriptor.wave_object = state.wave_object;
-  descriptor.density_object = state.density_object;
-  descriptor.potential_object = state.potential_object;
-  descriptor.projector_object = state.projector_object;
-  descriptor.history_object = state.history_object;
+ResidentSetDesc HostSCF::make_resident_set_desc(const SCFState& state,
+                                                const SystemRunConfig& run_config,
+                                                int episode_id) const {
+  const auto template_config = resolve_architecture_template(run_config);
+  ResidentSetDesc resident;
+  resident.resident_set_id =
+      state_prefix(run_config.software_family, run_config.flow_family) + "_" +
+      projector_mode_for(run_config.software_family, run_config.flow_family) +
+      "_" + template_config.template_id + "_resident";
+  resident.generation = state.projector_object.version;
+  resident.software_family = run_config.software_family;
+  resident.projector_mode =
+      projector_mode_for(run_config.software_family, run_config.flow_family);
+  resident.projector_object = state.projector_object;
+  resident.potential_slice_object = {
+      state_prefix(run_config.software_family, run_config.flow_family) +
+          "_veff_slice_" + std::to_string(episode_id),
+      state.potential_object.version,
+      state.potential_object.resident_buffer_tag,
+      "HOST_VEFF_SLICE",
+      "episode-window"};
 
   if (run_config.software_family == "CP2K" && run_config.flow_family == "QS_OT") {
-    descriptor.band_count = 12 + 2 * (state.scf_iteration - 1);
-    descriptor.panel_count = 2 + (state.scf_iteration > 2 ? 1 : 0);
-    descriptor.panel_size = 12;
-    descriptor.resident_row_block_size = 3;
-    descriptor.max_inner_steps = 2;
-    descriptor.band_batch = 6;
-    descriptor.solver_mode = "OT_PRECOND_CG";
-    descriptor.support_grid_mode = "AUX_GRID";
+    resident.support_grid_mode = "AUX_GRID";
+    resident.resident_kib = 84.0;
+    resident.preload_kib = 52.0;
   } else if (run_config.software_family == "CP2K") {
-    descriptor.band_count = 20 + 2 * (state.scf_iteration - 1);
-    descriptor.panel_count = 3 + (state.scf_iteration > 1 ? 1 : 0);
-    descriptor.panel_size = 10;
-    descriptor.resident_row_block_size = 5;
-    descriptor.max_inner_steps = 2;
-    descriptor.band_batch = 8;
-    descriptor.solver_mode = "DBCSR_DIAG";
-    descriptor.support_grid_mode = "FFT_AUX";
+    resident.support_grid_mode = "FFT_AUX";
+    resident.resident_kib = 124.0;
+    resident.preload_kib = 72.0;
   } else if (run_config.software_family == "VASP" && run_config.flow_family == "FAST") {
-    descriptor.band_count = 24 + 2 * (state.scf_iteration - 1);
-    descriptor.panel_count = 4 + (state.scf_iteration > 2 ? 1 : 0);
-    descriptor.panel_size = 12;
-    descriptor.resident_row_block_size = 6;
-    descriptor.max_inner_steps = 2;
-    descriptor.band_batch = 8;
-    descriptor.solver_mode =
-        state.scf_iteration == 1 ? "BLOCKED_DAVIDSON" : "RMM_DIIS";
-    descriptor.support_grid_mode = "ADDGRID";
+    resident.support_grid_mode = "ADDGRID";
+    resident.resident_kib = 188.0;
+    resident.preload_kib = 116.0;
   } else if (run_config.software_family == "VASP") {
-    descriptor.band_count = 24 + 4 * (state.scf_iteration - 1);
-    descriptor.panel_count = 4 + (state.scf_iteration > 1 ? 1 : 0);
-    descriptor.panel_size = 12;
-    descriptor.resident_row_block_size = 6;
-    descriptor.max_inner_steps = 3;
-    descriptor.band_batch = 8;
-    descriptor.solver_mode = "BLOCKED_DAVIDSON";
-    descriptor.support_grid_mode = "FINE_GRID";
+    resident.support_grid_mode = "FINE_GRID";
+    resident.resident_kib = 236.0;
+    resident.preload_kib = 144.0;
   } else {
-    descriptor.band_count = 16 + 4 * (state.scf_iteration - 1);
-    descriptor.panel_count = 3 + (state.scf_iteration > 1 ? 1 : 0);
-    descriptor.panel_size = 8;
-    descriptor.resident_row_block_size = 4;
-    descriptor.max_inner_steps = 3;
-    descriptor.band_batch = 4;
-    descriptor.solver_mode = "DAVIDSON";
-    descriptor.support_grid_mode = "BYPASS";
+    resident.support_grid_mode = "BYPASS";
+    resident.resident_kib = 108.0;
+    resident.preload_kib = 64.0;
   }
 
-  descriptor.workload_bucket = workload_bucket_for(descriptor.band_count);
-  descriptor.projector_mode =
-      projector_mode_for(run_config.software_family, run_config.flow_family);
-  descriptor.preferred_diag_mode = "hardware";
-  return descriptor;
+  resident.resident_kib *= template_config.resident_budget_scale;
+  resident.preload_kib *= template_config.resident_budget_scale;
+  resident.reuse_fft_support =
+      template_config.enable_device_fft &&
+      (state.scf_iteration > 1 || run_config.software_family != "QE");
+  return resident;
+}
+
+BandBatchDesc HostSCF::make_band_batch_desc(const SCFState& state,
+                                            const SystemRunConfig& run_config,
+                                            int episode_id) const {
+  BandBatchDesc batch;
+  batch.batch_id = episode_id;
+  batch.kpoint_id = 0;
+  batch.band_begin = 0;
+  batch.wave_object = state.wave_object;
+
+  if (run_config.software_family == "CP2K" && run_config.flow_family == "QS_OT") {
+    batch.band_count = 12 + 2 * (state.scf_iteration - 1);
+    batch.panel_count = 2 + (state.scf_iteration > 2 ? 1 : 0);
+    batch.panel_size = 12;
+    batch.band_batch = 6;
+  } else if (run_config.software_family == "CP2K") {
+    batch.band_count = 20 + 2 * (state.scf_iteration - 1);
+    batch.panel_count = 3 + (state.scf_iteration > 1 ? 1 : 0);
+    batch.panel_size = 10;
+    batch.band_batch = 8;
+  } else if (run_config.software_family == "VASP" && run_config.flow_family == "FAST") {
+    batch.band_count = 24 + 2 * (state.scf_iteration - 1);
+    batch.panel_count = 4 + (state.scf_iteration > 2 ? 1 : 0);
+    batch.panel_size = 12;
+    batch.band_batch = 8;
+  } else if (run_config.software_family == "VASP") {
+    batch.band_count = 24 + 4 * (state.scf_iteration - 1);
+    batch.panel_count = 4 + (state.scf_iteration > 1 ? 1 : 0);
+    batch.panel_size = 12;
+    batch.band_batch = 8;
+  } else {
+    batch.band_count = 16 + 4 * (state.scf_iteration - 1);
+    batch.panel_count = 3 + (state.scf_iteration > 1 ? 1 : 0);
+    batch.panel_size = 8;
+    batch.band_batch = 4;
+  }
+
+  batch.input_wave_kib =
+      static_cast<double>(batch.band_batch * batch.panel_count * batch.panel_size) *
+      16.0 / 1024.0;
+  batch.output_wave_kib =
+      static_cast<double>(batch.band_batch * batch.panel_size) * 16.0 / 1024.0;
+  batch.double_buffered = batch.panel_count >= 3;
+  return batch;
+}
+
+DiagPolicy HostSCF::make_diag_policy(const SystemRunConfig& run_config,
+                                     const BandBatchDesc& batch) const {
+  const auto template_config = resolve_architecture_template(run_config);
+  DiagPolicy policy;
+  policy.preferred_device_mode =
+      template_config.force_host_diag ? "fallback_companion" : "hardware";
+  policy.max_device_diag_dim =
+      std::max(batch.band_batch, template_config.device_diag_max_dim);
+  policy.max_condition_estimate =
+      run_config.software_family == "VASP" ? 1.45 : 1.65;
+  policy.require_resident_fit = template_config.resident_policy != "spill_tolerant";
+  policy.allow_cpu_fallback = template_config.allow_cpu_diag_fallback;
+  policy.force_cpu_diag = template_config.force_host_diag;
+  return policy;
+}
+
+ScfIterationRequest HostSCF::make_iteration_request(
+    const SCFState& state, const SystemRunConfig& run_config, int episode_id) const {
+  const auto template_config = resolve_architecture_template(run_config);
+  ScfIterationRequest request;
+  request.request_id = 1000 + episode_id;
+  request.scf_iteration = state.scf_iteration;
+  request.episode_id = episode_id;
+  request.software_family = run_config.software_family;
+  request.flow_family = run_config.flow_family;
+  request.architecture_family = template_config.template_id;
+  request.assumption_set_id = run_config.assumption_set_id;
+  request.offload_scope = template_config.offload_scope;
+  request.resident_policy = template_config.resident_policy;
+  request.confidence_label = template_config.confidence_label;
+  request.algorithm_contract_deviation =
+      template_config.algorithm_contract_deviation;
+  request.enable_fft = run_config.enable_fft && template_config.enable_device_fft;
+  request.resident_set = make_resident_set_desc(state, run_config, episode_id);
+  request.band_batch = make_band_batch_desc(state, run_config, episode_id);
+  request.diag_policy = make_diag_policy(run_config, request.band_batch);
+  request.density_object = state.density_object;
+  request.potential_object = state.potential_object;
+  request.history_object = state.history_object;
+  request.completion_policy = "BLOCKING";
+  return request;
 }
 
 SCFIterationClusteredReport HostSCF::finalize_iteration(
-    const EpisodeResult& episode, SCFState& state) const {
+    const ScfIterationRequest& request, const CompletionSummary& completion,
+    SCFState& state) const {
+  const auto& episode = completion.episode_result;
   const auto& descriptor = episode.descriptor;
   const bool is_cp2k = descriptor.software_family == "CP2K";
   const bool is_vasp = descriptor.software_family == "VASP";
@@ -162,6 +224,8 @@ SCFIterationClusteredReport HostSCF::finalize_iteration(
 
   SCFIterationClusteredReport iteration;
   iteration.scf_iteration = descriptor.scf_iteration;
+  iteration.request = request;
+  iteration.completion = completion;
   iteration.descriptor = descriptor;
   iteration.episode = episode;
   iteration.rho_out_norm =
@@ -174,7 +238,7 @@ SCFIterationClusteredReport HostSCF::finalize_iteration(
   iteration.density_delta =
       0.18 / static_cast<double>(descriptor.scf_iteration) +
       0.015 * episode.residual_norm +
-      0.005 * (episode.controller_state.cdiaghg_mode_selected == "fallback_companion"
+      0.005 * (completion.cpu_diag_fallback
                    ? 1.0
                    : 0.0);
   iteration.mixed_rho_norm = std::max(1e-6, state.rho_norm - iteration.density_delta);
@@ -195,7 +259,7 @@ SCFIterationClusteredReport HostSCF::finalize_iteration(
   state.total_energy = iteration.energy_after_iteration;
   state.converged = iteration.converged;
   state.last_density_delta = iteration.density_delta;
-  state.last_data_movement_kib = episode.total_data_movement_kib;
+  state.last_data_movement_kib = completion.total_data_movement_kib;
   state.wave_object = episode.p_next_object;
   state.density_object = {prefix + "_rho_iter_" + std::to_string(descriptor.scf_iteration),
                           descriptor.scf_iteration,
@@ -208,25 +272,28 @@ SCFIterationClusteredReport HostSCF::finalize_iteration(
       300 + descriptor.scf_iteration,
       "HOST_OUTER_SHELL",
       "scf-iteration"};
-  state.projector_object = {
-      prefix + "_proj_state_iter_" + std::to_string(descriptor.scf_iteration),
-      descriptor.scf_iteration,
-      320 + descriptor.scf_iteration,
-      "HOST_OUTER_SHELL",
-      "episode-window"};
+  if (descriptor.software_family == "VASP") {
+    state.projector_object = {
+        prefix + "_proj_state_iter_" + std::to_string(descriptor.scf_iteration),
+        descriptor.scf_iteration,
+        320 + descriptor.scf_iteration,
+        "HOST_OUTER_SHELL",
+        "episode-window"};
+  }
   state.history_object = {prefix + "_hist_iter_" + std::to_string(descriptor.scf_iteration),
                           descriptor.scf_iteration,
                           420 + descriptor.scf_iteration,
                           "HOST_OUTER_SHELL",
                           "full-run"};
 
-  log_line(name(), "Cluster-first iteration report => " + iteration.brief());
-  log_line(name(), "Episode controller => " + episode.controller_state.brief());
-  log_line(name(), "Cluster A => " + episode.cluster_a.brief());
-  log_line(name(), "Cluster B => " + episode.cluster_b.brief());
-  log_line(name(), "Cluster C => " + episode.cluster_c.brief());
-  log_line(name(), "Cluster D => " + episode.cluster_d.brief());
-  log_line(name(), "SCF state update => " + state.brief());
+  log_line(name(), "Host-managed iteration report => " + iteration.brief());
+  log_line(name(), "Completion summary => " + completion.brief());
+  log_line(name(), "Device controller => " + episode.controller_state.brief());
+  log_line(name(), "Hardware datapath Cluster A => " + episode.cluster_a.brief());
+  log_line(name(), "Hardware datapath Cluster B => " + episode.cluster_b.brief());
+  log_line(name(), "Hardware datapath Cluster C => " + episode.cluster_c.brief());
+  log_line(name(), "Hardware datapath Cluster D => " + episode.cluster_d.brief());
+  log_line(name(), "Host SCF state update => " + state.brief());
 
   return iteration;
 }
@@ -234,23 +301,39 @@ SCFIterationClusteredReport HostSCF::finalize_iteration(
 SCFRunReport HostSCF::run_full_flow(const SystemRunConfig& run_config) const {
   SCFRunReport report;
   report.run_config = run_config;
+  report.architecture_family = run_config.architecture_family;
+  report.assumption_set_id = run_config.assumption_set_id;
 
   SCFState state = initialize_state(run_config);
   for (int iter = 1; iter <= run_config.max_scf_iters; ++iter) {
     state.scf_iteration = iter;
-    const auto descriptor = make_episode_descriptor(state, run_config, 100 + iter);
-    log_line(name(), "HostSCF launches cluster-first episode: " + descriptor.brief());
-    fabric_.host_to_fpga("dispatch cluster-first episode " + descriptor.brief());
-    const auto episode = fpga_.execute_episode(descriptor);
-    fabric_.fpga_to_host("cluster-first episode return " + episode.brief());
+    sc_core::wait(8.0, sc_core::SC_NS);
+    log_line(name(), "Host CPU completes rho->Veff stage for iter " +
+                         std::to_string(iter));
 
-    auto iteration = finalize_iteration(episode, state);
+    const auto request = make_iteration_request(state, run_config, 100 + iter);
+    log_line(name(), "Host CPU submits inner hot-path request: " + request.brief());
+    const auto completion = fpga_.execute_iteration(request);
+
+    sc_core::wait(6.0, sc_core::SC_NS);
+    log_line(name(), "Host CPU consumes returned wave/density summary for iter " +
+                         std::to_string(iter));
+
+    auto iteration = finalize_iteration(request, completion, state);
     report.total_episodes += 1;
-    report.total_lcw_words_issued += episode.lcw_words_issued;
-    report.total_row_blocks_processed += episode.row_blocks_processed;
-    report.total_ref_cycles += episode.total_ref_cycles;
-    report.total_backpressure_ref_cycles += episode.total_backpressure_ref_cycles;
-    report.total_data_movement_kib += episode.total_data_movement_kib;
+    report.total_lcw_words_issued += completion.lcw_words_issued;
+    report.total_row_blocks_processed += completion.row_blocks_processed;
+    report.total_ref_cycles += completion.episode_result.total_ref_cycles;
+    report.total_backpressure_ref_cycles +=
+        completion.episode_result.total_backpressure_ref_cycles;
+    report.total_device_busy_ref_cycles += completion.device_busy_ref_cycles;
+    report.total_dma_ref_cycles += completion.dma_ref_cycles;
+    report.total_host_assist_ref_cycles += completion.host_assist_ref_cycles;
+    report.total_cpu_fallbacks += completion.cpu_diag_fallback ? 1 : 0;
+    report.resident_reuse_hits += completion.resident_reused ? 1 : 0;
+    report.total_data_movement_kib += completion.total_data_movement_kib;
+    report.total_dma_read_kib += completion.dma_read_kib;
+    report.total_dma_write_kib += completion.dma_write_kib;
     report.iterations.push_back(iteration);
 
     if (state.converged) {
@@ -263,7 +346,7 @@ SCFRunReport HostSCF::run_full_flow(const SystemRunConfig& run_config) const {
   if (!state.converged) {
     report.convergence_reason = "max_scf_iters_reached";
   }
-  log_line(name(), "Cluster-first full-flow report => " + report.brief());
+  log_line(name(), "Host-managed full-SCF report => " + report.brief());
   return report;
 }
 

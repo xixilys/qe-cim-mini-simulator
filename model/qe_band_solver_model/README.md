@@ -1,14 +1,22 @@
-# QE / CP2K / VASP-facing full-SCF system demo
+# QE / CP2K / VASP-facing host-managed full-SCF system demo
 
-This directory contains a **timed-functional SystemC-style demo** for a **DFT hybrid system model**.
+This directory contains a **timed-functional TLM-style/SystemC-style demo** for a **DFT hybrid system model**.
 
 ## Scope
 
 Implemented behavior-level flow:
 
-`DFTHybridSystem -> HostSCF -> FPGAOrchestrator -> ChipTop -> EpisodeController -> ClusterGraphExecutor -> Cluster A/B/C/D -> next SCF iteration`
+`DFTHybridSystem -> HostSCF (CPU runtime) -> FPGAOrchestrator (thin device runtime) -> ChipTop -> EpisodeController -> ClusterGraphExecutor -> Cluster A/B/C/D -> next SCF iteration`
 
-The current promoted model treats the old replay/body path as a legacy compatibility layer and runs the main episode path through a **cluster-first control plane**:
+The current promoted model treats the old replay/body path as a legacy compatibility layer and exposes a **host-device-first control contract**:
+
+- `ResidentSetDesc`
+- `BandBatchDesc`
+- `ScfIterationRequest`
+- `DiagPolicy`
+- `CompletionSummary`
+
+Those public objects are then mapped into the existing internal hardware execution path:
 
 - `EpisodeDescriptor -> EpisodeControllerState -> EpisodeResult`
 - a persistent episode controller that owns workload bucket, resident-fit, FIFO-credit, spill, and diag-mode decisions
@@ -20,7 +28,15 @@ The current promoted model treats the old replay/body path as a legacy compatibi
 - a single top-level `DFTHybridSystem` object;
 - software-family selection for `QE`, `CP2K/QS_DIAG`, `CP2K/QS_OT`, `VASP/BLOCKED_DAVIDSON`, and `VASP/FAST`-style flows.
 
-This demo is still **not a numerically faithful DFT implementation**. It is a **timed-functional cluster-first system model** that preserves the `Host -> FPGA -> Chip` transaction boundaries while moving the main runnable path away from replay/body accounting and toward explicit `Cluster A/B/C/D` execution.
+In addition, the runnable model now has a **bootstrap architecture-family layer** for system-level DSE:
+
+- `F1` — Host-heavy / single-hotpath
+- `F2` — Balanced hybrid / multi-operator pipeline
+- `F3` — Device-heavy / full inner-loop offload
+
+These family tags currently steer request/runtime policy, diag/offload defaults, resident-budget scaling, and reporting fields. They are the phase-1 scaffold for the later multi-family DSE harness.
+
+This demo is still **not a numerically faithful DFT implementation**. It is a **host-managed timed-functional system model** that preserves `Host CPU -> thin device runtime -> hardware datapath` boundaries, models control plus DMA/completion traffic, and keeps `Cluster A/B/C/D` as an internal hardware realization instead of the public API.
 
 ## QE shell-stage view
 
@@ -31,7 +47,14 @@ For the `QE / CBANDS_DIAG` path, the current model still closes the same shell c
 - `psi -> rho_out`
 - `mix_rho / convergence gate`
 
-What changed is the internal execution anchor:
+What changed is the system contract:
+
+- `HostSCF` now owns `rho -> Veff`, outer `SCF` control, `mix_rho`, convergence, and diag fallback policy
+- `FPGAOrchestrator` now behaves as a thin device runtime that manages resident preload, batch DMA, host-diag assist, and completion summaries
+- `Interconnect` now models TLM-style control and DMA transactions instead of plain string-only channels
+- `ChipTop` still reuses `Cluster A/B/C/D` as the inner hardware datapath
+
+What remains as the internal execution anchor:
 
 - `h_psi` + `s_psi` now live under `Cluster A`
 - `build H_sub / S_sub` now lives under `Cluster B`
@@ -43,8 +66,10 @@ What changed is the internal execution anchor:
 
 Current modeling-level judgement:
 
-- `Host/FPGA` remains mainly **transaction/object-level**
-- `ChipTop` is now a **cluster-first timed-functional executor**
+- `HostSCF` is now a **CPU-side control runtime**
+- `FPGAOrchestrator` is now a **thin device runtime / bridge**
+- `Interconnect` is now a **control + DMA + completion transaction model**
+- `ChipTop` remains a **cluster-first timed-functional executor**
 - `Cluster A/B` reuse the old Phase-B leaf modules as datapath blocks, but are no longer dispatched through `ReplayBundleExecutor`
 - `Cluster C` is a standalone hardware-first diagonalization proxy
 - `Cluster D` is a standalone refresh/residual cluster instead of a host-side accounting split
@@ -52,7 +77,7 @@ Current modeling-level judgement:
 
 In short, this directory should be read as:
 
-> a `QE`-connected cluster-first timed-functional runnable model with explicit `EpisodeController + Cluster A/B/C/D` execution,
+> a host-managed `QE / CP2K / VASP` full-SCF runnable model with explicit CPU/device/data-movement contracts and an internal `Cluster A/B/C/D` hardware datapath,
 > not as a numerically faithful DFT solver or a frozen RTL-level chip model.
 
 ## Top-level modules
@@ -117,7 +142,7 @@ In short, this directory should be read as:
 
 - `sc_main.cpp` — executable entry with env-configured software/flow selection
 - `src/dft_hybrid_system.*` — explicit full-system top module
-- `include/types.hpp` — current type home for both the new cluster-first types (`EpisodeDescriptor`, `EpisodeResult`, `SCFRunReport`, etc.) and the retained legacy replay/body types
+- `include/types.hpp` — current type home for the host-device-first public objects (`ResidentSetDesc`, `BandBatchDesc`, `ScfIterationRequest`, `DiagPolicy`, `CompletionSummary`), the internal cluster-first types (`EpisodeDescriptor`, `EpisodeResult`, `SCFRunReport`, etc.), and the retained legacy replay/body types
 - `src/episode_controller.*` — persistent cluster-first controller
 - `src/cluster_graph_executor.*` — ordered A/B/C/D executor
 - `src/cluster_a_operator_sweep.*` — fused operator-sweep cluster
@@ -131,9 +156,9 @@ In short, this directory should be read as:
 - `src/rebind_commit.*` — `BODY_10B` rebound-wave/projector commit leaf block
 - `src/history_integrator.*` — `BODY_10C` history integration leaf block
 - `src/ot_summary_commit.*` — `BODY_10C` summary export leaf block
-- `src/interconnect.*` — host/FPGA/chip channel abstraction
-- `src/host_scf.*` — outer SCF driver
-- `src/fpga_orchestrator.*` — runtime orchestration for Phase B, `BODY_10`, and `BODY_04`
+- `src/interconnect.*` — control / DMA / completion transaction abstraction with TLM-style `b_transport`
+- `src/host_scf.*` — CPU-side SCF driver and host-managed request generator
+- `src/fpga_orchestrator.*` — thin device runtime that manages resident reuse, DMA, and host-diag fallback
 - `src/chip_top.*` — on-chip Phase-B replay facade
 - `src/density_accumulation_stage.*` — `Phase C / sum_band` stage wrapper
 - `src/density_accumulator_unit.*` — density reduction block inside `Phase C`
@@ -223,6 +248,43 @@ QEBS_SOFTWARE_FAMILY=VASP QEBS_FLOW_FAMILY=FAST \
 - `QEBS_ENABLE_FFT`
 - `QEBS_SOFTWARE_FAMILY`
 - `QEBS_FLOW_FAMILY`
+- `QEBS_DEVICE_DIAG_MAX_DIM`
+- `QEBS_FORCE_HOST_DIAG`
+- `QEBS_ALLOW_CPU_DIAG_FALLBACK`
+- `QEBS_ARCH_FAMILY`
+- `QEBS_ASSUMPTION_SET_ID`
+- `QEBS_OFFLOAD_SCOPE`
+- `QEBS_RESIDENT_POLICY`
+- `QEBS_CASE_ID`
+- `QEBS_RESULT_JSON`
+
+### Canonical candidate JSON export
+
+The runnable model can emit a machine-readable candidate result JSON for the QE gold comparison lane and the architecture-family DSE sweep.
+
+Example smoke runs:
+
+```bash
+mkdir -p tmp
+
+QEBS_ARCH_FAMILY=F1 QEBS_MAX_SCF_ITERS=1 \
+QEBS_CASE_ID=si8_pbe_nc \
+QEBS_RESULT_JSON=./tmp/qebs_f1_candidate.json \
+./model/qe_band_solver_model/build/qe_band_solver_model
+
+QEBS_ARCH_FAMILY=F3 QEBS_MAX_SCF_ITERS=1 \
+QEBS_CASE_ID=si8_pbe_nc \
+QEBS_RESULT_JSON=./tmp/qebs_f3_candidate.json \
+./model/qe_band_solver_model/build/qe_band_solver_model
+```
+
+`QEBS_RESULT_JSON` writes the canonical candidate payload, while `QEBS_CASE_ID` carries the workload identity into that JSON so it can be compared against normalized QE gold baselines.
+
+## Architecture Note
+
+The host-device-first architecture writeup for this runnable model lives at:
+
+- [/Volumes/remote/phd/year_2/project/dft加速/docs/architecture/host_managed_full_scf_architecture_v1_20260409.md](/Volumes/remote/phd/year_2/project/dft加速/docs/architecture/host_managed_full_scf_architecture_v1_20260409.md)
 
 ## Phase-B Leaf Chains
 
@@ -238,11 +300,11 @@ These chains already carry explicit `accept / busy / complete`, queue-depth, rou
 
 A run prints timestamped logs that show:
 
-1. `BODY_05` outer-SCF setup and `BODY_00` object binding
-2. Host lowering each iteration into `ReplayBundleDescriptor`
-3. `FPGAOrchestrator` forwarding replay bundles to `ReplayBundleExecutor`
-4. For `Phase B`, `ReplayBundleExecutor` dispatching `BODY_01/BODY_02/BODY_03` into `ChipTop`
-5. `ChipTop` executing:
+1. `HostSCF` doing outer-shell `rho -> Veff` work on CPU
+2. `HostSCF` issuing `ScfIterationRequest` with `ResidentSetDesc`, `BandBatchDesc`, and `DiagPolicy`
+3. `Interconnect` showing control and DMA `b_transport` activity
+4. `FPGAOrchestrator` preloading resident state, streaming the active batch, and launching device execution
+5. `ChipTop` executing the internal hardware datapath:
    - panel staging in `NearSRAMSupport`
    - optional FFT transform in `FFTCompanion`
    - optional support-grid staging in `NearMemoryDomain`
@@ -253,11 +315,11 @@ A run prints timestamped logs that show:
    - `RowMergeTree` / `NearSRAMRowBuffer` partial commit
    - local aggregation in `NearMemoryDomain`
    - reduced-space closure in `ReductionClosureEngine`
-   - residual/update in `VectorDiagCompanion`
-6. For `CP2K/QS_OT`, `ReplayBundleExecutor` dispatching the runtime-managed `BODY_10` bundle
-7. `ReplayBundleExecutor` dispatching the runtime-managed `BODY_04` family bundle
-8. `Body04FamilyController` forwarding into `OuterUpdateRuntimeDomain`
-9. `OuterUpdateRuntimeDomain` emitting `Body04LoweringPlan` and then running `DensityAccumulationStage -> PotentialRefreshStage -> MixingConvergenceStage`
+   - hardware-first diagonalization in `Cluster C`
+   - refresh / residual update in `Cluster D`
+6. When needed, the thin device runtime exporting reduced matrices to Host CPU, waiting for host-diag assist, and importing the diag solution back
+7. `FPGAOrchestrator` emitting `CompletionSummary`
+8. `HostSCF` consuming the returned wave/update objects and continuing `mix_rho / convergence`
 10. For `BODY_10`, `PreconditionedUpdateVector / WaveCandidateCommit`, `OrthogonalizeUnit / RebindCommit`, and `HistoryIntegrator / OTSummaryCommit` run in sequence
 11. Inside `BODY_04`, `DensityAccumulatorUnit / DensityCommitUnit`, `PotentialFieldUnit / ProjectorStateUpdater`, and `DensityMixerUnit / ConvergenceTracker` run in sequence
 12. Host collecting a per-iteration report and final `DFTRunReport`

@@ -1,0 +1,662 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openlair.local/docs/benchmarks/systemc_architecture_family_dse_result_schema_v0.json",
+  "title": "SystemC Architecture Family DSE Result Bundle v0",
+  "description": "Machine-readable schema for architecture-family system-level DSE outputs used by the SystemC/QE shell bootstrap flow.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "result_bundle_kind",
+    "generated_at_utc",
+    "experiment",
+    "results",
+    "family_summary"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "systemc_architecture_family_dse_result_schema_v0"
+    },
+    "result_bundle_kind": {
+      "const": "architecture_family_dse_bundle"
+    },
+    "generated_at_utc": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "experiment": {
+      "$ref": "#/$defs/experiment"
+    },
+    "results": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/result_row"
+      }
+    },
+    "family_summary": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/family_summary"
+      }
+    },
+    "notes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "$defs": {
+    "nullable_boolean": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "nullable_integer": {
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "nullable_number": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "nullable_string": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "nullable_string_array": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "string"
+      }
+    },
+    "range": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "required": [
+        "lower",
+        "upper",
+        "units"
+      ],
+      "properties": {
+        "lower": {
+          "type": "number"
+        },
+        "upper": {
+          "type": "number"
+        },
+        "units": {
+          "type": "string"
+        }
+      }
+    },
+    "experiment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "run_id",
+        "producer_script",
+        "schema_path",
+        "source_model",
+        "assumption_set_id",
+        "qe_tolerance_schema_id",
+        "sweep_axes",
+        "workloads",
+        "excluded_engineering_knobs"
+      ],
+      "properties": {
+        "run_id": {
+          "type": "string"
+        },
+        "producer_script": {
+          "type": "string"
+        },
+        "schema_path": {
+          "type": "string"
+        },
+        "source_model": {
+          "type": "string"
+        },
+        "assumption_set_id": {
+          "type": "string"
+        },
+        "qe_tolerance_schema_id": {
+          "type": "string"
+        },
+        "source_kind": {
+          "enum": [
+            "stub",
+            "timed_functional_proxy",
+            "trace_calibrated_proxy",
+            "measured",
+            "mixed"
+          ]
+        },
+        "sweep_axes": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "family",
+            "diag_policy",
+            "offload_scope",
+            "resident_policy"
+          ],
+          "properties": {
+            "family": {
+              "type": "array",
+              "items": {
+                "enum": [
+                  "F1",
+                  "F2",
+                  "F3"
+                ]
+              }
+            },
+            "diag_policy": {
+              "type": "array",
+              "items": {
+                "enum": [
+                  "cpu_only",
+                  "device_first_fallback",
+                  "aggressive_device"
+                ]
+              }
+            },
+            "offload_scope": {
+              "type": "array",
+              "items": {
+                "enum": [
+                  "single_hotpath",
+                  "balanced",
+                  "device_heavy"
+                ]
+              }
+            },
+            "resident_policy": {
+              "type": "array",
+              "items": {
+                "enum": [
+                  "fit_first",
+                  "spill_tolerant"
+                ]
+              }
+            }
+          }
+        },
+        "workloads": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/workload"
+          }
+        },
+        "excluded_engineering_knobs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "workload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "workload_id",
+        "label",
+        "software_family",
+        "flow_family",
+        "trait_bucket",
+        "lane",
+        "gold_required"
+      ],
+      "properties": {
+        "workload_id": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "software_family": {
+          "enum": [
+            "QE",
+            "VASP",
+            "CP2K"
+          ]
+        },
+        "flow_family": {
+          "type": "string"
+        },
+        "trait_bucket": {
+          "type": "string"
+        },
+        "lane": {
+          "enum": [
+            "qe_gold",
+            "portability"
+          ]
+        },
+        "gold_required": {
+          "type": "boolean"
+        }
+      }
+    },
+    "result_row": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "result_id",
+        "result_status",
+        "source_kind",
+        "workload",
+        "design_point",
+        "comparison_contract",
+        "correctness",
+        "primary_metrics",
+        "secondary_metrics",
+        "energy_ledger",
+        "projection",
+        "artifacts",
+        "stub_reason"
+      ],
+      "properties": {
+        "result_id": {
+          "type": "string"
+        },
+        "result_status": {
+          "enum": [
+            "stub",
+            "pending_model_integration",
+            "complete",
+            "invalid"
+          ]
+        },
+        "source_kind": {
+          "enum": [
+            "stub",
+            "timed_functional_proxy",
+            "trace_calibrated_proxy",
+            "measured",
+            "mixed"
+          ]
+        },
+        "workload": {
+          "$ref": "#/$defs/workload"
+        },
+        "design_point": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "family",
+            "diag_policy",
+            "offload_scope",
+            "resident_policy",
+            "canonical_profile_match"
+          ],
+          "properties": {
+            "family": {
+              "enum": [
+                "F1",
+                "F2",
+                "F3"
+              ]
+            },
+            "diag_policy": {
+              "enum": [
+                "cpu_only",
+                "device_first_fallback",
+                "aggressive_device"
+              ]
+            },
+            "offload_scope": {
+              "enum": [
+                "single_hotpath",
+                "balanced",
+                "device_heavy"
+              ]
+            },
+            "resident_policy": {
+              "enum": [
+                "fit_first",
+                "spill_tolerant"
+              ]
+            },
+            "canonical_profile_match": {
+              "type": "boolean"
+            }
+          }
+        },
+        "comparison_contract": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "qe_baseline_id",
+            "qe_tolerance_schema_id",
+            "accounting_boundary_id",
+            "algorithm_contract_deviation",
+            "gold_required"
+          ],
+          "properties": {
+            "qe_baseline_id": {
+              "type": "string"
+            },
+            "qe_tolerance_schema_id": {
+              "type": "string"
+            },
+            "accounting_boundary_id": {
+              "type": "string"
+            },
+            "algorithm_contract_deviation": {
+              "type": "boolean"
+            },
+            "gold_required": {
+              "type": "boolean"
+            }
+          }
+        },
+        "correctness": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "gold_pass",
+            "final_total_energy_match",
+            "residual_threshold_state_match",
+            "converged_state_match",
+            "final_total_energy_abs_err_ev",
+            "final_total_energy_rel_err",
+            "notes"
+          ],
+          "properties": {
+            "status": {
+              "enum": [
+                "pending",
+                "pass",
+                "fail",
+                "partial"
+              ]
+            },
+            "gold_pass": {
+              "$ref": "#/$defs/nullable_boolean"
+            },
+            "final_total_energy_match": {
+              "$ref": "#/$defs/nullable_boolean"
+            },
+            "residual_threshold_state_match": {
+              "$ref": "#/$defs/nullable_boolean"
+            },
+            "converged_state_match": {
+              "$ref": "#/$defs/nullable_boolean"
+            },
+            "final_total_energy_abs_err_ev": {
+              "$ref": "#/$defs/nullable_number"
+            },
+            "final_total_energy_rel_err": {
+              "$ref": "#/$defs/nullable_number"
+            },
+            "notes": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "primary_metrics": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "time_to_convergence_s",
+            "speedup_to_convergence",
+            "energy_to_convergence_j",
+            "scf_iterations_to_convergence",
+            "bytes_moved_to_convergence",
+            "fallback_count_to_convergence"
+          ],
+          "properties": {
+            "time_to_convergence_s": {
+              "$ref": "#/$defs/nullable_number"
+            },
+            "speedup_to_convergence": {
+              "$ref": "#/$defs/nullable_number"
+            },
+            "energy_to_convergence_j": {
+              "$ref": "#/$defs/nullable_number"
+            },
+            "scf_iterations_to_convergence": {
+              "$ref": "#/$defs/nullable_integer"
+            },
+            "bytes_moved_to_convergence": {
+              "$ref": "#/$defs/nullable_number"
+            },
+            "fallback_count_to_convergence": {
+              "$ref": "#/$defs/nullable_integer"
+            }
+          }
+        },
+        "secondary_metrics": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "device_busy_ref_cycles",
+            "dma_ref_cycles",
+            "host_assist_ref_cycles",
+            "resident_reuse_hits",
+            "spill_ratio",
+            "fallback_ratio",
+            "complexity_proxy"
+          ],
+          "properties": {
+            "device_busy_ref_cycles": {
+              "$ref": "#/$defs/nullable_number"
+            },
+            "dma_ref_cycles": {
+              "$ref": "#/$defs/nullable_number"
+            },
+            "host_assist_ref_cycles": {
+              "$ref": "#/$defs/nullable_number"
+            },
+            "resident_reuse_hits": {
+              "$ref": "#/$defs/nullable_integer"
+            },
+            "spill_ratio": {
+              "$ref": "#/$defs/nullable_number"
+            },
+            "fallback_ratio": {
+              "$ref": "#/$defs/nullable_number"
+            },
+            "complexity_proxy": {
+              "enum": [
+                "low",
+                "medium",
+                "high",
+                "pending"
+              ]
+            }
+          }
+        },
+        "energy_ledger": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "E_host_j",
+            "E_device_runtime_j",
+            "E_dma_j",
+            "E_hardware_datapath_j",
+            "E_idle_static_j"
+          ],
+          "properties": {
+            "E_host_j": {
+              "$ref": "#/$defs/nullable_number"
+            },
+            "E_device_runtime_j": {
+              "$ref": "#/$defs/nullable_number"
+            },
+            "E_dma_j": {
+              "$ref": "#/$defs/nullable_number"
+            },
+            "E_hardware_datapath_j": {
+              "$ref": "#/$defs/nullable_number"
+            },
+            "E_idle_static_j": {
+              "$ref": "#/$defs/nullable_number"
+            }
+          }
+        },
+        "projection": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "speedup_to_convergence_range",
+            "energy_to_convergence_range_j",
+            "confidence",
+            "assumption_set_id",
+            "ranking_grade_ready",
+            "projection_grade_ready"
+          ],
+          "properties": {
+            "speedup_to_convergence_range": {
+              "$ref": "#/$defs/range"
+            },
+            "energy_to_convergence_range_j": {
+              "$ref": "#/$defs/range"
+            },
+            "confidence": {
+              "enum": [
+                "high",
+                "medium",
+                "exploratory",
+                "pending"
+              ]
+            },
+            "assumption_set_id": {
+              "type": "string"
+            },
+            "ranking_grade_ready": {
+              "type": "boolean"
+            },
+            "projection_grade_ready": {
+              "type": "boolean"
+            }
+          }
+        },
+        "artifacts": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "model_run_id",
+            "stdout_path",
+            "metrics_path",
+            "raw_trace_paths"
+          ],
+          "properties": {
+            "model_run_id": {
+              "$ref": "#/$defs/nullable_string"
+            },
+            "stdout_path": {
+              "$ref": "#/$defs/nullable_string"
+            },
+            "metrics_path": {
+              "$ref": "#/$defs/nullable_string"
+            },
+            "raw_trace_paths": {
+              "$ref": "#/$defs/nullable_string_array"
+            }
+          }
+        },
+        "stub_reason": {
+          "type": "string"
+        }
+      }
+    },
+    "family_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "family",
+        "canonical_diag_policy",
+        "canonical_offload_scope",
+        "canonical_resident_policy",
+        "result_count",
+        "ranking_grade_status",
+        "projection_grade_status",
+        "confidence",
+        "recommended_cpu_device_split",
+        "recommended_operator_set"
+      ],
+      "properties": {
+        "family": {
+          "enum": [
+            "F1",
+            "F2",
+            "F3"
+          ]
+        },
+        "canonical_diag_policy": {
+          "enum": [
+            "cpu_only",
+            "device_first_fallback",
+            "aggressive_device"
+          ]
+        },
+        "canonical_offload_scope": {
+          "enum": [
+            "single_hotpath",
+            "balanced",
+            "device_heavy"
+          ]
+        },
+        "canonical_resident_policy": {
+          "enum": [
+            "fit_first",
+            "spill_tolerant"
+          ]
+        },
+        "result_count": {
+          "type": "integer"
+        },
+        "ranking_grade_status": {
+          "enum": [
+            "pending",
+            "ready"
+          ]
+        },
+        "projection_grade_status": {
+          "enum": [
+            "pending",
+            "ready"
+          ]
+        },
+        "confidence": {
+          "enum": [
+            "high",
+            "medium",
+            "exploratory",
+            "pending"
+          ]
+        },
+        "recommended_cpu_device_split": {
+          "$ref": "#/$defs/nullable_string"
+        },
+        "recommended_operator_set": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

@@ -12,10 +12,19 @@ class HostSCF : public sc_core::sc_module {
 
  private:
   SCFState initialize_state(const SystemRunConfig& run_config) const;
-  EpisodeDescriptor make_episode_descriptor(const SCFState& state,
-                                           const SystemRunConfig& run_config,
-                                           int episode_id) const;
-  SCFIterationClusteredReport finalize_iteration(const EpisodeResult& episode,
+  ResidentSetDesc make_resident_set_desc(const SCFState& state,
+                                         const SystemRunConfig& run_config,
+                                         int episode_id) const;
+  BandBatchDesc make_band_batch_desc(const SCFState& state,
+                                     const SystemRunConfig& run_config,
+                                     int episode_id) const;
+  DiagPolicy make_diag_policy(const SystemRunConfig& run_config,
+                              const BandBatchDesc& batch) const;
+  ScfIterationRequest make_iteration_request(const SCFState& state,
+                                             const SystemRunConfig& run_config,
+                                             int episode_id) const;
+  SCFIterationClusteredReport finalize_iteration(const ScfIterationRequest& request,
+                                                 const CompletionSummary& completion,
                                                  SCFState& state) const;
 
   Interconnect& fabric_;

@@ -12,7 +12,7 @@ DFTHybridSystem::DFTHybridSystem(sc_core::sc_module_name name)
 SCFRunReport DFTHybridSystem::run_full_flow(const SystemRunConfig& run_config) const {
   log_line(name(), "DFTHybridSystem starts run: " + run_config.brief());
   auto report = host_.run_full_flow(run_config);
-  log_line(name(), "DFTHybridSystem complete: " + report.brief());
+  log_line(name(), "DFTHybridSystem host-managed run complete: " + report.brief());
   return report;
 }
 
