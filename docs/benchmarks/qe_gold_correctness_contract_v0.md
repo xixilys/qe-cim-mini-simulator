@@ -133,6 +133,27 @@ python3 docs/benchmarks/compare_qe_gold_correctness.py \
   --case-id si8_pbe_nc
 ```
 
+如果要把 QE gold lane 作为一条真正可执行的批量 gate 往前推，可以直接用 architecture-family sweep runner 的 gold 模式：
+
+```bash
+python3 docs/benchmarks/run_systemc_architecture_family_dse_sweep.py \
+  --gold-required-only \
+  --workloads si8_pbe_nc si8_pbe_uspp \
+  --families F1 F2 F3 \
+  --canonical-only \
+  --execute-model \
+  --auto-match-baseline-iters \
+  --fail-on-gold-mismatch \
+  --output-dir tmp/qe_gold_lane
+```
+
+这条命令会做四件事：
+
+1. 先把 QE baseline 归一化成 canonical gold JSON  
+2. 再运行 runnable model 导出 candidate JSON  
+3. 然后自动调用 compare helper  
+4. 最后输出 bundle/CSV/compare artifacts，并在任一 gold-required case 失败时返回非零退出码
+
 ## 7. 这份合同解决什么，不解决什么
 
 ### 解决

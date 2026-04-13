@@ -247,6 +247,11 @@ def parse_args() -> argparse.Namespace:
         help="Subset of workload ids to enumerate. Defaults to the v1 matrix.",
     )
     parser.add_argument(
+        "--gold-required-only",
+        action="store_true",
+        help="Restrict the sweep to workloads that require QE gold comparison.",
+    )
+    parser.add_argument(
         "--families",
         nargs="*",
         default=None,
@@ -320,6 +325,14 @@ def parse_args() -> argparse.Namespace:
         help="QEBS_MAX_SCF_ITERS value used when --execute-model is enabled.",
     )
     parser.add_argument(
+        "--auto-match-baseline-iters",
+        action="store_true",
+        help=(
+            "When running QE gold workloads, derive QEBS_MAX_SCF_ITERS from the canonical "
+            "baseline scf_iterations field instead of using --model-max-scf-iters."
+        ),
+    )
+    parser.add_argument(
         "--compare-helper",
         type=Path,
         default=DEFAULT_COMPARE_HELPER,
@@ -336,6 +349,11 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         default=DEFAULT_GOLD_BASELINE_ROOT,
         help=f"Root directory containing QE metadata/stdout cases (default: {DEFAULT_GOLD_BASELINE_ROOT}).",
+    )
+    parser.add_argument(
+        "--fail-on-gold-mismatch",
+        action="store_true",
+        help="Return nonzero when any gold-required row fails, errors, or lacks a compare result.",
     )
     parser.add_argument(
         "--list-workloads",
@@ -359,6 +377,10 @@ def validate_axis_subset(name: str, requested: list[str] | None, allowed: list[s
     if bad:
         raise ValueError(f"Unknown {name}: " + ", ".join(bad))
     return list(requested)
+
+
+def filter_gold_required_workloads(workloads: list[dict[str, object]]) -> list[dict[str, object]]:
+    return [workload for workload in workloads if bool(workload["gold_required"])]
 
 
 def canonical_profile_match(
@@ -503,6 +525,7 @@ def model_env(
     row: dict[str, object],
     candidate_json_path: Path,
     args: argparse.Namespace,
+    model_max_scf_iters: int,
 ) -> dict[str, str]:
     design = row["design_point"]
     env = os.environ.copy()
@@ -515,7 +538,7 @@ def model_env(
             "QEBS_ASSUMPTION_SET_ID": args.assumption_set_id,
             "QEBS_OFFLOAD_SCOPE": str(design["offload_scope"]),
             "QEBS_RESIDENT_POLICY": str(design["resident_policy"]),
-            "QEBS_MAX_SCF_ITERS": str(args.model_max_scf_iters),
+            "QEBS_MAX_SCF_ITERS": str(model_max_scf_iters),
             "QEBS_CASE_ID": str(workload["workload_id"]),
             "QEBS_RESULT_JSON": str(candidate_json_path),
         }
@@ -537,6 +560,7 @@ def run_model_for_row(
     row: dict[str, object],
     args: argparse.Namespace,
     artifacts_dir: Path,
+    baseline_payload: dict[str, object] | None = None,
 ) -> tuple[bool, str]:
     workload = row["workload"]
     candidate_json_path = artifacts_dir / "candidate" / f"{row['result_id']}.json"
@@ -544,7 +568,14 @@ def run_model_for_row(
     candidate_json_path.parent.mkdir(parents=True, exist_ok=True)
     stdout_path.parent.mkdir(parents=True, exist_ok=True)
 
-    env = model_env(workload, row, candidate_json_path, args)
+    model_max_scf_iters = args.model_max_scf_iters
+    if baseline_payload is not None and args.auto_match_baseline_iters:
+        final = baseline_payload.get("final", {})
+        baseline_iters = final.get("scf_iterations")
+        if isinstance(baseline_iters, int) and baseline_iters > 0:
+            model_max_scf_iters = baseline_iters
+
+    env = model_env(workload, row, candidate_json_path, args, model_max_scf_iters)
     with stdout_path.open("w", encoding="utf-8") as log_fh:
         proc = subprocess.run(
             [str(args.model_bin)],
@@ -561,6 +592,7 @@ def run_model_for_row(
     artifacts["stdout_path"] = str(stdout_path)
     artifacts["metrics_path"] = str(candidate_json_path)
     artifacts["raw_trace_paths"] = [str(stdout_path)]
+    row["primary_metrics"]["scf_iterations_to_convergence"] = model_max_scf_iters
 
     if proc.returncode != 0:
         row["result_status"] = "model_error"
@@ -604,29 +636,22 @@ def run_model_for_row(
     return True, "executed"
 
 
-def maybe_run_qe_gold_compare(
-    row: dict[str, object],
+def prepare_qe_gold_baseline(
+    workload: dict[str, object],
     args: argparse.Namespace,
     artifacts_dir: Path,
-) -> tuple[bool, str]:
-    workload = row["workload"]
+) -> tuple[dict[str, object] | None, Path | None, str | None]:
     if not workload["gold_required"]:
-        row["correctness"]["status"] = "not_required"
-        return True, "gold compare not required"
+        return None, None, None
 
     baseline_dir = args.gold_baseline_root / str(workload["workload_id"])
     metadata_path = baseline_dir / "metadata.json"
     stdout_path = baseline_dir / "stdout.out"
     if not metadata_path.exists() and not stdout_path.exists():
-        row["result_status"] = "baseline_missing"
-        row["correctness"]["status"] = "baseline_missing"
-        row["stub_reason"] = f"missing QE baseline under {baseline_dir}"
-        return False, "baseline missing"
+        return None, None, f"missing QE baseline under {baseline_dir}"
 
     baseline_json_path = artifacts_dir / "baseline" / f"{workload['workload_id']}.gold.json"
-    compare_report_path = artifacts_dir / "compare" / f"{row['result_id']}.compare.json"
     baseline_json_path.parent.mkdir(parents=True, exist_ok=True)
-    compare_report_path.parent.mkdir(parents=True, exist_ok=True)
 
     normalize_cmd = [sys.executable, str(args.normalize_gold_helper)]
     if metadata_path.exists():
@@ -642,10 +667,47 @@ def maybe_run_qe_gold_compare(
         check=False,
     )
     if normalize_proc.returncode != 0:
-        row["result_status"] = "baseline_normalization_error"
-        row["correctness"]["status"] = "baseline_normalization_error"
-        row["stub_reason"] = normalize_proc.stderr.strip() or normalize_proc.stdout.strip()
-        return False, "baseline normalization failed"
+        error = normalize_proc.stderr.strip() or normalize_proc.stdout.strip()
+        return None, None, error or "baseline normalization failed"
+
+    payload = json.loads(baseline_json_path.read_text(encoding="utf-8"))
+    return payload, baseline_json_path, None
+
+
+def maybe_run_qe_gold_compare(
+    row: dict[str, object],
+    args: argparse.Namespace,
+    artifacts_dir: Path,
+    baseline_payload: dict[str, object] | None = None,
+    baseline_json_path: Path | None = None,
+) -> tuple[bool, str]:
+    workload = row["workload"]
+    if not workload["gold_required"]:
+        row["correctness"]["status"] = "not_required"
+        return True, "gold compare not required"
+
+    if baseline_payload is None or baseline_json_path is None:
+        baseline_payload, baseline_json_path, error = prepare_qe_gold_baseline(
+            workload, args, artifacts_dir
+        )
+        if error is not None:
+            if "missing QE baseline" in error:
+                row["result_status"] = "baseline_missing"
+                row["correctness"]["status"] = "baseline_missing"
+            else:
+                row["result_status"] = "baseline_normalization_error"
+                row["correctness"]["status"] = "baseline_normalization_error"
+            row["stub_reason"] = error
+            return False, error
+
+    if baseline_payload is None or baseline_json_path is None:
+        row["result_status"] = "baseline_missing"
+        row["correctness"]["status"] = "baseline_missing"
+        row["stub_reason"] = "baseline payload unavailable"
+        return False, "baseline missing"
+
+    compare_report_path = artifacts_dir / "compare" / f"{row['result_id']}.compare.json"
+    compare_report_path.parent.mkdir(parents=True, exist_ok=True)
 
     compare_cmd = [
         sys.executable,
@@ -752,17 +814,71 @@ def build_bundle(
 
 
 def execute_bundle(bundle: dict[str, object], args: argparse.Namespace, artifacts_dir: Path) -> None:
+    baseline_cache: dict[str, tuple[dict[str, object] | None, Path | None, str | None]] = {}
     for row in bundle["results"]:
-        ok, reason = run_model_for_row(bundle, row, args, artifacts_dir)
+        workload = row["workload"]
+        baseline_payload = None
+        baseline_json_path = None
+        if workload["gold_required"]:
+            workload_id = str(workload["workload_id"])
+            if workload_id not in baseline_cache:
+                baseline_cache[workload_id] = prepare_qe_gold_baseline(
+                    workload, args, artifacts_dir
+                )
+            baseline_payload, baseline_json_path, baseline_error = baseline_cache[workload_id]
+            if baseline_error is not None:
+                row["stub_reason"] = baseline_error
+                row["correctness"]["status"] = (
+                    "baseline_missing"
+                    if "missing QE baseline" in baseline_error
+                    else "baseline_normalization_error"
+                )
+                row["result_status"] = (
+                    "baseline_missing"
+                    if row["correctness"]["status"] == "baseline_missing"
+                    else "baseline_normalization_error"
+                )
+                continue
+
+        ok, reason = run_model_for_row(
+            bundle, row, args, artifacts_dir, baseline_payload=baseline_payload
+        )
         if not ok:
             row["stub_reason"] = reason
             continue
-        compared, compare_reason = maybe_run_qe_gold_compare(row, args, artifacts_dir)
+        compared, compare_reason = maybe_run_qe_gold_compare(
+            row,
+            args,
+            artifacts_dir,
+            baseline_payload=baseline_payload,
+            baseline_json_path=baseline_json_path,
+        )
         if not compared and not row["workload"]["gold_required"]:
             row["stub_reason"] = ""
             continue
         if not compared and compare_reason != "compared":
             row["stub_reason"] = compare_reason
+
+
+def summarize_gold_results(bundle: dict[str, object]) -> dict[str, int]:
+    gold_rows = [row for row in bundle["results"] if row["workload"]["gold_required"]]
+    return {
+        "gold_rows": len(gold_rows),
+        "gold_passed": sum(1 for row in gold_rows if row["correctness"]["gold_pass"] is True),
+        "gold_failed": sum(1 for row in gold_rows if row["correctness"]["status"] == "fail"),
+        "gold_errors": sum(
+            1
+            for row in gold_rows
+            if row["correctness"]["status"]
+            in {
+                "baseline_missing",
+                "baseline_normalization_error",
+                "compare_error",
+                "model_error",
+                "candidate_missing",
+            }
+        ),
+    }
 
 
 def flatten_result(
@@ -867,6 +983,10 @@ def main() -> int:
         args.source_kind = "timed_functional_proxy"
 
     workloads = validate_workloads(args.workloads)
+    if args.gold_required_only:
+        workloads = filter_gold_required_workloads(workloads)
+        if not workloads:
+            raise ValueError("No gold-required workloads remain after --gold-required-only")
     families = validate_axis_subset("families", args.families, list(FAMILY_PROFILES))
     diag_policies = validate_axis_subset("diag policies", args.diag_policies, DIAG_POLICIES)
     offload_scopes = validate_axis_subset("offload scopes", args.offload_scopes, OFFLOAD_SCOPES)
@@ -897,6 +1017,7 @@ def main() -> int:
     csv_path = args.output_dir / args.csv_name
     write_json(json_path, bundle)
     write_csv(csv_path, bundle)
+    gold_summary = summarize_gold_results(bundle)
 
     print(f"[ok] wrote JSON bundle: {json_path}")
     print(f"[ok] wrote CSV rows:   {csv_path}")
@@ -904,6 +1025,17 @@ def main() -> int:
         f"[summary] rows={len(bundle['results'])} families={len(families)} "
         f"workloads={len(workloads)} execute_model={'yes' if args.execute_model else 'no'}"
     )
+    if gold_summary["gold_rows"] > 0:
+        print(
+            "[gold] rows={gold_rows} passed={gold_passed} failed={gold_failed} errors={gold_errors}".format(
+                **gold_summary
+            )
+        )
+
+    if args.fail_on_gold_mismatch and (
+        gold_summary["gold_failed"] > 0 or gold_summary["gold_errors"] > 0
+    ):
+        return 1
     return 0
 
 
