@@ -15,6 +15,42 @@
 
 配套关系上，它和 `/Volumes/remote/phd/year_2/project/dft加速/docs/benchmarks/extract_qe_shell_cpu_baseline.py` 是互补的：前者抽 shell-level timing aggregate，这一套文件冻结的是 QE gold numerical gate。
 
+## 0.1 Canonical gold matrix（v0）
+
+这一版 formal gate 明确冻结一个**版本化 canonical QE gold matrix**：
+
+- `canonical_gold_matrix_id = qe_canonical_gold_matrix_v0`
+- `canonical_gold_matrix_version = 2026-04-13`
+
+当前 gate-required workload 只包含两项：
+
+| workload_id | 角色 |
+| --- | --- |
+| `si8_pbe_nc` | **first-priority convergence case** |
+| `si8_pbe_uspp` | canonical coverage case |
+
+其中：
+
+- `si8_pbe_nc` 被明确标记为当前第一优先收敛对象；
+- 第一条固定 convergence family 是 `F1`，原因记录在 gate artifacts 里：`host_cpu_fallback` 与 QE CPU-side 行为耦合最少，适合作为第一条缩窄路径；
+- 这份 matrix 只声明 gate coverage / priority，不改变 compare helper 的字段语义、容差或 pass 阈值。
+
+## 0.2 Gate 输出状态分类（additive only）
+
+formal gate 在 summary / bundle / compare artifact 上统一使用下面这组状态：
+
+| 状态 | 含义 |
+| --- | --- |
+| `pass` | 所有强制字段通过 frozen QE gold contract |
+| `mismatch` | compare helper 正常执行，但至少一个强制字段失败 |
+| `baseline_missing` | baseline 元数据 / stdout 缺失 |
+| `baseline_normalization_error` | baseline 归一化失败 |
+| `candidate_missing` | runnable model 未产出 candidate JSON |
+| `model_error` | runnable model 返回非零 |
+| `compare_error` | compare helper 自身执行失败 |
+
+注意：这些分类只是**报告层 / artifact 层**的 formalization，不改变 baseline normalization semantics、compare-field semantics 或 tolerance。
+
 ## 1. v0 的强制字段
 
 v0 故意只冻结最小但必须的 gold gate：
@@ -133,7 +169,7 @@ python3 docs/benchmarks/compare_qe_gold_correctness.py \
   --case-id si8_pbe_nc
 ```
 
-如果要把 QE gold lane 作为一条真正可执行的批量 gate 往前推，可以直接用 architecture-family sweep runner 的 gold 模式：
+如果要把 QE gold lane 作为一条真正可执行的批量 gate 往前推，可以直接用 architecture-family sweep runner 的 canonical gold 命令：
 
 ```bash
 python3 docs/benchmarks/run_systemc_architecture_family_dse_sweep.py \
@@ -152,7 +188,36 @@ python3 docs/benchmarks/run_systemc_architecture_family_dse_sweep.py \
 1. 先把 QE baseline 归一化成 canonical gold JSON  
 2. 再运行 runnable model 导出 candidate JSON  
 3. 然后自动调用 compare helper  
-4. 最后输出 bundle/CSV/compare artifacts，并在任一 gold-required case 失败时返回非零退出码
+4. 最后输出 bundle/CSV/summary/compare artifacts，并在任一 gold-required case 失败时返回非零退出码
+
+### 6.1 Exit code 约定
+
+- 返回 `0`：所有 selected gold-required rows 都是 `pass`
+- 返回非零：出现任意 `mismatch` 或 infrastructure status（如 `baseline_missing` / `model_error` / `compare_error`）
+
+### 6.2 Artifact layout
+
+假设 `--output-dir tmp/qe_gold_lane`，当前 formal gate 会固定产出：
+
+| 路径 | 作用 |
+| --- | --- |
+| `tmp/qe_gold_lane/systemc_architecture_family_dse_bootstrap_v0.json` | 原始 machine-readable bundle |
+| `tmp/qe_gold_lane/systemc_architecture_family_dse_bootstrap_v0.csv` | 行级 CSV 导出 |
+| `tmp/qe_gold_lane/qe_gold_gate_summary_v0.json` | **machine-readable gate summary**（按 workload / family 汇总） |
+| `tmp/qe_gold_lane/qe_gold_gate_summary_v0.md` | **human-readable gate summary** |
+| `tmp/qe_gold_lane/artifacts/baseline/*.gold.json` | canonical baseline JSON |
+| `tmp/qe_gold_lane/artifacts/candidate/*.json` | candidate result JSON |
+| `tmp/qe_gold_lane/artifacts/compare/*.compare.json` | compare helper report |
+| `tmp/qe_gold_lane/artifacts/stdout/*.log` | runnable model stdout |
+
+### 6.3 Interpretation rules
+
+- `qe_gold_gate_summary_v0.json` / `.md` 都会给出：
+  - 每个 `workload × family` 的 gate status；
+  - 哪些强制字段失败（`final_total_energy_ry` / `final_converged` / `final_residual_threshold_reached`）；
+  - `scf_iterations` 的 baseline / candidate 对照，作为解释性上下文；
+  - `si8_pbe_nc` 是否是 first-priority convergence case。
+- `compare/*.compare.json` 继续保留逐字段原始细节；summary 只是把这些信息正式汇总出来，并没有改变 helper 的比较逻辑。
 
 ## 7. 这份合同解决什么，不解决什么
 

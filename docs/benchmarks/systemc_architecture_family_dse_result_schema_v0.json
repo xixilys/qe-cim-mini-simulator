@@ -113,6 +113,7 @@
         "source_model",
         "assumption_set_id",
         "qe_tolerance_schema_id",
+        "gate_contract",
         "sweep_axes",
         "workloads",
         "excluded_engineering_knobs"
@@ -135,6 +136,55 @@
         },
         "qe_tolerance_schema_id": {
           "type": "string"
+        },
+        "gate_contract": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "canonical_gold_matrix_id",
+            "canonical_gold_matrix_version",
+            "canonical_gold_workloads",
+            "first_priority_convergence_case",
+            "first_priority_convergence_family",
+            "first_priority_convergence_family_rationale",
+            "required_field_order",
+            "status_taxonomy"
+          ],
+          "properties": {
+            "canonical_gold_matrix_id": {
+              "type": "string"
+            },
+            "canonical_gold_matrix_version": {
+              "type": "string"
+            },
+            "canonical_gold_workloads": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "first_priority_convergence_case": {
+              "type": "string"
+            },
+            "first_priority_convergence_family": {
+              "type": "string"
+            },
+            "first_priority_convergence_family_rationale": {
+              "type": "string"
+            },
+            "required_field_order": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "status_taxonomy": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
         },
         "source_kind": {
           "enum": [
@@ -220,7 +270,8 @@
         "flow_family",
         "trait_bucket",
         "lane",
-        "gold_required"
+        "gold_required",
+        "first_priority_convergence_case"
       ],
       "properties": {
         "workload_id": {
@@ -250,6 +301,9 @@
         },
         "gold_required": {
           "type": "boolean"
+        },
+        "first_priority_convergence_case": {
+          "type": "boolean"
         }
       }
     },
@@ -278,6 +332,13 @@
         "result_status": {
           "enum": [
             "stub",
+            "executed",
+            "compared",
+            "baseline_missing",
+            "baseline_normalization_error",
+            "candidate_missing",
+            "model_error",
+            "compare_error",
             "pending_model_integration",
             "complete",
             "invalid"
@@ -375,6 +436,9 @@
             "final_total_energy_match",
             "residual_threshold_state_match",
             "converged_state_match",
+            "required_field_failures",
+            "baseline_scf_iterations",
+            "candidate_scf_iterations",
             "final_total_energy_abs_err_ev",
             "final_total_energy_rel_err",
             "notes"
@@ -384,8 +448,14 @@
               "enum": [
                 "pending",
                 "pass",
-                "fail",
-                "partial"
+                "mismatch",
+                "baseline_missing",
+                "baseline_normalization_error",
+                "candidate_missing",
+                "model_error",
+                "compare_error",
+                "partial",
+                "not_required"
               ]
             },
             "gold_pass": {
@@ -399,6 +469,18 @@
             },
             "converged_state_match": {
               "$ref": "#/$defs/nullable_boolean"
+            },
+            "required_field_failures": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "baseline_scf_iterations": {
+              "$ref": "#/$defs/nullable_integer"
+            },
+            "candidate_scf_iterations": {
+              "$ref": "#/$defs/nullable_integer"
             },
             "final_total_energy_abs_err_ev": {
               "$ref": "#/$defs/nullable_number"
@@ -559,6 +641,7 @@
             "model_run_id",
             "stdout_path",
             "metrics_path",
+            "compare_report_path",
             "raw_trace_paths"
           ],
           "properties": {
@@ -569,6 +652,9 @@
               "$ref": "#/$defs/nullable_string"
             },
             "metrics_path": {
+              "$ref": "#/$defs/nullable_string"
+            },
+            "compare_report_path": {
               "$ref": "#/$defs/nullable_string"
             },
             "raw_trace_paths": {

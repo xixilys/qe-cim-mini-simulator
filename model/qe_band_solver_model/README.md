@@ -280,6 +280,40 @@ QEBS_RESULT_JSON=./tmp/qebs_f3_candidate.json \
 
 `QEBS_RESULT_JSON` writes the canonical candidate payload, while `QEBS_CASE_ID` carries the workload identity into that JSON so it can be compared against normalized QE gold baselines.
 
+### Canonical QE gold gate command
+
+The formal QE gold gate currently freezes the canonical workload set `si8_pbe_nc` + `si8_pbe_uspp`, with `si8_pbe_nc` marked as the first-priority convergence case and `F1` fixed as the first convergence family.
+
+Canonical gate command:
+
+```bash
+python3 docs/benchmarks/run_systemc_architecture_family_dse_sweep.py \
+  --gold-required-only \
+  --workloads si8_pbe_nc si8_pbe_uspp \
+  --families F1 F2 F3 \
+  --canonical-only \
+  --execute-model \
+  --auto-match-baseline-iters \
+  --fail-on-gold-mismatch \
+  --output-dir tmp/qe_gold_lane
+```
+
+Expected outputs under `tmp/qe_gold_lane/`:
+
+- `systemc_architecture_family_dse_bootstrap_v0.json`
+- `systemc_architecture_family_dse_bootstrap_v0.csv`
+- `qe_gold_gate_summary_v0.json`
+- `qe_gold_gate_summary_v0.md`
+- `artifacts/baseline/*.gold.json`
+- `artifacts/candidate/*.json`
+- `artifacts/compare/*.compare.json`
+- `artifacts/stdout/*.log`
+
+Exit code contract:
+
+- `0` only when every selected gold-required row is `pass`
+- nonzero on any `mismatch` or infrastructure status (`baseline_missing`, `baseline_normalization_error`, `candidate_missing`, `model_error`, `compare_error`)
+
 ## Architecture Note
 
 The host-device-first architecture writeup for this runnable model lives at:

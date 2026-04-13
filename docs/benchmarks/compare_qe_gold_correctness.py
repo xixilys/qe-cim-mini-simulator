@@ -350,6 +350,7 @@ def build_report(
     ]
 
     required_results = [item for item in field_results if item["required"]]
+    failed_required_results = [item for item in required_results if item["status"] == "fail"]
     overall_pass = all(item["status"] == "pass" for item in required_results)
 
     report = {
@@ -362,9 +363,14 @@ def build_report(
         "pass_rule": schema.get("pass_rule"),
         "field_results": field_results,
         "summary": {
+            "status": "pass" if overall_pass else "mismatch",
             "required_fields": len(required_results),
             "required_passed": sum(1 for item in required_results if item["status"] == "pass"),
-            "required_failed": sum(1 for item in required_results if item["status"] == "fail"),
+            "required_failed": len(failed_required_results),
+            "failed_required_fields": [item["name"] for item in failed_required_results],
+            "required_failure_messages": [
+                f"{item['name']}: {item['message']}" for item in failed_required_results
+            ],
             "report_only_missing": sum(
                 1 for item in field_results if item["report_only"] and item["status"] == "missing"
             ),
