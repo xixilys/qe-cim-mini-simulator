@@ -141,3 +141,40 @@ verification / regression lane 的最小交付不是“又跑一遍命令”，�
 3. 有清晰文档说明什么叫 additive-only，什么叫 contract change。
 
 一句话：**formal gate 可以继续演进，但 frozen QE gold semantics 不能偷偷漂移。**
+
+---
+
+## 5. Latest observed verification snapshot（2026-04-13）
+
+本轮 worker-3 验证跑到的结果：
+
+- `python3 docs/benchmarks/check_qe_gold_contract_regression.py`：`PASS`
+- `cmake -S model/qe_band_solver_model -B model/qe_band_solver_model/build && cmake --build model/qe_band_solver_model/build -j4`：`PASS`
+- canonical QE gold gate：
+
+  ```bash
+  python3 docs/benchmarks/run_systemc_architecture_family_dse_sweep.py \
+    --gold-required-only \
+    --workloads si8_pbe_nc si8_pbe_uspp \
+    --families F1 F2 F3 \
+    --canonical-only \
+    --execute-model \
+    --auto-match-baseline-iters \
+    --fail-on-gold-mismatch \
+    --output-dir tmp/qe_gold_lane_worker3
+  ```
+
+  返回：
+
+  - `rows=6`
+  - `passed=0`
+  - `failed=6`
+  - `errors=0`
+
+按当前 artifact 读数：
+
+- `si8_pbe_nc` 的 `F1/F2/F3` 都是 **energy mismatch**，但 `final_converged` 和 `final_residual_threshold_reached` 已经匹配；
+- `si8_pbe_uspp` 的 `F1/F2/F3` 同时存在 **energy mismatch + converged/residual mismatch**。
+
+这个 snapshot 的意义不是“宣布 gate 已完成”，而是给 convergence lane 一个冻结合同下的当前基线：  
+`si8_pbe_nc/F1` 目前最集中的 blocker 已经收敛到 **energy gap**，不是布尔状态漂移。
