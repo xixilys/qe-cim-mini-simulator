@@ -117,6 +117,50 @@ void write_candidate_result_json(const qebs::SCFRunReport& report,
         << json_bool(last_iteration->completion.cpu_diag_fallback) << "\n";
     out << "  },\n";
   }
+  out << "  \"iteration_diagnostics\": [\n";
+  for (std::size_t idx = 0; idx < report.iterations.size(); ++idx) {
+    const auto& iteration = report.iterations[idx];
+    out << "    {\n";
+    out << "      \"scf_iteration\": " << iteration.scf_iteration << ",\n";
+    out << "      \"total_energy_ry\": " << std::setprecision(16)
+        << iteration.energy_after_iteration << ",\n";
+    out << "      \"density_delta\": " << std::setprecision(16)
+        << iteration.density_delta << ",\n";
+    out << "      \"rho_out_norm\": " << std::setprecision(16)
+        << iteration.rho_out_norm << ",\n";
+    out << "      \"mixed_rho_norm\": " << std::setprecision(16)
+        << iteration.mixed_rho_norm << ",\n";
+    out << "      \"potential_norm\": " << std::setprecision(16)
+        << iteration.potential_norm << ",\n";
+    out << "      \"residual_norm\": " << std::setprecision(16)
+        << iteration.completion.residual_norm << ",\n";
+    out << "      \"diag_path\": \""
+        << json_escape(iteration.completion.diag_path) << "\",\n";
+    out << "      \"confidence_label\": \""
+        << json_escape(iteration.completion.confidence_label) << "\",\n";
+    out << "      \"converged_after_iteration\": "
+        << json_bool(iteration.converged) << ",\n";
+    out << "      \"cpu_diag_fallback\": "
+        << json_bool(iteration.completion.cpu_diag_fallback) << ",\n";
+    out << "      \"resident_reused\": "
+        << json_bool(iteration.completion.resident_reused) << ",\n";
+    out << "      \"spill_active\": "
+        << json_bool(iteration.completion.spill_active) << ",\n";
+    out << "      \"used_device_fft\": "
+        << json_bool(iteration.completion.used_device_fft) << ",\n";
+    out << "      \"total_data_movement_kib\": " << std::setprecision(16)
+        << iteration.completion.total_data_movement_kib << ",\n";
+    out << "      \"dma_read_kib\": " << std::setprecision(16)
+        << iteration.completion.dma_read_kib << ",\n";
+    out << "      \"dma_write_kib\": " << std::setprecision(16)
+        << iteration.completion.dma_write_kib << ",\n";
+    out << "      \"device_busy_ref_cycles\": "
+        << iteration.completion.device_busy_ref_cycles << ",\n";
+    out << "      \"host_assist_ref_cycles\": "
+        << iteration.completion.host_assist_ref_cycles << "\n";
+    out << "    }" << (idx + 1 < report.iterations.size() ? "," : "") << "\n";
+  }
+  out << "  ],\n";
   out << "  \"metrics\": {\n";
   out << "    \"device_busy_ref_cycles\": " << report.total_device_busy_ref_cycles << ",\n";
   out << "    \"dma_ref_cycles\": " << report.total_dma_ref_cycles << ",\n";

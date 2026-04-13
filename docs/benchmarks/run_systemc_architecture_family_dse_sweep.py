@@ -7,6 +7,7 @@ import json
 import os
 import subprocess
 import sys
+from collections import Counter
 from datetime import datetime, timezone
 from itertools import product
 from pathlib import Path
@@ -732,6 +733,328 @@ def prepare_qe_gold_baseline(
     return payload, baseline_json_path, None
 
 
+def is_si8_f1_convergence_target(row: dict[str, object]) -> bool:
+    workload = row["workload"]
+    design = row["design_point"]
+    return (
+        workload["workload_id"] == "si8_pbe_nc"
+        and design["family"] == "F1"
+        and design["canonical_profile_match"] is True
+    )
+
+
+def nested_dict_get(payload: dict[str, Any], *keys: str) -> Any:
+    current: Any = payload
+    for key in keys:
+        if not isinstance(current, dict):
+            return None
+        current = current.get(key)
+    return current
+
+
+def energy_gap_snapshot(
+    baseline_total_energy_ry: float | int | None,
+    candidate_total_energy_ry: float | int | None,
+    scf_iteration: int | None,
+) -> dict[str, object]:
+    if baseline_total_energy_ry is None or candidate_total_energy_ry is None:
+        return {
+            "scf_iteration": scf_iteration,
+            "candidate_total_energy_ry": candidate_total_energy_ry,
+            "final_total_energy_abs_err_ev": None,
+            "final_total_energy_rel_err": None,
+        }
+
+    baseline_energy = float(baseline_total_energy_ry)
+    candidate_energy = float(candidate_total_energy_ry)
+    abs_err_ry = abs(candidate_energy - baseline_energy)
+    rel_err = abs_err_ry / max(abs(baseline_energy), 1.0)
+    return {
+        "scf_iteration": scf_iteration,
+        "candidate_total_energy_ry": candidate_energy,
+        "final_total_energy_abs_err_ev": abs_err_ry * RY_TO_EV,
+        "final_total_energy_rel_err": rel_err,
+    }
+
+
+def classify_si8_f1_convergence_blocker(
+    compare_report: dict[str, Any],
+    candidate_payload: dict[str, Any],
+    baseline_payload: dict[str, Any],
+) -> tuple[str, str, str]:
+    field_map = {item["name"]: item for item in compare_report["field_results"]}
+    baseline_final = baseline_payload.get("final", {})
+    candidate_final = candidate_payload.get("final", {})
+    candidate_iterations = candidate_payload.get("iteration_diagnostics", [])
+    last_iteration = candidate_iterations[-1] if candidate_iterations else {}
+    last_diag_path = str(last_iteration.get("diag_path") or "unknown")
+    candidate_scf_iterations = candidate_final.get("scf_iterations")
+    baseline_scf_iterations = baseline_final.get("scf_iterations")
+    max_scf_iters = nested_dict_get(candidate_payload, "run_config", "max_scf_iters")
+    energy_abs_err_ev = energy_gap_snapshot(
+        baseline_final.get("total_energy_ry"),
+        candidate_final.get("total_energy_ry"),
+        candidate_scf_iterations if isinstance(candidate_scf_iterations, int) else None,
+    )["final_total_energy_abs_err_ev"]
+
+    if (
+        field_map.get("final_converged", {}).get("status") == "fail"
+        or field_map.get("final_residual_threshold_reached", {}).get("status") == "fail"
+    ):
+        reason = (
+            "Candidate does not preserve the frozen QE convergence-state contract for "
+            f"si8_pbe_nc/F1: converged={candidate_final.get('converged')}, "
+            f"residual_threshold_reached={candidate_final.get('residual_threshold_reached')}."
+        )
+        next_move = (
+            "Keep F1 fixed and narrow on convergence-state progression first; do not touch "
+            "other families or the frozen compare thresholds."
+        )
+        return "convergence_state_mismatch", reason, next_move
+
+    if (
+        compare_report["overall_pass"] is False
+        and candidate_final.get("converged") is not True
+        and isinstance(candidate_scf_iterations, int)
+        and isinstance(max_scf_iters, int)
+        and candidate_scf_iterations >= max_scf_iters
+    ):
+        reason = (
+            "Candidate exhausts the configured SCF budget before reaching the QE gold end-state "
+            f"(candidate iters={candidate_scf_iterations}, max_scf_iters={max_scf_iters}, "
+            f"baseline iters={baseline_scf_iterations})."
+        )
+        next_move = (
+            "Keep si8_pbe_nc/F1 as the only active convergence target and retune the F1 iteration "
+            "path so the model can approach the QE baseline without expanding to other families."
+        )
+        return "iteration_cap_mismatch", reason, next_move
+
+    reason = (
+        "Candidate reaches the QE end-state flags but its energy path remains far from the QE gold "
+        f"baseline (final_total_energy_abs_err_ev={energy_abs_err_ev}, "
+        f"candidate iters={candidate_scf_iterations}, baseline iters={baseline_scf_iterations}, "
+        f"last_diag_path={last_diag_path})."
+    )
+    next_move = (
+        "Keep si8_pbe_nc/F1 fixed and calibrate the host_cpu_fallback energy update/diag path "
+        "against the QE gold energy trajectory before changing any other family or tolerance."
+    )
+    return "energy_trajectory_mismatch", reason, next_move
+
+
+def build_si8_f1_convergence_report(
+    row: dict[str, object],
+    baseline_payload: dict[str, Any],
+    candidate_payload: dict[str, Any],
+    compare_report: dict[str, Any],
+) -> dict[str, Any]:
+    baseline_final = baseline_payload.get("final", {})
+    candidate_final = candidate_payload.get("final", {})
+    iteration_diagnostics = [
+        item for item in candidate_payload.get("iteration_diagnostics", []) if isinstance(item, dict)
+    ]
+
+    before_iteration = iteration_diagnostics[0] if iteration_diagnostics else {}
+    after_iteration = iteration_diagnostics[-1] if iteration_diagnostics else {}
+    diag_path_counts = Counter(
+        str(item["diag_path"])
+        for item in iteration_diagnostics
+        if item.get("diag_path")
+    )
+    blocker_kind, blocker_reason, next_move = classify_si8_f1_convergence_blocker(
+        compare_report,
+        candidate_payload,
+        baseline_payload,
+    )
+    field_map = {item["name"]: item for item in compare_report["field_results"]}
+    required_failed_fields = [
+        item["name"]
+        for item in compare_report["field_results"]
+        if item["required"] and item["status"] != "pass"
+    ]
+
+    report = {
+        "report_kind": "si8_f1_convergence_lane_report_v0",
+        "generated_at_utc": iso_utc(utc_now()),
+        "case_id": row["workload"]["workload_id"],
+        "family": row["design_point"]["family"],
+        "priority_target": {
+            "first_priority_convergence_case": True,
+            "fixed_first_family": True,
+            "rationale": (
+                "F1 stays fixed as the first convergence family because host_cpu_fallback is the "
+                "least-coupled first-pass target relative to QE CPU-side behavior."
+            ),
+        },
+        "gold_snapshot": {
+            "overall_pass": compare_report["overall_pass"],
+            "required_failed_fields": required_failed_fields,
+            "energy_field_status": field_map.get("final_total_energy_ry", {}).get("status"),
+            "converged_field_status": field_map.get("final_converged", {}).get("status"),
+            "residual_field_status": field_map.get(
+                "final_residual_threshold_reached", {}
+            ).get("status"),
+        },
+        "baseline_final": {
+            "final_total_energy_ry": baseline_final.get("total_energy_ry"),
+            "final_converged": baseline_final.get("converged"),
+            "final_residual_threshold_reached": baseline_final.get(
+                "residual_threshold_reached"
+            ),
+            "scf_iterations": baseline_final.get("scf_iterations"),
+        },
+        "candidate_final": {
+            "final_total_energy_ry": candidate_final.get("total_energy_ry"),
+            "final_converged": candidate_final.get("converged"),
+            "final_residual_threshold_reached": candidate_final.get(
+                "residual_threshold_reached"
+            ),
+            "scf_iterations": candidate_final.get("scf_iterations"),
+            "residual_norm": candidate_final.get("residual_norm"),
+            "density_delta": candidate_final.get("density_delta"),
+        },
+        "gap_report": {
+            "before": energy_gap_snapshot(
+                baseline_final.get("total_energy_ry"),
+                before_iteration.get("total_energy_ry", candidate_final.get("total_energy_ry")),
+                before_iteration.get("scf_iteration"),
+            ),
+            "after": energy_gap_snapshot(
+                baseline_final.get("total_energy_ry"),
+                after_iteration.get("total_energy_ry", candidate_final.get("total_energy_ry")),
+                after_iteration.get("scf_iteration", candidate_final.get("scf_iterations")),
+            ),
+            "final_total_energy_abs_err_ev": field_map.get("final_total_energy_ry", {}).get(
+                "abs_err", 0.0
+            )
+            * RY_TO_EV
+            if field_map.get("final_total_energy_ry", {}).get("abs_err") is not None
+            else None,
+            "final_total_energy_rel_err": field_map.get("final_total_energy_ry", {}).get(
+                "rel_err"
+            ),
+            "candidate_iterations": candidate_final.get("scf_iterations"),
+            "baseline_iterations": baseline_final.get("scf_iterations"),
+            "scf_iteration_delta": (
+                candidate_final.get("scf_iterations") - baseline_final.get("scf_iterations")
+                if isinstance(candidate_final.get("scf_iterations"), int)
+                and isinstance(baseline_final.get("scf_iterations"), int)
+                else None
+            ),
+            "final_converged": candidate_final.get("converged"),
+            "final_residual_threshold_reached": candidate_final.get(
+                "residual_threshold_reached"
+            ),
+        },
+        "iteration_context": {
+            "energy_path_ry": [
+                item["total_energy_ry"]
+                for item in iteration_diagnostics
+                if item.get("total_energy_ry") is not None
+            ],
+            "diag_path_counts": dict(diag_path_counts),
+            "last_diag_path": after_iteration.get("diag_path"),
+            "cpu_diag_fallback_count": sum(
+                1 for item in iteration_diagnostics if item.get("cpu_diag_fallback") is True
+            ),
+            "resident_reuse_count": sum(
+                1 for item in iteration_diagnostics if item.get("resident_reused") is True
+            ),
+            "spill_active_count": sum(
+                1 for item in iteration_diagnostics if item.get("spill_active") is True
+            ),
+            "used_device_fft_count": sum(
+                1 for item in iteration_diagnostics if item.get("used_device_fft") is True
+            ),
+        },
+        "iteration_diagnostics": iteration_diagnostics,
+        "dominant_blocker": {
+            "kind": blocker_kind,
+            "reason": blocker_reason,
+        },
+        "explicit_next_narrowing_move": next_move,
+    }
+    return report
+
+
+def render_si8_f1_convergence_markdown(report: dict[str, Any]) -> str:
+    before = report["gap_report"]["before"]
+    after = report["gap_report"]["after"]
+    lines = [
+        "# si8_pbe_nc / F1 convergence lane report",
+        "",
+        f"- generated_at_utc: {report['generated_at_utc']}",
+        f"- gold_pass: {'yes' if report['gold_snapshot']['overall_pass'] else 'no'}",
+        f"- blocker: {report['dominant_blocker']['kind']}",
+        f"- last_diag_path: {report['iteration_context']['last_diag_path']}",
+        "",
+        "## Final gap snapshot",
+        "",
+        f"- baseline_final_total_energy_ry: {report['baseline_final']['final_total_energy_ry']}",
+        f"- candidate_final_total_energy_ry: {report['candidate_final']['final_total_energy_ry']}",
+        f"- final_total_energy_abs_err_ev: {report['gap_report']['final_total_energy_abs_err_ev']}",
+        f"- final_total_energy_rel_err: {report['gap_report']['final_total_energy_rel_err']}",
+        f"- baseline_iterations: {report['gap_report']['baseline_iterations']}",
+        f"- candidate_iterations: {report['gap_report']['candidate_iterations']}",
+        f"- final_converged: {report['gap_report']['final_converged']}",
+        f"- final_residual_threshold_reached: {report['gap_report']['final_residual_threshold_reached']}",
+        "",
+        "## Before / after within-run energy gap",
+        "",
+        f"- before_iter: {before['scf_iteration']}, before_abs_err_ev: {before['final_total_energy_abs_err_ev']}",
+        f"- after_iter: {after['scf_iteration']}, after_abs_err_ev: {after['final_total_energy_abs_err_ev']}",
+        "",
+        "## Dominant blocker",
+        "",
+        report["dominant_blocker"]["reason"],
+        "",
+        "## Next narrowing move",
+        "",
+        report["explicit_next_narrowing_move"],
+        "",
+    ]
+    return "\n".join(lines)
+
+
+def emit_si8_f1_convergence_artifacts(
+    row: dict[str, object],
+    artifacts_dir: Path,
+    baseline_payload: dict[str, Any],
+    compare_report: dict[str, Any],
+) -> list[Path]:
+    if not is_si8_f1_convergence_target(row):
+        return []
+
+    candidate_path = Path(str(row["artifacts"]["metrics_path"]))
+    if not candidate_path.exists():
+        return []
+
+    candidate_payload = json.loads(candidate_path.read_text(encoding="utf-8"))
+    report = build_si8_f1_convergence_report(
+        row,
+        baseline_payload,
+        candidate_payload,
+        compare_report,
+    )
+
+    convergence_dir = artifacts_dir / "convergence"
+    convergence_dir.mkdir(parents=True, exist_ok=True)
+    report_json_path = convergence_dir / f"{row['result_id']}.si8_f1_convergence.json"
+    report_md_path = convergence_dir / f"{row['result_id']}.si8_f1_convergence.md"
+    report_json_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
+    report_md_path.write_text(render_si8_f1_convergence_markdown(report), encoding="utf-8")
+
+    row["correctness"]["notes"].append(f"si8_f1_convergence_report={report_json_path}")
+    row["correctness"]["notes"].append(f"si8_f1_convergence_summary={report_md_path}")
+    raw_trace_paths = row["artifacts"].get("raw_trace_paths") or []
+    row["artifacts"]["raw_trace_paths"] = list(raw_trace_paths) + [
+        str(report_json_path),
+        str(report_md_path),
+    ]
+    return [report_json_path, report_md_path]
+
+
 def maybe_run_qe_gold_compare(
     row: dict[str, object],
     args: argparse.Namespace,
@@ -825,6 +1148,12 @@ def maybe_run_qe_gold_compare(
         str(baseline_json_path),
         str(compare_report_path),
     ]
+    emit_si8_f1_convergence_artifacts(
+        row,
+        artifacts_dir,
+        baseline_payload,
+        report,
+    )
     return report["overall_pass"], "compared"
 
 
