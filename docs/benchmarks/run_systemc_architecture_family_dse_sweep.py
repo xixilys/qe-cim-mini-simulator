@@ -20,7 +20,40 @@ DEFAULT_MODEL_BIN = ROOT / "model/qe_band_solver_model/build/qe_band_solver_mode
 DEFAULT_COMPARE_HELPER = ROOT / "docs/benchmarks/compare_qe_gold_correctness.py"
 DEFAULT_NORMALIZE_GOLD_HELPER = ROOT / "docs/benchmarks/normalize_qe_gold_baseline.py"
 DEFAULT_GOLD_BASELINE_ROOT = ROOT / "docs/benchmarks/results/qe_workload_revalidation"
+DEFAULT_GOLD_SUMMARY_JSON_NAME = "qe_gold_gate_summary_v0.json"
+DEFAULT_GOLD_SUMMARY_MD_NAME = "qe_gold_gate_summary_v0.md"
 RY_TO_EV = 13.605693009
+
+QE_GOLD_GATE_CONTRACT = {
+    "canonical_gold_matrix_id": "qe_canonical_gold_matrix_v0",
+    "canonical_gold_matrix_version": "2026-04-13",
+    "canonical_gold_workloads": [
+        "si8_pbe_nc",
+        "si8_pbe_uspp",
+    ],
+    "first_priority_convergence_case": "si8_pbe_nc",
+    "first_priority_convergence_family": "F1",
+    "first_priority_convergence_family_rationale": (
+        "host_cpu_fallback is the least-coupled first-pass target relative to QE CPU-side behavior."
+    ),
+    "required_field_order": [
+        "final_total_energy_ry",
+        "final_converged",
+        "final_residual_threshold_reached",
+    ],
+}
+
+GOLD_STATUS_TAXONOMY = [
+    "pass",
+    "mismatch",
+    "baseline_missing",
+    "baseline_normalization_error",
+    "candidate_missing",
+    "model_error",
+    "compare_error",
+    "pending",
+    "not_required",
+]
 
 FAMILY_PROFILES = {
     "F1": {
@@ -100,6 +133,7 @@ DEFAULT_WORKLOADS = {
         "trait_bucket": "USPP-heavy",
         "lane": "qe_gold",
         "gold_required": True,
+        "first_priority_convergence_case": False,
     },
     "si8_pbe_nc": {
         "workload_id": "si8_pbe_nc",
@@ -109,6 +143,7 @@ DEFAULT_WORKLOADS = {
         "trait_bucket": "NC-light",
         "lane": "qe_gold",
         "gold_required": True,
+        "first_priority_convergence_case": True,
     },
     "vasp_blocked_davidson_paw_heavy": {
         "workload_id": "vasp_blocked_davidson_paw_heavy",
@@ -118,6 +153,7 @@ DEFAULT_WORKLOADS = {
         "trait_bucket": "PAW-heavy",
         "lane": "portability",
         "gold_required": False,
+        "first_priority_convergence_case": False,
     },
     "cp2k_qs_ot_small_batch": {
         "workload_id": "cp2k_qs_ot_small_batch",
@@ -127,6 +163,7 @@ DEFAULT_WORKLOADS = {
         "trait_bucket": "NC-light",
         "lane": "portability",
         "gold_required": False,
+        "first_priority_convergence_case": False,
     },
 }
 
@@ -150,6 +187,7 @@ CSV_FIELDS = [
     "trait_bucket",
     "lane",
     "gold_required",
+    "first_priority_convergence_case",
     "family",
     "diag_policy",
     "offload_scope",
@@ -164,6 +202,9 @@ CSV_FIELDS = [
     "final_total_energy_match",
     "residual_threshold_state_match",
     "converged_state_match",
+    "required_field_failures",
+    "baseline_scf_iterations",
+    "candidate_scf_iterations",
     "final_total_energy_abs_err_ev",
     "final_total_energy_rel_err",
     "time_to_convergence_s",
@@ -195,6 +236,7 @@ CSV_FIELDS = [
     "model_run_id",
     "stdout_path",
     "metrics_path",
+    "compare_report_path",
     "raw_trace_paths",
     "stub_reason",
 ]
@@ -383,6 +425,18 @@ def filter_gold_required_workloads(workloads: list[dict[str, object]]) -> list[d
     return [workload for workload in workloads if bool(workload["gold_required"])]
 
 
+def gold_status_counts(rows: list[dict[str, object]]) -> dict[str, int]:
+    counts = {status: 0 for status in GOLD_STATUS_TAXONOMY}
+    for row in rows:
+        status = str(row["correctness"]["status"])
+        counts[status] = counts.get(status, 0) + 1
+    return counts
+
+
+def is_gold_gate_blocking_status(status: str) -> bool:
+    return status not in {"pass", "not_required"}
+
+
 def canonical_profile_match(
     family: str,
     diag_policy: str,
@@ -442,6 +496,9 @@ def build_result_row(
             "final_total_energy_match": None,
             "residual_threshold_state_match": None,
             "converged_state_match": None,
+            "required_field_failures": [],
+            "baseline_scf_iterations": None,
+            "candidate_scf_iterations": None,
             "final_total_energy_abs_err_ev": None,
             "final_total_energy_rel_err": None,
             "notes": [],
@@ -482,6 +539,7 @@ def build_result_row(
             "model_run_id": None,
             "stdout_path": None,
             "metrics_path": None,
+            "compare_report_path": None,
             "raw_trace_paths": None,
         },
         "stub_reason": (
@@ -708,6 +766,7 @@ def maybe_run_qe_gold_compare(
 
     compare_report_path = artifacts_dir / "compare" / f"{row['result_id']}.compare.json"
     compare_report_path.parent.mkdir(parents=True, exist_ok=True)
+    row["artifacts"]["compare_report_path"] = str(compare_report_path)
 
     compare_cmd = [
         sys.executable,
@@ -737,19 +796,30 @@ def maybe_run_qe_gold_compare(
     energy_field = field_map.get("final_total_energy_ry", {})
     converged_field = field_map.get("final_converged", {})
     residual_field = field_map.get("final_residual_threshold_reached", {})
+    scf_iterations_field = field_map.get("scf_iterations", {})
 
     row["comparison_contract"]["qe_baseline_id"] = f"{workload['workload_id']}_qe_gold"
     row["result_status"] = "compared"
-    row["correctness"]["status"] = "pass" if report["overall_pass"] else "fail"
+    row["correctness"]["status"] = "pass" if report["overall_pass"] else "mismatch"
     row["correctness"]["gold_pass"] = report["overall_pass"]
     row["correctness"]["final_total_energy_match"] = energy_field.get("status") == "pass"
     row["correctness"]["converged_state_match"] = converged_field.get("status") == "pass"
     row["correctness"]["residual_threshold_state_match"] = residual_field.get("status") == "pass"
+    row["correctness"]["required_field_failures"] = list(
+        report["summary"].get("failed_required_fields", [])
+    )
+    row["correctness"]["baseline_scf_iterations"] = scf_iterations_field.get("baseline", {}).get(
+        "value"
+    )
+    row["correctness"]["candidate_scf_iterations"] = scf_iterations_field.get(
+        "candidate", {}
+    ).get("value")
     abs_err_ry = energy_field.get("abs_err")
     row["correctness"]["final_total_energy_abs_err_ev"] = (
         None if abs_err_ry is None else float(abs_err_ry) * RY_TO_EV
     )
     row["correctness"]["final_total_energy_rel_err"] = energy_field.get("rel_err")
+    row["correctness"]["notes"] = list(report["summary"].get("required_failure_messages", []))
     raw_trace_paths = row["artifacts"].get("raw_trace_paths") or []
     row["artifacts"]["raw_trace_paths"] = list(raw_trace_paths) + [
         str(baseline_json_path),
@@ -794,6 +864,10 @@ def build_bundle(
             "assumption_set_id": args.assumption_set_id,
             "qe_tolerance_schema_id": args.qe_tolerance_schema_id,
             "source_kind": args.source_kind,
+            "gate_contract": {
+                **QE_GOLD_GATE_CONTRACT,
+                "status_taxonomy": GOLD_STATUS_TAXONOMY,
+            },
             "sweep_axes": {
                 "family": families,
                 "diag_policy": diag_policies,
@@ -860,25 +934,224 @@ def execute_bundle(bundle: dict[str, object], args: argparse.Namespace, artifact
             row["stub_reason"] = compare_reason
 
 
-def summarize_gold_results(bundle: dict[str, object]) -> dict[str, int]:
+def gold_summary_row(row: dict[str, object]) -> dict[str, object]:
+    workload = row["workload"]
+    design = row["design_point"]
+    correctness = row["correctness"]
+    return {
+        "workload_id": workload["workload_id"],
+        "workload_label": workload["label"],
+        "family": design["family"],
+        "status": correctness["status"],
+        "gold_pass": correctness["gold_pass"],
+        "first_priority_convergence_case": workload["first_priority_convergence_case"],
+        "required_field_failures": correctness["required_field_failures"],
+        "field_matches": {
+            "final_total_energy_ry": correctness["final_total_energy_match"],
+            "final_converged": correctness["converged_state_match"],
+            "final_residual_threshold_reached": correctness["residual_threshold_state_match"],
+        },
+        "final_total_energy_abs_err_ev": correctness["final_total_energy_abs_err_ev"],
+        "final_total_energy_rel_err": correctness["final_total_energy_rel_err"],
+        "baseline_scf_iterations": correctness["baseline_scf_iterations"],
+        "candidate_scf_iterations": correctness["candidate_scf_iterations"],
+        "notes": correctness["notes"],
+        "stdout_path": row["artifacts"]["stdout_path"],
+        "metrics_path": row["artifacts"]["metrics_path"],
+        "compare_report_path": row["artifacts"]["compare_report_path"],
+        "stub_reason": row["stub_reason"],
+    }
+
+
+def summarize_gold_results(bundle: dict[str, object]) -> dict[str, object]:
     gold_rows = [row for row in bundle["results"] if row["workload"]["gold_required"]]
+    status_counts = gold_status_counts(gold_rows)
     return {
         "gold_rows": len(gold_rows),
-        "gold_passed": sum(1 for row in gold_rows if row["correctness"]["gold_pass"] is True),
-        "gold_failed": sum(1 for row in gold_rows if row["correctness"]["status"] == "fail"),
+        "gold_passed": status_counts.get("pass", 0),
+        "gold_mismatches": status_counts.get("mismatch", 0),
         "gold_errors": sum(
-            1
-            for row in gold_rows
-            if row["correctness"]["status"]
-            in {
+            status_counts.get(status, 0)
+            for status in (
                 "baseline_missing",
                 "baseline_normalization_error",
-                "compare_error",
-                "model_error",
                 "candidate_missing",
-            }
+                "model_error",
+                "compare_error",
+            )
         ),
+        "status_counts": status_counts,
     }
+
+
+def build_gold_gate_summary(bundle: dict[str, object]) -> dict[str, object]:
+    gold_rows = [row for row in bundle["results"] if row["workload"]["gold_required"]]
+    rows = [gold_summary_row(row) for row in gold_rows]
+    by_workload: list[dict[str, object]] = []
+    for workload_id in QE_GOLD_GATE_CONTRACT["canonical_gold_workloads"]:
+        workload_rows = [row for row in rows if row["workload_id"] == workload_id]
+        if not workload_rows:
+            continue
+        by_workload.append(
+            {
+                "workload_id": workload_id,
+                "workload_label": workload_rows[0]["workload_label"],
+                "first_priority_convergence_case": workload_rows[0][
+                    "first_priority_convergence_case"
+                ],
+                "status_counts": gold_status_counts(
+                    [
+                        {
+                            "correctness": {"status": workload_row["status"]},
+                        }
+                        for workload_row in workload_rows
+                    ]
+                ),
+                "families": workload_rows,
+            }
+        )
+
+    by_family: list[dict[str, object]] = []
+    for family in FAMILY_PROFILES:
+        family_rows = [row for row in rows if row["family"] == family]
+        if not family_rows:
+            continue
+        by_family.append(
+            {
+                "family": family,
+                "status_counts": gold_status_counts(
+                    [
+                        {
+                            "correctness": {"status": family_row["status"]},
+                        }
+                        for family_row in family_rows
+                    ]
+                ),
+                "workloads": family_rows,
+            }
+        )
+
+    gold_summary = summarize_gold_results(bundle)
+    return {
+        "schema_version": "qe_gold_gate_summary_v0",
+        "generated_at_utc": bundle["generated_at_utc"],
+        "run_id": bundle["experiment"]["run_id"],
+        "gate_contract": bundle["experiment"]["gate_contract"],
+        "gold_rows": rows,
+        "status_counts": gold_summary["status_counts"],
+        "required_fields": QE_GOLD_GATE_CONTRACT["required_field_order"],
+        "by_workload": by_workload,
+        "by_family": by_family,
+    }
+
+
+def render_gold_gate_summary_markdown(summary: dict[str, object]) -> str:
+    lines = [
+        "# QE gold gate summary (v0)",
+        "",
+        f"- Run id: `{summary['run_id']}`",
+        f"- Generated at (UTC): `{summary['generated_at_utc']}`",
+        f"- Canonical gold matrix: `{summary['gate_contract']['canonical_gold_matrix_id']}`",
+        f"- Canonical gold workloads: `{', '.join(summary['gate_contract']['canonical_gold_workloads'])}`",
+        (
+            "- First-priority convergence lane: "
+            f"`{summary['gate_contract']['first_priority_convergence_case']}` / "
+            f"`{summary['gate_contract']['first_priority_convergence_family']}`"
+        ),
+        "",
+        "## Status taxonomy",
+        "",
+        "- `pass` — all required fields matched under the frozen QE gold contract.",
+        "- `mismatch` — compare helper ran, but one or more required fields failed.",
+        "- `baseline_missing` / `baseline_normalization_error` — baseline-side infrastructure failure.",
+        "- `candidate_missing` / `model_error` / `compare_error` — candidate or compare-side infrastructure failure.",
+        "",
+        "## Aggregate status counts",
+        "",
+    ]
+    for status in GOLD_STATUS_TAXONOMY:
+        lines.append(f"- `{status}`: {summary['status_counts'].get(status, 0)}")
+
+    lines.extend(
+        [
+            "",
+            "## Per-workload view",
+            "",
+            "| Workload | Family | Status | Failed required fields | Energy abs err (eV) | Energy rel err | Baseline SCF iters | Candidate SCF iters |",
+            "| --- | --- | --- | --- | ---: | ---: | ---: | ---: |",
+        ]
+    )
+    for workload_group in summary["by_workload"]:
+        for row in workload_group["families"]:
+            workload_label = str(workload_group["workload_id"])
+            if row["first_priority_convergence_case"]:
+                workload_label += " *(first-priority convergence case)*"
+            failed_fields = ", ".join(row["required_field_failures"]) or "—"
+            abs_err = (
+                "—"
+                if row["final_total_energy_abs_err_ev"] is None
+                else f"{row['final_total_energy_abs_err_ev']:.6e}"
+            )
+            rel_err = (
+                "—"
+                if row["final_total_energy_rel_err"] is None
+                else f"{row['final_total_energy_rel_err']:.6e}"
+            )
+            baseline_iters = (
+                "—" if row["baseline_scf_iterations"] is None else str(row["baseline_scf_iterations"])
+            )
+            candidate_iters = (
+                "—"
+                if row["candidate_scf_iterations"] is None
+                else str(row["candidate_scf_iterations"])
+            )
+            lines.append(
+                "| {workload} | {family} | {status} | {failed_fields} | {abs_err} | {rel_err} | {baseline_iters} | {candidate_iters} |".format(
+                    workload=workload_label,
+                    family=row["family"],
+                    status=row["status"],
+                    failed_fields=failed_fields,
+                    abs_err=abs_err,
+                    rel_err=rel_err,
+                    baseline_iters=baseline_iters,
+                    candidate_iters=candidate_iters,
+                )
+            )
+
+    lines.extend(
+        [
+            "",
+            "## Per-family view",
+            "",
+            "| Family | Workload | Status | Failed required fields | Baseline SCF iters | Candidate SCF iters |",
+            "| --- | --- | --- | --- | ---: | ---: |",
+        ]
+    )
+    for family_group in summary["by_family"]:
+        for row in family_group["workloads"]:
+            failed_fields = ", ".join(row["required_field_failures"]) or "—"
+            baseline_iters = (
+                "—" if row["baseline_scf_iterations"] is None else str(row["baseline_scf_iterations"])
+            )
+            candidate_iters = (
+                "—"
+                if row["candidate_scf_iterations"] is None
+                else str(row["candidate_scf_iterations"])
+            )
+            workload_label = str(row["workload_id"])
+            if row["first_priority_convergence_case"]:
+                workload_label += " *(first-priority convergence case)*"
+            lines.append(
+                "| {family} | {workload} | {status} | {failed_fields} | {baseline_iters} | {candidate_iters} |".format(
+                    family=family_group["family"],
+                    workload=workload_label,
+                    status=row["status"],
+                    failed_fields=failed_fields,
+                    baseline_iters=baseline_iters,
+                    candidate_iters=candidate_iters,
+                )
+            )
+    return "\n".join(lines) + "\n"
 
 
 def flatten_result(
@@ -911,6 +1184,7 @@ def flatten_result(
         "trait_bucket": workload["trait_bucket"],
         "lane": workload["lane"],
         "gold_required": workload["gold_required"],
+        "first_priority_convergence_case": workload["first_priority_convergence_case"],
         "family": design["family"],
         "diag_policy": design["diag_policy"],
         "offload_scope": design["offload_scope"],
@@ -925,6 +1199,9 @@ def flatten_result(
         "final_total_energy_match": correctness["final_total_energy_match"],
         "residual_threshold_state_match": correctness["residual_threshold_state_match"],
         "converged_state_match": correctness["converged_state_match"],
+        "required_field_failures": ";".join(correctness["required_field_failures"]),
+        "baseline_scf_iterations": correctness["baseline_scf_iterations"],
+        "candidate_scf_iterations": correctness["candidate_scf_iterations"],
         "final_total_energy_abs_err_ev": correctness["final_total_energy_abs_err_ev"],
         "final_total_energy_rel_err": correctness["final_total_energy_rel_err"],
         "time_to_convergence_s": primary["time_to_convergence_s"],
@@ -956,6 +1233,7 @@ def flatten_result(
         "model_run_id": artifacts["model_run_id"],
         "stdout_path": artifacts["stdout_path"],
         "metrics_path": artifacts["metrics_path"],
+        "compare_report_path": artifacts["compare_report_path"],
         "raw_trace_paths": "" if raw_trace_paths is None else ";".join(raw_trace_paths),
         "stub_reason": row["stub_reason"],
     }
@@ -971,6 +1249,18 @@ def write_csv(path: Path, bundle: dict[str, object]) -> None:
         writer.writeheader()
         for row in bundle["results"]:
             writer.writerow(flatten_result(bundle, row))
+
+
+def write_gold_gate_summary(output_dir: Path, bundle: dict[str, object]) -> tuple[Path, Path] | None:
+    gold_rows = [row for row in bundle["results"] if row["workload"]["gold_required"]]
+    if not gold_rows:
+        return None
+    summary = build_gold_gate_summary(bundle)
+    json_path = output_dir / DEFAULT_GOLD_SUMMARY_JSON_NAME
+    md_path = output_dir / DEFAULT_GOLD_SUMMARY_MD_NAME
+    write_json(json_path, summary)
+    md_path.write_text(render_gold_gate_summary_markdown(summary), encoding="utf-8")
+    return json_path, md_path
 
 
 def main() -> int:
@@ -1017,23 +1307,30 @@ def main() -> int:
     csv_path = args.output_dir / args.csv_name
     write_json(json_path, bundle)
     write_csv(csv_path, bundle)
+    gold_gate_summary_paths = write_gold_gate_summary(args.output_dir, bundle)
     gold_summary = summarize_gold_results(bundle)
 
     print(f"[ok] wrote JSON bundle: {json_path}")
     print(f"[ok] wrote CSV rows:   {csv_path}")
+    if gold_gate_summary_paths is not None:
+        gold_summary_json_path, gold_summary_md_path = gold_gate_summary_paths
+        print(f"[ok] wrote gold summary JSON: {gold_summary_json_path}")
+        print(f"[ok] wrote gold summary MD:   {gold_summary_md_path}")
     print(
         f"[summary] rows={len(bundle['results'])} families={len(families)} "
         f"workloads={len(workloads)} execute_model={'yes' if args.execute_model else 'no'}"
     )
     if gold_summary["gold_rows"] > 0:
         print(
-            "[gold] rows={gold_rows} passed={gold_passed} failed={gold_failed} errors={gold_errors}".format(
+            "[gold] rows={gold_rows} passed={gold_passed} mismatches={gold_mismatches} errors={gold_errors}".format(
                 **gold_summary
             )
         )
 
-    if args.fail_on_gold_mismatch and (
-        gold_summary["gold_failed"] > 0 or gold_summary["gold_errors"] > 0
+    if args.fail_on_gold_mismatch and any(
+        is_gold_gate_blocking_status(str(row["correctness"]["status"]))
+        for row in bundle["results"]
+        if row["workload"]["gold_required"]
     ):
         return 1
     return 0
