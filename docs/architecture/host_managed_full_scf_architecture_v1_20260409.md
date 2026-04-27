@@ -291,7 +291,7 @@ Host register/pin objects
   - 控制描述符、DMA、completion 的 TLM-style `b_transport`
 - [types.hpp](/Volumes/remote/phd/year_2/project/dft加速/model/qe_band_solver_model/include/types.hpp)
   - host-device-first public types
-- [cluster_c_hardware_diag.cpp](/Volumes/remote/phd/year_2/project/dft加速/model/qe_band_solver_model/src/cluster_c_hardware_diag.cpp)
+- [cluster_c_hardware_diag.cpp](/Volumes/remote/phd/year_2/project/dft加速/model/qe_band_solver_model/src/clusters/cluster_c_hardware_diag.cpp)
   - 设备优先 / host fallback 的判定门限
 
 ## 9. 当前实现状态

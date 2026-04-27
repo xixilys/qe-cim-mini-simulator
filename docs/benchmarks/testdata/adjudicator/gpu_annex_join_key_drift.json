@@ -1,0 +1,31 @@
+{
+  "join_key": {
+    "workload_group_id": "qe_fpga_phase1_workload_group_v0",
+    "architecture_family": "F2",
+    "diag_policy": "cpu_only",
+    "offload_scope": "single_hotpath",
+    "resident_policy": "fit_first",
+    "partition_strategy": "single_hotpath_partition",
+    "assumption_set_id": "pending_calibration_v0",
+    "qe_tolerance_schema_id": "pending_qe_numerical_tolerance_schema_v0",
+    "accounting_boundary_id": "scf_shell_convergence_scope_v1",
+    "fairness_policy_id": "qe_cpu_gpu_fpga_fairness_and_power_contract_v0",
+    "power_boundary_id": "whole_node_steady_state_single_cpu_single_accelerator_v0",
+    "observability_contract_id": "qe_simulator_board_observability_contract_v0",
+    "algorithm_rewrite_manifest_id": "qe_algorithm_rewrite_manifest_v0"
+  },
+  "status": "thesis_eligible",
+  "decisive_case_ids": [
+    "si4_pbe_uspp_small"
+  ],
+  "gpu_decisive_modes": [
+    "cuda"
+  ],
+  "workload_group_gpu_column_manifest": {
+    "safe_claim_status": "gpu_column_ready",
+    "thesis_counted_cases": [
+      "si4_pbe_uspp_small"
+    ],
+    "unresolved_rows": []
+  }
+}

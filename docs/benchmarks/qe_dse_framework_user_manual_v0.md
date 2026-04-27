@@ -61,6 +61,20 @@ Adjudicator controls claims.
 
 ---
 
+### 1.1 Unified DSE staged contract bundle
+
+Unified DSE staged documentation/contract lane 由以下文件固定：
+
+- `docs/benchmarks/qe_dse_systemc_feedback_contract_v0.md`：SystemC feedback dry-run 默认为 `planned_not_executed` / `not_executed` / `timed_functional_proxy_contract_only`，不隐式运行 SystemC。
+- `docs/benchmarks/qe_dse_gem5_systemc_handoff_contract_v0.md`：gem5/SystemC handoff 默认为 Stage B planning record，`execution_status = not_executed`，`platform_status = requires_linux_x86_validation`。
+- `docs/benchmarks/qe_unified_dse_stage_a_readiness_checklist_v0.md`：固定 QE anchor status、pre-adjudication ranking 语义，以及 `final_public_family_winner = null` 的 Stage A 边界。
+- `docs/benchmarks/qe_dse_qe_correctness_report_contract_v0.md`：固定 Stage C external QE-equivalent correctness report 的 schema 和 claim gate。
+- `docs/benchmarks/qe_dse_fpga_asic_implementation_evidence_contract_v0.md`：固定 Stage D FPGA/ASIC implementation evidence 的 schema、target/evidence-kind matrix 和 overclaim 拒绝规则。
+
+这些合同只允许 evidence-only / screening-only 读法：CLI 不生成 RTL/HLS/board、cycle accuracy、CIM-only identity、实际 gem5-controlled SCF 或最终 public winner claim；QE-equivalent SCF 只能来自 validated external correctness report。老师汇报语言继续引用 `docs/architecture/systemc_system_level_dse_family_responsibility_matrix_v0_20260413.md` 和 `docs/architecture/systemc_system_level_dse_advisor_report_template_v0_20260413.md`，不要另造 recommendation 口径。
+
+---
+
 ## 2. 框架总览
 
 当前 DSE 工具链可以理解为五层：
@@ -481,6 +495,62 @@ python3 docs/benchmarks/run_unified_dse_v0.py \
 - 当前 canonical Stage-A family sweep orchestrator 仍是 `run_systemc_architecture_family_dse_sweep.py`；
 - `SystemC` execution 必须显式 opt-in，默认 dry-run / proposal-only 不隐式运行模型；
 - implementation backend 在 v0 中只允许 stub / reserved / projection-only，不表示 HLS、RTL、OpenROAD、FPGA board 或 whole-node power capability 已完成。
+
+Stage B0 descriptor-only handoff 可以在不执行仿真的情况下显式生成：
+
+```bash
+python3 docs/benchmarks/run_unified_dse_v0.py \
+  --design-space-spec docs/benchmarks/qe_architecture_family_design_space_spec_v0.json \
+  --workload tmp/workload_descriptor.json \
+  --output-dir tmp/unified_dse_results \
+  --dry-run \
+  --emit-stage-b0-descriptors
+```
+
+该模式会额外写出 `systemc_configs/`、`gem5_systemc_handoff/` 和
+`stage_b0_descriptor_manifest_v0.json`。这些文件只是下一阶段 SystemC/gem5 adapter 的输入合同；
+`execution_status` 仍为 `not_executed`，不能读成 gem5 已经控制 SystemC 或 QE-equivalent SCF 已经完成。
+
+如果已有外部 SystemC feedback artifact，可以用 `--systemc-feedback` 回流指标：
+
+```bash
+python3 docs/benchmarks/run_unified_dse_v0.py \
+  --design-space-spec docs/benchmarks/qe_architecture_family_design_space_spec_v0.json \
+  --workload tmp/workload_descriptor.json \
+  --systemc-feedback tmp/systemc_feedback.json \
+  --output-dir tmp/unified_dse_results \
+  --dry-run
+```
+
+这个模式只读取 artifact；CLI 不启动 SystemC。若 artifact 含完整 proxy metrics，DSE row 可以进入
+`promotion-eligible`，但仍是 timed-functional/proxy feedback，不是最终 public winner。
+
+如果需要一眼查看所有阶段状态，可加：
+
+```bash
+--emit-full-stage-status
+```
+
+输出 `unified_dse_full_stage_status_v0.json`。没有真实外部报告的后续阶段会显示为
+`blocked_waiting_*`，例如 gem5/SystemC smoke、QE-equivalent correctness、FPGA/ASIC implementation evidence。
+
+Stage B3 的 gem5/SystemC smoke 报告可以通过 `--gem5-smoke-report` 引用，但必须是外部已经产生的
+`qe_dse_gem5_systemc_smoke_report_v0` artifact。该报告只能证明 smoke-level bridge/control evidence；
+`claim_ceiling` 必须是 `gem5_systemc_smoke_only`，且
+`correctness_gate.qe_equivalent_scf_claim` 必须保持 `false`。
+
+Stage C 的 QE-equivalent correctness 报告可以通过 `--qe-correctness-report` 引用。该报告必须使用
+`qe_dse_qe_equivalent_correctness_report_v0` schema，并且只有在
+`correctness_status = pass`、`compare_report.overall_pass = true`、容差 schema 为
+`qe_gold_numerical_tolerance_schema_v0` 时，才允许设置
+`qe_equivalent_scf_claim = true`。这只证明 correctness gate 通过，不证明硬件实现、性能优势或最终架构赢家。
+
+Stage D 的 FPGA/ASIC implementation evidence 可以通过 `--implementation-evidence` 引用。该 artifact
+必须使用 `qe_dse_fpga_asic_implementation_evidence_v0` schema，并明确写出
+`implementation_target_class`、`evidence_kind`、窄 claim ceiling（例如
+`hls_synthesis_only`、`rtl_simulation_only`、`fpga_board_measurement_only`、
+`asic_ppa_estimate_only`）。CLI 只做 schema / claim-boundary validation，不运行 HLS、RTL、OpenROAD、
+board 或 ASIC flow，也拒绝 `final_public_family_winner` / production release ready 这类越权字段。
 
 Stage-A 允许：
 

@@ -38,6 +38,7 @@
 
 - `docs/overview/project_development_timeline.md`：完整开发时间线与阶段结论
 - `docs/overview/qe_project_implementation_architecture_and_plan_v0.md`：当前项目级实现架构、workstream、phase roadmap 与 validation gate 总规划
+- `docs/overview/gem5_systemc_wsl_joint_debug_plan_20260427.md`：从 macOS 迁移到 WSL 后继续 gem5 + SystemC 联合调试的执行 runbook
 - `docs/overview/agent_handoff_20260312.md`：仓库级 handoff / 工作约束
 - `docs/overview/qe_subspace_sampling.md`：`QE` 采样与真实样本背景
 - `docs/architecture/system_design_master_spec_v0.md`：当前唯一系统级主规范

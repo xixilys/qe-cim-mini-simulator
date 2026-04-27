@@ -60,6 +60,15 @@ class UnifiedDseBackendTests(unittest.TestCase):
         self.assertEqual(payload["source_kind"], "stub")
         self.assertEqual(payload["authority_scope"], "supporting_evidence_only")
         self.assertIsNone(payload.get("final_public_family_winner"))
+        self.assertEqual(payload["systemc_feedback_contract"]["status"], "planned_not_executed")
+        self.assertEqual(payload["systemc_feedback_contract"]["backend_class"], "systemc_timed_functional_proxy")
+        self.assertIn("candidate_config_ref", payload["systemc_feedback_contract"])
+        self.assertFalse(payload["systemc_feedback_contract"]["subprocess_invoked"])
+        self.assertEqual(payload["gem5_handoff_contract"]["status"], "planned_for_stage_b")
+        self.assertEqual(payload["gem5_handoff_contract"]["handoff_status"], "planned")
+        self.assertIn("input_descriptor_ref", payload["gem5_handoff_contract"])
+        self.assertFalse(payload["qe_anchor_refs"]["qe_equivalent_scf_claim"])
+        self.assertIn("case_id", payload["qe_anchor_refs"])
 
     def test_systemc_dry_run_does_not_execute_subprocess(self) -> None:
         interfaces = load_unified_dse_module("interfaces")
@@ -84,6 +93,11 @@ class UnifiedDseBackendTests(unittest.TestCase):
         self.assertEqual(payload["result_status"], "dry_run")
         self.assertEqual(payload["source_kind"], "stub")
         self.assertFalse(payload["backend_observability"]["executed"])
+        self.assertEqual(payload["systemc_feedback_contract"]["execution_status"], "not_executed")
+        self.assertEqual(
+            payload["systemc_feedback_contract"]["claim_ceiling"],
+            "timed_functional_proxy_contract_only",
+        )
         self.assertEqual(payload["authority_scope"], "supporting_evidence_only")
 
     def test_systemc_requires_explicit_opt_in_before_subprocess_execution(self) -> None:
@@ -133,6 +147,8 @@ class UnifiedDseBackendTests(unittest.TestCase):
         self.assertEqual(payload["result_status"], "model_error")
         self.assertEqual(payload["backend_observability"]["returncode"], 7)
         self.assertTrue(payload["backend_observability"]["executed"])
+        self.assertEqual(payload["systemc_feedback_contract"]["execution_status"], "executed")
+        self.assertTrue(payload["systemc_feedback_contract"]["subprocess_invoked"])
         self.assertEqual(payload["authority_scope"], "supporting_evidence_only")
 
     def test_implementation_backend_returns_only_stub_or_reserved_status(self) -> None:

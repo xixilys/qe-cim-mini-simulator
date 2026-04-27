@@ -1,0 +1,41 @@
+{
+  "schema_version": "qe_cpu_gpu_baseline_manifest_template_v0",
+  "baseline_class": "CPU+GPU",
+  "case_id": "si4_pbe_uspp_small",
+  "gpu_mode": "strict_fp64",
+  "run_tag": "YYYYMMDD-HHMMSS",
+  "host_id": "fill-me",
+  "gpu_id": "fill-me",
+  "qe_rev": "fill-me",
+  "correctness_contract_id": "qe_gold_correctness_contract_v0",
+  "workload_group_id": "qe_fpga_phase1_workload_group_v0",
+  "fairness_policy_id": "qe_cpu_gpu_fpga_fairness_and_power_contract_v0",
+  "algorithm_rewrite_manifest_id": "qe_algorithm_rewrite_manifest_v0",
+  "gpu_mode_attempts": [
+    "strict_fp64"
+  ],
+  "mode_attempt_exemption_note": "",
+  "shared_rewrite_closed": false,
+  "host_platform_comparable": false,
+  "rewrite_mode": "none",
+  "qe_tolerance_schema_id": "qe_gold_numerical_tolerance_schema_v0",
+  "accounting_boundary_id": "scf_shell_convergence_scope_v1",
+  "power_boundary_id": "whole_node_steady_state_single_cpu_single_accelerator_v0",
+  "warmup_policy": "symmetric_warmup_once",
+  "host_normalization_note": "fill-me",
+  "command": "fill-me",
+  "env": {
+    "CUDA_VISIBLE_DEVICES": "fill-me"
+  },
+  "artifact_paths": {
+    "stdout": "qe_<case>__cpu_gpu__<mode>__<tag>.stdout.txt",
+    "stderr": "qe_<case>__cpu_gpu__<mode>__<tag>.stderr.txt",
+    "timing": "qe_<case>__cpu_gpu__<mode>__<tag>.timing.json",
+    "correctness": "qe_<case>__cpu_gpu__<mode>__<tag>.correctness.json",
+    "convergence": "qe_<case>__cpu_gpu__<mode>__<tag>.convergence.json",
+    "power": "qe_<case>__cpu_gpu__<mode>__<tag>.power.json",
+    "summary": "qe_<case>__cpu_gpu__<mode>__<tag>.summary.md"
+  },
+  "baseline_state": "pending",
+  "notes": []
+}

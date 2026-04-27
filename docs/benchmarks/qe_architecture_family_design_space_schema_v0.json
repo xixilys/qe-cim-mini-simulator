@@ -1,0 +1,991 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openlair.local/docs/benchmarks/qe_architecture_family_design_space_schema_v0.json",
+  "title": "QE Architecture Family Design Space Spec v0",
+  "description": "Schema for the complete QE architecture-family DSE design-space specification. The spec defines workload, architecture, mapping, evaluator, calibration, reporting, authority, and first-campaign objects for Stage-A evidence-only DSE.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "design_space_id",
+    "design_space_version",
+    "authority_stage",
+    "scope",
+    "local_anchors",
+    "workload_ir",
+    "architecture_ir",
+    "mapping_schedule_ir",
+    "evaluator_ir",
+    "calibration_feedback_ir",
+    "search_ir",
+    "reporting_ir",
+    "first_qe_campaign",
+    "validation_requirements"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "qe_architecture_family_design_space_spec_v0"
+    },
+    "design_space_id": {
+      "$ref": "#/$defs/non_empty_string"
+    },
+    "design_space_version": {
+      "$ref": "#/$defs/non_empty_string"
+    },
+    "authority_stage": {
+      "$ref": "#/$defs/authority_stage"
+    },
+    "scope": {
+      "$ref": "#/$defs/scope"
+    },
+    "local_anchors": {
+      "$ref": "#/$defs/local_anchors"
+    },
+    "workload_ir": {
+      "$ref": "#/$defs/workload_ir"
+    },
+    "architecture_ir": {
+      "$ref": "#/$defs/architecture_ir"
+    },
+    "mapping_schedule_ir": {
+      "$ref": "#/$defs/mapping_schedule_ir"
+    },
+    "evaluator_ir": {
+      "$ref": "#/$defs/evaluator_ir"
+    },
+    "calibration_feedback_ir": {
+      "$ref": "#/$defs/calibration_feedback_ir"
+    },
+    "search_ir": {
+      "$ref": "#/$defs/search_ir"
+    },
+    "reporting_ir": {
+      "$ref": "#/$defs/reporting_ir"
+    },
+    "first_qe_campaign": {
+      "$ref": "#/$defs/campaign"
+    },
+    "validation_requirements": {
+      "$ref": "#/$defs/validation_requirements"
+    }
+  },
+  "$defs": {
+    "non_empty_string": {
+      "type": "string",
+      "minLength": 1
+    },
+    "path_string": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[^\\n]+$"
+    },
+    "string_array": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/non_empty_string"
+      }
+    },
+    "number_or_null": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "family": {
+      "enum": [
+        "F1",
+        "F2",
+        "F3",
+        "F4",
+        "F5",
+        "custom"
+      ]
+    },
+    "diag_policy": {
+      "enum": [
+        "cpu_only",
+        "device_first_fallback",
+        "aggressive_device"
+      ]
+    },
+    "offload_scope": {
+      "enum": [
+        "single_hotpath",
+        "balanced",
+        "device_heavy"
+      ]
+    },
+    "resident_policy": {
+      "enum": [
+        "fit_first",
+        "spill_tolerant"
+      ]
+    },
+    "partition_strategy": {
+      "enum": [
+        "single_hotpath_partition",
+        "operator_build_fused__diag__refresh",
+        "operator__build__diag__refresh",
+        "operator__build_diag_fused__refresh",
+        "operator_build_fused__diag_refresh_fused"
+      ]
+    },
+    "promotion_state": {
+      "enum": [
+        "reject",
+        "explain-only",
+        "promotion-eligible"
+      ]
+    },
+    "source_kind": {
+      "enum": [
+        "stub",
+        "timed_functional_proxy",
+        "trace_calibrated_proxy",
+        "measured",
+        "mixed"
+      ]
+    },
+    "gpu_baseline_state": {
+      "enum": [
+        "pending",
+        "running",
+        "measured_not_yet_validated",
+        "reference_only",
+        "deferred",
+        "thesis_eligible"
+      ]
+    },
+    "authority_stage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "stage_id",
+        "claim_posture",
+        "decision_authority",
+        "dse_authority_limit",
+        "stage_b_activation_gates"
+      ],
+      "properties": {
+        "stage_id": {
+          "const": "Stage-A"
+        },
+        "claim_posture": {
+          "enum": [
+            "evidence_only",
+            "bounded_projection_grade"
+          ]
+        },
+        "decision_authority": {
+          "const": "adjudicator_memo_only"
+        },
+        "dse_authority_limit": {
+          "const": "rank_screen_explain_nominate_only"
+        },
+        "stage_b_activation_gates": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/non_empty_string"
+          }
+        }
+      }
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "software_family",
+        "system_object",
+        "included_families",
+        "excluded_actions"
+      ],
+      "properties": {
+        "software_family": {
+          "const": "QE"
+        },
+        "system_object": {
+          "const": "HostSCF_to_FPGAOrchestrator_to_ChipTop_cluster_ABCD"
+        },
+        "included_families": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/family"
+          }
+        },
+        "excluded_actions": {
+          "$ref": "#/$defs/string_array"
+        }
+      }
+    },
+    "anchor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "anchor_id",
+        "path",
+        "role"
+      ],
+      "properties": {
+        "anchor_id": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "path": {
+          "$ref": "#/$defs/path_string"
+        },
+        "role": {
+          "$ref": "#/$defs/non_empty_string"
+        }
+      }
+    },
+    "local_anchors": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/anchor"
+      }
+    },
+    "field_spec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "field",
+        "required",
+        "source",
+        "purpose"
+      ],
+      "properties": {
+        "field": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "source": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "purpose": {
+          "$ref": "#/$defs/non_empty_string"
+        }
+      }
+    },
+    "workload_ir": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ir_id",
+        "identity_fields",
+        "signature_fields",
+        "trace_shape_fields",
+        "stage_model",
+        "evidence_sources"
+      ],
+      "properties": {
+        "ir_id": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "identity_fields": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/field_spec"
+          }
+        },
+        "signature_fields": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/field_spec"
+          }
+        },
+        "trace_shape_fields": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/field_spec"
+          }
+        },
+        "stage_model": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "stage_id",
+              "owner",
+              "default_cluster",
+              "workload_role"
+            ],
+            "properties": {
+              "stage_id": {
+                "$ref": "#/$defs/non_empty_string"
+              },
+              "owner": {
+                "enum": [
+                  "host",
+                  "fpga_runtime",
+                  "chip_cluster",
+                  "mixed"
+                ]
+              },
+              "default_cluster": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "workload_role": {
+                "$ref": "#/$defs/non_empty_string"
+              }
+            }
+          }
+        },
+        "evidence_sources": {
+          "$ref": "#/$defs/string_array"
+        }
+      }
+    },
+    "architecture_ir": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ir_id",
+        "graph_surface",
+        "template_surface",
+        "family_profiles",
+        "design_axes"
+      ],
+      "properties": {
+        "ir_id": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "graph_surface": {
+          "$ref": "#/$defs/graph_surface"
+        },
+        "template_surface": {
+          "$ref": "#/$defs/template_surface"
+        },
+        "family_profiles": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/family_profile"
+          }
+        },
+        "design_axes": {
+          "$ref": "#/$defs/design_axes"
+        }
+      }
+    },
+    "graph_surface": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "component_catalog_path",
+        "graph_seed_path",
+        "projection_helper_path",
+        "authority_keys",
+        "sidecar_only_fields"
+      ],
+      "properties": {
+        "component_catalog_path": {
+          "$ref": "#/$defs/path_string"
+        },
+        "graph_seed_path": {
+          "$ref": "#/$defs/path_string"
+        },
+        "projection_helper_path": {
+          "$ref": "#/$defs/path_string"
+        },
+        "authority_keys": {
+          "$ref": "#/$defs/string_array"
+        },
+        "sidecar_only_fields": {
+          "$ref": "#/$defs/string_array"
+        }
+      }
+    },
+    "template_surface": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "loader_path",
+        "generator_path",
+        "projector_path",
+        "schema_path",
+        "runtime_config_hook",
+        "candidate_templates"
+      ],
+      "properties": {
+        "loader_path": {
+          "$ref": "#/$defs/path_string"
+        },
+        "generator_path": {
+          "$ref": "#/$defs/path_string"
+        },
+        "projector_path": {
+          "$ref": "#/$defs/path_string"
+        },
+        "schema_path": {
+          "$ref": "#/$defs/path_string"
+        },
+        "runtime_config_hook": {
+          "const": "QEBS_ARCH_CONFIG"
+        },
+        "candidate_templates": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/template_catalog_entry"
+          }
+        }
+      }
+    },
+    "template_catalog_entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "template_id",
+        "template_path",
+        "template_family",
+        "runtime_projection_family",
+        "campaign_role",
+        "stage_a_status"
+      ],
+      "properties": {
+        "template_id": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "template_path": {
+          "$ref": "#/$defs/path_string"
+        },
+        "template_family": {
+          "$ref": "#/$defs/family"
+        },
+        "runtime_projection_family": {
+          "$ref": "#/$defs/family"
+        },
+        "campaign_role": {
+          "enum": [
+            "baseline",
+            "primary",
+            "conditional",
+            "deferred"
+          ]
+        },
+        "stage_a_status": {
+          "enum": [
+            "validated_baseline",
+            "projection_only",
+            "reserved"
+          ]
+        }
+      }
+    },
+    "family_profile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "family",
+        "label",
+        "canonical_diag_policy",
+        "canonical_offload_scope",
+        "canonical_resident_policy",
+        "canonical_partition_strategy",
+        "complexity_proxy"
+      ],
+      "properties": {
+        "family": {
+          "$ref": "#/$defs/family"
+        },
+        "label": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "canonical_diag_policy": {
+          "$ref": "#/$defs/diag_policy"
+        },
+        "canonical_offload_scope": {
+          "$ref": "#/$defs/offload_scope"
+        },
+        "canonical_resident_policy": {
+          "$ref": "#/$defs/resident_policy"
+        },
+        "canonical_partition_strategy": {
+          "$ref": "#/$defs/partition_strategy"
+        },
+        "complexity_proxy": {
+          "enum": [
+            "low",
+            "medium",
+            "high"
+          ]
+        }
+      }
+    },
+    "design_axes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "family",
+        "diag_policy",
+        "offload_scope",
+        "resident_policy",
+        "partition_strategy"
+      ],
+      "properties": {
+        "family": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/family"
+          }
+        },
+        "diag_policy": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/diag_policy"
+          }
+        },
+        "offload_scope": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/offload_scope"
+          }
+        },
+        "resident_policy": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/resident_policy"
+          }
+        },
+        "partition_strategy": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/partition_strategy"
+          }
+        }
+      }
+    },
+    "mapping_schedule_ir": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ir_id",
+        "runtime_projection_fields",
+        "cluster_sequence",
+        "host_owned_stages",
+        "hardware_owned_stages"
+      ],
+      "properties": {
+        "ir_id": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "runtime_projection_fields": {
+          "$ref": "#/$defs/string_array"
+        },
+        "cluster_sequence": {
+          "$ref": "#/$defs/string_array"
+        },
+        "host_owned_stages": {
+          "$ref": "#/$defs/string_array"
+        },
+        "hardware_owned_stages": {
+          "$ref": "#/$defs/string_array"
+        }
+      }
+    },
+    "evaluator_ir": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ir_id",
+        "layers"
+      ],
+      "properties": {
+        "ir_id": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "layers": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/evaluator_layer"
+          }
+        }
+      }
+    },
+    "evaluator_layer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "layer_id",
+        "fidelity_class",
+        "source_kind",
+        "local_tools",
+        "allowed_outputs",
+        "forbidden_outputs"
+      ],
+      "properties": {
+        "layer_id": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "fidelity_class": {
+          "enum": [
+            "characterization_pruning",
+            "fast_timed_functional",
+            "correctness_capable",
+            "generalization_coverage",
+            "authority_adjudication"
+          ]
+        },
+        "source_kind": {
+          "$ref": "#/$defs/source_kind"
+        },
+        "local_tools": {
+          "$ref": "#/$defs/string_array"
+        },
+        "allowed_outputs": {
+          "$ref": "#/$defs/string_array"
+        },
+        "forbidden_outputs": {
+          "$ref": "#/$defs/string_array"
+        }
+      }
+    },
+    "calibration_feedback_ir": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ir_id",
+        "calibration_contract_path",
+        "source_kind_taxonomy",
+        "gpu_baseline_state_taxonomy",
+        "feedback_fields",
+        "identity_preservation_rule"
+      ],
+      "properties": {
+        "ir_id": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "calibration_contract_path": {
+          "$ref": "#/$defs/path_string"
+        },
+        "source_kind_taxonomy": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/source_kind"
+          }
+        },
+        "gpu_baseline_state_taxonomy": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/gpu_baseline_state"
+          }
+        },
+        "feedback_fields": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/field_spec"
+          }
+        },
+        "identity_preservation_rule": {
+          "$ref": "#/$defs/non_empty_string"
+        }
+      }
+    },
+    "search_ir": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ir_id",
+        "candidate_generators",
+        "dse_v2_bo_poc"
+      ],
+      "properties": {
+        "ir_id": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "candidate_generators": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/candidate_generator"
+          }
+        },
+        "dse_v2_bo_poc": {
+          "$ref": "#/$defs/bo_poc"
+        }
+      }
+    },
+    "candidate_generator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "generator_id",
+        "strategy",
+        "producer_path",
+        "authority_limit"
+      ],
+      "properties": {
+        "generator_id": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "strategy": {
+          "enum": [
+            "canonical_grid",
+            "grid_search",
+            "random_sampling",
+            "latin_hypercube",
+            "bayesian_optimization_poc"
+          ]
+        },
+        "producer_path": {
+          "$ref": "#/$defs/path_string"
+        },
+        "authority_limit": {
+          "enum": [
+            "candidate_proposal_only",
+            "evaluated_row_producer",
+            "evidence_packager_only"
+          ]
+        }
+      }
+    },
+    "bo_poc": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "poc_id",
+        "status",
+        "input_surfaces",
+        "output_surfaces",
+        "guardrails"
+      ],
+      "properties": {
+        "poc_id": {
+          "const": "dse_v2_bo_poc"
+        },
+        "status": {
+          "enum": [
+            "reserved_proposal_layer",
+            "prototype_only",
+            "disabled"
+          ]
+        },
+        "input_surfaces": {
+          "$ref": "#/$defs/string_array"
+        },
+        "output_surfaces": {
+          "$ref": "#/$defs/string_array"
+        },
+        "guardrails": {
+          "$ref": "#/$defs/string_array"
+        }
+      }
+    },
+    "reporting_ir": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ir_id",
+        "pareto_objectives",
+        "promotion_policy",
+        "allowed_stage_a_reports",
+        "forbidden_stage_a_reports",
+        "adjudicator_intake_surfaces"
+      ],
+      "properties": {
+        "ir_id": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "pareto_objectives": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/objective"
+          }
+        },
+        "promotion_policy": {
+          "$ref": "#/$defs/promotion_policy"
+        },
+        "allowed_stage_a_reports": {
+          "$ref": "#/$defs/string_array"
+        },
+        "forbidden_stage_a_reports": {
+          "$ref": "#/$defs/string_array"
+        },
+        "adjudicator_intake_surfaces": {
+          "$ref": "#/$defs/string_array"
+        }
+      }
+    },
+    "objective": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "metric",
+        "direction",
+        "role"
+      ],
+      "properties": {
+        "metric": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "direction": {
+          "enum": [
+            "minimize",
+            "maximize",
+            "report_only"
+          ]
+        },
+        "role": {
+          "enum": [
+            "primary_objective",
+            "secondary_objective",
+            "constraint_metric",
+            "explanation_metric"
+          ]
+        }
+      }
+    },
+    "promotion_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "state_machine",
+        "reject_statuses",
+        "explain_only_when",
+        "tie_band_rule"
+      ],
+      "properties": {
+        "state_machine": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/promotion_state"
+          }
+        },
+        "reject_statuses": {
+          "$ref": "#/$defs/string_array"
+        },
+        "explain_only_when": {
+          "$ref": "#/$defs/string_array"
+        },
+        "tie_band_rule": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "max_relative_margin",
+            "source_contract_path"
+          ],
+          "properties": {
+            "kind": {
+              "const": "relative_time_margin_after_energy_tiebreak"
+            },
+            "max_relative_margin": {
+              "type": "number",
+              "minimum": 0
+            },
+            "source_contract_path": {
+              "$ref": "#/$defs/path_string"
+            }
+          }
+        }
+      }
+    },
+    "campaign": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "campaign_id",
+        "purpose",
+        "families_primary",
+        "families_conditional",
+        "main_cases",
+        "anchor_cases",
+        "coverage_cases",
+        "generalization_cases",
+        "design_axes",
+        "objectives",
+        "required_gates",
+        "expected_outputs"
+      ],
+      "properties": {
+        "campaign_id": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "purpose": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "families_primary": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/family"
+          }
+        },
+        "families_conditional": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/family"
+          }
+        },
+        "main_cases": {
+          "$ref": "#/$defs/string_array"
+        },
+        "anchor_cases": {
+          "$ref": "#/$defs/string_array"
+        },
+        "coverage_cases": {
+          "$ref": "#/$defs/string_array"
+        },
+        "generalization_cases": {
+          "$ref": "#/$defs/string_array"
+        },
+        "design_axes": {
+          "$ref": "#/$defs/design_axes"
+        },
+        "objectives": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/objective"
+          }
+        },
+        "required_gates": {
+          "$ref": "#/$defs/string_array"
+        },
+        "expected_outputs": {
+          "$ref": "#/$defs/string_array"
+        }
+      }
+    },
+    "validation_requirements": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_validation_required",
+        "local_validation_allowed",
+        "heavy_simulation_allowed",
+        "contract_mutation_allowed",
+        "runtime_code_mutation_allowed"
+      ],
+      "properties": {
+        "schema_validation_required": {
+          "const": true
+        },
+        "local_validation_allowed": {
+          "const": true
+        },
+        "heavy_simulation_allowed": {
+          "const": false
+        },
+        "contract_mutation_allowed": {
+          "const": false
+        },
+        "runtime_code_mutation_allowed": {
+          "const": false
+        }
+      }
+    }
+  }
+}

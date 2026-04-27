@@ -88,7 +88,29 @@
 
 这意味着 docs lane 现在不应提前生成带具体数值的 advisor 首页，而应继续等待这些结果型上游产物真正落地。
 
-## 5. 进入下一阶段前还缺什么
+## 4.2 2026-04-16 状态更新：next-stage package 已落地
+
+相对于本 note 初稿阶段，当前 repo 已经不再停留在“只有骨架、没有 recommendation-grade package”的状态。
+
+当前 next-stage phase runner 已经能够直接生成：
+
+- `qe_next_stage_dse_phase_summary.json / .md`
+- `qe_next_stage_projection_review.json / .md`
+- `qe_next_stage_stage_main_recommendation.json / .md`
+
+这意味着：
+
+- projection review package 已能汇总所有 accurate-layer-passing shortlisted candidates；
+- stage-main recommendation package 已能收口最终 `recommended_family`、`recommended_primary_candidates`、以及 `validated_alternative_candidates`；
+- advisor-facing cover memo / report / one-pager / pack manifest / checklist / docs index / figures-layout guide / why-not template / QA cheatsheet 都已经知道并引用这两类 package。
+
+因此，当前 docs lane 的主要职责已经进一步转成：
+
+1. 维护 package 字段与 advisor-facing narrative 的一致性；
+2. 确保 `projection_review` 与 `stage_main_recommendation_package` 不发生语义漂移；
+3. 只在 package contract 再次升级时补同步，而不是继续扩写更多抽象模板。
+
+## 5. 进入下一阶段前还缺什么（在 package 已落地之后）
 
 ### 5.1 family-behavior-deepening
 还需要更清楚地回答：
@@ -125,6 +147,7 @@
 - 有可追溯的 canonical baseline ID
 - 有可追溯的 candidate canonical result payload
 - 有来自 sweep runner 的 family ranking / projection outputs
+- 若 stage 已到 `projection_eligible`，`projection_review` 与 `stage_main_recommendation_package` 已生成并彼此一致
 - `confidence` 已由 verifier 结合上游证据冻结
 
 ## 8. 一句话状态总结

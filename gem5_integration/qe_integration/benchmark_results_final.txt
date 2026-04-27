@@ -1,0 +1,153 @@
+[SystemC Mock] FPGA model initialized with architecture: F2
+[SystemC Mock] Using DSE-derived performance model (mock mode)
+[SystemC Mock] Executing electrons loop: n_bands=16, max_iter=100, conv_thr=1.00e-08
+[SystemC Mock] Electrons loop complete: converged=1, iterations=70, energy=-22.800000
+[SystemC Mock] Total time: 0.295 ms (c_bands: 0.284 ms)
+[SystemC Mock] Executing electrons loop: n_bands=32, max_iter=100, conv_thr=1.00e-08
+[SystemC Mock] Electrons loop complete: converged=1, iterations=70, energy=-22.800000
+[SystemC Mock] Total time: 1.147 ms (c_bands: 1.136 ms)
+[SystemC Mock] Executing electrons loop: n_bands=48, max_iter=100, conv_thr=1.00e-08
+[SystemC Mock] Electrons loop complete: converged=1, iterations=70, energy=-22.800000
+[SystemC Mock] Total time: 2.567 ms (c_bands: 2.556 ms)
+[SystemC Mock] Executing electrons loop: n_bands=64, max_iter=100, conv_thr=1.00e-08
+[SystemC Mock] Electrons loop complete: converged=1, iterations=70, energy=-22.800000
+[SystemC Mock] Total time: 4.555 ms (c_bands: 4.544 ms)
+[SystemC Mock] Executing electrons loop: n_bands=128, max_iter=100, conv_thr=1.00e-08
+[SystemC Mock] Electrons loop complete: converged=1, iterations=70, energy=-22.800000
+[SystemC Mock] Total time: 18.188 ms (c_bands: 18.178 ms)
+[SystemC Mock] FPGA model finalized
+=========================================
+FPGA Offload Performance Benchmark Suite
+=========================================
+
+Initializing FPGA accelerator (F2 architecture)...
+SUCCESS: FPGA initialized
+
+Running benchmarks...
+----------------------------------------
+
+Workload 1: si4
+  Bands:     16
+  Basis:     64
+  K-points:  1
+
+     FPGA execution time:     0.294525 ms
+  FPGA time:            0.295 ms
+  Iterations:      70
+  Converged:       T
+  Final error:       1.0000E-09
+  Total energy:      -22.800000
+  CPU time (est):       3.500 ms
+  Speedup:              11.88x
+
+Workload 2: si8
+  Bands:     32
+  Basis:     128
+  K-points:  1
+
+     FPGA execution time:     1.146600 ms
+  FPGA time:            1.147 ms
+  Iterations:      70
+  Converged:       T
+  Final error:       1.0000E-09
+  Total energy:      -22.800000
+  CPU time (est):      14.000 ms
+  Speedup:              12.21x
+
+Workload 3: graphene
+  Bands:     48
+  Basis:     192
+  K-points:  1
+
+     FPGA execution time:     2.566725 ms
+  FPGA time:            2.567 ms
+  Iterations:      70
+  Converged:       T
+  Final error:       1.0000E-09
+  Total energy:      -22.800000
+  CPU time (est):      31.500 ms
+  Speedup:              12.27x
+
+Workload 4: au_slab
+  Bands:     64
+  Basis:     256
+  K-points:  1
+
+     FPGA execution time:     4.554900 ms
+  FPGA time:            4.555 ms
+  Iterations:      70
+  Converged:       T
+  Final error:       1.0000E-09
+  Total energy:      -22.800000
+  CPU time (est):      56.000 ms
+  Speedup:              12.29x
+
+Workload 5: sic32
+  Bands:     128
+  Basis:     512
+  K-points:  1
+
+     FPGA execution time:    18.188100 ms
+  FPGA time:           18.188 ms
+  Iterations:      70
+  Converged:       T
+  Final error:       1.0000E-09
+  Total energy:      -22.800000
+  CPU time (est):     224.000 ms
+  Speedup:              12.32x
+
+FPGA finalized
+
+=========================================
+Performance Summary
+=========================================
+
+Workload      Bands  Basis  FPGA(ms)  CPU(ms)  Speedup
+---------------------------------------------------------
+si4              16     64     0.295     3.500    11.88x
+si8              32    128     1.147    14.000    12.21x
+graphene         48    192     2.567    31.500    12.27x
+au_slab          64    256     4.555    56.000    12.29x
+sic32           128    512    18.188   224.000    12.32x
+---------------------------------------------------------
+
+Average speedup:       12.20x
+Minimum speedup:       11.88x
+Maximum speedup:       12.32x
+
+=========================================
+Energy Efficiency Analysis
+=========================================
+
+Assumptions:
+  CPU power:  150 W (Intel Xeon)
+  FPGA power:  50 W (Xilinx U280)
+
+Workload: si4
+  CPU energy:        0.525 J
+  FPGA energy:       0.015 J
+  Reduction:         35.65x
+
+Workload: si8
+  CPU energy:        2.100 J
+  FPGA energy:       0.057 J
+  Reduction:         36.63x
+
+Workload: graphene
+  CPU energy:        4.725 J
+  FPGA energy:       0.128 J
+  Reduction:         36.82x
+
+Workload: au_slab
+  CPU energy:        8.400 J
+  FPGA energy:       0.228 J
+  Reduction:         36.88x
+
+Workload: sic32
+  CPU energy:       33.600 J
+  FPGA energy:       0.909 J
+  Reduction:         36.95x
+
+=========================================
+Benchmark complete!
+=========================================

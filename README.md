@@ -58,12 +58,14 @@ For design review, the current key files are:
 - **Runnable system model**
   - `model/qe_band_solver_model/README.md`: runnable model overview
   - `model/qe_band_solver_model/src/dft_hybrid_system.cpp`: hybrid `Host + FPGA/runtime + Chip` system object
-  - `model/qe_band_solver_model/src/chip_top.cpp`: chip-top execution skeleton
-  - `model/qe_band_solver_model/src/body04_family_controller.cpp`: `BODY_04` family control path
-  - `model/qe_band_solver_model/src/body10_family_controller.cpp`: `BODY_10` family control path
+  - `model/qe_band_solver_model/src/host_scf.cpp`: host-managed SCF control/runtime entry
+  - `model/qe_band_solver_model/src/fpga_orchestrator.cpp`: thin device-runtime bridge
+  - `model/qe_band_solver_model/src/clusters/cluster_graph_executor.cpp`: active `Cluster A/B/C/D` execution path
+  - `model/qe_band_solver_model/legacy/README.md`: archived replay/body compatibility subtree
   - `model/qe_band_solver_model/include/types.hpp`: shared descriptors, reports, and object summaries
 - **Context and evidence**
   - `docs/overview/project_development_timeline.md`: long-form project development record
+  - `docs/overview/qe_project_implementation_architecture_and_plan_v0.md`: project-level implementation architecture, roadmap, workstreams, and validation gates
   - `docs/overview/agent_handoff_20260312.md`: current handoff and priority context
   - `model/qe_band_solver_model/docs/qe_band_solver_smoke_run_20260326.md`: current `QE` / `CP2K` smoke validation notes
   - `docs/README.md`: fuller docs index by category

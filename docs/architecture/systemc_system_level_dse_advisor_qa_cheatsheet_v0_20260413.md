@@ -9,6 +9,8 @@
 - 向老师解释为什么 system-level DSE 先做 family 选型
 - 解释为什么当前只报 `speedup_to_convergence_range` / `energy_to_convergence_range`
 - 回答正确性、confidence、CPU/device 分工、以及后续工程化的追问
+- 回答 `projection_review` 与 `stage_main_recommendation_package` 之间的区别
+- 回答 release-facing 时为什么要先看 `stage_artifact_bundle_manifest`
 
 ## 2. 开场 20 秒版本
 
@@ -47,6 +49,14 @@
 ### Q8. 现在这套结论能支持走到哪一步？
 **建议回答**
 > 当前结论足以支持下一阶段系统架构方向选择，也能支持是否值得继续进入 FPGA / 更高 fidelity 建模。但它还不该直接用于 RTL 参数冻结、板级功耗承诺或 DMA/buffer 最终预算决策。
+
+### Q9. `projection_review` 和 `stage_main_recommendation_package` 有什么区别？
+**建议回答**
+> `projection_review` 汇总的是所有通过 accurate-layer 的 shortlisted candidates，用来证明哪些候选已经具备 recommendation-grade 的资格；`stage_main_recommendation_package` 则进一步收口成对外主推荐：谁是 recommended family、哪些是 recommended primary candidates、哪些只是 validated alternatives。这两个包一起用，可以把“所有通过者”和“最终主线推荐”清楚分开。
+
+### Q10. release-facing 时为什么先看 `stage_artifact_bundle_manifest`？
+**建议回答**
+> 因为 `stage_artifact_bundle_manifest` 是最顶层的统一入口。它会把 phase summary、projection review、stage-main recommendation package 的路径和 readiness 一起列出来，所以老师或汇报人不需要先猜应该打开哪个文件；先看 manifest，就能知道当前 bundle 是否 ready、主推荐是谁、以及下游 artifact 在哪里。
 
 ## 4. CPU / Device 分工答辩口径
 
@@ -92,6 +102,9 @@
 2. family ranking summary
 3. confidence / claims rubric
 4. one-page executive summary
+5. projection review package
+6. stage-main recommendation package
+7. stage artifact bundle manifest
 
 ## 7. 汇报结束时的收口句式
 

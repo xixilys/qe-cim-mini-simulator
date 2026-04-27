@@ -127,8 +127,85 @@ class UnifiedDseAnalysisTests(unittest.TestCase):
         self.assertEqual(set(result_analysis.PROMOTION_STATES), allowed)
         self.assertEqual(set(summary["promotion_state_counts"]), allowed)
         self.assertEqual({row["promotion_state"] for row in summary["rows"]}, allowed)
+        for row in summary["rows"]:
+            self.assertEqual(row["ranking_claim_ceiling"], "stage_a_screening_only")
+            self.assertIn("screening_rank", row)
+            self.assertIn("pareto_membership", row)
+            self.assertIn("shortlist_reason", row)
+            self.assertIsNone(row["final_public_family_winner"])
+        explain_rows = [row for row in summary["rows"] if row["promotion_state"] != "promotion-eligible"]
+        self.assertEqual(
+            {row["pareto_membership"] for row in explain_rows},
+            {"not_evaluated"},
+        )
         with self.assertRaisesRegex(ValueError, "promotion state"):
             result_analysis.validate_promotion_state("winner")
+
+    def test_result_analysis_ranks_only_promotion_eligible_rows(self) -> None:
+        result_analysis = load_unified_dse_module("result_analysis")
+        rows = [
+            {
+                "result_status": "executed",
+                "screening_rank": 99,
+                "metrics": {
+                    "time_to_convergence_s": 2.0,
+                    "energy_to_convergence_j": 2.0,
+                    "bytes_moved_to_convergence": 2.0,
+                    "fallback_ratio": 0.0,
+                    "spill_ratio": 0.0,
+                },
+                "projection": {"ranking_grade_ready": True},
+            },
+            {
+                "result_status": "stub",
+                "metrics": {},
+                "projection": {"ranking_grade_ready": False},
+            },
+            {
+                "result_status": "executed",
+                "metrics": {
+                    "time_to_convergence_s": 1.0,
+                    "energy_to_convergence_j": 3.0,
+                    "bytes_moved_to_convergence": 3.0,
+                    "fallback_ratio": 0.0,
+                    "spill_ratio": 0.0,
+                },
+                "projection": {"ranking_grade_ready": True},
+            },
+        ]
+
+        summary = result_analysis.summarize_results(rows)
+        ranked = [row for row in summary["rows"] if row["promotion_state"] == "promotion-eligible"]
+        unranked = [row for row in summary["rows"] if row["promotion_state"] != "promotion-eligible"]
+
+        self.assertEqual([row["screening_rank"] for row in ranked], [2, 1])
+        self.assertEqual({row["pareto_membership"] for row in ranked}, {"screening_candidate"})
+        self.assertEqual([row["screening_rank"] for row in unranked], [None])
+        self.assertEqual({row["pareto_membership"] for row in unranked}, {"not_evaluated"})
+
+    def test_non_numeric_required_metrics_are_not_promotion_eligible(self) -> None:
+        result_analysis = load_unified_dse_module("result_analysis")
+        rows = [
+            {
+                "result_status": "executed",
+                "metrics": {
+                    "time_to_convergence_s": "n/a",
+                    "energy_to_convergence_j": 2.0,
+                    "bytes_moved_to_convergence": 3.0,
+                    "fallback_ratio": 0.0,
+                    "spill_ratio": 0.0,
+                },
+                "projection": {"ranking_grade_ready": True},
+            }
+        ]
+
+        summary = result_analysis.summarize_results(rows)
+        row = summary["rows"][0]
+
+        self.assertEqual(row["promotion_state"], "explain-only")
+        self.assertIsNone(row["screening_rank"])
+        self.assertEqual(row["pareto_membership"], "not_evaluated")
+        self.assertEqual(row["shortlist_reason"], "insufficient_metrics_for_shortlist")
 
 
 if __name__ == "__main__":

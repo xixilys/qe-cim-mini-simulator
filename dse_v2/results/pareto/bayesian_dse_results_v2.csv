@@ -1,0 +1,2 @@
+pipeline_depth,parallel_units,intermediate_buffer_kb,tile_npw,tile_nkb,tile_m,dma_channels,pcie_gen,offload_strategy,dataflow_pattern,psi_strategy,beta_strategy,h_psi_impl,gemm_impl,overlap_policy,bram_utilization,dsp_utilization,energy_j,time_s,arm_name
+5,8,1024,2048,16,8,4,5,h_psi_only,streaming,stream,stream,fft_bram,winograd,full_pipeline,0.03764705500824104,0.07324220166927986,0.0012342420957280528,1.6456550986626156e-05,47

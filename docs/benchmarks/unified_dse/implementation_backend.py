@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from .interfaces import DesignPoint, EvaluationResult, WorkloadDescriptor
+from .stage_a_contracts import default_contract_fields
 
 
 class ImplementationBackend:
@@ -20,6 +21,12 @@ class ImplementationBackend:
             promotion_state="explain-only",
             final_public_family_winner=None,
             extra_fields={
+                **default_contract_fields(
+                    workload=workload,
+                    design_point=design_point,
+                    backend="implementation",
+                    source_kind="stub",
+                ),
                 "claim_bearing": False,
                 "stub_reason": "implementation_backend_reserved_for_future_non_stage_a_claims",
             },

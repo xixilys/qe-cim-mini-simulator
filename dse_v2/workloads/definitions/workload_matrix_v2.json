@@ -1,0 +1,346 @@
+{
+  "version": "2.0",
+  "description": "Extended QE workload matrix for DSE v2 - includes semiconductors, 2D materials, oxides, and organic molecules",
+  "workloads": [
+    {
+      "id": "si8_pbe_uspp",
+      "category": "semiconductor",
+      "material": "Silicon (Si)",
+      "description": "8-atom Si cell, PBE functional, ultrasoft pseudopotential",
+      "structure": {
+        "atoms": 8,
+        "cell_type": "fcc",
+        "lattice_constant_angstrom": 5.43
+      },
+      "dft_params": {
+        "functional": "PBE",
+        "pseudopotential": "USPP",
+        "ecutwfc_ry": 30,
+        "ecutrho_ry": 240,
+        "kpoints": "8x8x8"
+      },
+      "expected_dimensions": {
+        "npw": 2945,
+        "nkb": 144,
+        "nbnd": 16
+      },
+      "priority": "high",
+      "reference": "existing"
+    },
+    {
+      "id": "gan_wurtzite_pbe",
+      "category": "semiconductor",
+      "material": "Gallium Nitride (GaN)",
+      "description": "Wurtzite GaN, wide-bandgap semiconductor for power electronics",
+      "structure": {
+        "atoms": 4,
+        "cell_type": "wurtzite",
+        "lattice_constant_angstrom": [3.189, 5.185]
+      },
+      "dft_params": {
+        "functional": "PBE",
+        "pseudopotential": "PAW",
+        "ecutwfc_ry": 50,
+        "ecutrho_ry": 400,
+        "kpoints": "8x8x6"
+      },
+      "expected_dimensions": {
+        "npw": 4200,
+        "nkb": 96,
+        "nbnd": 20
+      },
+      "priority": "high",
+      "reference": "new"
+    },
+    {
+      "id": "gaas_zincblende_pbe",
+      "category": "semiconductor",
+      "material": "Gallium Arsenide (GaAs)",
+      "description": "Zincblende GaAs, III-V semiconductor for optoelectronics",
+      "structure": {
+        "atoms": 8,
+        "cell_type": "zincblende",
+        "lattice_constant_angstrom": 5.65
+      },
+      "dft_params": {
+        "functional": "PBE",
+        "pseudopotential": "PAW",
+        "ecutwfc_ry": 45,
+        "ecutrho_ry": 360,
+        "kpoints": "8x8x8"
+      },
+      "expected_dimensions": {
+        "npw": 3800,
+        "nkb": 128,
+        "nbnd": 24
+      },
+      "priority": "medium",
+      "reference": "new"
+    },
+    {
+      "id": "graphene_pbe_uspp",
+      "category": "2d_material",
+      "material": "Graphene",
+      "description": "Single-layer graphene, 2D carbon allotrope",
+      "structure": {
+        "atoms": 2,
+        "cell_type": "hexagonal",
+        "lattice_constant_angstrom": 2.46,
+        "vacuum_angstrom": 15
+      },
+      "dft_params": {
+        "functional": "PBE",
+        "pseudopotential": "USPP",
+        "ecutwfc_ry": 40,
+        "ecutrho_ry": 320,
+        "kpoints": "12x12x1"
+      },
+      "expected_dimensions": {
+        "npw": 1850,
+        "nkb": 32,
+        "nbnd": 8
+      },
+      "priority": "high",
+      "reference": "existing"
+    },
+    {
+      "id": "mos2_monolayer_pbe",
+      "category": "2d_material",
+      "material": "Molybdenum Disulfide (MoS2)",
+      "description": "Monolayer MoS2, transition metal dichalcogenide",
+      "structure": {
+        "atoms": 3,
+        "cell_type": "hexagonal",
+        "lattice_constant_angstrom": 3.16,
+        "vacuum_angstrom": 15
+      },
+      "dft_params": {
+        "functional": "PBE",
+        "pseudopotential": "PAW",
+        "ecutwfc_ry": 50,
+        "ecutrho_ry": 400,
+        "kpoints": "12x12x1"
+      },
+      "expected_dimensions": {
+        "npw": 2800,
+        "nkb": 80,
+        "nbnd": 14
+      },
+      "priority": "high",
+      "reference": "new"
+    },
+    {
+      "id": "hbn_monolayer_pbe",
+      "category": "2d_material",
+      "material": "Hexagonal Boron Nitride (h-BN)",
+      "description": "Monolayer h-BN, wide-bandgap 2D insulator",
+      "structure": {
+        "atoms": 2,
+        "cell_type": "hexagonal",
+        "lattice_constant_angstrom": 2.50,
+        "vacuum_angstrom": 15
+      },
+      "dft_params": {
+        "functional": "PBE",
+        "pseudopotential": "USPP",
+        "ecutwfc_ry": 45,
+        "ecutrho_ry": 360,
+        "kpoints": "12x12x1"
+      },
+      "expected_dimensions": {
+        "npw": 2100,
+        "nkb": 48,
+        "nbnd": 10
+      },
+      "priority": "medium",
+      "reference": "new"
+    },
+    {
+      "id": "tio2_rutile_pbe",
+      "category": "oxide",
+      "material": "Titanium Dioxide (TiO2)",
+      "description": "Rutile TiO2, photocatalyst and wide-bandgap oxide",
+      "structure": {
+        "atoms": 6,
+        "cell_type": "tetragonal",
+        "lattice_constant_angstrom": [4.59, 2.96]
+      },
+      "dft_params": {
+        "functional": "PBE+U",
+        "pseudopotential": "PAW",
+        "ecutwfc_ry": 50,
+        "ecutrho_ry": 400,
+        "kpoints": "6x6x8",
+        "hubbard_u": {"Ti": 4.0}
+      },
+      "expected_dimensions": {
+        "npw": 3500,
+        "nkb": 112,
+        "nbnd": 24
+      },
+      "priority": "high",
+      "reference": "new"
+    },
+    {
+      "id": "zno_wurtzite_pbe",
+      "category": "oxide",
+      "material": "Zinc Oxide (ZnO)",
+      "description": "Wurtzite ZnO, transparent conducting oxide",
+      "structure": {
+        "atoms": 4,
+        "cell_type": "wurtzite",
+        "lattice_constant_angstrom": [3.25, 5.21]
+      },
+      "dft_params": {
+        "functional": "PBE",
+        "pseudopotential": "PAW",
+        "ecutwfc_ry": 50,
+        "ecutrho_ry": 400,
+        "kpoints": "8x8x6"
+      },
+      "expected_dimensions": {
+        "npw": 3900,
+        "nkb": 96,
+        "nbnd": 20
+      },
+      "priority": "medium",
+      "reference": "new"
+    },
+    {
+      "id": "fe_bcc_pbe_spin",
+      "category": "magnetic",
+      "material": "Iron (Fe)",
+      "description": "BCC Fe with spin polarization, ferromagnetic metal",
+      "structure": {
+        "atoms": 2,
+        "cell_type": "bcc",
+        "lattice_constant_angstrom": 2.87
+      },
+      "dft_params": {
+        "functional": "PBE",
+        "pseudopotential": "PAW",
+        "ecutwfc_ry": 50,
+        "ecutrho_ry": 400,
+        "kpoints": "12x12x12",
+        "spin_polarized": true
+      },
+      "expected_dimensions": {
+        "npw": 2200,
+        "nkb": 64,
+        "nbnd": 16
+      },
+      "priority": "medium",
+      "reference": "existing"
+    },
+    {
+      "id": "benzene_pbe_uspp",
+      "category": "organic",
+      "material": "Benzene (C6H6)",
+      "description": "Benzene molecule in box, organic chemistry benchmark",
+      "structure": {
+        "atoms": 12,
+        "cell_type": "cubic",
+        "lattice_constant_angstrom": 15.0
+      },
+      "dft_params": {
+        "functional": "PBE",
+        "pseudopotential": "USPP",
+        "ecutwfc_ry": 35,
+        "ecutrho_ry": 280,
+        "kpoints": "1x1x1"
+      },
+      "expected_dimensions": {
+        "npw": 8500,
+        "nkb": 96,
+        "nbnd": 24
+      },
+      "priority": "low",
+      "reference": "existing"
+    },
+    {
+      "id": "water_dimer_pbe",
+      "category": "organic",
+      "material": "Water Dimer (H2O)2",
+      "description": "Water dimer, hydrogen bonding benchmark",
+      "structure": {
+        "atoms": 6,
+        "cell_type": "cubic",
+        "lattice_constant_angstrom": 12.0
+      },
+      "dft_params": {
+        "functional": "PBE",
+        "pseudopotential": "USPP",
+        "ecutwfc_ry": 40,
+        "ecutrho_ry": 320,
+        "kpoints": "1x1x1"
+      },
+      "expected_dimensions": {
+        "npw": 4200,
+        "nkb": 48,
+        "nbnd": 16
+      },
+      "priority": "low",
+      "reference": "new"
+    },
+    {
+      "id": "perovskite_catio3_pbe",
+      "category": "oxide",
+      "material": "Calcium Titanate (CaTiO3)",
+      "description": "Perovskite CaTiO3, ferroelectric oxide",
+      "structure": {
+        "atoms": 5,
+        "cell_type": "cubic",
+        "lattice_constant_angstrom": 3.84
+      },
+      "dft_params": {
+        "functional": "PBE",
+        "pseudopotential": "PAW",
+        "ecutwfc_ry": 50,
+        "ecutrho_ry": 400,
+        "kpoints": "6x6x6"
+      },
+      "expected_dimensions": {
+        "npw": 2600,
+        "nkb": 96,
+        "nbnd": 20
+      },
+      "priority": "medium",
+      "reference": "new"
+    }
+  ],
+  "categories": {
+    "semiconductor": {
+      "description": "Bulk semiconductors (Si, GaN, GaAs)",
+      "count": 3,
+      "priority": "high"
+    },
+    "2d_material": {
+      "description": "2D materials (graphene, MoS2, h-BN)",
+      "count": 3,
+      "priority": "high"
+    },
+    "oxide": {
+      "description": "Metal oxides (TiO2, ZnO, perovskites)",
+      "count": 3,
+      "priority": "medium"
+    },
+    "magnetic": {
+      "description": "Magnetic materials (Fe)",
+      "count": 1,
+      "priority": "medium"
+    },
+    "organic": {
+      "description": "Organic molecules (benzene, water)",
+      "count": 2,
+      "priority": "low"
+    }
+  },
+  "summary": {
+    "total_workloads": 12,
+    "new_workloads": 8,
+    "existing_workloads": 4,
+    "priority_high": 5,
+    "priority_medium": 5,
+    "priority_low": 2
+  }
+}

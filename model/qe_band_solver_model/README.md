@@ -38,6 +38,18 @@ These family tags currently steer request/runtime policy, diag/offload defaults,
 
 This demo is still **not a numerically faithful DFT implementation**. It is a **host-managed timed-functional system model** that preserves `Host CPU -> thin device runtime -> hardware datapath` boundaries, models control plus DMA/completion traffic, and keeps `Cluster A/B/C/D` as an internal hardware realization instead of the public API.
 
+## Authority and claim boundary
+
+This README describes the current runnable-model truth for the repository. It does not create a second decision authority.
+
+For benchmark and release-facing reading, the frozen rule is:
+
+- the adjudicator memo, documented in `docs/benchmarks/qe_ic_adjudicator_authority_contract_v0.md`, is the only decision authority
+- this runnable model is one evidence source for that memo
+- DSE bundles, projection summaries, GPU annex artifacts, phase closure artifacts, and this runnable model README all remain non-authoritative on their own
+
+That distinction matters because this runnable model is still timed-functional and proxy-level. A favorable result here can support Stage A narrowing or guarded predictiveness language, but it does not by itself authorize thesis-grade family selection, board-grounded causality, or final public comparative claims.
+
 ## QE shell-stage view
 
 For the `QE / CBANDS_DIAG` path, the current model still closes the same shell contract:
@@ -61,6 +73,7 @@ What remains as the internal execution anchor:
 - `cdiaghg` now has an explicit hardware-first `Cluster C` proxy instead of being split out of `VectorDiagCompanion`
 - `refresh / residual -> P_next` now has an explicit `Cluster D`
 - `psi -> rho_out / rho -> Veff / mix_rho` are no longer the primary chip-side execution path; the old `BODY_04` runtime remains as legacy/phase-2 support code
+- the replay/body compatibility implementation is now archived under `legacy/` and is not part of the default build
 
 ## Modeling level
 
@@ -73,12 +86,18 @@ Current modeling-level judgement:
 - `Cluster A/B` reuse the old Phase-B leaf modules as datapath blocks, but are no longer dispatched through `ReplayBundleExecutor`
 - `Cluster C` is a standalone hardware-first diagonalization proxy
 - `Cluster D` is a standalone refresh/residual cluster instead of a host-side accounting split
-- the legacy `BODY_04` and `BODY_10` code remains in-tree, but it is no longer the main executable path
+- the legacy `BODY_04` and `BODY_10` code is archived under `legacy/`, and it is no longer part of the main executable path or the default build
 
 In short, this directory should be read as:
 
 > a host-managed `QE / CP2K / VASP` full-SCF runnable model with explicit CPU/device/data-movement contracts and an internal `Cluster A/B/C/D` hardware datapath,
 > not as a numerically faithful DFT solver or a frozen RTL-level chip model.
+
+In adjudicator terms, that means:
+
+- current runnable-model evidence can feed Stage A
+- current runnable-model evidence alone does not activate Stage B
+- stronger outward claims require additional closure, including decisive measured GPU baseline evidence, phase closure, board or whole-node closure, ranking stability, and workload-group admissibility
 
 ## Top-level modules
 
@@ -117,7 +136,7 @@ In short, this directory should be read as:
   - `ReductionClosureEngine`
   - `VectorDiagCompanion`
   - `FFTCompanion`
-- **Runtime-managed outer-update bundles**
+- **Archived runtime-managed outer-update bundles**
   - `ReplayBundleExecutor`
   - `Body04FamilyController`
     - `OuterUpdateRuntimeDomain`
@@ -140,52 +159,43 @@ In short, this directory should be read as:
 
 ## Files
 
+- Cleanup classification snapshot (`2026-04-15`):
+  - **runtime spine / core** — `sc_main.cpp`, `dft_hybrid_system.*`, `host_scf.*`, `fpga_orchestrator.*`, `interconnect.*`, `chip_top.*`, `architecture_template.*`, and root `include/*.hpp` core descriptors/utilities
+  - **active cluster execution path** — grouped under `src/clusters/` and `include/clusters/`
+  - **active on-chip datapath + companions** — grouped under `src/onchip/` and `include/onchip/`
+  - **legacy compatibility subtree** — archived under `legacy/`; it contains `replay_bundle_executor.*`, `body04_family_controller.*`, `outer_update_runtime_domain.*`, `body10_family_controller.*`, and the `BODY_04` / `BODY_10` stage-unit files, but they are no longer compiled by default
+  - **generated artifacts** — `build/` and `build-systemc/`; these are reproducible build outputs, not source-of-truth files, and should be cleaned when doing directory housekeeping
 - `sc_main.cpp` — executable entry with env-configured software/flow selection
 - `src/dft_hybrid_system.*` — explicit full-system top module
 - `include/types.hpp` — current type home for the host-device-first public objects (`ResidentSetDesc`, `BandBatchDesc`, `ScfIterationRequest`, `DiagPolicy`, `CompletionSummary`), the internal cluster-first types (`EpisodeDescriptor`, `EpisodeResult`, `SCFRunReport`, etc.), and the retained legacy replay/body types
-- `src/episode_controller.*` — persistent cluster-first controller
-- `src/cluster_graph_executor.*` — ordered A/B/C/D executor
-- `src/cluster_a_operator_sweep.*` — fused operator-sweep cluster
-- `src/cluster_b_reduced_build.*` — reduced-matrix build cluster
-- `src/cluster_c_hardware_diag.*` — hardware-first diagonalization proxy
-- `src/cluster_d_refresh_residual.*` — refresh / residual -> `P_next` cluster
-- `src/replay_bundle_executor.*`, `src/body04_family_controller.*`, `src/outer_update_runtime_domain.*`, `src/body10_family_controller.*` — retained legacy/runtime support path, no longer the primary runnable path
-- `src/preconditioned_update_vector.*` — `BODY_10A` preconditioned update leaf block
-- `src/wave_candidate_commit.*` — `BODY_10A` wave-candidate commit leaf block
-- `src/orthogonalize_unit.*` — `BODY_10B` orthogonalize leaf block
-- `src/rebind_commit.*` — `BODY_10B` rebound-wave/projector commit leaf block
-- `src/history_integrator.*` — `BODY_10C` history integration leaf block
-- `src/ot_summary_commit.*` — `BODY_10C` summary export leaf block
+- `src/clusters/episode_controller.*` — persistent cluster-first controller
+- `src/clusters/cluster_graph_executor.*` — ordered A/B/C/D executor
+- `src/clusters/cluster_a_operator_sweep.*` — fused operator-sweep cluster
+- `src/clusters/cluster_b_reduced_build.*` — reduced-matrix build cluster
+- `src/clusters/cluster_c_hardware_diag.*` — hardware-first diagonalization proxy
+- `src/clusters/cluster_d_refresh_residual.*` — refresh / residual -> `P_next` cluster
 - `src/interconnect.*` — control / DMA / completion transaction abstraction with TLM-style `b_transport`
 - `src/host_scf.*` — CPU-side SCF driver and host-managed request generator
 - `src/fpga_orchestrator.*` — thin device runtime that manages resident reuse, DMA, and host-diag fallback
-- `src/chip_top.*` — on-chip Phase-B replay facade
-- `src/density_accumulation_stage.*` — `Phase C / sum_band` stage wrapper
-- `src/density_accumulator_unit.*` — density reduction block inside `Phase C`
-- `src/density_commit_unit.*` — density-object commit block inside `Phase C`
-- `src/potential_refresh_stage.*` — `Phase D / v_of_rho/newd` stage wrapper
-- `src/potential_field_unit.*` — potential-field build block inside `Phase D`
-- `src/projector_state_updater.*` — projector-state update block inside `Phase D`
-- `src/mixing_convergence_stage.*` — `Phase E / mix_rho` / convergence gate stage wrapper
-- `src/density_mixer_unit.*` — density-mix block inside `Phase E`
-- `src/convergence_tracker.*` — convergence/history block inside `Phase E`
-- `src/command_scheduler.*`
-- `src/resident_context_controller.*`
-- `src/context_loader.*`
-- `src/digit_serial_input_boundary.*`
-- `src/conjugate_sign_selector.*`
-- `src/near_sram_coeff_buffer.*`
-- `src/near_sram_row_buffer.*`
-- `src/cim_array_core.*`
-- `src/residue_3m_core.*`
-- `src/coefficient_accumulator.*`
-- `src/row_merge_tree.*`
-- `src/cim_eligible_operator_subchain.*`
-- `src/near_sram_support.*`
-- `src/near_memory_domain.*`
-- `src/reduction_closure_engine.*`
-- `src/vector_diag_companion.*`
-- `src/fft_companion.*`
+- `src/chip_top.*` — cluster-first chip execution facade
+- `src/onchip/command_scheduler.*`
+- `src/onchip/resident_context_controller.*`
+- `src/onchip/context_loader.*`
+- `src/onchip/digit_serial_input_boundary.*`
+- `src/onchip/conjugate_sign_selector.*`
+- `src/onchip/near_sram_coeff_buffer.*`
+- `src/onchip/near_sram_row_buffer.*`
+- `src/onchip/cim_array_core.*`
+- `src/onchip/residue_3m_core.*`
+- `src/onchip/coefficient_accumulator.*`
+- `src/onchip/row_merge_tree.*`
+- `src/onchip/cim_eligible_operator_subchain.*`
+- `src/onchip/near_sram_support.*`
+- `src/onchip/near_memory_domain.*`
+- `src/onchip/reduction_closure_engine.*`
+- `src/onchip/vector_diag_companion.*`
+- `src/onchip/fft_companion.*`
+- `legacy/README.md` — archived replay/body compatibility subtree overview
 - `include/systemc_compat.hpp` — fallback compatibility layer when a real SystemC library is unavailable
 
 ## Build
@@ -332,7 +342,7 @@ These chains already carry explicit `accept / busy / complete`, queue-depth, rou
 
 ## Expected behavior
 
-A run prints timestamped logs that show:
+A default run prints timestamped logs that show:
 
 1. `HostSCF` doing outer-shell `rho -> Veff` work on CPU
 2. `HostSCF` issuing `ScfIterationRequest` with `ResidentSetDesc`, `BandBatchDesc`, and `DiagPolicy`
@@ -354,15 +364,18 @@ A run prints timestamped logs that show:
 6. When needed, the thin device runtime exporting reduced matrices to Host CPU, waiting for host-diag assist, and importing the diag solution back
 7. `FPGAOrchestrator` emitting `CompletionSummary`
 8. `HostSCF` consuming the returned wave/update objects and continuing `mix_rho / convergence`
-10. For `BODY_10`, `PreconditionedUpdateVector / WaveCandidateCommit`, `OrthogonalizeUnit / RebindCommit`, and `HistoryIntegrator / OTSummaryCommit` run in sequence
-11. Inside `BODY_04`, `DensityAccumulatorUnit / DensityCommitUnit`, `PotentialFieldUnit / ProjectorStateUpdater`, and `DensityMixerUnit / ConvergenceTracker` run in sequence
-12. Host collecting a per-iteration report and final `DFTRunReport`
-13. Either the next SCF iteration starts or the run stops after convergence / iteration cap
+9. Host collecting a per-iteration report and final `DFTRunReport`
+10. Either the next SCF iteration starts or the run stops after convergence / iteration cap
+
+Archived replay/body note:
+
+- `BODY_10` sequencing (`PreconditionedUpdateVector / WaveCandidateCommit`, `OrthogonalizeUnit / RebindCommit`, `HistoryIntegrator / OTSummaryCommit`) now belongs to the archived `legacy/` subtree and is not part of the default build/runtime path.
+- `BODY_04` sequencing (`DensityAccumulatorUnit / DensityCommitUnit`, `PotentialFieldUnit / ProjectorStateUpdater`, `DensityMixerUnit / ConvergenceTracker`) is also archived under `legacy/`; older notes may still describe it as a direct runtime path, but the promoted runtime is `HostSCF -> FPGAOrchestrator -> ChipTop -> ClusterGraphExecutor -> Cluster A/B/C/D`.
 
 ## Notes
 
 - The current smoke run uses the fallback compatibility layer because no real SystemC library was available in the environment.
 - The code is organized to preserve host/FPGA/chip transaction boundaries while making the whole system object explicit.
-- The current model explicitly tracks `object handle`, `version`, `resident buffer tag`, `resident_context_id`, `resident_generation`, `ReplayBundleDescriptor/ReplayBundleCompletion`, `Body10LoweringPlan`, `Body04LoweringPlan`, `lcw_words_issued`, `row_blocks_processed`, `BODY_10` bundle identity, and `BODY_04` bundle identity.
+- The current active build explicitly tracks `object handle`, `version`, `resident buffer tag`, `resident_context_id`, `resident_generation`, `lcw_words_issued`, and `row_blocks_processed`; archived replay/body descriptors such as `ReplayBundleDescriptor/ReplayBundleCompletion`, `Body10LoweringPlan`, and `Body04LoweringPlan` remain preserved in `include/types.hpp` and `legacy/`.
 - `DFTRunReport` now also exposes run-level `lcw` total, `row_block` total, `Phase B` / `BODY_10` / `BODY_04` reference-cycle and backpressure totals, per-family data-movement totals, and `convergence_reason`.
 - `QE` remains the only executed software anchor in the workspace; `CP2K` and `VASP` are still behavior-level mappings grounded by source/document reconstruction rather than local executable evidence.

@@ -31,3 +31,33 @@ full_transcription.txt
 model/ozaki_subspace_model/docs/.DS_Store
 .omx/
 tmp/
+
+# Local gem5/SystemC integration build, cache, and run artifacts
+gem5_src/
+gem5_integration/gem5/
+gem5_integration/m5out*/
+gem5_integration/systemc_model/build/
+gem5_integration/**/__pycache__/
+gem5_integration/**/*.pyc
+gem5_integration/**/*.o
+gem5_integration/**/*.a
+gem5_integration/minimal_rootfs/init
+gem5_integration/minimal_rootfs/init_pci
+gem5_integration/minimal_rootfs/initramfs.cpio.gz
+gem5_integration/minimal_rootfs/rootfs/
+gem5_integration/qe_integration/benchmark_fpga_offload
+gem5_integration/qe_integration/test_fpga_interface
+gem5_integration/qe_integration/test_qe_fpga_offload
+gem5_integration/qe_test_program/fpga_pci_electrons_test
+gem5_integration/qe_test_program/fpga_test
+gem5_integration/qe_test_program/fpga_test_simple
+gem5_integration/qe_test_program/qe_fpga_benchmark
+gem5_integration/qe_test_program/qe_fpga_benchmark_static
+gem5_integration/qe_test_program/test_qe_offload_minimal
+gem5_integration/test_programs/hello.x86
+
+# Local agent/tool scratch state and generated result bundles
+.sisyphus/
+.tmp_stage_b_adjudicator/
+opencode.json.bak-*
+docs/benchmarks/results/systemc_architecture_family_dse_bootstrap/

@@ -1,0 +1,127 @@
+{
+  "template_id": "resident_dataflow_fabric_v1",
+  "template_version": "v1",
+  "family": "custom",
+  "label": "Resident Dataflow Fabric Scaffold",
+
+  "description": "Projection-only scaffold for an aggressive resident-dataflow fabric using schema-level PIM-style compute-unit categories. It records residency and dataflow intent without claiming C++ runtime implementation.",
+
+  "clusters": [
+    {
+      "cluster_id": "cluster_a",
+      "role": "operator_sweep",
+      "compute_unit": "pim_3d_stacked",
+      "enabled": true,
+      "timing_model": "hybrid",
+      "resource_budget": {
+        "dsp_count": 160,
+        "bram_18k_count": 320,
+        "lut_count": 160000,
+        "uram_count": 96
+      }
+    },
+    {
+      "cluster_id": "cluster_b",
+      "role": "reduced_build",
+      "compute_unit": "pim_bram_based",
+      "enabled": true,
+      "timing_model": "proxy_formula",
+      "resource_budget": {
+        "dsp_count": 96,
+        "bram_18k_count": 260,
+        "lut_count": 70000,
+        "uram_count": 48
+      }
+    },
+    {
+      "cluster_id": "cluster_c",
+      "role": "hardware_diag",
+      "compute_unit": "traditional_fpga_dsp",
+      "enabled": true,
+      "timing_model": "hybrid",
+      "resource_budget": {
+        "dsp_count": 224,
+        "bram_18k_count": 140,
+        "lut_count": 95000,
+        "uram_count": 24
+      }
+    },
+    {
+      "cluster_id": "cluster_d",
+      "role": "refresh_residual",
+      "compute_unit": "pim_bram_based",
+      "enabled": true,
+      "timing_model": "proxy_formula",
+      "resource_budget": {
+        "dsp_count": 64,
+        "bram_18k_count": 180,
+        "lut_count": 52000,
+        "uram_count": 32
+      }
+    }
+  ],
+
+  "policies": {
+    "diag_policy": "device_first_fallback",
+    "offload_scope": "device_heavy",
+    "resident_policy": "spill_tolerant",
+    "partition_strategy": "operator__build__diag__refresh"
+  },
+
+  "compute_config": {
+    "clock_mhz": 225,
+    "gemm_tile_size": 32,
+    "dsp_array_dims": {
+      "rows": 8,
+      "cols": 16
+    }
+  },
+
+  "memory_hierarchy": {
+    "l1_buffer_kb": 768,
+    "l2_buffer_kb": 3072,
+    "resident_budget_scale": 1.5
+  },
+
+  "component_overrides": {
+    "resident_context_controller": {
+      "component_ref": "resident_context_controller",
+      "implementation_variant": "resident_dataflow_projection_stub",
+      "config_overrides": {
+        "prefer_wavefunction_residency": true,
+        "allow_spill_replay": true,
+        "runtime_support_status": "projection_only"
+      }
+    },
+    "near_memory_domain": {
+      "component_ref": "near_memory_domain",
+      "implementation_variant": "pim_projection_stub",
+      "config_overrides": {
+        "pim_bram_based_maps_to_generic_pim": true,
+        "pim_3d_stacked_maps_to_generic_pim": true
+      }
+    },
+    "diag_fallback_unit": {
+      "component_ref": "diag_fallback_unit",
+      "implementation_variant": "host_lapack_fallback_required",
+      "config_overrides": {
+        "allow_host_fallback": true,
+        "preserve_qe_fp64_tolerance": true
+      }
+    }
+  },
+
+  "dse_metadata": {
+    "exploration_priority": "low",
+    "expected_performance_class": "aggressive",
+    "risk_level": "high",
+    "tags": ["scaffold_only", "projection_only", "resident_dataflow", "pim_bram_based", "pim_3d_stacked", "fp64_correctness_required", "host_diag_fallback"]
+  },
+
+  "notes": {
+    "validation_status": "Scaffold only; no SystemC, RTL, board, or numerical validation is claimed.",
+    "correctness_policy": "Resident-dataflow placement must preserve QE FP64 operator and generalized Hermitian correctness; resident/spill policy cannot change numerical tolerances.",
+    "diag_policy": "Host LAPACK diagonalization fallback is retained because PIM-style residency does not provide a validated generalized Hermitian eigensolver.",
+    "projection_boundary": "pim_bram_based and pim_3d_stacked are projected to the generic PIM SystemC compute category; detailed memory-stack timing is metadata only."
+  }
+}

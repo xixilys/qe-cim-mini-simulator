@@ -2,25 +2,136 @@
 
 ## Purpose
 
-- This repository is a prototype for accelerating Quantum ESPRESSO style subspace diagonalization and dense kernels with a CIM-oriented backend.
-- The main implementation lives in `model/` and the main design context lives in `docs/`.
-- Treat the codebase as research software: preserve reproducibility, numerical intent, and paper-facing assumptions.
+DFT acceleration system prototype for Quantum ESPRESSO subspace diagonalization with CIM-oriented backend.
+
+**System Architecture:**
+- **Host + FPGA + Chip**: Complete hybrid acceleration system
+- **4-Cluster Pipeline**: Operator sweep (68%), reduced build (4%), hardware diag (23%), refresh/residual (5%)
+- **Dual Model Stack**: Algorithm validation (Ozaki) + System simulation (SystemC)
+
+**Project Status:** ~90% complete infrastructure, algorithm validation in progress
+
+## Quick Navigation
+
+### For Implementation Work
+- **Algorithm validation**: See `model/ozaki_subspace_model/AGENTS.md`
+- **SystemC model**: See `model/qe_band_solver_model/AGENTS.md`
+- **Architecture specs**: See `docs/architecture/AGENTS.md`
+- **DSE framework**: See `docs/benchmarks/AGENTS.md`
+
+### For Design Review
+1. `docs/architecture/system_design_master_spec_v0.md` - Master system specification
+2. `docs/overview/project_development_timeline.md` - Development timeline
+3. `docs/benchmarks/qe_cpu_gpu_fpga_fairness_and_power_contract_v0.md` - Fairness contract
+4. `docs/overview/agent_handoff_20260312.md` - Repository handoff notes
+
+### For Quick Start
+```bash
+# Build and run algorithm validation
+make -C model/ozaki_subspace_model
+./model/ozaki_subspace_model/bin/complex_ozaki_eval
+
+# Build and run SystemC model
+cd model/qe_band_solver_model/build
+cmake .. && make -j4
+./qe_band_solver_model
+
+# Run DSE sweep
+python3 docs/benchmarks/run_systemc_architecture_family_dse_sweep.py
+```
 
 ## Repository Layout
 
-- `model/`: model index and submodel entrypoints.
-- `model/ozaki_subspace_model/`: standalone behavioral evaluators for Ozaki/CRT GEMM, reduced generalized subspace validation, and iterative subspace prototypes.
-- `model/ozaki_subspace_model/include/`: headers shared by the standalone evaluators.
-- `model/ozaki_subspace_model/src/`: C++ sources for the standalone evaluators.
-- `model/ozaki_subspace_model/bin/`: build outputs created by the standalone `Makefile`.
-- `model/ozaki_subspace_model/docs/`: validation notes for the standalone evaluator stack.
-- `model/qe_band_solver_model/`: cluster-first timed-functional QE shell runnable model.
-- `model/qe_band_solver_model/include/`: headers for the runnable QE shell model.
-- `model/qe_band_solver_model/src/`: implementation files for the runnable QE shell model.
-- `model/qe_band_solver_model/docs/`: validation notes for the QE shell runnable model.
-- `docs/`: project-level design notes, benchmark workflows, QE sampling notes, and handoff context.
-- `docs/benchmarks/`: Python scripts for trace summarization and CPU/PySCF baselines.
-- `soft/qe-7.5/`: workspace copy of QE used for trace instrumentation and local experiments.
+```
+.
+├── model/                          # Implementation models
+│   ├── ozaki_subspace_model/       # Algorithm validation (Ozaki-II, eigensolver)
+│   │   ├── AGENTS.md               # Detailed guide for algorithm validation
+│   │   ├── src/                    # C++ testbenches and engines
+│   │   ├── include/                # Headers
+│   │   ├── bin/                    # Built executables
+│   │   └── Makefile                # Standalone build system
+│   └── qe_band_solver_model/       # SystemC system simulation
+│       ├── AGENTS.md               # Detailed guide for SystemC model
+│       ├── src/                    # SystemC modules
+│       ├── include/                # Module headers
+│       └── CMakeLists.txt          # CMake build system
+├── docs/                           # Design documentation
+│   ├── AGENTS.md                   # Documentation directory guide
+│   ├── architecture/               # System architecture specs
+│   │   ├── AGENTS.md               # Architecture guide
+│   │   ├── system_design_master_spec_v0.md
+│   │   ├── qe_ic_component_catalog_system_level_v1.json
+│   │   └── qe_ic_graph_seed_system_level_v1.json
+│   ├── benchmarks/                 # DSE framework and validation
+│   │   ├── AGENTS.md               # Benchmarks guide
+│   │   ├── run_systemc_architecture_family_dse_sweep.py
+│   │   └── 50+ analysis/validation scripts
+│   ├── overview/                   # Project timeline and handoff
+│   ├── cim/                        # CIM design specifications
+│   ├── control/                    # Control ISA specifications
+│   └── survey/                     # Industry surveys
+└── soft/qe-7.5/                    # QE workspace copy (instrumented)
+
+## ⚠️ CRITICAL: Background Task Protocol
+
+**NEVER call `background_output()` before receiving `<system-reminder>` notification.**
+
+This is a strict system-level protocol. Violating it causes "无法调用background task" errors and **permanent loss of all background work**.
+
+### Correct Flow
+
+```typescript
+// Step 1: Launch parallel background tasks
+task(subagent_type="explore", run_in_background=true, load_skills=[], 
+     description="Find auth patterns", prompt="...")  
+// → Returns task_id: bg_abc123
+
+task(subagent_type="librarian", run_in_background=true, load_skills=[], 
+     description="Find library docs", prompt="...")
+// → Returns task_id: bg_def456
+
+// Step 2: Do ONLY non-overlapping work (work that doesn't depend on these results)
+// If no independent work exists: **END YOUR RESPONSE HERE**
+
+// Step 3: **WAIT** for system notification
+// The system will send: <system-reminder> [ALL BACKGROUND TASKS COMPLETE]
+
+// Step 4: NOW collect results (only after notification)
+background_output(task_id="bg_abc123")  // ✅ Safe
+background_output(task_id="bg_def456")  // ✅ Safe
+
+// Step 5: Use results, then cleanup
+background_cancel(taskId="bg_abc123")
+background_cancel(taskId="bg_def456")
+```
+
+### Common Mistakes That Cause Errors
+
+- ❌ **Calling `background_output()` immediately after spawning** → Error: task still running
+- ❌ **Continuing with dependent work before results arrive** → Incomplete/wrong results
+- ❌ **Trying to "check" or poll task status** → System rejects premature access
+- ❌ **Calling across sessions** → Task IDs expire when session ends
+
+### Why This Protocol Exists
+
+The system uses a state machine (`pending → running → completed`). Calling `background_output()` on a non-completed task triggers a state check failure. The `<system-reminder>` notification is the **only** reliable signal that results are ready.
+
+### If You Violate This
+
+1. You get error: "无法调用background task"
+2. All background work is **permanently lost** (cannot be recovered)
+3. You must re-spawn all tasks from scratch
+4. Results are never collected from the failed attempt
+
+### Recovery
+
+If you encounter this error:
+1. Background tasks from the failed attempt are gone
+2. Re-spawn the tasks following the correct protocol
+3. This time: **wait for `<system-reminder>` before collecting**
+
+---
 
 ## Critical Workspace Rules
 

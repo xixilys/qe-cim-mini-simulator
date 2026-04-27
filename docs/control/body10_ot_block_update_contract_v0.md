@@ -187,11 +187,11 @@ BODY_05 / BODY_00
 
 当前仓库中已经有：
 
-- `model/qe_band_solver_model/include/body10_family_controller.hpp`
-- `model/qe_band_solver_model/src/body10_family_controller.cpp`
+- `model/qe_band_solver_model/legacy/include/body10_family_controller.hpp`
+- `model/qe_band_solver_model/legacy/src/body10_family_controller.cpp`
 - `Body10StageRequest / Body10StageSummary / Body10LoweringPlan`
 - `Body10BundleRequest / Body10BundleSummary`
-- `FPGAOrchestrator::execute_body10_family(...)`
+- archived replay/body compatibility path for `BODY_10`
 
 并且当前行为级实现已经显式覆盖：
 

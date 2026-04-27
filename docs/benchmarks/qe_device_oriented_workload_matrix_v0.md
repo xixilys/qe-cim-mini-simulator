@@ -4,6 +4,11 @@
 
 这份矩阵用于冻结本项目在 `Task 2` 中采用的代表性 `QE` 工作负载集合。
 
+从 `2026-04-16` 起，这份矩阵不再单独承担“器件导向语义”解释职责；它现在与下面两份新 artifact 联动：
+
+- `docs/benchmarks/qe_ic_computational_signature_taxonomy_v0.md`
+- `docs/benchmarks/qe_ic_case_signature_matrix_v0.json`
+
 这里不再把“本地最容易运行的小系统”当作主比较对象，而是按照导师给出的方向，把工作负载收口到：
 
 - 面向集成电路器件设计；
@@ -15,6 +20,12 @@
 1. **Primary device-oriented workloads**：后续必须优先覆盖的主负载；
 2. **Local proxy workloads**：当前仓库已有、可用于先做 `SystemC / shell-level` 建模的代理系统；
 3. **Excluded / secondary cases**：可做调试或压力测试，但不应主导“器件导向”叙事。
+
+换句话说：
+
+- 本文负责冻结 **case roster / role / bring-up priority**；
+- `qe_ic_computational_signature_taxonomy_v0.md` 负责冻结 **signature vocabulary**；
+- `qe_ic_case_signature_matrix_v0.json` 负责冻结 **case × signature map**。
 
 ## 1. 冻结原则
 
@@ -85,6 +96,25 @@
 | Molecule / toy parser case | Excluded from primary matrix | 调试或 smoke | `benzene`, `h2_tiny` | 本地 trace 就绪 | 可保留做调试与模型 sanity check，但不用于器件导向主结论 |
 | Magnetic legacy case | Excluded by default | 仅在自旋/磁器件方向需要时再纳入 | `fe_scf_old` | 旧输出可参考 | 当前器件主线默认不纳入 primary matrix |
 
+## 3.1 显示标签与 machine-readable workload_id 对照
+
+从当前版本开始，文档里的显示标签与后续 machine-readable join key 必须区分：
+
+| display label | machine-readable workload_id | current role |
+| --- | --- | --- |
+| `Small semiconductor proxy` | `si4_pbe_uspp_small` | Stage-A bring-up proxy |
+| `Bulk Si anchor (NC)` | `si8_pbe_nc` | accurate-layer anchor |
+| `Bulk Si coverage (USPP)` | `si8_pbe_uspp` | follow-on coverage |
+| `2D channel transport proxy` | `graphene_pbe_uspp` | Stage-A bring-up proxy |
+| `2D channel PAW coverage` | `graphene_pbe_paw` | signature coverage |
+| `Au slab` | `au_slab_subspace` | Stage-B nonblocking signature coverage |
+| `SiC32` | `sic32_subspace` | Stage-B nonblocking signature coverage |
+
+这张表的作用是：
+
+1. 防止 `Au slab` / `SiC32` 这类显示标签与后续 artifact join key 脱节；
+2. 为 signature-aware DSE、GPU baseline ingest、release-bundle validation 提供一致的 workload_id。
+
 ## 4. 当前推荐的最小主矩阵
 
 如果现在必须先冻结一个**最小但 defensible** 的器件导向工作负载矩阵，我建议是：
@@ -109,6 +139,33 @@
 - `Si` 与 `graphene` 当前本地 trace 最完整；
 - `Au slab` 与 `SiC32` 在本地 handoff 中已被确认存在样本，但需要整理进统一 summary；
 - `bn32_pbe_uspp` 不是器件主对象，但对系统压力建模很有价值，适合作为辅助 stress case。
+
+## 4.1 与 signature-driven specialization 的关系
+
+当前版本之后，最小主矩阵还要再按两个阶段解释：
+
+### Stage A — bring-up closure set
+
+先闭合：
+
+- `si4_pbe_uspp_small`
+- `graphene_pbe_uspp`
+- `si8_pbe_nc`
+
+其中：
+
+- `si4_pbe_uspp_small` 和 `graphene_pbe_uspp` 是 decisive bring-up lanes；
+- `si8_pbe_nc` 是 bulk-Si accurate-layer anchor；
+- `si8_pbe_uspp` 是 follow-on coverage，不与 `si8_pbe_nc` 混成同一角色。
+
+### Stage B — nonblocking signature coverage
+
+后续再扩到：
+
+- `au_slab_subspace`
+- `sic32_subspace`
+
+在当前 release/readiness 规则里，它们先作为 **nonblocking signature coverage**，不自动进入当前 blocking gate。
 
 ## 5. 当前可直接用的本地代理数值
 
@@ -151,3 +208,20 @@
 - energy-per-episode metrics
 
 也就是说，后续所有 `CPU only / CPU+GPU / CPU+FPGA` 的公平比较，都应首先在这份器件导向矩阵上展开，而不是在 `benzene/h2` 这类简单系统上展开。
+
+从 signature-driven specialization 的角度看，后续推进还应同步读取：
+
+- `docs/benchmarks/qe_ic_computational_signature_taxonomy_v0.md`
+- `docs/benchmarks/qe_ic_case_signature_matrix_v0.json`
+- `docs/benchmarks/qe_ic_full_flow_phase_config_v0.json`
+
+这样后续 DSE 不再只回答：
+
+- 哪个 family 当前最可信
+
+而会进一步回答：
+
+- 对哪一类 `signature_id`
+- 哪种 `family + policy + partition_strategy`
+- 是更合适的 **best trusted point**
+- 哪个又是更激进的 **best performance candidate**

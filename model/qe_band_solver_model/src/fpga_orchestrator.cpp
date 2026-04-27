@@ -4,6 +4,40 @@
 
 namespace qebs {
 
+namespace {
+
+bool is_experimental_signature_request(const ScfIterationRequest& request) {
+  if (request.software_family != "QE") {
+    return false;
+  }
+  static constexpr const char* kStableCaseIds[] = {
+      "si4_pbe_uspp_small",
+      "graphene_pbe_uspp",
+      "graphene_pbe_paw",
+      "h2_tiny",
+      "si8_pbe_nc",
+      "si8_pbe_uspp",
+  };
+  for (const char* stable_case_id : kStableCaseIds) {
+    if (request.case_id == stable_case_id) {
+      return false;
+    }
+  }
+  return !request.signature_id.empty() ||
+         !request.property_target.empty() ||
+         !request.pseudopotential_family.empty() ||
+         !request.solver_path_class.empty() ||
+         !request.workload_topology.empty() ||
+         !request.post_scf_extension_level.empty() ||
+         !request.projector_pressure.empty() ||
+         !request.nonlocal_pressure.empty() ||
+         !request.generalized_ratio_bucket.empty() ||
+         !request.diag_dominance.empty() ||
+         !request.fft_grid_pressure.empty();
+}
+
+}  // namespace
+
 FPGAOrchestrator::FPGAOrchestrator(sc_core::sc_module_name name, Interconnect& fabric,
                                    ChipTop& chip)
     : sc_core::sc_module(name), fabric_(fabric), chip_(chip) {}
@@ -14,6 +48,7 @@ EpisodeDescriptor FPGAOrchestrator::make_episode_descriptor(
   descriptor.request_id = request.request_id;
   descriptor.scf_iteration = request.scf_iteration;
   descriptor.episode_id = request.episode_id;
+  descriptor.case_id = request.case_id;
   descriptor.band_begin = request.band_batch.band_begin;
   descriptor.band_count = request.band_batch.band_count;
   descriptor.panel_count = request.band_batch.panel_count;
@@ -43,6 +78,34 @@ EpisodeDescriptor FPGAOrchestrator::make_episode_descriptor(
       request.band_batch.band_count <= 12
           ? "small"
           : (request.band_batch.band_count <= 24 ? "medium" : "large");
+  descriptor.signature_id = request.signature_id;
+  descriptor.property_target = request.property_target;
+  descriptor.pseudopotential_family = request.pseudopotential_family;
+  descriptor.solver_path_class = request.solver_path_class;
+  descriptor.workload_topology = request.workload_topology;
+  descriptor.post_scf_extension_level = request.post_scf_extension_level;
+  descriptor.projector_pressure = request.projector_pressure;
+  descriptor.nonlocal_pressure = request.nonlocal_pressure;
+  descriptor.generalized_ratio_bucket = request.generalized_ratio_bucket;
+  descriptor.diag_dominance = request.diag_dominance;
+  descriptor.fft_grid_pressure = request.fft_grid_pressure;
+  descriptor.graph_frontdoor_mode = request.graph_frontdoor_mode;
+  descriptor.graph_id = request.graph_id;
+  descriptor.graph_topology_style = request.graph_topology_style;
+  descriptor.graph_module_count = request.graph_module_count;
+  descriptor.graph_flow_count = request.graph_flow_count;
+  descriptor.graph_leaf_component_count = request.graph_leaf_component_count;
+  descriptor.graph_has_fft_unit = request.graph_has_fft_unit;
+  descriptor.graph_has_reduction_unit = request.graph_has_reduction_unit;
+  descriptor.graph_has_diag_unit = request.graph_has_diag_unit;
+  descriptor.graph_has_vector_diag_companion = request.graph_has_vector_diag_companion;
+  descriptor.graph_has_refresh_unit = request.graph_has_refresh_unit;
+  descriptor.graph_has_leaf_hotpath_flow = request.graph_has_leaf_hotpath_flow;
+  descriptor.graph_prefers_diag_before_reduction = request.graph_prefers_diag_before_reduction;
+  descriptor.graph_prefers_refresh_before_diag = request.graph_prefers_refresh_before_diag;
+  descriptor.graph_requested_cluster_sequence = request.graph_requested_cluster_sequence;
+  descriptor.graph_resolved_cluster_sequence = request.graph_resolved_cluster_sequence;
+  descriptor.graph_sequence_constraints = request.graph_sequence_constraints;
   descriptor.projector_mode = request.resident_set.projector_mode;
   descriptor.preferred_diag_mode = request.diag_policy.force_cpu_diag
                                        ? "fallback_companion"
@@ -57,6 +120,26 @@ EpisodeDescriptor FPGAOrchestrator::make_episode_descriptor(
   descriptor.potential_object = request.potential_object;
   descriptor.projector_object = request.resident_set.projector_object;
   descriptor.history_object = request.history_object;
+  if (is_experimental_signature_request(request)) {
+    if (request.post_scf_extension_level == "mobility_extension_expected" ||
+        request.post_scf_extension_level == "epw_expected") {
+      descriptor.max_inner_steps = std::max(descriptor.max_inner_steps, 4);
+    }
+    if (request.solver_path_class == "generalized_overlap") {
+      descriptor.max_diag_condition_estimate -= 0.08;
+    }
+    if (request.projector_pressure == "high") {
+      descriptor.max_device_diag_dim = std::min(descriptor.max_device_diag_dim, 24);
+    }
+    if (request.fft_grid_pressure == "high") {
+      descriptor.resident_budget_scale *= 0.92;
+    }
+    if (request.workload_topology == "slab_interface") {
+      descriptor.resident_budget_scale *= 0.95;
+    } else if (request.workload_topology == "wide_bandgap") {
+      descriptor.resident_budget_scale *= 0.90;
+    }
+  }
   return descriptor;
 }
 
@@ -89,6 +172,7 @@ CompletionSummary FPGAOrchestrator::make_completion_summary(
   completion.request_id = request.request_id;
   completion.scf_iteration = request.scf_iteration;
   completion.episode_id = request.episode_id;
+  completion.case_id = request.case_id;
   completion.architecture_family = request.architecture_family;
   completion.assumption_set_id = request.assumption_set_id;
   completion.offload_scope = request.offload_scope;

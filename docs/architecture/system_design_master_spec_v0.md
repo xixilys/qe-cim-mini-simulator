@@ -922,8 +922,20 @@ HostSCF -> FPGAOrchestrator -> ReplayBundleExecutor ->
   - 作为事务字段与行为合同文档；
 - `docs/architecture/qe_full_dft_systemc_extension_outline_v0.md`
   - 作为 `qe_band_solver_model` 如何继续推广到完整 `SCF` skeleton 的扩展文档；
+- `docs/architecture/qe_system_optimized_delta_20260413.md`
+  - 作为最近一轮 optimized system-level redesign 的 delta 文档，明确 phase-1 public contract、family maturity 与哪些 claim 已更扎实；
 - `model/qe_band_solver_model/README.md`
   - 作为当前可运行系统模型入口；
+- `docs/benchmarks/qe_fpga_workload_group_and_correctness_contract_v0.md`
+  - 作为 QE-only phase-1 thesis 的 workload-group roster 与 same-correctness / same-tolerance admission 合同；
+- `docs/benchmarks/qe_cpu_gpu_fpga_fairness_and_power_contract_v0.md`
+  - 作为 `CPU + GPU` / `CPU + FPGA` shared-rewrite、公平比较、whole-node power 与 exact end-to-end accounting boundary 合同；
+- `docs/benchmarks/qe_algorithm_rewrite_manifest_contract_v0.md`
+  - 作为 algorithm rewrite 的分类、GPU applicability、FPGA-only architectural rewrite 与 decisive baseline eligibility 合同；
+- `docs/benchmarks/qe_cpu_gpu_baseline_acquisition_runbook_v0.md`
+  - 作为 phase-1 `CPU + GPU` baseline 的实际采集 runbook；
+- `docs/benchmarks/qe_simulator_board_observability_contract_v0.md`
+  - 作为 simulator/DSE ↔ FPGA board 的 observability / calibration 合同；
 - `Survey/reports/2026-03-28-qe-vasp-cp2k-unified-flow-workload-matrix-v1.md`
   - 作为三软件统一流程/负载的外围证据。
 

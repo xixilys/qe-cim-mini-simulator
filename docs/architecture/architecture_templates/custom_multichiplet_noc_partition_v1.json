@@ -1,0 +1,124 @@
+{
+  "template_id": "custom_multichiplet_noc_partition_v1",
+  "template_version": "v1",
+  "family": "custom",
+  "label": "Multi-Chiplet NoC Partition Scaffold",
+
+  "description": "Stage-A projection scaffold for partitioning the DFT subspace pipeline across multiple chiplet-like regions connected by a projected NoC. It records communication-risk assumptions without claiming runtime or physical design support.",
+
+  "clusters": [
+    {
+      "cluster_id": "cluster_a",
+      "role": "operator_sweep",
+      "compute_unit": "hybrid_cim_dsp",
+      "enabled": true,
+      "timing_model": "hybrid",
+      "resource_budget": {
+        "dsp_count": 360,
+        "bram_18k_count": 260,
+        "lut_count": 180000,
+        "uram_count": 72
+      }
+    },
+    {
+      "cluster_id": "cluster_b",
+      "role": "reduced_build",
+      "compute_unit": "pim_bram_based",
+      "enabled": true,
+      "timing_model": "proxy_formula",
+      "resource_budget": {
+        "dsp_count": 120,
+        "bram_18k_count": 220,
+        "lut_count": 72000,
+        "uram_count": 40
+      }
+    },
+    {
+      "cluster_id": "cluster_c",
+      "role": "hardware_diag",
+      "compute_unit": "traditional_fpga_dsp",
+      "enabled": true,
+      "timing_model": "hybrid",
+      "resource_budget": {
+        "dsp_count": 260,
+        "bram_18k_count": 144,
+        "lut_count": 112000,
+        "uram_count": 28
+      }
+    },
+    {
+      "cluster_id": "cluster_d",
+      "role": "refresh_residual",
+      "compute_unit": "pim_bram_based",
+      "enabled": true,
+      "timing_model": "proxy_formula",
+      "resource_budget": {
+        "dsp_count": 96,
+        "bram_18k_count": 180,
+        "lut_count": 62000,
+        "uram_count": 28
+      }
+    }
+  ],
+
+  "policies": {
+    "diag_policy": "device_first_fallback",
+    "offload_scope": "device_heavy",
+    "resident_policy": "spill_tolerant",
+    "partition_strategy": "operator__build__diag__refresh"
+  },
+
+  "compute_config": {
+    "clock_mhz": 225,
+    "gemm_tile_size": 32,
+    "dsp_array_dims": {
+      "rows": 12,
+      "cols": 16
+    },
+    "cim_config": {
+      "moduli_count": 16,
+      "use_karatsuba": true,
+      "residue_width": 32
+    }
+  },
+
+  "memory_hierarchy": {
+    "l1_buffer_kb": 512,
+    "l2_buffer_kb": 3072,
+    "resident_budget_scale": 1.4
+  },
+
+  "component_overrides": {
+    "chiplet_noc": {
+      "component_ref": "chip_execution_facade",
+      "implementation_variant": "multichiplet_noc_projection_stub",
+      "config_overrides": {
+        "projected_chiplet_count": 4,
+        "noc_links_projected": 6,
+        "runtime_support_status": "projection_only"
+      }
+    },
+    "diag_fallback_unit": {
+      "component_ref": "diag_fallback_unit",
+      "implementation_variant": "host_lapack_fallback_required",
+      "config_overrides": {
+        "allow_host_fallback": true,
+        "preserve_qe_fp64_tolerance": true
+      }
+    }
+  },
+
+  "dse_metadata": {
+    "exploration_priority": "low",
+    "expected_performance_class": "aggressive",
+    "risk_level": "high",
+    "tags": ["scaffold_only", "projection_only", "custom", "multichiplet", "noc_partition", "spill_tolerant", "host_diag_fallback"]
+  },
+
+  "notes": {
+    "validation_status": "Scaffold only; no SystemC, RTL, board, packaging, or NoC validation is claimed.",
+    "rationale": "Explores whether separating operator, reduction, diagonalization, and refresh regions could help reason about bandwidth and locality tradeoffs.",
+    "risk_summary": "High risk because NoC latency, coherency, and chiplet packaging are outside the current executor model.",
+    "projection_boundary": "Projected chiplet placement is recorded in component_overrides metadata only and does not imply implemented multi-chiplet execution."
+  }
+}

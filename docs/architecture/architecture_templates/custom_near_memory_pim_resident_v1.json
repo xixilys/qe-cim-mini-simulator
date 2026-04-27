@@ -1,0 +1,127 @@
+{
+  "template_id": "custom_near_memory_pim_resident_v1",
+  "template_version": "v1",
+  "family": "custom",
+  "label": "Near-Memory PIM Resident Scaffold",
+
+  "description": "Stage-A projection scaffold for a near-memory PIM-resident architecture that keeps wavefunction and operator tiles close to BRAM/PIM-style storage. It is metadata for DSE projection, not an implemented runtime family.",
+
+  "clusters": [
+    {
+      "cluster_id": "cluster_a",
+      "role": "operator_sweep",
+      "compute_unit": "pim_bram_based",
+      "enabled": true,
+      "timing_model": "hybrid",
+      "resource_budget": {
+        "dsp_count": 160,
+        "bram_18k_count": 360,
+        "lut_count": 130000,
+        "uram_count": 96
+      }
+    },
+    {
+      "cluster_id": "cluster_b",
+      "role": "reduced_build",
+      "compute_unit": "pim_bram_based",
+      "enabled": true,
+      "timing_model": "proxy_formula",
+      "resource_budget": {
+        "dsp_count": 96,
+        "bram_18k_count": 280,
+        "lut_count": 74000,
+        "uram_count": 56
+      }
+    },
+    {
+      "cluster_id": "cluster_c",
+      "role": "hardware_diag",
+      "compute_unit": "traditional_fpga_dsp",
+      "enabled": true,
+      "timing_model": "hybrid",
+      "resource_budget": {
+        "dsp_count": 224,
+        "bram_18k_count": 120,
+        "lut_count": 90000,
+        "uram_count": 20
+      }
+    },
+    {
+      "cluster_id": "cluster_d",
+      "role": "refresh_residual",
+      "compute_unit": "pim_bram_based",
+      "enabled": true,
+      "timing_model": "proxy_formula",
+      "resource_budget": {
+        "dsp_count": 80,
+        "bram_18k_count": 220,
+        "lut_count": 58000,
+        "uram_count": 40
+      }
+    }
+  ],
+
+  "policies": {
+    "diag_policy": "device_first_fallback",
+    "offload_scope": "device_heavy",
+    "resident_policy": "fit_first",
+    "partition_strategy": "operator__build__diag__refresh"
+  },
+
+  "compute_config": {
+    "clock_mhz": 225,
+    "gemm_tile_size": 32,
+    "dsp_array_dims": {
+      "rows": 8,
+      "cols": 12
+    }
+  },
+
+  "memory_hierarchy": {
+    "l1_buffer_kb": 768,
+    "l2_buffer_kb": 3584,
+    "resident_budget_scale": 1.7
+  },
+
+  "component_overrides": {
+    "near_memory_domain": {
+      "component_ref": "near_memory_domain",
+      "implementation_variant": "pim_resident_projection_stub",
+      "config_overrides": {
+        "prefer_wavefunction_residency": true,
+        "resident_operator_tiles": true,
+        "runtime_support_status": "projection_only"
+      }
+    },
+    "resident_context_controller": {
+      "component_ref": "resident_context_controller",
+      "implementation_variant": "fit_first_resident_projection_stub",
+      "config_overrides": {
+        "spill_tolerant_replay": false,
+        "preserve_object_versions": true
+      }
+    },
+    "diag_fallback_unit": {
+      "component_ref": "diag_fallback_unit",
+      "implementation_variant": "host_lapack_fallback_required",
+      "config_overrides": {
+        "allow_host_fallback": true,
+        "preserve_qe_fp64_tolerance": true
+      }
+    }
+  },
+
+  "dse_metadata": {
+    "exploration_priority": "medium",
+    "expected_performance_class": "aggressive",
+    "risk_level": "high",
+    "tags": ["scaffold_only", "projection_only", "custom", "near_memory", "pim_bram_based", "resident_context", "host_diag_fallback"]
+  },
+
+  "notes": {
+    "validation_status": "Scaffold only; no SystemC, RTL, board, or numerical replay validation is claimed.",
+    "correctness_policy": "Residency and fit-first placement cannot alter QE FP64 operator or generalized Hermitian solver tolerances.",
+    "diag_policy": "Host LAPACK fallback remains required because the near-memory PIM concept does not validate a full generalized eigensolver.",
+    "projection_boundary": "PIM residency is expressed with schema-supported pim_bram_based units and metadata only."
+  }
+}

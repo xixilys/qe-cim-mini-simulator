@@ -8,6 +8,12 @@
 - 不拿孤立 kernel 峰值做宣传；
 - 只在公平 shell-level 语义下判断 `CPU + FPGA` 是否赢、赢在哪里、为什么赢。
 
+从 `2026-04-13` 起，本文不再单独承载所有冻结项；以下三份合同文件应与本文一起阅读：
+
+- `docs/benchmarks/qe_fpga_workload_group_and_correctness_contract_v0.md`
+- `docs/benchmarks/qe_cpu_gpu_fpga_fairness_and_power_contract_v0.md`
+- `docs/benchmarks/qe_simulator_board_observability_contract_v0.md`
+
 ### 当前本地执行阶段的收口
 
 虽然最终合同仍保留 `CPU + GPU` 行作为完整 fairness contract 的一部分，但**当前本地可执行阶段**已经收口为：
@@ -15,7 +21,7 @@
 - `CPU only`
 - `CPU + FPGA`
 
-原因很简单：
+原因如下：
 
 - 当前本地已经拿到了 `CPU only` 的真实 QE timing；
 - 当前本地还没有可声明 precision mode 的 `CPU + GPU` shell baseline 机器与运行结果；
@@ -84,6 +90,11 @@
 工作负载必须来自真实 `QE` trace-backed case，而不是单一 toy example。
 
 ### 2.2 两层 workload 组织
+
+从 `2026-04-13` 起，**phase-1 decisive roster 以**
+`docs/benchmarks/qe_fpga_workload_group_and_correctness_contract_v0.md`
+**为准**。本节保留的是较早期的 workload 叙事分层，用于解释为什么这些 family 曾被纳入候选池；
+若与冻结后的 phase-1 roster 不一致，应以后者为准。
 
 为兼顾当前本地样本与器件导向叙事，比较矩阵分成两层：
 

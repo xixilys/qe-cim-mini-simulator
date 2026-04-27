@@ -1,0 +1,55 @@
+{
+  "schema_version": "qe_algorithm_rewrite_manifest_template_v0",
+  "manifest_id": "qe_algorithm_rewrite_manifest_v0",
+  "fairness_policy_id": "qe_cpu_gpu_fpga_fairness_and_power_contract_v0",
+  "workload_group_id": "qe_fpga_phase1_workload_group_v0",
+  "entries": [
+    {
+      "rewrite_id": "RW-QE-001",
+      "title": "example rewrite",
+      "rewrite_class": "shared_semantic",
+      "scope": [
+        "h_psi",
+        "build H_sub/S_sub"
+      ],
+      "description": "Describe the rewrite succinctly.",
+      "motivation": "Why this rewrite is introduced.",
+      "changes_algorithm_semantics": "qualified",
+      "correctness_contract_impact": "bounded",
+      "tolerance_contract_note": "Reference the relevant QE gold / tolerance note.",
+      "gpu_applicable": "yes",
+      "gpu_applicability_basis": "State why GPU can or cannot adopt it.",
+      "gpu_enabled_in_baseline": "deferred",
+      "gpu_enablement_note": "Explain the current GPU status.",
+      "fpga_required_arch_feature": "none",
+      "expected_benefit_axis": "time",
+      "expected_benefit_note": "What metric should improve.",
+      "ablation_required": "yes",
+      "admission_risk": "medium",
+      "evidence_note": "spec-only",
+      "review_status": "draft",
+      "owner_note": "Fill in owner or lane note.",
+      "affected_workload_ids": [
+        "si4_pbe_uspp_small",
+        "graphene_pbe_uspp"
+      ],
+      "affected_family_ids": [
+        "F1",
+        "F2"
+      ],
+      "simulator_hook_ids": [
+        "algorithm_rewrite_manifest_id"
+      ],
+      "board_observability_rows": [
+        "OBS-01",
+        "OBS-12"
+      ],
+      "fallback_behavior": "No special fallback documented yet.",
+      "shared_rewrite_dependency_ids": [],
+      "claim_dependency_ids": [
+        "CL1",
+        "CL3"
+      ]
+    }
+  ]
+}

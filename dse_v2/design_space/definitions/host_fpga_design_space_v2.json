@@ -1,0 +1,131 @@
+{
+  "version": "v2.0",
+  "description": "Host+FPGA two-layer architecture design space",
+  "categorical_params": {
+    "offload_strategy": [
+      "h_psi_only",
+      "h_s_psi_fused",
+      "full_operator_sweep",
+      "include_diag"
+    ],
+    "dataflow_pattern": [
+      "streaming",
+      "buffered",
+      "hybrid"
+    ],
+    "psi_strategy": [
+      "stream",
+      "tile",
+      "resident"
+    ],
+    "beta_strategy": [
+      "resident",
+      "cache",
+      "stream"
+    ],
+    "h_psi_impl": [
+      "fft_dsp",
+      "fft_bram",
+      "systolic",
+      "mixed"
+    ],
+    "gemm_impl": [
+      "dsp_array",
+      "systolic",
+      "winograd"
+    ],
+    "overlap_policy": [
+      "none",
+      "compute_dma",
+      "full_pipeline"
+    ]
+  },
+  "integer_params": {
+    "pipeline_depth": {
+      "min": 2,
+      "max": 5
+    },
+    "parallel_units": {
+      "values": [
+        1,
+        2,
+        4,
+        8
+      ]
+    },
+    "intermediate_buffer_kb": {
+      "values": [
+        64,
+        128,
+        256,
+        512,
+        1024
+      ]
+    },
+    "tile_npw": {
+      "values": [
+        256,
+        512,
+        1024,
+        2048
+      ]
+    },
+    "tile_nkb": {
+      "values": [
+        16,
+        32,
+        64,
+        144
+      ]
+    },
+    "tile_m": {
+      "values": [
+        4,
+        8,
+        16,
+        32
+      ]
+    },
+    "dma_channels": {
+      "values": [
+        1,
+        2,
+        4
+      ]
+    },
+    "pcie_gen": {
+      "values": [
+        3,
+        4,
+        5
+      ]
+    }
+  },
+  "constraints": [
+    {
+      "type": "resource",
+      "name": "dsp_utilization",
+      "max": 0.85,
+      "description": "DSP utilization must not exceed 85%"
+    },
+    {
+      "type": "resource",
+      "name": "bram_utilization",
+      "max": 0.85,
+      "description": "BRAM utilization must not exceed 85%"
+    }
+  ],
+  "objectives": {
+    "primary": {
+      "name": "time_to_convergence_s",
+      "minimize": true,
+      "weight": 1.0
+    },
+    "secondary": {
+      "name": "energy_to_convergence_j",
+      "minimize": true,
+      "weight": 0.5
+    }
+  },
+  "total_configurations": 179159040
+}

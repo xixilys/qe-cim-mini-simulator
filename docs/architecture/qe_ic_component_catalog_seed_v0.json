@@ -1,0 +1,602 @@
+{
+  "catalog_version": "qe_ic_component_catalog_seed_v0",
+  "components": [
+    {
+      "component_id": "system_container",
+      "component_type": "SystemContainer",
+      "role": "full_flow_host_device_system",
+      "default_placement": "shared",
+      "supported_ops": [
+        "run_demo",
+        "run_full_flow",
+        "compose_host_device_flow"
+      ],
+      "latency_model_ref": "system_container_proxy_v0",
+      "power_model_ref": "system_container_proxy_v0",
+      "observability_keys": [
+        "device_busy_ref_cycles",
+        "dma_ref_cycles",
+        "host_assist_ref_cycles"
+      ],
+      "capacity_or_limit": {
+        "max_supported_software_families": "external"
+      },
+      "fallback_behavior": "delegates policy to host/device orchestration anchors",
+      "brownfield_anchor": "model/qe_band_solver_model/src/dft_hybrid_system.cpp"
+    },
+    {
+      "component_id": "chip_execution_facade",
+      "component_type": "GraphExecutor",
+      "role": "chip_level_cluster_execution_facade",
+      "default_placement": "fpga",
+      "supported_ops": [
+        "run_episode",
+        "cluster_abcd_dispatch",
+        "legacy_replay_adapter"
+      ],
+      "latency_model_ref": "chip_top_proxy_v0",
+      "power_model_ref": "chip_top_proxy_v0",
+      "observability_keys": [
+        "device_busy_ref_cycles",
+        "bytes_moved_to_convergence"
+      ],
+      "capacity_or_limit": {
+        "concurrent_episodes": 1
+      },
+      "fallback_behavior": "retains legacy replay adapters for archive compatibility",
+      "brownfield_anchor": "model/qe_band_solver_model/src/chip_top.cpp"
+    },
+    {
+      "component_id": "cluster_flow_executor",
+      "component_type": "GraphExecutor",
+      "role": "ordered_cluster_abcd_executor",
+      "default_placement": "fpga",
+      "supported_ops": [
+        "run_episode",
+        "cluster_a_b_c_d_pipeline"
+      ],
+      "latency_model_ref": "cluster_graph_proxy_v0",
+      "power_model_ref": "cluster_graph_proxy_v0",
+      "observability_keys": [
+        "device_busy_ref_cycles",
+        "realized_inner_steps"
+      ],
+      "capacity_or_limit": {
+        "pipeline_order": "fixed_abcd"
+      },
+      "fallback_behavior": "none",
+      "brownfield_anchor": "model/qe_band_solver_model/src/clusters/cluster_graph_executor.cpp"
+    },
+    {
+      "component_id": "command_scheduler",
+      "component_type": "Scheduler",
+      "role": "lcw_issue_and_projector_chain_control",
+      "default_placement": "fpga",
+      "supported_ops": [
+        "issue_projector_chain",
+        "control_dispatch"
+      ],
+      "latency_model_ref": "command_scheduler_proxy_v0",
+      "power_model_ref": "control_proxy_v0",
+      "observability_keys": [
+        "device_busy_ref_cycles"
+      ],
+      "capacity_or_limit": {
+        "max_lcw_words_per_issue": "policy-bound"
+      },
+      "fallback_behavior": "none",
+      "brownfield_anchor": "model/qe_band_solver_model/src/onchip/command_scheduler.cpp"
+    },
+    {
+      "component_id": "vector_diag_companion",
+      "component_type": "DiagUnit",
+      "role": "vector_diag_update_companion",
+      "default_placement": "fpga",
+      "supported_ops": [
+        "solve_and_update",
+        "vector_diag"
+      ],
+      "latency_model_ref": "vector_diag_proxy_v0",
+      "power_model_ref": "diag_proxy_v0",
+      "observability_keys": [
+        "last_diag_path",
+        "last_max_diag_condition_estimate"
+      ],
+      "capacity_or_limit": {
+        "solver_modes": "legacy_vector_diag"
+      },
+      "fallback_behavior": "legacy_diag_companion",
+      "brownfield_anchor": "model/qe_band_solver_model/src/onchip/vector_diag_companion.cpp"
+    },
+    {
+      "component_id": "near_memory_domain",
+      "component_type": "NearMemoryBuffer",
+      "role": "panel_staging_and_local_aggregate",
+      "default_placement": "fpga",
+      "supported_ops": [
+        "stage_panels",
+        "local_aggregate"
+      ],
+      "latency_model_ref": "near_memory_proxy_v0",
+      "power_model_ref": "near_memory_proxy_v0",
+      "observability_keys": [
+        "bytes_moved_to_convergence",
+        "device_busy_ref_cycles"
+      ],
+      "capacity_or_limit": {
+        "panel_staging_window": "configurable"
+      },
+      "fallback_behavior": "none",
+      "brownfield_anchor": "model/qe_band_solver_model/src/onchip/near_memory_domain.cpp"
+    },
+    {
+      "component_id": "cim_operator_subchain",
+      "component_type": "GraphExecutor",
+      "role": "cim_project_backproject_subchain",
+      "default_placement": "fpga",
+      "supported_ops": [
+        "run_operator_chain",
+        "project_backproject_loop"
+      ],
+      "latency_model_ref": "cim_subchain_proxy_v0",
+      "power_model_ref": "cim_proxy_v0",
+      "observability_keys": [
+        "device_busy_ref_cycles"
+      ],
+      "capacity_or_limit": {
+        "max_panel_visits": "configurable"
+      },
+      "fallback_behavior": "none",
+      "brownfield_anchor": "model/qe_band_solver_model/src/onchip/cim_eligible_operator_subchain.cpp"
+    },
+    {
+      "component_id": "cim_array_core",
+      "component_type": "CIMArray",
+      "role": "project_backproject_leaf_core",
+      "default_placement": "fpga",
+      "supported_ops": [
+        "project",
+        "backproject"
+      ],
+      "latency_model_ref": "cim_core_proxy_v0",
+      "power_model_ref": "cim_proxy_v0",
+      "observability_keys": [
+        "device_busy_ref_cycles"
+      ],
+      "capacity_or_limit": {
+        "max_row_block": "configurable"
+      },
+      "fallback_behavior": "none",
+      "brownfield_anchor": "model/qe_band_solver_model/src/onchip/cim_array_core.cpp"
+    },
+    {
+      "component_id": "residue_3m_core",
+      "component_type": "CIMArray",
+      "role": "residue_project_backproject_macro",
+      "default_placement": "fpga",
+      "supported_ops": [
+        "project",
+        "backproject"
+      ],
+      "latency_model_ref": "residue_3m_proxy_v0",
+      "power_model_ref": "cim_proxy_v0",
+      "observability_keys": [
+        "device_busy_ref_cycles"
+      ],
+      "capacity_or_limit": {
+        "mac_mode": "3m"
+      },
+      "fallback_behavior": "none",
+      "brownfield_anchor": "model/qe_band_solver_model/src/onchip/residue_3m_core.cpp"
+    },
+    {
+      "component_id": "coefficient_accumulator",
+      "component_type": "DataTransform",
+      "role": "project_coeff_refinement",
+      "default_placement": "fpga",
+      "supported_ops": [
+        "accumulate"
+      ],
+      "latency_model_ref": "coefficient_accumulator_proxy_v0",
+      "power_model_ref": "control_proxy_v0",
+      "observability_keys": [
+        "device_busy_ref_cycles"
+      ],
+      "capacity_or_limit": {
+        "accumulate_policy": "fixed"
+      },
+      "fallback_behavior": "none",
+      "brownfield_anchor": "model/qe_band_solver_model/src/onchip/coefficient_accumulator.cpp"
+    },
+    {
+      "component_id": "row_merge_tree",
+      "component_type": "ReductionUnit",
+      "role": "backproject_row_partial_merge",
+      "default_placement": "fpga",
+      "supported_ops": [
+        "merge"
+      ],
+      "latency_model_ref": "row_merge_proxy_v0",
+      "power_model_ref": "reduction_proxy_v0",
+      "observability_keys": [
+        "device_busy_ref_cycles"
+      ],
+      "capacity_or_limit": {
+        "merge_fan_in": "fixed"
+      },
+      "fallback_behavior": "none",
+      "brownfield_anchor": "model/qe_band_solver_model/src/onchip/row_merge_tree.cpp"
+    },
+    {
+      "component_id": "context_loader",
+      "component_type": "DataTransform",
+      "role": "resident_row_window_materialization",
+      "default_placement": "fpga",
+      "supported_ops": [
+        "load_row_window"
+      ],
+      "latency_model_ref": "context_loader_proxy_v0",
+      "power_model_ref": "control_proxy_v0",
+      "observability_keys": [
+        "device_busy_ref_cycles"
+      ],
+      "capacity_or_limit": {
+        "max_row_window": "configurable"
+      },
+      "fallback_behavior": "none",
+      "brownfield_anchor": "model/qe_band_solver_model/src/onchip/context_loader.cpp"
+    },
+    {
+      "component_id": "digit_serial_input_boundary",
+      "component_type": "FormatAdapter",
+      "role": "digit_serial_pack_boundary",
+      "default_placement": "fpga",
+      "supported_ops": [
+        "pack_project_stream"
+      ],
+      "latency_model_ref": "digit_serial_boundary_proxy_v0",
+      "power_model_ref": "control_proxy_v0",
+      "observability_keys": [
+        "device_busy_ref_cycles"
+      ],
+      "capacity_or_limit": {
+        "digit_width": "configurable"
+      },
+      "fallback_behavior": "none",
+      "brownfield_anchor": "model/qe_band_solver_model/src/onchip/digit_serial_input_boundary.cpp"
+    },
+    {
+      "component_id": "conjugate_sign_selector",
+      "component_type": "FormatAdapter",
+      "role": "project_backproject_sign_policy",
+      "default_placement": "fpga",
+      "supported_ops": [
+        "apply_project_policy",
+        "apply_backproject_policy"
+      ],
+      "latency_model_ref": "conjugate_sign_proxy_v0",
+      "power_model_ref": "control_proxy_v0",
+      "observability_keys": [
+        "device_busy_ref_cycles"
+      ],
+      "capacity_or_limit": {
+        "sign_policies": "project|backproject"
+      },
+      "fallback_behavior": "none",
+      "brownfield_anchor": "model/qe_band_solver_model/src/onchip/conjugate_sign_selector.cpp"
+    },
+    {
+      "component_id": "near_sram_coeff_buffer",
+      "component_type": "NearMemoryBuffer",
+      "role": "coeff_store_and_transform",
+      "default_placement": "fpga",
+      "supported_ops": [
+        "store_and_transform"
+      ],
+      "latency_model_ref": "near_sram_coeff_proxy_v0",
+      "power_model_ref": "near_memory_proxy_v0",
+      "observability_keys": [
+        "device_busy_ref_cycles"
+      ],
+      "capacity_or_limit": {
+        "coeff_buffer_depth": "configurable"
+      },
+      "fallback_behavior": "none",
+      "brownfield_anchor": "model/qe_band_solver_model/src/onchip/near_sram_coeff_buffer.cpp"
+    },
+    {
+      "component_id": "near_sram_row_buffer",
+      "component_type": "NearMemoryBuffer",
+      "role": "row_partial_commit",
+      "default_placement": "fpga",
+      "supported_ops": [
+        "commit_partial"
+      ],
+      "latency_model_ref": "near_sram_row_proxy_v0",
+      "power_model_ref": "near_memory_proxy_v0",
+      "observability_keys": [
+        "device_busy_ref_cycles"
+      ],
+      "capacity_or_limit": {
+        "row_buffer_depth": "configurable"
+      },
+      "fallback_behavior": "none",
+      "brownfield_anchor": "model/qe_band_solver_model/src/onchip/near_sram_row_buffer.cpp"
+    },
+    {
+      "component_id": "near_sram_support",
+      "component_type": "NearMemoryBuffer",
+      "role": "panel_stage_and_partial_aggregate",
+      "default_placement": "fpga",
+      "supported_ops": [
+        "stage_panel",
+        "aggregate"
+      ],
+      "latency_model_ref": "near_sram_support_proxy_v0",
+      "power_model_ref": "near_memory_proxy_v0",
+      "observability_keys": [
+        "bytes_moved_to_convergence",
+        "device_busy_ref_cycles"
+      ],
+      "capacity_or_limit": {
+        "panel_slots": "configurable"
+      },
+      "fallback_behavior": "none",
+      "brownfield_anchor": "model/qe_band_solver_model/src/onchip/near_sram_support.cpp"
+    },
+    {
+      "component_id": "reduction_closure_engine",
+      "component_type": "ReductionUnit",
+      "role": "reduced_space_closure",
+      "default_placement": "fpga",
+      "supported_ops": [
+        "close"
+      ],
+      "latency_model_ref": "reduction_closure_proxy_v0",
+      "power_model_ref": "reduction_proxy_v0",
+      "observability_keys": [
+        "device_busy_ref_cycles"
+      ],
+      "capacity_or_limit": {
+        "closure_mode": "fixed"
+      },
+      "fallback_behavior": "none",
+      "brownfield_anchor": "model/qe_band_solver_model/src/onchip/reduction_closure_engine.cpp"
+    },
+    {
+      "component_id": "host_controller",
+      "component_type": "HostController",
+      "role": "outer_scf_control",
+      "default_placement": "host",
+      "supported_ops": [
+        "rho_to_veff",
+        "mixing",
+        "convergence_control"
+      ],
+      "latency_model_ref": "host_runtime_proxy_v0",
+      "power_model_ref": "host_control_proxy_v0",
+      "observability_keys": [
+        "host_assist_ref_cycles",
+        "fallback_count_to_convergence"
+      ],
+      "capacity_or_limit": {
+        "max_scf_iters": "external"
+      },
+      "fallback_behavior": "owns global fallback policy",
+      "brownfield_anchor": "model/qe_band_solver_model/src/host_scf.cpp"
+    },
+    {
+      "component_id": "device_orchestrator",
+      "component_type": "FallbackManager",
+      "role": "device_runtime_bridge",
+      "default_placement": "shared",
+      "supported_ops": [
+        "resident_reuse",
+        "host_diag_fallback",
+        "completion_summary"
+      ],
+      "latency_model_ref": "device_runtime_proxy_v0",
+      "power_model_ref": "device_runtime_proxy_v0",
+      "observability_keys": [
+        "device_busy_ref_cycles",
+        "resident_reuse_hits"
+      ],
+      "capacity_or_limit": {
+        "max_device_diag_dim": "policy-bound"
+      },
+      "fallback_behavior": "invokes host_cpu_fallback when required",
+      "brownfield_anchor": "model/qe_band_solver_model/src/fpga_orchestrator.cpp"
+    },
+    {
+      "component_id": "interconnect_fabric",
+      "component_type": "InterconnectLink",
+      "role": "host_device_control_and_dma",
+      "default_placement": "shared",
+      "supported_ops": [
+        "control_b_transport",
+        "dma_to_device",
+        "dma_to_host"
+      ],
+      "latency_model_ref": "interconnect_proxy_v0",
+      "power_model_ref": "dma_proxy_v0",
+      "observability_keys": [
+        "dma_ref_cycles",
+        "bytes_moved_to_convergence"
+      ],
+      "capacity_or_limit": {
+        "bandwidth_class": "configurable"
+      },
+      "fallback_behavior": "none",
+      "brownfield_anchor": "model/qe_band_solver_model/src/interconnect.cpp"
+    },
+    {
+      "component_id": "cim_array",
+      "component_type": "CIMArray",
+      "role": "fused_hpsi_spsi_operator",
+      "default_placement": "fpga",
+      "supported_ops": [
+        "project",
+        "backproject",
+        "fused_operator_sweep"
+      ],
+      "latency_model_ref": "cluster_a_proxy_v0",
+      "power_model_ref": "cim_proxy_v0",
+      "observability_keys": [
+        "device_busy_ref_cycles",
+        "spill_ratio"
+      ],
+      "capacity_or_limit": {
+        "resident_row_block_size": "configurable"
+      },
+      "fallback_behavior": "none",
+      "brownfield_anchor": "model/qe_band_solver_model/src/clusters/cluster_a_operator_sweep.cpp"
+    },
+    {
+      "component_id": "fft_unit",
+      "component_type": "FFTUnit",
+      "role": "spectral_transform_support",
+      "default_placement": "fpga",
+      "supported_ops": [
+        "fft_transform"
+      ],
+      "latency_model_ref": "fft_proxy_v0",
+      "power_model_ref": "fft_proxy_v0",
+      "observability_keys": [
+        "last_support_grid_mode"
+      ],
+      "capacity_or_limit": {
+        "grid_mode": "BYPASS|AUX|FFT_AUX"
+      },
+      "fallback_behavior": "can be bypassed",
+      "brownfield_anchor": "model/qe_band_solver_model/src/onchip/fft_companion.cpp"
+    },
+    {
+      "component_id": "reduction_unit",
+      "component_type": "ReductionUnit",
+      "role": "reduced_hs_build",
+      "default_placement": "fpga",
+      "supported_ops": [
+        "aggregate_partials",
+        "build_reduced_space"
+      ],
+      "latency_model_ref": "cluster_b_proxy_v0",
+      "power_model_ref": "reduction_proxy_v0",
+      "observability_keys": [
+        "last_workload_bucket"
+      ],
+      "capacity_or_limit": {
+        "reduced_dim": "derived"
+      },
+      "fallback_behavior": "none",
+      "brownfield_anchor": "model/qe_band_solver_model/src/clusters/cluster_b_reduced_build.cpp"
+    },
+    {
+      "component_id": "diag_unit",
+      "component_type": "DiagUnit",
+      "role": "hardware_first_diagonalization",
+      "default_placement": "fpga",
+      "supported_ops": [
+        "device_diag",
+        "host_diag_fallback"
+      ],
+      "latency_model_ref": "cluster_c_proxy_v0",
+      "power_model_ref": "diag_proxy_v0",
+      "observability_keys": [
+        "last_diag_path",
+        "last_max_diag_condition_estimate",
+        "host_cpu_fallback_count"
+      ],
+      "capacity_or_limit": {
+        "max_device_diag_dim": "configurable"
+      },
+      "fallback_behavior": "host_cpu_fallback",
+      "brownfield_anchor": "model/qe_band_solver_model/src/clusters/cluster_c_hardware_diag.cpp"
+    },
+    {
+      "component_id": "refresh_unit",
+      "component_type": "DataTransform",
+      "role": "refresh_residual_pnext",
+      "default_placement": "fpga",
+      "supported_ops": [
+        "refresh",
+        "residual_update",
+        "pnext_writeback"
+      ],
+      "latency_model_ref": "cluster_d_proxy_v0",
+      "power_model_ref": "refresh_proxy_v0",
+      "observability_keys": [
+        "realized_inner_steps"
+      ],
+      "capacity_or_limit": {
+        "inner_step_cap": "configurable"
+      },
+      "fallback_behavior": "none",
+      "brownfield_anchor": "model/qe_band_solver_model/src/clusters/cluster_d_refresh_residual.cpp"
+    },
+    {
+      "component_id": "resident_buffer",
+      "component_type": "ResidentBuffer",
+      "role": "resident_context_storage",
+      "default_placement": "fpga",
+      "supported_ops": [
+        "resident_fit",
+        "context_windowing"
+      ],
+      "latency_model_ref": "resident_proxy_v0",
+      "power_model_ref": "resident_proxy_v0",
+      "observability_keys": [
+        "spill_active_count",
+        "resident_reuse_hits"
+      ],
+      "capacity_or_limit": {
+        "resident_budget_kib": "configurable"
+      },
+      "fallback_behavior": "spill_or_refit",
+      "brownfield_anchor": "model/qe_band_solver_model/src/onchip/resident_context_controller.cpp"
+    },
+    {
+      "component_id": "dma_channel",
+      "component_type": "DMAChannel",
+      "role": "host_fpga_transfer",
+      "default_placement": "shared",
+      "supported_ops": [
+        "h2d",
+        "d2h"
+      ],
+      "latency_model_ref": "dma_proxy_v0",
+      "power_model_ref": "dma_proxy_v0",
+      "observability_keys": [
+        "dma_ref_cycles",
+        "bytes_moved_to_convergence"
+      ],
+      "capacity_or_limit": {
+        "dma_class": "configurable"
+      },
+      "fallback_behavior": "none",
+      "brownfield_anchor": "model/qe_band_solver_model/src/interconnect.cpp"
+    },
+    {
+      "component_id": "episode_controller",
+      "component_type": "EpisodeController",
+      "role": "inner_loop_governor",
+      "default_placement": "shared",
+      "supported_ops": [
+        "fit_check",
+        "diag_mode_select",
+        "fifo_credit_control"
+      ],
+      "latency_model_ref": "episode_controller_proxy_v0",
+      "power_model_ref": "control_proxy_v0",
+      "observability_keys": [
+        "last_workload_bucket",
+        "configured_max_inner_steps",
+        "spill_active_count"
+      ],
+      "capacity_or_limit": {
+        "fifo_credit_limit": "policy-bound"
+      },
+      "fallback_behavior": "forces fallback_companion when resident fit fails",
+      "brownfield_anchor": "model/qe_band_solver_model/src/clusters/episode_controller.cpp"
+    }
+  ]
+}

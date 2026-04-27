@@ -1,0 +1,150 @@
+{
+  "export_contract_version": "qe_ic_graph_export_examples_v0",
+  "baseline_ssot": "family_scaffold",
+  "examples": [
+    {
+      "graph_id": "seed_f1_single_hotpath",
+      "seed_template_id": "f1_single_hotpath_graph_v0",
+      "projected_design_point": {
+        "family": "F1",
+        "diag_policy": "cpu_only",
+        "offload_scope": "single_hotpath",
+        "resident_policy": "fit_first",
+        "partition_strategy": "single_hotpath_partition"
+      },
+      "shared_join_keys": {
+        "workload_group_id": "qe_fpga_phase1_workload_group_v0",
+        "fairness_policy_id": "qe_cpu_gpu_fpga_fairness_and_power_contract_v0",
+        "observability_contract_id": "qe_simulator_board_observability_contract_v0"
+      },
+      "round_trip_expected_template_id": "f1_single_hotpath_graph_v0",
+      "graph_topology_summary": {
+        "module_instance_count": 18,
+        "link_count": 18,
+        "flow_count": 2,
+        "critical_path_summary": "sys0 -> host -> dma0 -> chip0 -> flow0 -> sched0 -> cim0 -> diag0",
+        "key_component_refs": [
+          "system_container",
+          "host_controller",
+          "dma_channel",
+          "chip_execution_facade",
+          "cluster_flow_executor",
+          "command_scheduler",
+          "context_loader",
+          "digit_serial_input_boundary",
+          "conjugate_sign_selector",
+          "cim_operator_subchain",
+          "cim_array_core",
+          "residue_3m_core",
+          "coefficient_accumulator",
+          "near_sram_coeff_buffer",
+          "near_sram_row_buffer",
+          "row_merge_tree",
+          "cim_array",
+          "diag_unit"
+        ]
+      }
+    },
+    {
+      "graph_id": "seed_f2_balanced_pipeline",
+      "seed_template_id": "f2_balanced_graph_v0",
+      "projected_design_point": {
+        "family": "F2",
+        "diag_policy": "device_first_fallback",
+        "offload_scope": "balanced",
+        "resident_policy": "fit_first",
+        "partition_strategy": "operator__build__diag__refresh"
+      },
+      "shared_join_keys": {
+        "workload_group_id": "qe_fpga_phase1_workload_group_v0",
+        "fairness_policy_id": "qe_cpu_gpu_fpga_fairness_and_power_contract_v0",
+        "observability_contract_id": "qe_simulator_board_observability_contract_v0"
+      },
+      "round_trip_expected_template_id": "f2_balanced_graph_v0",
+      "graph_topology_summary": {
+        "module_instance_count": 25,
+        "link_count": 25,
+        "flow_count": 3,
+        "critical_path_summary": "sys0 -> host -> dma0 -> chip0 -> flow0 -> epc0 -> sched0 -> nmem0 -> fft0 -> cim0 -> red0 -> diag0",
+        "key_component_refs": [
+          "system_container",
+          "host_controller",
+          "dma_channel",
+          "chip_execution_facade",
+          "cluster_flow_executor",
+          "episode_controller",
+          "command_scheduler",
+          "near_memory_domain",
+          "near_sram_support",
+          "context_loader",
+          "digit_serial_input_boundary",
+          "conjugate_sign_selector",
+          "cim_operator_subchain",
+          "cim_array_core",
+          "residue_3m_core",
+          "coefficient_accumulator",
+          "near_sram_coeff_buffer",
+          "near_sram_row_buffer",
+          "row_merge_tree",
+          "fft_unit",
+          "cim_array",
+          "reduction_closure_engine",
+          "reduction_unit",
+          "diag_unit",
+          "vector_diag_companion"
+        ]
+      }
+    },
+    {
+      "graph_id": "seed_f3_device_heavy",
+      "seed_template_id": "f3_device_heavy_graph_v0",
+      "projected_design_point": {
+        "family": "F3",
+        "diag_policy": "aggressive_device",
+        "offload_scope": "device_heavy",
+        "resident_policy": "spill_tolerant",
+        "partition_strategy": "operator__build__diag__refresh"
+      },
+      "shared_join_keys": {
+        "workload_group_id": "qe_fpga_phase1_workload_group_v0",
+        "fairness_policy_id": "qe_cpu_gpu_fpga_fairness_and_power_contract_v0",
+        "observability_contract_id": "qe_simulator_board_observability_contract_v0"
+      },
+      "round_trip_expected_template_id": "f3_device_heavy_graph_v0",
+      "graph_topology_summary": {
+        "module_instance_count": 26,
+        "link_count": 26,
+        "flow_count": 2,
+        "critical_path_summary": "sys0 -> host -> dma0 -> chip0 -> flow0 -> epc0 -> sched0 -> nmem0 -> fft0 -> cim0 -> red0 -> diag0 -> vdiag0 -> ref0",
+        "key_component_refs": [
+          "system_container",
+          "host_controller",
+          "dma_channel",
+          "chip_execution_facade",
+          "cluster_flow_executor",
+          "episode_controller",
+          "command_scheduler",
+          "near_memory_domain",
+          "near_sram_support",
+          "context_loader",
+          "digit_serial_input_boundary",
+          "conjugate_sign_selector",
+          "cim_operator_subchain",
+          "cim_array_core",
+          "residue_3m_core",
+          "coefficient_accumulator",
+          "near_sram_coeff_buffer",
+          "near_sram_row_buffer",
+          "row_merge_tree",
+          "fft_unit",
+          "cim_array",
+          "reduction_closure_engine",
+          "reduction_unit",
+          "diag_unit",
+          "vector_diag_companion",
+          "refresh_unit"
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,121 @@
+{
+  "template_id": "4cluster_traditional_fpga_v1",
+  "template_version": "v1",
+  "family": "F2",
+  "label": "4-Cluster Traditional FPGA DSP Array",
+  
+  "description": "Alternative to CIM baseline using traditional FPGA DSP-based blocked GEMM in Cluster A. Trades CIM's analog compute for proven DSP48E2 blocks with higher clock frequency.",
+  
+  "clusters": [
+    {
+      "cluster_id": "cluster_a",
+      "role": "operator_sweep",
+      "compute_unit": "traditional_fpga_dsp",
+      "enabled": true,
+      "timing_model": "cycle_accurate",
+      "resource_budget": {
+        "dsp_count": 512,
+        "bram_18k_count": 150,
+        "lut_count": 100000,
+        "uram_count": 30
+      }
+    },
+    {
+      "cluster_id": "cluster_b",
+      "role": "reduced_build",
+      "compute_unit": "traditional_fpga_dsp",
+      "enabled": true,
+      "timing_model": "proxy_formula",
+      "resource_budget": {
+        "dsp_count": 100,
+        "bram_18k_count": 50,
+        "lut_count": 30000,
+        "uram_count": 0
+      }
+    },
+    {
+      "cluster_id": "cluster_c",
+      "role": "hardware_diag",
+      "compute_unit": "traditional_fpga_dsp",
+      "enabled": true,
+      "timing_model": "cycle_accurate",
+      "resource_budget": {
+        "dsp_count": 200,
+        "bram_18k_count": 100,
+        "lut_count": 80000,
+        "uram_count": 20
+      }
+    },
+    {
+      "cluster_id": "cluster_d",
+      "role": "refresh_residual",
+      "compute_unit": "traditional_fpga_dsp",
+      "enabled": true,
+      "timing_model": "proxy_formula",
+      "resource_budget": {
+        "dsp_count": 50,
+        "bram_18k_count": 30,
+        "lut_count": 20000,
+        "uram_count": 0
+      }
+    }
+  ],
+  
+  "policies": {
+    "diag_policy": "device_first_fallback",
+    "offload_scope": "balanced",
+    "resident_policy": "fit_first",
+    "partition_strategy": "operator__build__diag__refresh"
+  },
+  
+  "compute_config": {
+    "clock_mhz": 300,
+    "gemm_tile_size": 32,
+    "dsp_array_dims": {
+      "rows": 16,
+      "cols": 16
+    }
+  },
+  
+  "memory_hierarchy": {
+    "l1_buffer_kb": 256,
+    "l2_buffer_kb": 1024,
+    "resident_budget_scale": 1.0
+  },
+  
+  "component_overrides": {
+    "operator_apply_engine": {
+      "component_ref": "operator_apply_engine",
+      "implementation_variant": "traditional_fpga_gemm",
+      "config_overrides": {
+        "panel_size": 8,
+        "gemm_engine_type": "blocked_gemm",
+        "block_size": 32,
+        "dsp_array_rows": 16,
+        "dsp_array_cols": 16
+      }
+    },
+    "diag_fallback_unit": {
+      "component_ref": "diag_fallback_unit",
+      "implementation_variant": "lapack_eigensolver",
+      "config_overrides": {
+        "solver_parallelism": 4,
+        "max_device_diag_dim": 28
+      }
+    }
+  },
+  
+  "dse_metadata": {
+    "exploration_priority": "high",
+    "expected_performance_class": "competitive",
+    "risk_level": "low",
+    "tags": ["traditional_fpga", "dsp_array", "4cluster", "f2_balanced", "to_validate"]
+  },
+  
+  "notes": {
+    "rationale": "Traditional FPGA approach may achieve higher clock frequency (300MHz vs 250MHz for CIM) and more predictable timing",
+    "tradeoffs": "Uses more DSP blocks (512 vs 0 for CIM), but consumes fewer LUTs and has simpler control logic",
+    "expected_performance": "Unknown - needs DSE evaluation. May be competitive with CIM for certain workload sizes.",
+    "validation_status": "Not yet validated - requires DSE sweep"
+  }
+}

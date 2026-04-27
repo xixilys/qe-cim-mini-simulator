@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import dataclass, fields
 from typing import Any, Mapping
 
@@ -20,6 +21,40 @@ WORKLOAD_IDENTITY_KEYS = (
     "fairness_policy_id",
     "power_boundary_id",
     "observability_contract_id",
+)
+
+WORKLOAD_DESCRIPTOR_CORE_KEYS = (
+    "schema_version",
+    "workload_id",
+    "workload_group_id",
+    "qe_tolerance_schema_id",
+    "accounting_boundary_id",
+    "fairness_policy_id",
+    "power_boundary_id",
+    "observability_contract_id",
+    "signature_id",
+    "property_target",
+    "pseudopotential_family",
+    "solver_path_class",
+    "workload_topology",
+    "post_scf_extension_level",
+    "projector_pressure",
+    "nonlocal_pressure",
+    "dimension_n",
+    "dimension_m",
+    "scf_iterations",
+)
+
+EVALUATION_RESULT_CORE_KEYS = (
+    "workload",
+    "design_point",
+    "backend",
+    "result_status",
+    "source_kind",
+    "metrics",
+    "authority_scope",
+    "promotion_state",
+    "final_public_family_winner",
 )
 
 
@@ -64,14 +99,29 @@ class WorkloadDescriptor:
     dimension_n: int
     dimension_m: int
     scf_iterations: int
+    extra_fields: dict[str, Any] | None = None
 
     @classmethod
     def from_dict(cls, payload: Mapping[str, Any]) -> "WorkloadDescriptor":
-        field_names = tuple(field.name for field in fields(cls))
-        return cls(**_copy_required(payload, field_names))
+        extra_fields = {
+            key: deepcopy(value)
+            for key, value in payload.items()
+            if key not in WORKLOAD_DESCRIPTOR_CORE_KEYS
+        }
+        return cls(
+            **_copy_required(payload, WORKLOAD_DESCRIPTOR_CORE_KEYS),
+            extra_fields=extra_fields or None,
+        )
 
     def to_dict(self) -> dict[str, Any]:
-        return {field.name: getattr(self, field.name) for field in fields(self)}
+        payload = {
+            field.name: getattr(self, field.name)
+            for field in fields(self)
+            if field.name != "extra_fields"
+        }
+        if self.extra_fields is not None:
+            payload.update(deepcopy(self.extra_fields))
+        return payload
 
 
 @dataclass(frozen=True)
@@ -89,6 +139,11 @@ class EvaluationResult:
 
     @classmethod
     def from_dict(cls, payload: Mapping[str, Any]) -> "EvaluationResult":
+        extra_fields = {
+            key: deepcopy(value)
+            for key, value in payload.items()
+            if key not in EVALUATION_RESULT_CORE_KEYS
+        }
         return cls(
             workload=WorkloadDescriptor.from_dict(payload["workload"]),
             design_point=DesignPoint.from_dict(payload["design_point"]),
@@ -99,6 +154,7 @@ class EvaluationResult:
             authority_scope=payload["authority_scope"],
             promotion_state=payload["promotion_state"],
             final_public_family_winner=payload["final_public_family_winner"],
+            extra_fields=extra_fields or None,
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -114,5 +170,5 @@ class EvaluationResult:
             "final_public_family_winner": self.final_public_family_winner,
         }
         if self.extra_fields is not None:
-            payload.update(self.extra_fields)
+            payload.update(deepcopy(self.extra_fields))
         return payload

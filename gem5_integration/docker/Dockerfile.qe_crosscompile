@@ -1,0 +1,24 @@
+# Dockerfile for gem5 QE FPGA cross-compilation
+# Builds static x86_64 Linux binaries with gfortran
+
+FROM debian:stable-slim
+
+# Install build dependencies and cross-compiler
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    gfortran \
+    wget \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Download and install musl cross-compiler
+RUN wget -q https://musl.cc/x86_64-linux-musl-cross.tgz && \
+    tar -xzf x86_64-linux-musl-cross.tgz -C /opt && \
+    rm x86_64-linux-musl-cross.tgz
+
+ENV PATH="/opt/x86_64-linux-musl-cross/bin:$PATH"
+ENV CC=x86_64-linux-musl-gcc
+ENV FC=x86_64-linux-musl-gfortran
+ENV CXX=x86_64-linux-musl-g++
+
+WORKDIR /workspace

@@ -12,6 +12,12 @@
 
 都使用同一套指标口径。
 
+从 `2026-04-13` 起，本文只冻结**指标定义**；workload-group 准入、fairness / whole-node power 边界，以及 simulator↔board observability 校准，分别以以下文档为准：
+
+- `docs/benchmarks/qe_fpga_workload_group_and_correctness_contract_v0.md`
+- `docs/benchmarks/qe_cpu_gpu_fpga_fairness_and_power_contract_v0.md`
+- `docs/benchmarks/qe_simulator_board_observability_contract_v0.md`
+
 这份合同服务的系统对象是：
 
 - `QE-connected band-solver subsystem`

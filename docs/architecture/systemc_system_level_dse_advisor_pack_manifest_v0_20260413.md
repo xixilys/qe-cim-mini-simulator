@@ -46,8 +46,17 @@
 
 - DSE result schema: `/Volumes/remote/phd/year_2/project/dft加速/docs/benchmarks/systemc_architecture_family_dse_result_schema_v0.json`
 - DSE sweep runner: `/Volumes/remote/phd/year_2/project/dft加速/docs/benchmarks/run_systemc_architecture_family_dse_sweep.py`
+- Next-stage phase runner: `/Volumes/remote/phd/year_2/project/dft加速/docs/benchmarks/run_qe_next_stage_dse_phase.py`
 
 这意味着 `speedup_to_convergence_range`、`energy_to_convergence_range`、`confidence`、`assumption_set_id` 这些字段也已经有 concrete schema / runner 落点。
+
+此外，当前 next-stage phase runner 已经能直接输出两类 recommendation-grade 上游包：
+
+- `qe_next_stage_projection_review.json / .md`
+- `qe_next_stage_stage_main_recommendation.json / .md`
+- `qe_next_stage_artifact_bundle_manifest.json / .md`
+
+前者汇总所有 accurate-layer-passing shortlisted candidates；后者进一步收口成“recommended primary candidates + validated alternatives”的对外推荐包；最顶层的 artifact bundle manifest 则把 phase summary、projection review 和 stage-main recommendation package 重新收成一个 release-facing 统一入口。
 
 同时需要注意：当前 bootstrap sweep runner 中 `qe_baseline_id` 默认写成 `qe_cpu_only_gold_v0`，`qe_tolerance_schema_id` 默认仍是 `pending_qe_numerical_tolerance_schema_v0`。在 final advisor pack 进入 release 前，这两个字段应被 canonical baseline / correctness lane 的真实值覆盖，而不是直接沿用 bootstrap placeholder。
 
@@ -61,6 +70,9 @@
 | Family responsibility matrix | `family_matrix` | 统一 CPU/device/datapath 分工叙事 | architecture lane + report lane | 是 |
 | QE gold correctness report | `qe_gold_report` | 冻结 `gold_pass / gold_fail` | correctness lane | 是 |
 | Sweep / summary ranking output | `sweep_summary` | family ranking、projection range、assumption set | sweep lane | 是 |
+| Projection review package | `projection_review` | 汇总所有 accurate-layer-passing shortlisted candidates | sweep/report lane | recommendation-grade 时是 |
+| Stage-main recommendation package | `stage_main_package` | 收口最终 recommended family、recommended primary candidates、validated alternatives | sweep/report lane | projection-grade 对外推荐时是 |
+| Stage artifact bundle manifest | `stage_artifact_bundle_manifest` | 作为 phase summary / projection review / stage-main package 的统一 release-facing 入口 | sweep/report lane | projection-grade release 时是 |
 | Confidence and claims rubric | `claims_rubric` | 冻结 `confidence` 与 claim discipline | report lane + verifier lane | 是 |
 | Bootstrap-complete handoff note | `bootstrap_handoff_note` | 记录 bootstrap 已落地骨架与下一阶段缺口，供 team 过渡期对齐 | docs lane / team coordination | 否 |
 | Advisor pack checklist | `assembly_checklist` | 最终成包放行检查 | verifier lane | 是 |
@@ -71,6 +83,8 @@
 | 首页字段 | 来源 artifact | 上游 owner | 说明 |
 |---|---|---|---|
 | `recommended_family` | `sweep_summary` + `family_matrix` | sweep lane / architecture lane | 必须和 family responsibility matrix 叙事一致 |
+| `recommended_primary_candidates` | `stage_main_package` | sweep/report lane | projection-grade 首页/主报告推荐卡的直接机器可核对来源 |
+| `validated_alternative_candidates` | `stage_main_package` + `projection_review` | sweep/report lane | why-not-other-families 与风险讨论的直接来源 |
 | `correctness_status` | `qe_gold_report` | correctness lane | 不允许 report lane 自行推断 |
 | `confidence` | `claims_rubric` + `qe_gold_report` + `sweep_summary` | verifier/report lane | 必须按 rubric 打级 |
 | `speedup_to_convergence_range` | `sweep_summary` | sweep lane | 只能填 range；schema 字段同名 |
@@ -103,6 +117,9 @@
 - `energy_to_convergence_range`
 - `assumption_set_id`
 - main reason / sensitivity note
+- projection review package
+- stage-main recommendation package（若已进入 `projection_eligible`）
+- stage artifact bundle manifest（若已进入 release-facing package stage）
 
 ### 5.4 Verifier lane -> Final pack
 必须交付：
@@ -126,6 +143,8 @@
 - canonical baseline-normalized output 尚未落地
 - candidate-result canonicalized payload 尚未落地
 - final family ranking / projection result JSON 尚未落地
+- projection review package 或 stage-main recommendation package 缺失（当 stage 已到 `projection_eligible`）
+- stage artifact bundle manifest 缺失（当 package 已进入 release-facing 使用阶段）
 - QE gold correctness 结果缺失
 - 首页缺少 `correctness_status` 或 `confidence`
 - projection 不是 range 而是无边界点估计
@@ -141,6 +160,8 @@
 - `speedup_to_convergence_range` 已冻结
 - `energy_to_convergence_range` 已冻结
 - 已存在可追溯的 DSE result bundle / ranking output 文件
+- 若 stage 已到 `projection_eligible`，已存在 `projection_review` 与 `stage_main_package` 对应 artifact
+- 若当前 package 已进入 release-facing 使用阶段，已存在 `stage_artifact_bundle_manifest` 且路径与下游 artifact 一致
 - `assumption_set_id` 已可追溯
 - 报告明确声明 v1 不是 RTL 参数冻结器
 - 报告未越级声称 board-level final power

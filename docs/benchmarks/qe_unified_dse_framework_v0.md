@@ -32,6 +32,24 @@ Unified DSE v0 organizes Stage-A evidence.
 Adjudicator controls public claims.
 ```
 
+### 1.1 Stage contract-lane artifacts
+
+The staged DSE flow now has companion contract/readiness documents:
+
+- `docs/benchmarks/qe_dse_systemc_feedback_contract_v0.md` defines the dry-run SystemC feedback object. Default rows are `planned_not_executed`, `not_executed`, `subprocess_invoked = false`, and capped at `timed_functional_proxy_contract_only`.
+- `docs/benchmarks/qe_dse_gem5_systemc_handoff_contract_v0.md` defines the Stage B gem5/SystemC handoff object. Default rows are `planned_for_stage_b`, `not_executed`, `requires_linux_x86_validation`, and capped at `stage_b_handoff_contract_only`.
+- `docs/benchmarks/qe_unified_dse_stage_a_readiness_checklist_v0.md` defines QE anchor defaults and pre-adjudication ranking semantics: `qe_equivalent_scf_claim = false`, `pareto_membership = not_evaluated`, `ranking_claim_ceiling = stage_a_screening_only`, and `final_public_family_winner = null`.
+- `docs/benchmarks/qe_dse_qe_correctness_report_contract_v0.md` defines the Stage C external QE-equivalent correctness report accepted by `--qe-correctness-report`.
+- `docs/benchmarks/qe_dse_fpga_asic_implementation_evidence_contract_v0.md` defines the Stage D external FPGA/ASIC implementation evidence accepted by `--implementation-evidence`.
+
+These artifacts preserve the same claim ceiling as this framework: the CLI does
+not generate RTL/HLS/board evidence, does not make cycle-accurate claims, does
+not lock into CIM, does not hide gem5/SystemC execution, and does not claim
+QE-equivalent SCF without a validated external correctness report.
+Advisor-facing language should stay aligned with
+`docs/architecture/systemc_system_level_dse_family_responsibility_matrix_v0_20260413.md`
+and `docs/architecture/systemc_system_level_dse_advisor_report_template_v0_20260413.md`.
+
 ## 2. Module architecture
 
 v0 实施形态建议为一个标准库 Python package：
@@ -457,9 +475,10 @@ Suggested command shape after implementation:
 
 ```bash
 python3 docs/benchmarks/run_unified_dse_v0.py \
-  --design-space docs/benchmarks/qe_architecture_family_design_space_spec_v0.json \
-  --design-space-schema docs/benchmarks/qe_architecture_family_design_space_schema_v0.json \
-  --mode dry_run \
+  --design-space-spec docs/benchmarks/qe_architecture_family_design_space_spec_v0.json \
+  --workload docs/benchmarks/testdata/unified_dse/minimal_workload.json \
+  --dry-run \
+  --max-design-points 4 \
   --output-dir tmp/unified_dse_v0_dry_run
 ```
 
@@ -467,14 +486,144 @@ For SystemC opt-in only:
 
 ```bash
 python3 docs/benchmarks/run_unified_dse_v0.py \
-  --design-space docs/benchmarks/qe_architecture_family_design_space_spec_v0.json \
-  --design-space-schema docs/benchmarks/qe_architecture_family_design_space_schema_v0.json \
-  --mode systemc_opt_in \
+  --design-space-spec docs/benchmarks/qe_architecture_family_design_space_spec_v0.json \
+  --workload docs/benchmarks/testdata/unified_dse/minimal_workload.json \
   --execute-systemc \
   --output-dir tmp/unified_dse_v0_systemc_proxy
 ```
 
 The second command is a future implementation target. This documentation task does not run it and does not claim that the CLI already exists.
+
+### 6.1 Stage B0 descriptor-only handoff
+
+The implemented CLI can optionally emit Stage B0 handoff descriptors without running
+SystemC or gem5:
+
+```bash
+python3 docs/benchmarks/run_unified_dse_v0.py \
+  --design-space-spec docs/benchmarks/qe_architecture_family_design_space_spec_v0.json \
+  --workload docs/benchmarks/testdata/unified_dse/minimal_workload.json \
+  --output-dir tmp/unified_dse_stage_b0_descriptors \
+  --dry-run \
+  --max-design-points 4 \
+  --emit-stage-b0-descriptors
+```
+
+The output sidecars are:
+
+- `systemc_configs/{candidate_id}.json`
+- `gem5_systemc_handoff/{candidate_id}.json`
+- `stage_b0_descriptor_manifest_v0.json`
+
+This is descriptor generation only. It records `not_executed` status and a
+descriptor-only claim ceiling so later Stage B work can connect real SystemC
+feedback or gem5/SystemC control without changing the Stage A evidence boundary.
+
+### 6.2 SystemC feedback ingest and full-stage status
+
+The next claim-safe step after descriptor generation is artifact ingest. The CLI
+can read a SystemC feedback JSON and merge metrics back into DSE rows:
+
+```bash
+python3 docs/benchmarks/run_unified_dse_v0.py \
+  --design-space-spec docs/benchmarks/qe_architecture_family_design_space_spec_v0.json \
+  --workload docs/benchmarks/testdata/unified_dse/minimal_workload.json \
+  --systemc-feedback tmp/systemc_feedback.json \
+  --output-dir tmp/unified_dse_stage_b1_b2 \
+  --dry-run \
+  --max-design-points 4
+```
+
+This reads an external feedback artifact; it does not launch SystemC. If the
+artifact provides ranking-grade proxy metrics, rows may become
+`promotion-eligible`, but the claim ceiling remains timed-functional feedback
+only and `final_public_family_winner` remains `null`.
+
+For a complete staged status surface, use:
+
+```bash
+python3 docs/benchmarks/run_unified_dse_v0.py \
+  --design-space-spec docs/benchmarks/qe_architecture_family_design_space_spec_v0.json \
+  --workload docs/benchmarks/testdata/unified_dse/minimal_workload.json \
+  --output-dir tmp/unified_dse_full_stage_status \
+  --dry-run \
+  --emit-stage-b0-descriptors \
+  --emit-full-stage-status
+```
+
+This writes `unified_dse_full_stage_status_v0.json`. Stages without external
+evidence are reported as blocked, for example
+`blocked_waiting_gem5_systemc_smoke_report`,
+`blocked_waiting_qe_equivalent_correctness_report`, and
+`blocked_waiting_fpga_asic_implementation_evidence`.
+
+### 6.3 Stage B3 gem5/SystemC smoke report intake
+
+Stage B3 becomes referenced only when an external smoke report is supplied and
+validated:
+
+```bash
+python3 docs/benchmarks/run_unified_dse_v0.py \
+  --design-space-spec docs/benchmarks/qe_architecture_family_design_space_spec_v0.json \
+  --workload docs/benchmarks/testdata/unified_dse/minimal_workload.json \
+  --gem5-smoke-report tmp/gem5_smoke_report.json \
+  --output-dir tmp/unified_dse_stage_b3 \
+  --dry-run \
+  --emit-full-stage-status
+```
+
+The smoke report schema is `qe_dse_gem5_systemc_smoke_report_v0`. Required
+safe fields include `execution_status = executed`,
+`claim_ceiling = gem5_systemc_smoke_only`,
+`scf_control_loop_status`, `systemc_bridge_status`, `environment`, `metrics`,
+and `correctness_gate.qe_equivalent_scf_claim = false`. The CLI rejects a
+Stage B3 smoke report that attempts to claim QE-equivalent SCF.
+
+### 6.4 Stage C QE-equivalent correctness report intake
+
+Stage C can now be represented by an external correctness report reference:
+
+```bash
+python3 docs/benchmarks/run_unified_dse_v0.py \
+  --design-space-spec docs/benchmarks/qe_architecture_family_design_space_spec_v0.json \
+  --workload docs/benchmarks/testdata/unified_dse/minimal_workload.json \
+  --qe-correctness-report tmp/qe_correctness_report.json \
+  --output-dir tmp/unified_dse_stage_c \
+  --dry-run \
+  --emit-full-stage-status
+```
+
+The report schema is `qe_dse_qe_equivalent_correctness_report_v0`. A report may
+set `qe_equivalent_scf_claim = true` only when it records
+`execution_status = executed`, `correctness_status = pass`, the frozen tolerance
+schema `qe_gold_numerical_tolerance_schema_v0`, and a compare payload whose
+`overall_pass = true`. This is a correctness-only claim ceiling
+(`qe_equivalent_scf_correctness_only`), not a performance, implementation, or
+final-winner claim. Failed/mismatch reports are still valid evidence references
+but keep Stage C in `external_correctness_report_referenced_not_proven`.
+
+### 6.5 Stage D FPGA/ASIC implementation evidence intake
+
+Stage D is also an external-artifact intake surface:
+
+```bash
+python3 docs/benchmarks/run_unified_dse_v0.py \
+  --design-space-spec docs/benchmarks/qe_architecture_family_design_space_spec_v0.json \
+  --workload docs/benchmarks/testdata/unified_dse/minimal_workload.json \
+  --implementation-evidence tmp/implementation_evidence.json \
+  --output-dir tmp/unified_dse_stage_d \
+  --dry-run \
+  --emit-full-stage-status
+```
+
+The evidence schema is `qe_dse_fpga_asic_implementation_evidence_v0`. It accepts
+explicit FPGA/ASIC evidence kinds such as `hls_synthesis`, `rtl_simulation`,
+`fpga_board`, `openroad_physical`, `asic_ppa`, or
+`implementation_projection`, each with a narrow claim ceiling such as
+`hls_synthesis_only` or `fpga_board_measurement_only`. The DSE CLI only
+validates and references the artifact; it does not run HLS, RTL simulation,
+OpenROAD, gem5, SystemC, or board measurement. The schema rejects public winner
+claims and production release readiness claims.
 
 ## 7. Explicit non-goals
 

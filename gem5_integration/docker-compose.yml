@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  gem5-test:
+    platform: linux/amd64
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - .:/workspace/gem5_integration
+      - ../model:/workspace/model
+      - ../docs:/workspace/docs
+    working_dir: /workspace/gem5_integration
+    stdin_open: true
+    tty: true
+    command: /bin/bash

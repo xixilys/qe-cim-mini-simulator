@@ -27,10 +27,39 @@ struct ObjectRecord {
 struct SystemRunConfig {
   std::string software_family = "QE";
   std::string flow_family = "CBANDS_DIAG";
+  std::string case_id = "systemc_candidate";
   std::string architecture_family = "F2";
   std::string assumption_set_id = "default-assumptions";
+  std::string signature_id;
+  std::string property_target;
+  std::string pseudopotential_family;
+  std::string solver_path_class;
+  std::string workload_topology;
+  std::string post_scf_extension_level;
+  std::string projector_pressure;
+  std::string nonlocal_pressure;
+  std::string generalized_ratio_bucket;
+  std::string diag_dominance;
+  std::string fft_grid_pressure;
   std::string offload_scope_override;
   std::string resident_policy_override;
+  std::string graph_frontdoor_mode;
+  std::string graph_id;
+  std::string graph_topology_style;
+  int graph_module_count = 0;
+  int graph_flow_count = 0;
+  int graph_leaf_component_count = 0;
+  bool graph_has_fft_unit = false;
+  bool graph_has_reduction_unit = false;
+  bool graph_has_diag_unit = false;
+  bool graph_has_vector_diag_companion = false;
+  bool graph_has_refresh_unit = false;
+  bool graph_has_leaf_hotpath_flow = false;
+  bool graph_prefers_diag_before_reduction = false;
+  bool graph_prefers_refresh_before_diag = false;
+  std::string graph_requested_cluster_sequence;
+  std::string graph_resolved_cluster_sequence;
+  std::string graph_sequence_constraints;
   int max_scf_iters = 3;
   bool enable_fft = true;
   int device_diag_max_dim = 28;
@@ -41,13 +70,36 @@ struct SystemRunConfig {
     std::ostringstream oss;
     oss << "software=" << software_family
         << ", flow=" << flow_family
+        << ", case_id=" << case_id
         << ", arch_family=" << architecture_family
         << ", assumption_set=" << assumption_set_id
+        << ", signature_id=" << (signature_id.empty() ? "unset" : signature_id)
+        << ", property_target=" << (property_target.empty() ? "unset" : property_target)
+        << ", pseudo_family=" << (pseudopotential_family.empty() ? "unset" : pseudopotential_family)
+        << ", topology=" << (workload_topology.empty() ? "unset" : workload_topology)
         << ", max_scf_iters=" << max_scf_iters
         << ", fft=" << (enable_fft ? "on" : "off")
         << ", device_diag_max_dim=" << device_diag_max_dim
         << ", force_host_diag=" << (force_host_diag ? "yes" : "no")
         << ", cpu_fallback=" << (allow_cpu_diag_fallback ? "yes" : "no");
+    if (!graph_frontdoor_mode.empty()) {
+      oss << ", graph_mode=" << graph_frontdoor_mode
+          << ", graph_id=" << (graph_id.empty() ? "unset" : graph_id)
+          << ", graph_style=" << (graph_topology_style.empty() ? "unset" : graph_topology_style)
+          << ", graph_modules=" << graph_module_count
+          << ", graph_flows=" << graph_flow_count
+          << ", graph_leafs=" << graph_leaf_component_count
+          << ", graph_fft=" << (graph_has_fft_unit ? "yes" : "no")
+          << ", graph_red=" << (graph_has_reduction_unit ? "yes" : "no")
+          << ", graph_diag=" << (graph_has_diag_unit ? "yes" : "no")
+          << ", graph_vdiag=" << (graph_has_vector_diag_companion ? "yes" : "no")
+          << ", graph_refresh=" << (graph_has_refresh_unit ? "yes" : "no")
+          << ", graph_leaf_flow=" << (graph_has_leaf_hotpath_flow ? "yes" : "no")
+          << ", graph_diag_before_red=" << (graph_prefers_diag_before_reduction ? "yes" : "no")
+          << ", graph_refresh_before_diag=" << (graph_prefers_refresh_before_diag ? "yes" : "no")
+          << ", graph_requested_seq=" << (graph_requested_cluster_sequence.empty() ? "unset" : graph_requested_cluster_sequence)
+          << ", graph_resolved_seq=" << (graph_resolved_cluster_sequence.empty() ? "unset" : graph_resolved_cluster_sequence);
+    }
     return oss.str();
   }
 };
@@ -167,11 +219,40 @@ struct ScfIterationRequest {
   int episode_id = 0;
   std::string software_family = "QE";
   std::string flow_family = "CBANDS_DIAG";
+  std::string case_id = "systemc_candidate";
   std::string architecture_family = "F2";
   std::string assumption_set_id = "default-assumptions";
+  std::string signature_id;
+  std::string property_target;
+  std::string pseudopotential_family;
+  std::string solver_path_class;
+  std::string workload_topology;
+  std::string post_scf_extension_level;
+  std::string projector_pressure;
+  std::string nonlocal_pressure;
+  std::string generalized_ratio_bucket;
+  std::string diag_dominance;
+  std::string fft_grid_pressure;
   std::string offload_scope = "balanced";
   std::string resident_policy = "fit_first";
   std::string confidence_label = "medium";
+  std::string graph_frontdoor_mode;
+  std::string graph_id;
+  std::string graph_topology_style;
+  int graph_module_count = 0;
+  int graph_flow_count = 0;
+  int graph_leaf_component_count = 0;
+  bool graph_has_fft_unit = false;
+  bool graph_has_reduction_unit = false;
+  bool graph_has_diag_unit = false;
+  bool graph_has_vector_diag_companion = false;
+  bool graph_has_refresh_unit = false;
+  bool graph_has_leaf_hotpath_flow = false;
+  bool graph_prefers_diag_before_reduction = false;
+  bool graph_prefers_refresh_before_diag = false;
+  std::string graph_requested_cluster_sequence;
+  std::string graph_resolved_cluster_sequence;
+  std::string graph_sequence_constraints;
   bool algorithm_contract_deviation = false;
   bool enable_fft = true;
   ResidentSetDesc resident_set;
@@ -189,6 +270,9 @@ struct ScfIterationRequest {
         << ", episode=" << episode_id
         << ", sw=" << software_family
         << ", flow=" << flow_family
+        << ", case_id=" << case_id
+        << ", signature_id=" << (signature_id.empty() ? "unset" : signature_id)
+        << ", property_target=" << (property_target.empty() ? "unset" : property_target)
         << ", arch=" << architecture_family
         << ", offload_scope=" << offload_scope
         << ", resident_policy=" << resident_policy
@@ -196,6 +280,24 @@ struct ScfIterationRequest {
         << ", batch=" << band_batch.batch_id
         << ", diag_policy={" << diag_policy.brief() << "}"
         << ", completion=" << completion_policy;
+    if (!graph_frontdoor_mode.empty()) {
+      oss << ", graph_mode=" << graph_frontdoor_mode
+          << ", graph_id=" << (graph_id.empty() ? "unset" : graph_id)
+          << ", graph_style=" << (graph_topology_style.empty() ? "unset" : graph_topology_style)
+          << ", graph_modules=" << graph_module_count
+          << ", graph_flows=" << graph_flow_count
+          << ", graph_leafs=" << graph_leaf_component_count
+          << ", graph_fft=" << (graph_has_fft_unit ? "yes" : "no")
+          << ", graph_red=" << (graph_has_reduction_unit ? "yes" : "no")
+          << ", graph_diag=" << (graph_has_diag_unit ? "yes" : "no")
+          << ", graph_vdiag=" << (graph_has_vector_diag_companion ? "yes" : "no")
+          << ", graph_refresh=" << (graph_has_refresh_unit ? "yes" : "no")
+          << ", graph_leaf_flow=" << (graph_has_leaf_hotpath_flow ? "yes" : "no")
+          << ", graph_diag_before_red=" << (graph_prefers_diag_before_reduction ? "yes" : "no")
+          << ", graph_refresh_before_diag=" << (graph_prefers_refresh_before_diag ? "yes" : "no")
+          << ", graph_requested_seq=" << (graph_requested_cluster_sequence.empty() ? "unset" : graph_requested_cluster_sequence)
+          << ", graph_resolved_seq=" << (graph_resolved_cluster_sequence.empty() ? "unset" : graph_resolved_cluster_sequence);
+    }
     return oss.str();
   }
 };
@@ -900,6 +1002,18 @@ struct EpisodeDescriptor {
   std::string support_grid_mode = "BYPASS";
   std::string precision_mode = "fp64-constrained";
   std::string workload_bucket = "medium";
+  std::string case_id = "systemc_candidate";
+  std::string signature_id;
+  std::string property_target;
+  std::string pseudopotential_family;
+  std::string solver_path_class;
+  std::string workload_topology;
+  std::string post_scf_extension_level;
+  std::string projector_pressure;
+  std::string nonlocal_pressure;
+  std::string generalized_ratio_bucket;
+  std::string diag_dominance;
+  std::string fft_grid_pressure;
   std::string projector_mode = "USPP";
   std::string preferred_diag_mode = "hardware";
   std::string architecture_family = "F2";
@@ -907,6 +1021,23 @@ struct EpisodeDescriptor {
   std::string offload_scope = "balanced";
   std::string resident_policy = "fit_first";
   std::string confidence_label = "medium";
+  std::string graph_frontdoor_mode;
+  std::string graph_id;
+  std::string graph_topology_style;
+  int graph_module_count = 0;
+  int graph_flow_count = 0;
+  int graph_leaf_component_count = 0;
+  bool graph_has_fft_unit = false;
+  bool graph_has_reduction_unit = false;
+  bool graph_has_diag_unit = false;
+  bool graph_has_vector_diag_companion = false;
+  bool graph_has_refresh_unit = false;
+  bool graph_has_leaf_hotpath_flow = false;
+  bool graph_prefers_diag_before_reduction = false;
+  bool graph_prefers_refresh_before_diag = false;
+  std::string graph_requested_cluster_sequence;
+  std::string graph_resolved_cluster_sequence;
+  std::string graph_sequence_constraints;
   bool algorithm_contract_deviation = false;
   std::string resident_set_id = "resident-default";
   double resident_budget_scale = 1.0;
@@ -927,6 +1058,8 @@ struct EpisodeDescriptor {
         << ", episode=" << episode_id
         << ", sw=" << software_family
         << ", flow=" << flow_family
+        << ", case_id=" << case_id
+        << ", signature_id=" << (signature_id.empty() ? "unset" : signature_id)
         << ", arch=" << architecture_family
         << ", solver=" << solver_mode
         << ", bands=[" << band_begin << "," << (band_begin + band_count) << ")"
@@ -937,6 +1070,24 @@ struct EpisodeDescriptor {
         << ", projector=" << projector_mode
         << ", diag=" << preferred_diag_mode
         << ", max_device_diag_dim=" << max_device_diag_dim;
+    if (!graph_frontdoor_mode.empty()) {
+      oss << ", graph_mode=" << graph_frontdoor_mode
+          << ", graph_id=" << (graph_id.empty() ? "unset" : graph_id)
+          << ", graph_style=" << (graph_topology_style.empty() ? "unset" : graph_topology_style)
+          << ", graph_modules=" << graph_module_count
+          << ", graph_flows=" << graph_flow_count
+          << ", graph_leafs=" << graph_leaf_component_count
+          << ", graph_fft=" << (graph_has_fft_unit ? "yes" : "no")
+          << ", graph_red=" << (graph_has_reduction_unit ? "yes" : "no")
+          << ", graph_diag=" << (graph_has_diag_unit ? "yes" : "no")
+          << ", graph_vdiag=" << (graph_has_vector_diag_companion ? "yes" : "no")
+          << ", graph_refresh=" << (graph_has_refresh_unit ? "yes" : "no")
+          << ", graph_leaf_flow=" << (graph_has_leaf_hotpath_flow ? "yes" : "no")
+          << ", graph_diag_before_red=" << (graph_prefers_diag_before_reduction ? "yes" : "no")
+          << ", graph_refresh_before_diag=" << (graph_prefers_refresh_before_diag ? "yes" : "no")
+          << ", graph_requested_seq=" << (graph_requested_cluster_sequence.empty() ? "unset" : graph_requested_cluster_sequence)
+          << ", graph_resolved_seq=" << (graph_resolved_cluster_sequence.empty() ? "unset" : graph_resolved_cluster_sequence);
+    }
     return oss.str();
   }
 };
@@ -1089,6 +1240,8 @@ struct EpisodeResult {
   ClusterMetrics cluster_b;
   ClusterMetrics cluster_c;
   ClusterMetrics cluster_d;
+  std::string graph_executed_cluster_sequence;
+  std::string graph_execution_plan_source;
   ResidentContextDesc resident_context;
   FullHS full_hs;
   ReducedMatrices reduced;
@@ -1113,6 +1266,9 @@ struct EpisodeResult {
         << ", diag_mode=" << controller_state.cdiaghg_mode_selected
         << ", residual=" << std::fixed << std::setprecision(4) << residual_norm
         << ", updated_norm=" << updated_vector_norm
+        << (graph_executed_cluster_sequence.empty()
+                ? ""
+                : ", graph_exec_seq=" + graph_executed_cluster_sequence)
         << ", p_next=" << p_next_object.object_handle
         << ", lcw=" << lcw_words_issued
         << ", row_blocks=" << row_blocks_processed
@@ -1127,6 +1283,7 @@ struct CompletionSummary {
   int request_id = 0;
   int scf_iteration = 0;
   int episode_id = 0;
+  std::string case_id = "systemc_candidate";
   std::string architecture_family = "F2";
   std::string assumption_set_id = "default-assumptions";
   std::string offload_scope = "balanced";
@@ -1160,6 +1317,7 @@ struct CompletionSummary {
     oss << "request=" << request_id
         << ", iter=" << scf_iteration
         << ", episode=" << episode_id
+        << ", case_id=" << case_id
         << ", arch=" << architecture_family
         << ", status=" << status
         << ", reason=" << completion_reason

@@ -1,0 +1,1077 @@
+{
+  "schema_version": "qe_architecture_family_design_space_spec_v0",
+  "design_space_id": "qe_complete_architecture_family_dse_framework_v0",
+  "design_space_version": "v0",
+  "authority_stage": {
+    "stage_id": "Stage-A",
+    "claim_posture": "evidence_only",
+    "decision_authority": "adjudicator_memo_only",
+    "dse_authority_limit": "rank_screen_explain_nominate_only",
+    "stage_b_activation_gates": [
+      "decisive_cpu_gpu_baseline_closed",
+      "phase1_evidence_closure_closed",
+      "board_or_whole_node_observability_closed",
+      "ranking_stability_closed",
+      "workload_group_admissibility_closed"
+    ]
+  },
+  "scope": {
+    "software_family": "QE",
+    "system_object": "HostSCF_to_FPGAOrchestrator_to_ChipTop_cluster_ABCD",
+    "included_families": [
+      "F1",
+      "F2",
+      "F3",
+      "F4",
+      "F5",
+      "custom"
+    ],
+    "excluded_actions": [
+      "edit_cpp_runtime",
+      "run_systemc_or_heavy_simulation",
+      "mutate_frozen_contracts",
+      "modify_timestamped_artifacts",
+      "publish_final_performance_claims",
+      "claim_cpu_fpga_beats_cpu_gpu"
+    ]
+  },
+  "local_anchors": [
+    {
+      "anchor_id": "current_architecture_family_runner",
+      "path": "docs/benchmarks/run_systemc_architecture_family_dse_sweep.py",
+      "role": "Current architecture-family sweep producer for F1/F2/F3 rows plus template-driven scaffold rows, graph evidence, projection flags, gold-gate helpers, JSON bundles, and CSV bundles."
+    },
+    {
+      "anchor_id": "result_bundle_schema",
+      "path": "docs/benchmarks/systemc_architecture_family_dse_result_schema_v0.json",
+      "role": "Machine-readable result bundle schema consumed by downstream phase, release, and adjudicator surfaces."
+    },
+    {
+      "anchor_id": "architecture_template_loader",
+      "path": "docs/benchmarks/architecture_template_loader.py",
+      "role": "Loads and validates architecture templates against architecture_template_schema_v1.json."
+    },
+    {
+      "anchor_id": "architecture_candidate_generator",
+      "path": "docs/benchmarks/architecture_candidate_generator.py",
+      "role": "Generates grid, random, and Latin-hypercube architecture candidates from template parameter ranges."
+    },
+    {
+      "anchor_id": "template_to_systemc_projector",
+      "path": "docs/benchmarks/template_to_systemc_config.py",
+      "role": "Projects architecture templates to SystemC architecture configuration JSON."
+    },
+    {
+      "anchor_id": "runtime_arch_config_hook",
+      "path": "model/qe_band_solver_model/sc_main.cpp:393-400",
+      "role": "QEBS_ARCH_CONFIG runtime hook for loading architecture config JSON into the runnable model."
+    },
+    {
+      "anchor_id": "runtime_graph_frontdoor_hooks",
+      "path": "model/qe_band_solver_model/sc_main.cpp:322-390",
+      "role": "QEBS_* workload, policy, signature, and graph-frontdoor environment fields consumed by SystemRunConfig."
+    },
+    {
+      "anchor_id": "graph_projection_helper",
+      "path": "docs/benchmarks/qe_ic_graph_projection_utils.py",
+      "role": "Pure helper for graph/component projection into design-point keys, shared join keys, and runtime frontdoor patches."
+    },
+    {
+      "anchor_id": "graph_projection_contract",
+      "path": "docs/architecture/qe_ic_component_graph_projection_v1.md",
+      "role": "Normative mapping from component catalog and graph spec to design_point plus SystemRunConfig projection fields."
+    },
+    {
+      "anchor_id": "component_catalog_system_level_v1",
+      "path": "docs/architecture/qe_ic_component_catalog_system_level_v1.json",
+      "role": "System-level component catalog used by graph projection and DSE frontdoor validation."
+    },
+    {
+      "anchor_id": "graph_seed_system_level_v1",
+      "path": "docs/architecture/qe_ic_graph_seed_system_level_v1.json",
+      "role": "Canonical balanced F2 system-level graph seed."
+    },
+    {
+      "anchor_id": "fidelity_ladder",
+      "path": "docs/benchmarks/qe_dse_fidelity_ladder_and_execution_loop_v0.md",
+      "role": "Low-cost to high-fidelity execution ladder and promotion loop."
+    },
+    {
+      "anchor_id": "phase_config",
+      "path": "docs/benchmarks/qe_next_stage_dse_simulator_phase_config_v0.json",
+      "role": "Baseline authority for fast-layer objectives, accurate-layer checks, state machine, and promotion policy."
+    },
+    {
+      "anchor_id": "calibration_contract",
+      "path": "docs/benchmarks/qe_ic_simulator_calibration_contract_v0.md",
+      "role": "Descriptor, calibration, join-key export, and lane-ownership contract."
+    },
+    {
+      "anchor_id": "fairness_power_contract",
+      "path": "docs/benchmarks/qe_cpu_gpu_fpga_fairness_and_power_contract_v0.md",
+      "role": "Frozen CPU/GPU/FPGA fairness, rewrite, timing, and whole-node power boundary contract."
+    },
+    {
+      "anchor_id": "adjudicator_authority_contract",
+      "path": "docs/benchmarks/qe_ic_adjudicator_authority_contract_v0.md",
+      "role": "Single public decision authority and Stage-A/Stage-B claim-permission boundary."
+    },
+    {
+      "anchor_id": "dse_v2_bo_poc",
+      "path": "reserved:dse_v2_bo_poc",
+      "role": "Reserved Bayesian-optimization proposal layer; not a claim-bearing evaluator in Stage A."
+    }
+  ],
+  "workload_ir": {
+    "ir_id": "qe_workload_ir_v0",
+    "identity_fields": [
+      {
+        "field": "workload_id",
+        "required": true,
+        "source": "case descriptor or graph_spec.join_keys",
+        "purpose": "Stable case identity across simulator, GPU, board, and adjudicator evidence."
+      },
+      {
+        "field": "workload_group_id",
+        "required": true,
+        "source": "workload contract and graph_spec.join_keys",
+        "purpose": "Prevents cross-group aggregation drift."
+      },
+      {
+        "field": "qe_tolerance_schema_id",
+        "required": true,
+        "source": "correctness contract and graph_spec.join_keys",
+        "purpose": "Pins comparisons to the same numerical tolerance policy."
+      },
+      {
+        "field": "accounting_boundary_id",
+        "required": true,
+        "source": "fairness contract and runner contract metadata",
+        "purpose": "Keeps timing and energy inside the same end-to-end shell boundary."
+      },
+      {
+        "field": "fairness_policy_id",
+        "required": true,
+        "source": "docs/benchmarks/qe_cpu_gpu_fpga_fairness_and_power_contract_v0.md",
+        "purpose": "Pins CPU/GPU/FPGA comparison rules."
+      },
+      {
+        "field": "power_boundary_id",
+        "required": true,
+        "source": "docs/benchmarks/qe_cpu_gpu_fpga_fairness_and_power_contract_v0.md",
+        "purpose": "Pins whole-node power and energy accounting."
+      },
+      {
+        "field": "observability_contract_id",
+        "required": true,
+        "source": "docs/benchmarks/qe_simulator_board_observability_contract_v0.md",
+        "purpose": "Pins simulator to board join-key and counter compatibility."
+      }
+    ],
+    "signature_fields": [
+      {
+        "field": "signature_id",
+        "required": true,
+        "source": "qe_ic_case_signature_matrix_v0.json or workload descriptor",
+        "purpose": "Groups cases by computational signature."
+      },
+      {
+        "field": "property_target",
+        "required": true,
+        "source": "calibration contract signature extension",
+        "purpose": "Records the scientific target class behind the case."
+      },
+      {
+        "field": "pseudopotential_family",
+        "required": true,
+        "source": "calibration contract signature extension",
+        "purpose": "Captures NC, USPP, PAW, or hybrid pseudopotential pressure."
+      },
+      {
+        "field": "solver_path_class",
+        "required": true,
+        "source": "calibration contract signature extension",
+        "purpose": "Distinguishes standard band, generalized overlap, and extension-sensitive paths."
+      },
+      {
+        "field": "workload_topology",
+        "required": true,
+        "source": "calibration contract signature extension",
+        "purpose": "Records bulk, 2D, slab, wide-bandgap, or defect/doped topology."
+      },
+      {
+        "field": "post_scf_extension_level",
+        "required": true,
+        "source": "calibration contract signature extension",
+        "purpose": "Separates shell-only from NSCF, DFPT, EPW, or mobility-extension expectations."
+      },
+      {
+        "field": "projector_pressure",
+        "required": true,
+        "source": "QE trace signature or graph workload_class.signature_hints",
+        "purpose": "Captures projector/nonlocal hotpath pressure."
+      },
+      {
+        "field": "nonlocal_pressure",
+        "required": true,
+        "source": "QE trace signature or workload descriptor",
+        "purpose": "Captures nonlocal operator pressure."
+      },
+      {
+        "field": "generalized_ratio_bucket",
+        "required": true,
+        "source": "QE trace signature or graph workload_class.signature_hints",
+        "purpose": "Captures overlap/generalized eigensolver pressure."
+      },
+      {
+        "field": "diag_dominance",
+        "required": true,
+        "source": "QE trace signature or graph workload_class.signature_hints",
+        "purpose": "Captures diagonalization share."
+      },
+      {
+        "field": "fft_grid_pressure",
+        "required": true,
+        "source": "QE trace signature or graph workload_class.signature_hints",
+        "purpose": "Captures FFT and grid-support pressure."
+      }
+    ],
+    "trace_shape_fields": [
+      {
+        "field": "trace_shape_id",
+        "required": true,
+        "source": "trace summarization and case-pack tooling",
+        "purpose": "Stable handle for shape-derived sizing inputs."
+      },
+      {
+        "field": "trace_shape_summary",
+        "required": true,
+        "source": "summarize_qe_subspace_trace.py and workload revalidation artifacts",
+        "purpose": "Compact `npw`, `nkb`, `nbnd`, and dominant-share evidence."
+      },
+      {
+        "field": "fast_proxy_assumption_set_id",
+        "required": true,
+        "source": "runner assumption-set metadata",
+        "purpose": "Pins proxy formulas and uncertainty interpretation."
+      }
+    ],
+    "stage_model": [
+      {
+        "stage_id": "rho_to_Veff",
+        "owner": "host",
+        "default_cluster": null,
+        "workload_role": "loop-carried potential construction before band solve"
+      },
+      {
+        "stage_id": "h_psi_s_psi_operator_sweep",
+        "owner": "chip_cluster",
+        "default_cluster": "A",
+        "workload_role": "fused operator sweep hotpath for h_psi and s_psi"
+      },
+      {
+        "stage_id": "build_H_sub_S_sub",
+        "owner": "chip_cluster",
+        "default_cluster": "B",
+        "workload_role": "reduced matrix build and closure"
+      },
+      {
+        "stage_id": "cdiaghg_or_host_diag_assist",
+        "owner": "mixed",
+        "default_cluster": "C",
+        "workload_role": "hardware-first diagonalization proxy with host fallback policy"
+      },
+      {
+        "stage_id": "refresh_residual_to_P_next",
+        "owner": "chip_cluster",
+        "default_cluster": "D",
+        "workload_role": "refresh and residual update for next search state"
+      },
+      {
+        "stage_id": "psi_to_rho_out_and_mix",
+        "owner": "host",
+        "default_cluster": null,
+        "workload_role": "shell-visible density update and convergence gate"
+      }
+    ],
+    "evidence_sources": [
+      "docs/overview/qe_subspace_sampling.md",
+      "docs/benchmarks/summarize_qe_subspace_trace.py",
+      "docs/benchmarks/qe_kernel_characterization_matrix_for_system_dse_v0.md",
+      "docs/benchmarks/qe_partition_and_interface_for_system_dse_v0.md",
+      "docs/benchmarks/qe_dse_parameter_stack_for_system_dse_v0.md",
+      "model/qe_band_solver_model/README.md"
+    ]
+  },
+  "architecture_ir": {
+    "ir_id": "qe_architecture_graph_template_ir_v0",
+    "graph_surface": {
+      "component_catalog_path": "docs/architecture/qe_ic_component_catalog_system_level_v1.json",
+      "graph_seed_path": "docs/architecture/qe_ic_graph_seed_system_level_v1.json",
+      "projection_helper_path": "docs/benchmarks/qe_ic_graph_projection_utils.py",
+      "authority_keys": [
+        "family",
+        "diag_policy",
+        "offload_scope",
+        "resident_policy",
+        "partition_strategy"
+      ],
+      "sidecar_only_fields": [
+        "module_instance_count",
+        "link_count",
+        "flow_count",
+        "critical_path_summary",
+        "dataflow_bottleneck_summary",
+        "mapping_risk_summary",
+        "estimator_provenance"
+      ]
+    },
+    "template_surface": {
+      "loader_path": "docs/benchmarks/architecture_template_loader.py",
+      "generator_path": "docs/benchmarks/architecture_candidate_generator.py",
+      "projector_path": "docs/benchmarks/template_to_systemc_config.py",
+      "schema_path": "docs/architecture/architecture_template_schema_v1.json",
+      "runtime_config_hook": "QEBS_ARCH_CONFIG",
+      "runtime_executor_boundary": {
+        "current_runtime_executor_families": [
+          "F1",
+          "F2",
+          "F3"
+        ],
+        "projection_only_template_families": [
+          "F4",
+          "F5",
+          "custom"
+        ],
+        "boundary_rule": "Template loading, candidate generation, and config projection are proposal surfaces. A template becomes runtime-executor-backed only when the runnable SystemC path consumes its projected config and emits comparable runtime metrics for the same workload and join keys.",
+        "f4_f5_custom_rule": "F4, F5, custom, and any newly added architecture template ids are projection/scaffold rows in Stage A unless a runtime executor path explicitly supports the requested fused, hybrid, resident, or PIM semantics.",
+        "stage_a_claim_rule": "Projection rows may be screened, ranked when complete metrics exist, and sent to adjudicator intake as evidence, but they must not be reported as completed executor support or final architecture winners."
+      },
+      "candidate_templates": [
+        {
+          "template_id": "4cluster_traditional_fpga_v1",
+          "template_path": "docs/architecture/architecture_templates/4cluster_traditional_fpga_v1.json",
+          "template_label": "4-Cluster Traditional FPGA DSP Array",
+          "template_family": "F2",
+          "runtime_projection_family": "F2",
+          "cluster_shape": "4cluster_operator_build_diag_refresh",
+          "executor_boundary": "F2 runtime-family projection; template-specific DSP resource/timing assumptions remain evidence until runtime metrics are emitted.",
+          "campaign_role": "baseline",
+          "stage_a_status": "catalogued_baseline_template"
+        },
+        {
+          "template_id": "4cluster_cim_baseline_v1",
+          "template_path": "docs/architecture/architecture_templates/4cluster_cim_baseline_v1.json",
+          "template_label": "4-Cluster CIM Array Baseline (Current System)",
+          "template_family": "F2",
+          "runtime_projection_family": "F2",
+          "cluster_shape": "4cluster_operator_build_diag_refresh",
+          "executor_boundary": "F2 runtime-family projection for the current balanced CIM-oriented baseline; still evidence-only under Stage A adjudicator rules.",
+          "campaign_role": "baseline",
+          "stage_a_status": "catalogued_baseline_template"
+        },
+        {
+          "template_id": "f1_host_heavy_cpu_baseline_v1",
+          "template_path": "docs/architecture/architecture_templates/f1_host_heavy_cpu_baseline_v1.json",
+          "template_label": "Host-Heavy CPU Baseline Projection Scaffold",
+          "template_family": "F1",
+          "runtime_projection_family": "F1",
+          "cluster_shape": "single_hotpath_host_heavy_reference",
+          "executor_boundary": "F1 runtime-family projection scaffold; host-heavy CPU and disabled-cluster semantics remain proposal metadata unless backed by comparable runtime rows.",
+          "campaign_role": "baseline",
+          "stage_a_status": "projection_only"
+        },
+        {
+          "template_id": "f2_systolic_fpga_dense_path_v1",
+          "template_path": "docs/architecture/architecture_templates/f2_systolic_fpga_dense_path_v1.json",
+          "template_label": "F2 Systolic FPGA Dense Path Scaffold",
+          "template_family": "F2",
+          "runtime_projection_family": "F2",
+          "cluster_shape": "4cluster_systolic_dense_operator_build_diag_refresh",
+          "executor_boundary": "F2 runtime-family projection scaffold; systolic dense-path assumptions are Stage-A metadata until emitted as comparable runtime metrics.",
+          "campaign_role": "primary",
+          "stage_a_status": "projection_only"
+        },
+        {
+          "template_id": "f3_tensor_systolic_fpga_offload_v1",
+          "template_path": "docs/architecture/architecture_templates/f3_tensor_systolic_fpga_offload_v1.json",
+          "template_label": "Tensor Systolic FPGA Offload Scaffold",
+          "template_family": "F3",
+          "runtime_projection_family": "F3",
+          "cluster_shape": "device_heavy_tensor_systolic_operator_build_diag_refresh",
+          "executor_boundary": "F3 runtime-family projection scaffold; tensor-systolic fabric assumptions require explicit runtime support before executor claims.",
+          "campaign_role": "primary",
+          "stage_a_status": "projection_only"
+        },
+        {
+          "template_id": "f3_hbm_streaming_operator_pipeline_v1",
+          "template_path": "docs/architecture/architecture_templates/f3_hbm_streaming_operator_pipeline_v1.json",
+          "template_label": "HBM Streaming Operator Pipeline Scaffold",
+          "template_family": "F3",
+          "runtime_projection_family": "F3",
+          "cluster_shape": "device_heavy_hbm_streaming_operator_pipeline",
+          "executor_boundary": "F3 runtime-family projection scaffold; HBM streaming and operator-pipeline semantics are metadata until runtime support emits comparable metrics.",
+          "campaign_role": "primary",
+          "stage_a_status": "projection_only"
+        },
+        {
+          "template_id": "3cluster_fused_build_diag_v1",
+          "template_path": "docs/architecture/architecture_templates/3cluster_fused_build_diag_v1.json",
+          "template_label": "3-Cluster with Fused Build+Diag",
+          "template_family": "F4",
+          "runtime_projection_family": "F2",
+          "cluster_shape": "3cluster_operator_build_diag_fused_refresh",
+          "executor_boundary": "Projection-only F4 scaffold; build+diag fusion requires explicit executor support before runtime-support claims.",
+          "campaign_role": "conditional",
+          "stage_a_status": "projection_only"
+        },
+        {
+          "template_id": "cim_dsp_vector_hybrid_v1",
+          "template_path": "docs/architecture/architecture_templates/cim_dsp_vector_hybrid_v1.json",
+          "template_label": "CIM + DSP Vector Hybrid Scaffold",
+          "template_family": "F4",
+          "runtime_projection_family": "F2",
+          "cluster_shape": "4cluster_hybrid_operator_build_diag_refresh",
+          "executor_boundary": "Projection-only F4 scaffold; hybrid CIM/DSP vector semantics are metadata unless backed by a runtime executor.",
+          "campaign_role": "primary",
+          "stage_a_status": "projection_only"
+        },
+        {
+          "template_id": "f4_cim_dsp_hbm_hybrid_v1",
+          "template_path": "docs/architecture/architecture_templates/f4_cim_dsp_hbm_hybrid_v1.json",
+          "template_label": "CIM + DSP + HBM Hybrid Scaffold",
+          "template_family": "F4",
+          "runtime_projection_family": "F2",
+          "cluster_shape": "4cluster_cim_dsp_hbm_hybrid_operator_build_diag_refresh",
+          "executor_boundary": "Projection-only F4 scaffold; CIM/DSP/HBM hybrid semantics are not completed SystemC executor features.",
+          "campaign_role": "primary",
+          "stage_a_status": "projection_only"
+        },
+        {
+          "template_id": "unified_fp64_gemm_fabric_v1",
+          "template_path": "docs/architecture/architecture_templates/unified_fp64_gemm_fabric_v1.json",
+          "template_label": "Unified FP64 GEMM Fabric Scaffold",
+          "template_family": "F5",
+          "runtime_projection_family": "F2",
+          "cluster_shape": "operator_build_fused_fabric_diag_refresh",
+          "executor_boundary": "Projection-only F5 scaffold; unified FP64 operator/build fabric scheduling is not a completed SystemC executor feature.",
+          "campaign_role": "primary",
+          "stage_a_status": "projection_only"
+        },
+        {
+          "template_id": "f5_cgra_dataflow_operator_v1",
+          "template_path": "docs/architecture/architecture_templates/f5_cgra_dataflow_operator_v1.json",
+          "template_label": "CGRA Dataflow Operator Scaffold",
+          "template_family": "F5",
+          "runtime_projection_family": "F2",
+          "cluster_shape": "cgra_dataflow_operator_build_fused_diag_refresh",
+          "executor_boundary": "Projection-only F5 scaffold; CGRA-style dataflow and fused operator/build scheduling require a future executor before runtime claims.",
+          "campaign_role": "primary",
+          "stage_a_status": "projection_only"
+        },
+        {
+          "template_id": "resident_dataflow_fabric_v1",
+          "template_path": "docs/architecture/architecture_templates/resident_dataflow_fabric_v1.json",
+          "template_label": "Resident Dataflow Fabric Scaffold",
+          "template_family": "custom",
+          "runtime_projection_family": "F2",
+          "cluster_shape": "resident_operator_build_diag_refresh",
+          "executor_boundary": "Projection-only custom scaffold; resident dataflow and PIM-style behavior are not completed runtime executor semantics.",
+          "campaign_role": "conditional",
+          "stage_a_status": "projection_only"
+        },
+        {
+          "template_id": "custom_multichiplet_noc_partition_v1",
+          "template_path": "docs/architecture/architecture_templates/custom_multichiplet_noc_partition_v1.json",
+          "template_label": "Multi-Chiplet NoC Partition Scaffold",
+          "template_family": "custom",
+          "runtime_projection_family": "F2",
+          "cluster_shape": "multichiplet_noc_operator_build_diag_refresh_partition",
+          "executor_boundary": "Projection-only custom scaffold; NoC partitioning, chiplet placement, and packaging semantics are metadata only in Stage A.",
+          "campaign_role": "conditional",
+          "stage_a_status": "projection_only"
+        },
+        {
+          "template_id": "custom_near_memory_pim_resident_v1",
+          "template_path": "docs/architecture/architecture_templates/custom_near_memory_pim_resident_v1.json",
+          "template_label": "Near-Memory PIM Resident Scaffold",
+          "template_family": "custom",
+          "runtime_projection_family": "F2",
+          "cluster_shape": "near_memory_pim_resident_operator_build_diag_refresh",
+          "executor_boundary": "Projection-only custom scaffold; near-memory PIM residency assumptions require future executor and board evidence before runtime or power claims.",
+          "campaign_role": "conditional",
+          "stage_a_status": "projection_only"
+        }
+      ]
+    },
+    "family_profiles": [
+      {
+        "family": "F1",
+        "label": "Host-heavy / Single-hotpath",
+        "canonical_diag_policy": "cpu_only",
+        "canonical_offload_scope": "single_hotpath",
+        "canonical_resident_policy": "fit_first",
+        "canonical_partition_strategy": "single_hotpath_partition",
+        "complexity_proxy": "low"
+      },
+      {
+        "family": "F2",
+        "label": "Balanced hybrid / Multi-operator pipeline",
+        "canonical_diag_policy": "device_first_fallback",
+        "canonical_offload_scope": "balanced",
+        "canonical_resident_policy": "fit_first",
+        "canonical_partition_strategy": "operator__build__diag__refresh",
+        "complexity_proxy": "medium"
+      },
+      {
+        "family": "F3",
+        "label": "Device-heavy / Full inner-loop offload",
+        "canonical_diag_policy": "aggressive_device",
+        "canonical_offload_scope": "device_heavy",
+        "canonical_resident_policy": "spill_tolerant",
+        "canonical_partition_strategy": "operator__build__diag__refresh",
+        "complexity_proxy": "high"
+      },
+      {
+        "family": "F4",
+        "label": "Fused or CIM-DSP hybrid projection scaffold",
+        "canonical_diag_policy": "device_first_fallback",
+        "canonical_offload_scope": "balanced",
+        "canonical_resident_policy": "fit_first",
+        "canonical_partition_strategy": "operator_build_fused__diag__refresh",
+        "complexity_proxy": "high"
+      },
+      {
+        "family": "F5",
+        "label": "Unified FP64 GEMM fabric projection scaffold",
+        "canonical_diag_policy": "device_first_fallback",
+        "canonical_offload_scope": "device_heavy",
+        "canonical_resident_policy": "fit_first",
+        "canonical_partition_strategy": "operator_build_fused__diag__refresh",
+        "complexity_proxy": "high"
+      },
+      {
+        "family": "custom",
+        "label": "Resident dataflow or PIM-style projection scaffold",
+        "canonical_diag_policy": "device_first_fallback",
+        "canonical_offload_scope": "device_heavy",
+        "canonical_resident_policy": "spill_tolerant",
+        "canonical_partition_strategy": "operator__build__diag__refresh",
+        "complexity_proxy": "high"
+      }
+    ],
+    "design_axes": {
+      "family": [
+        "F1",
+        "F2",
+        "F3",
+        "F4",
+        "F5",
+        "custom"
+      ],
+      "diag_policy": [
+        "cpu_only",
+        "device_first_fallback",
+        "aggressive_device"
+      ],
+      "offload_scope": [
+        "single_hotpath",
+        "balanced",
+        "device_heavy"
+      ],
+      "resident_policy": [
+        "fit_first",
+        "spill_tolerant"
+      ],
+      "partition_strategy": [
+        "single_hotpath_partition",
+        "operator_build_fused__diag__refresh",
+        "operator__build__diag__refresh",
+        "operator__build_diag_fused__refresh",
+        "operator_build_fused__diag_refresh_fused"
+      ]
+    }
+  },
+  "mapping_schedule_ir": {
+    "ir_id": "qe_mapping_schedule_ir_v0",
+    "runtime_projection_fields": [
+      "QEBS_SOFTWARE_FAMILY",
+      "QEBS_FLOW_FAMILY",
+      "QEBS_CASE_ID",
+      "QEBS_ARCH_FAMILY",
+      "QEBS_ASSUMPTION_SET_ID",
+      "QEBS_SIGNATURE_ID",
+      "QEBS_PROJECTOR_PRESSURE",
+      "QEBS_NONLOCAL_PRESSURE",
+      "QEBS_GENERALIZED_RATIO_BUCKET",
+      "QEBS_DIAG_DOMINANCE",
+      "QEBS_FFT_GRID_PRESSURE",
+      "QEBS_OFFLOAD_SCOPE",
+      "QEBS_RESIDENT_POLICY",
+      "QEBS_GRAPH_FRONTDOOR_MODE",
+      "QEBS_GRAPH_ID",
+      "QEBS_GRAPH_TOPOLOGY_STYLE",
+      "QEBS_GRAPH_REQUESTED_CLUSTER_SEQUENCE",
+      "QEBS_GRAPH_RESOLVED_CLUSTER_SEQUENCE",
+      "QEBS_GRAPH_SEQUENCE_CONSTRAINTS",
+      "QEBS_ARCH_CONFIG",
+      "QEBS_RESULT_JSON"
+    ],
+    "cluster_sequence": [
+      "A:operator_sweep",
+      "B:reduced_build",
+      "C:hardware_diag_or_host_assist",
+      "D:refresh_residual",
+      "template_override:F4:operator_sweep_or_fused_build_variant__diag__refresh",
+      "template_override:F5:fused_operator_build__diag__refresh",
+      "template_override:custom:resident_operator__build__diag__resident_refresh"
+    ],
+    "host_owned_stages": [
+      "rho_to_Veff",
+      "outer_scf_control",
+      "host_diag_fallback_when_policy_requires",
+      "psi_to_rho_out",
+      "mix_rho",
+      "convergence_gate"
+    ],
+    "hardware_owned_stages": [
+      "h_psi",
+      "s_psi",
+      "build_H_sub",
+      "build_S_sub",
+      "hardware_diag_proxy_when_enabled",
+      "refresh",
+      "residual_to_P_next"
+    ]
+  },
+  "evaluator_ir": {
+    "ir_id": "qe_multi_fidelity_evaluator_ir_v0",
+    "layers": [
+      {
+        "layer_id": "layer_a_characterization_pruning",
+        "fidelity_class": "characterization_pruning",
+        "source_kind": "trace_calibrated_proxy",
+        "local_tools": [
+          "docs/benchmarks/run_qe_workload_matrix.py",
+          "docs/benchmarks/summarize_qe_subspace_trace.py",
+          "docs/benchmarks/analyze_qe_scf_operator_load.py",
+          "docs/benchmarks/analyze_qe_workload_revalidation.py",
+          "docs/benchmarks/extract_qe_shell_cpu_baseline.py"
+        ],
+        "allowed_outputs": [
+          "workload_shape",
+          "hotpath_identification",
+          "candidate_axis_pruning",
+          "infeasibility_notes"
+        ],
+        "forbidden_outputs": [
+          "final_family_decision",
+          "thesis_grade_claim",
+          "board_grounded_claim"
+        ]
+      },
+      {
+        "layer_id": "layer_b_fast_timed_functional_search",
+        "fidelity_class": "fast_timed_functional",
+        "source_kind": "timed_functional_proxy",
+        "local_tools": [
+          "docs/benchmarks/run_systemc_architecture_family_dse_sweep.py",
+          "docs/benchmarks/run_qe_next_stage_dse_phase.py",
+          "model/qe_band_solver_model/build/qe_band_solver_model"
+        ],
+        "allowed_outputs": [
+          "row_metrics",
+          "family_summary",
+          "ranking_grade_ready",
+          "projection_grade_ready",
+          "reject_explain_promote_state",
+          "primary_and_fallback_shortlist"
+        ],
+        "forbidden_outputs": [
+          "public_family_winner",
+          "cpu_fpga_vs_cpu_gpu_final_comparison",
+          "whole_node_power_claim"
+        ]
+      },
+      {
+        "layer_id": "layer_c_correctness_capable_accurate_layer",
+        "fidelity_class": "correctness_capable",
+        "source_kind": "mixed",
+        "local_tools": [
+          "docs/benchmarks/compare_qe_gold_correctness.py",
+          "docs/benchmarks/normalize_qe_gold_baseline.py",
+          "docs/benchmarks/qe_gold_numerical_tolerance_schema_v0.json"
+        ],
+        "allowed_outputs": [
+          "gold_pass",
+          "convergence_comparable_pass",
+          "final_total_energy_ry",
+          "final_converged",
+          "final_residual_threshold_reached"
+        ],
+        "forbidden_outputs": [
+          "standalone_public_recommendation",
+          "claim_permission_without_adjudicator"
+        ]
+      },
+      {
+        "layer_id": "layer_d_nonblocking_generalization",
+        "fidelity_class": "generalization_coverage",
+        "source_kind": "mixed",
+        "local_tools": [
+          "docs/benchmarks/run_qe_next_stage_dse_phase.py"
+        ],
+        "allowed_outputs": [
+          "generalization_case_status",
+          "nonblocking_mismatch_notes",
+          "externality_boundary_notes"
+        ],
+        "forbidden_outputs": [
+          "release_blocking_decision_unless_future_gate_changes",
+          "public_generalization_claim"
+        ]
+      },
+      {
+        "layer_id": "layer_e_adjudicator_authority",
+        "fidelity_class": "authority_adjudication",
+        "source_kind": "mixed",
+        "local_tools": [
+          "docs/benchmarks/run_qe_system_design_adjudicator.py",
+          "docs/benchmarks/qe_ic_adjudicator_authority_contract_v0.md"
+        ],
+        "allowed_outputs": [
+          "public_release_posture",
+          "claim_permission_matrix",
+          "public_family_decision_when_allowed",
+          "contradiction_ledger"
+        ],
+        "forbidden_outputs": [
+          "skip_stage_b_activation_gates",
+          "override_higher_precedence_blocker_with_proxy_evidence"
+        ]
+      }
+    ]
+  },
+  "calibration_feedback_ir": {
+    "ir_id": "qe_calibration_feedback_ir_v0",
+    "calibration_contract_path": "docs/benchmarks/qe_ic_simulator_calibration_contract_v0.md",
+    "source_kind_taxonomy": [
+      "stub",
+      "timed_functional_proxy",
+      "trace_calibrated_proxy",
+      "measured",
+      "mixed"
+    ],
+    "gpu_baseline_state_taxonomy": [
+      "pending",
+      "running",
+      "measured_not_yet_validated",
+      "reference_only",
+      "deferred",
+      "thesis_eligible"
+    ],
+    "feedback_fields": [
+      {
+        "field": "calibration_manifest_id",
+        "required": true,
+        "source": "numerically grounded lane descriptor",
+        "purpose": "Stable handle for trace, gold, and calibration bundle."
+      },
+      {
+        "field": "gold_case_bundle_id",
+        "required": true,
+        "source": "gold correctness artifact set",
+        "purpose": "Pins correctness comparison bundle."
+      },
+      {
+        "field": "gpu_baseline_state",
+        "required": true,
+        "source": "CPU/GPU baseline readiness tooling",
+        "purpose": "Records whether GPU evidence is deferred, reference-only, or thesis eligible."
+      },
+      {
+        "field": "decisive_for_case",
+        "required": false,
+        "source": "baseline readiness and closure tooling",
+        "purpose": "Marks fastest admissible GPU baseline row when available; not a source-kind replacement."
+      },
+      {
+        "field": "calibration_residual_summary",
+        "required": false,
+        "source": "future measured or calibrated comparison rows",
+        "purpose": "Records proxy-to-measured residuals without changing design-point identity."
+      }
+    ],
+    "identity_preservation_rule": "Calibration may refine uncertainty and source_kind, but it must not change workload_id, workload_group_id, family, diag_policy, offload_scope, resident_policy, partition_strategy, fairness_policy_id, power_boundary_id, or observability_contract_id."
+  },
+  "search_ir": {
+    "ir_id": "qe_search_ir_v0",
+    "candidate_generators": [
+      {
+        "generator_id": "canonical_runner_grid",
+        "strategy": "canonical_grid",
+        "producer_path": "docs/benchmarks/run_systemc_architecture_family_dse_sweep.py",
+        "authority_limit": "evaluated_row_producer"
+      },
+      {
+        "generator_id": "template_grid_random_lhs_generator",
+        "strategy": "latin_hypercube",
+        "producer_path": "docs/benchmarks/architecture_candidate_generator.py",
+        "authority_limit": "candidate_proposal_only"
+      },
+      {
+        "generator_id": "template_to_systemc_config_projector",
+        "strategy": "grid_search",
+        "producer_path": "docs/benchmarks/template_to_systemc_config.py",
+        "authority_limit": "candidate_proposal_only"
+      },
+      {
+        "generator_id": "dse_v2_bo_poc_generator",
+        "strategy": "bayesian_optimization_poc",
+        "producer_path": "reserved:dse_v2_bo_poc",
+        "authority_limit": "candidate_proposal_only"
+      }
+    ],
+    "dse_v2_bo_poc": {
+      "poc_id": "dse_v2_bo_poc",
+      "status": "reserved_proposal_layer",
+      "input_surfaces": [
+        "systemc_architecture_family_dse_result_schema_v0 rows",
+        "qe_architecture_family_design_space_spec_v0 normalized axes",
+        "fast_layer objective and constraint metrics",
+        "promotion state labels",
+        "calibration uncertainty fields when available"
+      ],
+      "output_surfaces": [
+        "proposed_candidate_vector",
+        "acquisition_score_metadata",
+        "proposal_seed",
+        "prior_row_references",
+        "no_result_until_standard_evaluation"
+      ],
+      "guardrails": [
+        "must_not_mutate_frozen_contracts",
+        "must_project_back_to_design_axes_before_execution",
+        "must_use_QEBS_ARCH_CONFIG_or_graph_frontdoor_for_runtime_targeting",
+        "must_not_emit_promotion_eligible_without_fast_layer_state_machine",
+        "must_not_emit_claim_bearing_results"
+      ]
+    },
+    "stage_a_template_driven_flow": {
+      "flow_id": "stage_a_template_driven_dse_flow_v0",
+      "authority_boundary": "evidence_only_adjudicator_intake",
+      "steps": [
+        "load_design_space_spec_and_template_catalog",
+        "load_architecture_template_json_files",
+        "validate_required_template_fields_and_hash_artifacts",
+        "project_each_template_to_design_point_keys_and_optional_QEBS_ARCH_CONFIG_sidecar",
+        "map_F4_F5_custom_or_new_template_ids_to_projection_scaffold_rows_unless_runtime_executor_support_exists",
+        "enumerate_bounded_workload_by_template_rows",
+        "emit_json_csv_and_stage_a_coverage_manifest",
+        "classify_rows_as_reject_explain_only_or_promotion_eligible_without_public_winner_claims",
+        "send_evidence_bundle_to_adjudicator_intake"
+      ],
+      "bounded_smoke_command": "python3 docs/benchmarks/run_systemc_architecture_family_dse_sweep.py --template-driven --architecture-template-dir docs/architecture/architecture_templates --architecture-template-ids 4cluster_cim_baseline_v1 4cluster_traditional_fpga_v1 3cluster_fused_build_diag_v1 cim_dsp_vector_hybrid_v1 unified_fp64_gemm_fabric_v1 resident_dataflow_fabric_v1 --workloads si4_pbe_uspp_small graphene_pbe_uspp --max-design-points 12 --emit-projected-configs --design-space-spec docs/benchmarks/qe_architecture_family_design_space_spec_v0.json --source-kind stub --output-dir tmp/stage_a_template_dse_smoke",
+      "smoke_command_intent": "Bounded template-driven Stage-A DSE smoke over six templates and two QE workload proxies. It emits scaffold rows and projected config sidecars without --execute-model, so it does not claim completed SystemC executor support."
+    }
+  },
+  "reporting_ir": {
+    "ir_id": "qe_reporting_ir_v0",
+    "pareto_objectives": [
+      {
+        "metric": "time_to_convergence_s",
+        "direction": "minimize",
+        "role": "primary_objective"
+      },
+      {
+        "metric": "energy_to_convergence_j",
+        "direction": "minimize",
+        "role": "secondary_objective"
+      },
+      {
+        "metric": "bytes_moved_to_convergence",
+        "direction": "minimize",
+        "role": "constraint_metric"
+      },
+      {
+        "metric": "fallback_ratio",
+        "direction": "minimize",
+        "role": "constraint_metric"
+      },
+      {
+        "metric": "spill_ratio",
+        "direction": "minimize",
+        "role": "constraint_metric"
+      },
+      {
+        "metric": "projection_confidence",
+        "direction": "report_only",
+        "role": "explanation_metric"
+      }
+    ],
+    "promotion_policy": {
+      "state_machine": [
+        "reject",
+        "explain-only",
+        "promotion-eligible"
+      ],
+      "reject_statuses": [
+        "model_error",
+        "candidate_missing",
+        "baseline_missing",
+        "baseline_normalization_error",
+        "compare_error"
+      ],
+      "explain_only_when": [
+        "missing_fast_layer_metrics",
+        "ranking_grade_ready_false"
+      ],
+      "tie_band_rule": {
+        "kind": "relative_time_margin_after_energy_tiebreak",
+        "max_relative_margin": 0.05,
+        "source_contract_path": "docs/benchmarks/qe_simulator_board_observability_contract_v0.md"
+      }
+    },
+    "allowed_stage_a_reports": [
+      "row_level_metric_table",
+      "family_summary_evidence",
+      "pareto_frontier_evidence",
+      "promotion_state_counts",
+      "primary_candidate_and_fallback_candidate_as_evidence",
+      "graph_projection_sidecar",
+      "calibration_gap_notes",
+      "adjudicator_intake_bundle"
+    ],
+    "forbidden_stage_a_reports": [
+      "final_public_family_winner",
+      "final_cpu_fpga_beats_cpu_gpu_claim",
+      "lower_whole_node_power_claim",
+      "board_grounded_causality_claim",
+      "thesis_grade_speedup_claim",
+      "bo_poc_result_claim_without_standard_evaluation"
+    ],
+    "adjudicator_intake_surfaces": [
+      "DSE result rows",
+      "family_summary",
+      "row-level projection",
+      "gpu_annex_summary",
+      "phase1_evidence_closure",
+      "projection_review_package_as_evidence",
+      "stage_main_recommendation_package_as_evidence",
+      "contradiction_ledger_inputs"
+    ]
+  },
+  "first_qe_campaign": {
+    "campaign_id": "qe_arch_family_stage_a_campaign_v0",
+    "purpose": "Run a Stage-A evidence-only architecture-family DSE campaign over QE band-solver design families without changing runtime code or frozen contracts.",
+    "families_primary": [
+      "F1",
+      "F2",
+      "F4",
+      "F5"
+    ],
+    "families_conditional": [
+      "F3",
+      "custom"
+    ],
+    "main_cases": [
+      "si4_pbe_uspp_small",
+      "graphene_pbe_uspp"
+    ],
+    "anchor_cases": [
+      "si8_pbe_nc"
+    ],
+    "coverage_cases": [
+      "si8_pbe_uspp"
+    ],
+    "generalization_cases": [
+      "si4_pbe_uspp_small",
+      "graphene_pbe_uspp",
+      "graphene_pbe_paw",
+      "h2_tiny"
+    ],
+    "design_axes": {
+      "family": [
+        "F1",
+        "F2",
+        "F3",
+        "F4",
+        "F5",
+        "custom"
+      ],
+      "diag_policy": [
+        "cpu_only",
+        "device_first_fallback",
+        "aggressive_device"
+      ],
+      "offload_scope": [
+        "single_hotpath",
+        "balanced",
+        "device_heavy"
+      ],
+      "resident_policy": [
+        "fit_first",
+        "spill_tolerant"
+      ],
+      "partition_strategy": [
+        "single_hotpath_partition",
+        "operator_build_fused__diag__refresh",
+        "operator__build__diag__refresh",
+        "operator__build_diag_fused__refresh",
+        "operator_build_fused__diag_refresh_fused"
+      ]
+    },
+    "objectives": [
+      {
+        "metric": "time_to_convergence_s",
+        "direction": "minimize",
+        "role": "primary_objective"
+      },
+      {
+        "metric": "energy_to_convergence_j",
+        "direction": "minimize",
+        "role": "secondary_objective"
+      },
+      {
+        "metric": "bytes_moved_to_convergence",
+        "direction": "minimize",
+        "role": "constraint_metric"
+      },
+      {
+        "metric": "fallback_ratio",
+        "direction": "minimize",
+        "role": "constraint_metric"
+      },
+      {
+        "metric": "spill_ratio",
+        "direction": "minimize",
+        "role": "constraint_metric"
+      }
+    ],
+    "required_gates": [
+      "schema_valid_design_space_spec",
+      "join_key_integrity",
+      "fairness_policy_attached",
+      "observability_contract_attached",
+      "ranking_grade_ready_for_promotion",
+      "accurate_layer_for_shortlisted_candidates",
+      "adjudicator_intake_before_public_claims"
+    ],
+    "expected_outputs": [
+      "design_space_schema_validated",
+      "architecture_template_catalog_validated",
+      "framework_documentation_complete",
+      "stage_a_evidence_only_campaign_plan",
+      "no_heavy_simulation_run",
+      "no_runtime_or_contract_mutation",
+      "no_final_performance_claim"
+    ]
+  },
+  "validation_requirements": {
+    "schema_validation_required": true,
+    "local_validation_allowed": true,
+    "heavy_simulation_allowed": false,
+    "contract_mutation_allowed": false,
+    "runtime_code_mutation_allowed": false
+  }
+}

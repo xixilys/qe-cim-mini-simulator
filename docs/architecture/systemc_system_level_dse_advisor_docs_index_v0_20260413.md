@@ -25,6 +25,12 @@
 10. **Why-not-other-families note template**
 11. **Advisor Q&A cheatsheet**
 
+如果当前 next-stage phase 已经进入 `projection_eligible`，建议在第 2 步和第 3 步之间额外查看：
+
+- `qe_next_stage_projection_review.json / .md`
+- `qe_next_stage_stage_main_recommendation.json / .md`
+- `qe_next_stage_artifact_bundle_manifest.json / .md`
+
 ## 3. 文档导航表
 
 | 文档 | 路径 | 主要用途 | 建议使用阶段 | 对外 / 对内 |
@@ -75,6 +81,33 @@
 - projection / ranking 结果的 machine-readable schema（含 `energy_to_convergence_range_j`、`ranking_grade_ready`、`projection_grade_ready` 等字段）
 - family-level batch sweep 的 runner 落点
 
+当前 next-stage phase runner 还可以直接生成：
+
+- `qe_next_stage_projection_review.json / .md`
+- `qe_next_stage_stage_main_recommendation.json / .md`
+- `qe_next_stage_artifact_bundle_manifest.json / .md`
+- `docs/benchmarks/qe_next_stage_release_delivery_spec_v0.md`
+
+这两类 artifact 分别对应：
+- accurate-layer-passing shortlisted candidates 的 review 包
+- 最终 recommended family 的 stage-main recommendation 包
+
+其中 `stage_artifact_bundle_manifest` 适合作为 release-facing 的最顶层入口，因为它会统一索引：
+
+- phase summary
+- projection review package
+- stage-main recommendation package
+
+而 `qe_next_stage_release_delivery_spec_v0.md` 负责把这条链的：
+
+- 读取顺序
+- release-ready 判定
+- generalization 状态
+- 当前交付状态
+- 默认本地复现方式
+
+写成一份更稳定的对外交付说明。
+
 ## 4. 最小对外交付集合
 
 如果只准备一个最小可汇报包，建议至少包含：
@@ -95,6 +128,8 @@
 3. advisor pack manifest
 4. QE gold correctness report
 5. sweep / summary ranking output
+6. projection review / stage-main recommendation package（如果 phase 已到 `projection_eligible`）
+7. stage artifact bundle manifest（如果 package 已进入 release-facing 使用阶段）
 
 ## 6. 推荐组装顺序
 
@@ -119,6 +154,7 @@
 
 - family-level 系统叙事统一
 - correctness / confidence / projection 的口径统一
+- projection-grade recommendation package 与 advisor-facing叙事的对齐
 - 老师汇报页、主报告页、一页摘要页的模板化生成
 - final verifier 对 advisor pack 的放行检查
 

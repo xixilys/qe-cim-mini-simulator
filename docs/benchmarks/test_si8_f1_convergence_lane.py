@@ -119,6 +119,35 @@ class Si8F1ConvergenceLaneTests(unittest.TestCase):
             ],
         }
 
+    def sample_compare_report_pass(self) -> dict[str, object]:
+        return {
+            "overall_pass": True,
+            "field_results": [
+                {
+                    "name": "final_total_energy_ry",
+                    "required": True,
+                    "status": "pass",
+                    "abs_err": 1.527970861639943e-09,
+                    "rel_err": 2.4523381207118093e-11,
+                },
+                {
+                    "name": "final_converged",
+                    "required": True,
+                    "status": "pass",
+                },
+                {
+                    "name": "final_residual_threshold_reached",
+                    "required": True,
+                    "status": "pass",
+                },
+                {
+                    "name": "scf_iterations",
+                    "required": False,
+                    "status": "fail",
+                },
+            ],
+        }
+
     def test_build_report_flags_energy_trajectory_blocker(self) -> None:
         row = self.sample_row(metrics_path="unused.json")
         report = MODULE.build_si8_f1_convergence_report(
@@ -158,6 +187,24 @@ class Si8F1ConvergenceLaneTests(unittest.TestCase):
             self.assertEqual(report["priority_target"]["first_priority_convergence_case"], True)
             self.assertIn(str(report_json_path), row["artifacts"]["raw_trace_paths"])
             self.assertIn("si8_f1_convergence_report=", row["correctness"]["notes"][0])
+
+    def test_build_report_marks_gold_pass_lane_as_anchor(self) -> None:
+        row = self.sample_row(metrics_path="unused.json")
+        candidate_payload = self.sample_candidate_payload()
+        candidate_payload["final"]["total_energy_ry"] = -62.28748772152797
+        candidate_payload["final"]["scf_iterations"] = 4
+        candidate_payload["iteration_diagnostics"][-1]["total_energy_ry"] = -62.28748772152797
+
+        report = MODULE.build_si8_f1_convergence_report(
+            row,
+            self.sample_baseline_payload(),
+            candidate_payload,
+            self.sample_compare_report_pass(),
+        )
+
+        self.assertEqual(report["dominant_blocker"]["kind"], "gold_passed")
+        self.assertIn("accurate-layer passing anchor", report["dominant_blocker"]["reason"])
+        self.assertIn("accurate-layer passing reference", report["explicit_next_narrowing_move"])
 
 
 if __name__ == "__main__":

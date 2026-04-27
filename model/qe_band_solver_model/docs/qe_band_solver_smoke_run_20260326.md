@@ -2,9 +2,22 @@
 
 ## 1. 目的
 
-这份记录对应当前 `model/qe_band_solver_model` 的最新 smoke run。
+这份记录对应 `2026-03-26` 时 `model/qe_band_solver_model` 的 smoke run。
 
-它验证的已经不再只是一个孤立的 `QE c_bands episode subsystem`，而是一个提升后的行为级全流程闭环：
+> **2026-04-15 状态说明**
+>
+> 这份文档现在应视为**archive-era smoke 记录**。  
+> 当前默认 build/runtime 的主路径已经是：
+>
+> `HostSCF -> FPGAOrchestrator -> ChipTop -> ClusterGraphExecutor -> Cluster A/B/C/D`
+>
+> 旧的 replay/body 兼容实现已经归档到：
+>
+> `model/qe_band_solver_model/legacy/`
+>
+> 因此，本文中凡是把 `ReplayBundleExecutor / BODY_04 / BODY_10` 写成“当前默认主路径”的段落，都应按**历史阶段记录**理解，而不是当前 canonical runtime 说明。
+
+它最初验证的已经不再只是一个孤立的 `QE c_bands episode subsystem`，而是一个当时的行为级全流程闭环：
 
 - `HostSCF -> FPGAOrchestrator -> ReplayBundleExecutor -> ChipTop -> c_bands episode -> Body04FamilyController -> OuterUpdateRuntimeDomain -> sum_band -> v_of_rho/newd -> mix_rho -> next SCF iteration`
 - 并生成显式的 `ReplayBundleDescriptor / ReplayBundleCompletion`
@@ -39,7 +52,7 @@ cmake --build model/qe_band_solver_model/build -j4
 
 ## 3. 结果
 
-本次在默认 fallback compatibility path 下的结果为：
+本次（2026-03-26，当时的 fallback compatibility / replay-body 路径）结果为：
 
 - Build: success
 - Run: success
@@ -65,7 +78,7 @@ cmake --build model/qe_band_solver_model/build -j4
 
 ## 4. 运行时观察到的闭环
 
-从日志可以确认以下顺序已经打通：
+从当时日志可以确认以下顺序已经打通：
 
 1. `HostSCF` 执行 `BODY_05 outer_scf_control_body`
 2. `HostSCF` 执行 `BODY_00 basis_seed_and_bind_body`
@@ -90,9 +103,9 @@ cmake --build model/qe_band_solver_model/build -j4
 9. 三个 stage 内部又细化成 6 个支撑 block，并在日志中可见
 10. 默认运行在第 `3` 轮 `SCF` iteration 后收敛并停止
 
-## 5. 对当前主仓库的意义
+## 5. 对当时主仓库的意义
 
-这份 smoke run 说明：
+这份 smoke run 在当时说明：
 
 - 主仓库中的 `qe_band_solver_model` 已经从单次 `c_bands` 子系统 demo，提升成一个行为级 `QE full DFT flow` 控制骨架
 - 当前 `Host -> FPGA -> Chip` 的真实系统对象已经能表达 `BODY_00-05` 的主线关系
@@ -152,7 +165,7 @@ QEBS_SOFTWARE_FAMILY=CP2K QEBS_FLOW_FAMILY=QS_OT ./model/qe_band_solver_model/bu
 [3466.0 ns] [host_scf] Full DFT run report => software=QE, flow=CBANDS_DIAG, iters=3, phase_b=3, body04=3, body10=0, lcw=18, row_blocks=66, phase_b_ref_cycles=2745, phase_b_bp_ref_cycles=372, body10_ref_cycles=0, body10_bp_ref_cycles=0, body04_ref_cycles=108, body04_bp_ref_cycles=0, total_move_kib=2238.4000, body04_move_kib=2238.4000, body10_move_kib=0.0000, reason=mix_gate_converged, final_density=qe_rho_mixed_iter_3, model_level=STRUCTURAL_TIMED_FUNCTIONAL_WITH_PHASEB_BODY10_BODY04_LEAF_FLOW_CONTROL_PROXY, converged=yes
 ```
 
-当前解释应以这组名字为准：
+对于这段 archive-era 记录，应以这组名字来理解当时的命名：
 
 - `Phase B`：带叶块流控代理的结构化 timed-functional
 - `BODY_04`：已经冻结成 `A/B/C` 三段，而不再沿用旧的 `C/D/E` stage 临时命名
@@ -170,7 +183,7 @@ QEBS_SOFTWARE_FAMILY=CP2K QEBS_FLOW_FAMILY=QS_OT ./model/qe_band_solver_model/bu
 [3224.0 ns] [host_scf] Full DFT run report => software=CP2K, flow=QS_OT, iters=3, phase_b=3, body04=3, body10=3, lcw=24, row_blocks=56, phase_b_ref_cycles=2150, phase_b_bp_ref_cycles=362, body10_ref_cycles=54, body10_bp_ref_cycles=0, body04_ref_cycles=120, body04_bp_ref_cycles=0, total_move_kib=2590.5600, body04_move_kib=2326.5600, body10_move_kib=264.0000, reason=max_scf_iters_reached, final_density=cp2k_ot_rho_mixed_iter_3, model_level=STRUCTURAL_TIMED_FUNCTIONAL_WITH_PHASEB_BODY10_BODY04_LEAF_FLOW_CONTROL_PROXY, converged=no
 ```
 
-这说明当前 `CP2K/QS_OT` 行为级对象已经具备：
+这说明当时的 `CP2K/QS_OT` archive-era 行为级对象已经具备：
 
 - `BODY_10A/B/C` 的显式 stage summary；
 - `BODY_10C` 的 queryable history/decision 提交边界；
@@ -184,11 +197,11 @@ QEBS_SOFTWARE_FAMILY=CP2K QEBS_FLOW_FAMILY=QS_OT ./model/qe_band_solver_model/bu
 - `STRUCTURAL_TIMED_FUNCTIONAL`
 - `STRUCTURAL_TIMED_FUNCTIONAL_WITH_PHASEB_AND_BODY04_LEAF_FLOW_CONTROL_PROXY`
 
-当前 canonical 命名应以第 `7` 节和主规格书为准。
+如果需要对照这条 archive-era 路径内部的命名，应以第 `7` 节和当时主规格书里的对应表述为准。
 
 ## 8. 2026-04-02 QE shell-stage 视图追加验证
 
-为了把当前 `Phase B + BODY_04` 的内部实现和实验阶段已经冻结的 `QE SCF shell` 比较合同对齐，这一版又追加了一层 `QE / CBANDS_DIAG` 专用的 shell-stage 视图。
+为了把当时 `Phase B + BODY_04` 的内部实现和实验阶段已经冻结的 `QE SCF shell` 比较合同对齐，这一版又追加了一层 `QE / CBANDS_DIAG` 专用的 shell-stage 视图。
 
 这层视图不是重写模型，而是在现有 full-flow 模型上追加一个显式映射层，把内部实现重投影到：
 
@@ -197,7 +210,7 @@ QEBS_SOFTWARE_FAMILY=CP2K QEBS_FLOW_FAMILY=QS_OT ./model/qe_band_solver_model/bu
 - `psi -> rho_out`
 - `mix_rho / convergence gate`
 
-其中当前版本的关键约定是：
+其中这版 archive-era shell-stage 视图的关键约定是：
 
 - `rho -> Veff` 由 `BODY_04B_POTENTIAL_REFRESH` 提供，但在 shell 语义上被标成 **loop-carried** stage；
 - `h_psi` / `s_psi` 在 shell 级仍保持显式分离，但当前 `Phase B` 代理在同一 row-block projector sweep 中同时形成 `H/S` partial，因此 `s_psi` 作为 **fused-shadow** stage 报告而不重复记账；

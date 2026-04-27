@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from .interfaces import DesignPoint, EvaluationResult, WorkloadDescriptor
+from .stage_a_contracts import default_contract_fields
 
 
 class FastModelBackend:
@@ -22,4 +23,10 @@ class FastModelBackend:
             authority_scope="supporting_evidence_only",
             promotion_state="explain-only",
             final_public_family_winner=None,
+            extra_fields=default_contract_fields(
+                workload=workload,
+                design_point=design_point,
+                backend="fast_model",
+                source_kind=self.source_kind,
+            ),
         )

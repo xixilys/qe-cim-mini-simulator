@@ -1,0 +1,127 @@
+{
+  "template_id": "f3_hbm_streaming_operator_pipeline_v1",
+  "template_version": "v1",
+  "family": "F3",
+  "label": "HBM Streaming Operator Pipeline Scaffold",
+
+  "description": "Stage-A projection scaffold for an HBM-oriented streaming operator pipeline. The concept increases residency and buffering around Cluster A and Cluster B without claiming validated HBM timing or runtime scheduler support.",
+
+  "clusters": [
+    {
+      "cluster_id": "cluster_a",
+      "role": "operator_sweep",
+      "compute_unit": "traditional_fpga_dsp",
+      "enabled": true,
+      "timing_model": "hybrid",
+      "resource_budget": {
+        "dsp_count": 512,
+        "bram_18k_count": 220,
+        "lut_count": 145000,
+        "uram_count": 80
+      }
+    },
+    {
+      "cluster_id": "cluster_b",
+      "role": "reduced_build",
+      "compute_unit": "pim_bram_based",
+      "enabled": true,
+      "timing_model": "proxy_formula",
+      "resource_budget": {
+        "dsp_count": 120,
+        "bram_18k_count": 240,
+        "lut_count": 68000,
+        "uram_count": 48
+      }
+    },
+    {
+      "cluster_id": "cluster_c",
+      "role": "hardware_diag",
+      "compute_unit": "traditional_fpga_dsp",
+      "enabled": true,
+      "timing_model": "hybrid",
+      "resource_budget": {
+        "dsp_count": 200,
+        "bram_18k_count": 104,
+        "lut_count": 82000,
+        "uram_count": 20
+      }
+    },
+    {
+      "cluster_id": "cluster_d",
+      "role": "refresh_residual",
+      "compute_unit": "traditional_fpga_dsp",
+      "enabled": true,
+      "timing_model": "proxy_formula",
+      "resource_budget": {
+        "dsp_count": 72,
+        "bram_18k_count": 60,
+        "lut_count": 30000,
+        "uram_count": 8
+      }
+    }
+  ],
+
+  "policies": {
+    "diag_policy": "device_first_fallback",
+    "offload_scope": "device_heavy",
+    "resident_policy": "spill_tolerant",
+    "partition_strategy": "operator__build__diag__refresh"
+  },
+
+  "compute_config": {
+    "clock_mhz": 275,
+    "gemm_tile_size": 32,
+    "dsp_array_dims": {
+      "rows": 16,
+      "cols": 20
+    }
+  },
+
+  "memory_hierarchy": {
+    "l1_buffer_kb": 640,
+    "l2_buffer_kb": 4096,
+    "resident_budget_scale": 1.6
+  },
+
+  "component_overrides": {
+    "operator_streaming_frontend": {
+      "component_ref": "operator_apply_engine",
+      "implementation_variant": "hbm_streaming_projection_stub",
+      "config_overrides": {
+        "prefer_streaming_panels": true,
+        "hbm_channels_projected": 8,
+        "runtime_support_status": "projection_only"
+      }
+    },
+    "near_memory_domain": {
+      "component_ref": "near_memory_domain",
+      "implementation_variant": "hbm_resident_projection_stub",
+      "config_overrides": {
+        "spill_tolerant_replay": true,
+        "stream_operator_tiles": true
+      }
+    },
+    "diag_fallback_unit": {
+      "component_ref": "diag_fallback_unit",
+      "implementation_variant": "host_lapack_fallback_required",
+      "config_overrides": {
+        "allow_host_fallback": true,
+        "preserve_qe_fp64_tolerance": true
+      }
+    }
+  },
+
+  "dse_metadata": {
+    "exploration_priority": "medium",
+    "expected_performance_class": "competitive",
+    "risk_level": "high",
+    "tags": ["scaffold_only", "projection_only", "hbm_streaming", "operator_pipeline", "spill_tolerant", "host_diag_fallback"]
+  },
+
+  "notes": {
+    "validation_status": "Scaffold only; no SystemC, RTL, board, or HBM timing validation is claimed.",
+    "rationale": "Models whether larger streaming buffers and HBM-style residency could reduce operator-sweep replay pressure in DSE.",
+    "correctness_policy": "Streaming order must remain numerically compatible with QE FP64 tolerances before any implementation claim.",
+    "projection_boundary": "HBM channels and streaming behavior are metadata only under the current template-driven projection."
+  }
+}

@@ -4,6 +4,7 @@ from pathlib import Path
 import subprocess
 
 from .interfaces import DesignPoint, EvaluationResult, WorkloadDescriptor
+from .stage_a_contracts import default_contract_fields
 
 
 class SystemCBackend:
@@ -18,6 +19,13 @@ class SystemCBackend:
         design_point: DesignPoint,
     ) -> EvaluationResult:
         if self.dry_run:
+            extra_fields = default_contract_fields(
+                workload=workload,
+                design_point=design_point,
+                backend="systemc",
+                source_kind="stub",
+            )
+            extra_fields["backend_observability"] = {"executed": False}
             return EvaluationResult(
                 workload=workload,
                 design_point=design_point,
@@ -28,7 +36,7 @@ class SystemCBackend:
                 authority_scope="supporting_evidence_only",
                 promotion_state="explain-only",
                 final_public_family_winner=None,
-                extra_fields={"backend_observability": {"executed": False}},
+                extra_fields=extra_fields,
             )
 
         if not self.allow_execute:
@@ -41,6 +49,23 @@ class SystemCBackend:
             text=True,
         )
         result_status = "executed" if completed.returncode == 0 else "model_error"
+        extra_fields = default_contract_fields(
+            workload=workload,
+            design_point=design_point,
+            backend="systemc",
+            source_kind="timed_functional_proxy",
+        )
+        extra_fields["systemc_feedback_contract"].update(
+            {
+                "status": "explicit_adapter_executed",
+                "execution_status": "executed",
+                "subprocess_invoked": True,
+            }
+        )
+        extra_fields["backend_observability"] = {
+            "executed": True,
+            "returncode": completed.returncode,
+        }
         return EvaluationResult(
             workload=workload,
             design_point=design_point,
@@ -51,10 +76,5 @@ class SystemCBackend:
             authority_scope="supporting_evidence_only",
             promotion_state="explain-only",
             final_public_family_winner=None,
-            extra_fields={
-                "backend_observability": {
-                    "executed": True,
-                    "returncode": completed.returncode,
-                }
-            },
+            extra_fields=extra_fields,
         )

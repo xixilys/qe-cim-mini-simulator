@@ -1,0 +1,116 @@
+{
+  "template_id": "f5_cgra_dataflow_operator_v1",
+  "template_version": "v1",
+  "family": "F5",
+  "label": "CGRA Dataflow Operator Scaffold",
+
+  "description": "Stage-A projection scaffold for a CGRA-style dataflow operator engine. The operator and reduced-build path are represented as a fused custom fabric while diagonalization retains conservative fallback semantics.",
+
+  "clusters": [
+    {
+      "cluster_id": "cluster_a",
+      "role": "fused_operator_build",
+      "compute_unit": "custom",
+      "enabled": true,
+      "fusion_group": "ab_cgra_dataflow",
+      "timing_model": "hybrid",
+      "resource_budget": {
+        "dsp_count": 384,
+        "bram_18k_count": 280,
+        "lut_count": 220000,
+        "uram_count": 84
+      }
+    },
+    {
+      "cluster_id": "cluster_b",
+      "role": "reduced_build",
+      "compute_unit": "custom",
+      "enabled": false,
+      "fusion_group": "ab_cgra_dataflow",
+      "timing_model": "proxy_formula"
+    },
+    {
+      "cluster_id": "cluster_c",
+      "role": "hardware_diag",
+      "compute_unit": "traditional_fpga_dsp",
+      "enabled": true,
+      "timing_model": "hybrid",
+      "resource_budget": {
+        "dsp_count": 224,
+        "bram_18k_count": 120,
+        "lut_count": 90000,
+        "uram_count": 20
+      }
+    },
+    {
+      "cluster_id": "cluster_d",
+      "role": "refresh_residual",
+      "compute_unit": "traditional_fpga_dsp",
+      "enabled": true,
+      "timing_model": "proxy_formula",
+      "resource_budget": {
+        "dsp_count": 88,
+        "bram_18k_count": 64,
+        "lut_count": 40000,
+        "uram_count": 8
+      }
+    }
+  ],
+
+  "policies": {
+    "diag_policy": "device_first_fallback",
+    "offload_scope": "device_heavy",
+    "resident_policy": "spill_tolerant",
+    "partition_strategy": "operator_build_fused__diag__refresh"
+  },
+
+  "compute_config": {
+    "clock_mhz": 250,
+    "gemm_tile_size": 32,
+    "dsp_array_dims": {
+      "rows": 16,
+      "cols": 16
+    }
+  },
+
+  "memory_hierarchy": {
+    "l1_buffer_kb": 512,
+    "l2_buffer_kb": 2048,
+    "resident_budget_scale": 1.3
+  },
+
+  "component_overrides": {
+    "operator_build_fabric": {
+      "component_ref": "operator_apply_engine",
+      "implementation_variant": "cgra_dataflow_projection_stub",
+      "config_overrides": {
+        "dataflow_rows": 16,
+        "dataflow_cols": 16,
+        "shares_operator_and_reduced_build_datapath": true,
+        "runtime_support_status": "projection_only"
+      }
+    },
+    "diag_fallback_unit": {
+      "component_ref": "diag_fallback_unit",
+      "implementation_variant": "host_lapack_fallback_required",
+      "config_overrides": {
+        "allow_host_fallback": true,
+        "preserve_qe_fp64_tolerance": true
+      }
+    }
+  },
+
+  "dse_metadata": {
+    "exploration_priority": "low",
+    "expected_performance_class": "aggressive",
+    "risk_level": "high",
+    "tags": ["scaffold_only", "projection_only", "cgra", "dataflow", "fused_operator_build", "custom_compute", "host_diag_fallback"]
+  },
+
+  "notes": {
+    "validation_status": "Scaffold only; no SystemC, RTL, board, or CGRA compiler validation is claimed.",
+    "rationale": "Explores a dataflow-style operator/build fabric as a high-risk alternative to fixed systolic and CIM datapaths.",
+    "correctness_policy": "The fused operator/build projection must preserve QE FP64 semantics and cannot claim relaxed numerical tolerances.",
+    "projection_boundary": "custom compute_unit denotes a schema-supported placeholder, not an implemented CGRA backend."
+  }
+}

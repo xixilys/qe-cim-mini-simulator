@@ -1,0 +1,101 @@
+{
+  "template_id": "f1_host_heavy_cpu_baseline_v1",
+  "template_version": "v1",
+  "family": "F1",
+  "label": "Host-Heavy CPU Baseline Projection Scaffold",
+
+  "description": "Stage-A projection scaffold for a conservative host-heavy baseline. Device clusters are retained as schema-visible placeholders for accounting, while diagonalization and most control decisions remain host-centered.",
+
+  "clusters": [
+    {
+      "cluster_id": "cluster_a",
+      "role": "operator_sweep",
+      "compute_unit": "traditional_fpga_dsp",
+      "enabled": true,
+      "timing_model": "proxy_formula",
+      "resource_budget": {
+        "dsp_count": 128,
+        "bram_18k_count": 80,
+        "lut_count": 60000,
+        "uram_count": 8
+      }
+    },
+    {
+      "cluster_id": "cluster_b",
+      "role": "reduced_build",
+      "compute_unit": "traditional_fpga_dsp",
+      "enabled": false,
+      "timing_model": "proxy_formula"
+    },
+    {
+      "cluster_id": "cluster_c",
+      "role": "hardware_diag",
+      "compute_unit": "traditional_fpga_dsp",
+      "enabled": false,
+      "timing_model": "proxy_formula"
+    },
+    {
+      "cluster_id": "cluster_d",
+      "role": "refresh_residual",
+      "compute_unit": "traditional_fpga_dsp",
+      "enabled": false,
+      "timing_model": "proxy_formula"
+    }
+  ],
+
+  "policies": {
+    "diag_policy": "cpu_only",
+    "offload_scope": "single_hotpath",
+    "resident_policy": "spill_tolerant",
+    "partition_strategy": "single_hotpath_partition"
+  },
+
+  "compute_config": {
+    "clock_mhz": 250,
+    "gemm_tile_size": 16,
+    "dsp_array_dims": {
+      "rows": 8,
+      "cols": 8
+    }
+  },
+
+  "memory_hierarchy": {
+    "l1_buffer_kb": 128,
+    "l2_buffer_kb": 512,
+    "resident_budget_scale": 0.6
+  },
+
+  "component_overrides": {
+    "host_control_path": {
+      "component_ref": "host_controller",
+      "implementation_variant": "host_heavy_projection_stub",
+      "config_overrides": {
+        "runtime_support_status": "projection_only",
+        "prefer_host_reduced_build": true,
+        "prefer_host_diag": true
+      }
+    },
+    "diag_fallback_unit": {
+      "component_ref": "diag_fallback_unit",
+      "implementation_variant": "lapack_eigensolver",
+      "config_overrides": {
+        "allow_host_fallback": true,
+        "preserve_qe_fp64_tolerance": true
+      }
+    }
+  },
+
+  "dse_metadata": {
+    "exploration_priority": "medium",
+    "expected_performance_class": "baseline",
+    "risk_level": "low",
+    "tags": ["scaffold_only", "projection_only", "host_heavy", "cpu_only_diag", "single_hotpath", "stage_a_candidate"]
+  },
+
+  "notes": {
+    "validation_status": "Scaffold only; no SystemC, RTL, board, or CPU benchmark validation is claimed by this template.",
+    "correctness_policy": "Host LAPACK diagonalization remains the reference path and must preserve QE FP64 tolerances.",
+    "projection_boundary": "Disabled device clusters are retained for schema-compatible projection and comparison only; this template does not add a new host executor.",
+    "intended_use": "Conservative reference candidate for measuring whether device-heavy templates justify offload complexity."
+  }
+}

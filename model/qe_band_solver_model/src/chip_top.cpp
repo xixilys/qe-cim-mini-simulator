@@ -1,4 +1,5 @@
 #include "chip_top.hpp"
+#include "logging.hpp"
 
 namespace qebs {
 
@@ -72,10 +73,21 @@ EpisodeSummary make_legacy_episode_summary(const EpisodeResult& result) {
 
 }  // namespace
 
+ChipTop::ChipTop(sc_core::sc_module_name name, const ArchitectureConfig& config)
+    : sc_core::sc_module(name),
+      config_(config),
+      episode_controller_(sc_core::sc_module_name("episode_controller")),
+      cluster_graph_executor_(sc_core::sc_module_name("cluster_graph_executor"), config) {
+  log_line(std::string(name), "ChipTop initialized with architecture: " + config.template_label);
+}
+
 ChipTop::ChipTop(sc_core::sc_module_name name)
     : sc_core::sc_module(name),
+      config_(ArchitectureConfig::create_default()),
       episode_controller_(sc_core::sc_module_name("episode_controller")),
-      cluster_graph_executor_(sc_core::sc_module_name("cluster_graph_executor")) {}
+      cluster_graph_executor_(sc_core::sc_module_name("cluster_graph_executor"), config_) {
+  log_line(std::string(name), "ChipTop initialized with default architecture");
+}
 
 EpisodeResult ChipTop::run_episode(const EpisodeDescriptor& descriptor) const {
   log_line(name(), "ChipTop cluster-first episode begins: " + descriptor.brief());

@@ -12,6 +12,9 @@
 - executive summary one-pager template
 - QE gold correctness report
 - sweep / summary ranking outputs
+- projection review package（若 stage 已到 `projection_eligible`）
+- stage-main recommendation package（若已经形成正式对外推荐包）
+- stage artifact bundle manifest（若已经形成 release-facing 推荐总包）
 
 ## 2. Advisor pack 最小组成
 
@@ -41,6 +44,16 @@
    - range 生成依据
    - 为什么是 range 而不是 point estimate
 
+5. **Recommendation package appendix**（projection-grade 时）
+   - projection review package
+   - stage-main recommendation package
+   - recommended primary candidates
+   - validated alternatives
+
+6. **Release bundle appendix**（release-facing 时）
+   - stage artifact bundle manifest
+   - phase summary / projection review / stage-main recommendation package 的统一路径索引
+
 ## 3. 汇总前检查（必须全部通过）
 
 ### 3.1 输入完整性
@@ -49,6 +62,9 @@
 - [ ] 已引用 `/Volumes/remote/phd/year_2/project/dft加速/docs/benchmarks/qe_gold_correctness_contract_v0.md`
 - [ ] 已引用 `/Volumes/remote/phd/year_2/project/dft加速/docs/benchmarks/qe_gold_numerical_tolerance_schema_v0.json`
 - [ ] sweep / summary 已输出区间型 projection
+- [ ] 若 stage 已到 `projection_eligible`，`projection_review` 已生成
+- [ ] 若 stage 已到 `projection_eligible`，`stage_main_recommendation_package` 已生成
+- [ ] 若当前 package 已进入 release-facing 使用阶段，`stage_artifact_bundle_manifest` 已生成
 - [ ] 已引用 `/Volumes/remote/phd/year_2/project/dft加速/docs/benchmarks/systemc_architecture_family_dse_result_schema_v0.json`
 - [ ] 已引用 `/Volumes/remote/phd/year_2/project/dft加速/docs/benchmarks/run_systemc_architecture_family_dse_sweep.py`
 - [ ] `assumption_set_id` 已冻结
@@ -65,6 +81,9 @@
 - [ ] `ranking_grade_ready` / `projection_grade_ready` 状态已核对
 - [ ] `main_reason`
 - [ ] `main_caveat`
+- [ ] `recommended_primary_candidates`（projection-grade 时）
+- [ ] `validated_alternative_candidates`（projection-grade 时）
+- [ ] `stage_artifact_bundle_manifest`（release-facing 时）
 
 ### 3.3 Claim discipline
 - [ ] ranking-grade 与 projection-grade 未混写
@@ -81,6 +100,8 @@
 4. **为什么 speedup / energy 只报 range？**
 5. **哪些结论现在能信，哪些还只是 exploratory？**
 6. **下一步如果继续做，最值得花时间的工程点是什么？**
+7. **stage-main recommendation package 和 projection review package 的区别是什么？**
+8. **release-facing 时应该先看哪个 artifact？**
 
 ## 5. 常见失败模式
 
@@ -115,6 +136,8 @@
 - [ ] `confidence` 已按 rubric 定级
 - [ ] `speedup_to_convergence_range` 已有 assumption set 支撑
 - [ ] `energy_to_convergence_range` 已有 assumption set 支撑
+- [ ] 若 stage 已到 `projection_eligible`，projection review / stage-main recommendation package 已齐全且互相一致
+- [ ] 若当前 package 已进入 release-facing 使用阶段，stage artifact bundle manifest 已存在且正确索引 phase summary / projection review / stage-main package
 - [ ] 报告明确声明 v1 不是 RTL 参数冻结器
 - [ ] 报告明确声明未直接外推 board-level power
 

@@ -1,0 +1,168 @@
+{
+  "schema_version": "qe_ic_case_signature_matrix_v0",
+  "generated_at_utc": "2026-04-16T15:20:00Z",
+  "taxonomy_ref": "docs/benchmarks/qe_ic_computational_signature_taxonomy_v0.md",
+  "stage_a_bringup_cases": [
+    "si4_pbe_uspp_small",
+    "graphene_pbe_uspp",
+    "si8_pbe_nc"
+  ],
+  "stage_b_nonblocking_signature_coverage": [
+    "au_slab_subspace",
+    "sic32_subspace"
+  ],
+  "cases": [
+    {
+      "machine_workload_id": "si4_pbe_uspp_small",
+      "display_label": "Small semiconductor proxy",
+      "signature_id": "sig_small_si__uspp__generalized_overlap__bulk__band_structure",
+      "property_target": "band_structure",
+      "pseudopotential_family": "USPP",
+      "solver_path_class": "generalized_overlap",
+      "workload_topology": "bulk",
+      "post_scf_extension_level": "shell_only",
+      "operator_signature": {
+        "projector_pressure": "medium",
+        "nonlocal_pressure": "medium",
+        "generalized_ratio_bucket": "medium",
+        "diag_dominance": "medium",
+        "fft_grid_pressure": "medium"
+      },
+      "topology_role": "bringup_proxy",
+      "signature_confidence": "measured"
+    },
+    {
+      "machine_workload_id": "si8_pbe_nc",
+      "display_label": "Bulk Si anchor (NC)",
+      "signature_id": "sig_bulk_si__nc__generalized_overlap__bulk__band_gap",
+      "property_target": "band_gap",
+      "pseudopotential_family": "NC",
+      "solver_path_class": "generalized_overlap",
+      "workload_topology": "bulk",
+      "post_scf_extension_level": "nscf_extension",
+      "operator_signature": {
+        "projector_pressure": "medium",
+        "nonlocal_pressure": "low",
+        "generalized_ratio_bucket": "high",
+        "diag_dominance": "high",
+        "fft_grid_pressure": "medium"
+      },
+      "topology_role": "accurate_anchor",
+      "signature_confidence": "measured"
+    },
+    {
+      "machine_workload_id": "si8_pbe_uspp",
+      "display_label": "Bulk Si coverage (USPP)",
+      "signature_id": "sig_bulk_si__uspp__generalized_overlap__bulk__band_gap",
+      "property_target": "band_gap",
+      "pseudopotential_family": "USPP",
+      "solver_path_class": "generalized_overlap",
+      "workload_topology": "bulk",
+      "post_scf_extension_level": "nscf_extension",
+      "operator_signature": {
+        "projector_pressure": "high",
+        "nonlocal_pressure": "high",
+        "generalized_ratio_bucket": "high",
+        "diag_dominance": "high",
+        "fft_grid_pressure": "medium"
+      },
+      "topology_role": "coverage_followon",
+      "signature_confidence": "measured"
+    },
+    {
+      "machine_workload_id": "graphene_pbe_uspp",
+      "display_label": "2D channel transport proxy",
+      "signature_id": "sig_graphene__uspp__generalized_overlap__2D__effective_mass",
+      "property_target": "effective_mass",
+      "pseudopotential_family": "USPP",
+      "solver_path_class": "generalized_overlap",
+      "workload_topology": "2D",
+      "post_scf_extension_level": "nscf_extension",
+      "operator_signature": {
+        "projector_pressure": "low",
+        "nonlocal_pressure": "low",
+        "generalized_ratio_bucket": "medium",
+        "diag_dominance": "high",
+        "fft_grid_pressure": "high"
+      },
+      "topology_role": "bringup_proxy",
+      "signature_confidence": "measured"
+    },
+    {
+      "machine_workload_id": "graphene_pbe_paw",
+      "display_label": "2D channel PAW coverage",
+      "signature_id": "sig_graphene__paw__generalized_overlap__2D__effective_mass",
+      "property_target": "effective_mass",
+      "pseudopotential_family": "PAW",
+      "solver_path_class": "generalized_overlap",
+      "workload_topology": "2D",
+      "post_scf_extension_level": "nscf_extension",
+      "operator_signature": {
+        "projector_pressure": "medium",
+        "nonlocal_pressure": "medium",
+        "generalized_ratio_bucket": "medium",
+        "diag_dominance": "high",
+        "fft_grid_pressure": "high"
+      },
+      "topology_role": "coverage_followon",
+      "signature_confidence": "measured"
+    },
+    {
+      "machine_workload_id": "au_slab_subspace",
+      "display_label": "Au slab",
+      "signature_id": "sig_au_slab__uspp__standard_band__slab_interface__band_gap",
+      "property_target": "band_gap",
+      "pseudopotential_family": "USPP",
+      "solver_path_class": "standard_band",
+      "workload_topology": "slab_interface",
+      "post_scf_extension_level": "shell_only",
+      "operator_signature": {
+        "projector_pressure": "high",
+        "nonlocal_pressure": "high",
+        "generalized_ratio_bucket": "medium",
+        "diag_dominance": "high",
+        "fft_grid_pressure": "high"
+      },
+      "topology_role": "stage_b_nonblocking",
+      "signature_confidence": "provisional"
+    },
+    {
+      "machine_workload_id": "sic32_subspace",
+      "display_label": "SiC32",
+      "signature_id": "sig_sic32__uspp__generalized_overlap__wide_bandgap__transport_proxy",
+      "property_target": "transport_proxy",
+      "pseudopotential_family": "USPP",
+      "solver_path_class": "generalized_overlap",
+      "workload_topology": "wide_bandgap",
+      "post_scf_extension_level": "mobility_extension_expected",
+      "operator_signature": {
+        "projector_pressure": "high",
+        "nonlocal_pressure": "high",
+        "generalized_ratio_bucket": "high",
+        "diag_dominance": "high",
+        "fft_grid_pressure": "high"
+      },
+      "topology_role": "stage_b_nonblocking",
+      "signature_confidence": "provisional"
+    },
+    {
+      "machine_workload_id": "h2_tiny",
+      "display_label": "H2 tiny molecule sanity signature",
+      "signature_id": "sig_h2_tiny__uspp__standard_band__defect_doped__band_structure",
+      "property_target": "band_structure",
+      "pseudopotential_family": "USPP",
+      "solver_path_class": "standard_band",
+      "workload_topology": "defect_doped",
+      "post_scf_extension_level": "shell_only",
+      "operator_signature": {
+        "projector_pressure": "low",
+        "nonlocal_pressure": "low",
+        "generalized_ratio_bucket": "low",
+        "diag_dominance": "low",
+        "fft_grid_pressure": "low"
+      },
+      "topology_role": "stress_aux",
+      "signature_confidence": "measured"
+    }
+  ]
+}
