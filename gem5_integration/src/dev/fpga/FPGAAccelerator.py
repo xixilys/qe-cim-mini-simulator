@@ -38,3 +38,11 @@ class FPGAAccelerator(PciEndpoint):
         False,
         "Allow real_bridge only when an actual SystemC target binding is provided"
     )
+    roi_stats_enabled = Param.Bool(
+        True,
+        "Record device-local offload ROI tick counters; guest/proxy code still owns m5_reset_stats/m5_dump_stats"
+    )
+    roi_label = Param.String(
+        "qebs_offload",
+        "Label attached to device-local ROI begin/end markers"
+    )

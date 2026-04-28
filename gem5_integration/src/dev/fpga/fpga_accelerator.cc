@@ -37,6 +37,12 @@ FPGAAccelerator::FPGAAccelerator(const Params &p)
       electronsLastCommandTick(0), electronsLastDoneTick(0),
       electronsCompletionSource(COMPLETION_NONE),
       pendingElectronsCompletionSource(COMPLETION_NONE),
+      roiStatsEnabled(p.roi_stats_enabled),
+      roiLabel(p.roi_label),
+      roiStatusReg(p.roi_stats_enabled ? ROI_STATUS_ENABLED : 0),
+      roiStartTick(0), roiEndTick(0),
+      roiBeginCount(0), roiEndCount(0),
+      electronsRoiCommandCount(0), electronsRoiCompletionCount(0),
       dmaEngine(nullptr),
 #ifdef USE_SYSTEMC
       tlmMediator(nullptr),
@@ -229,6 +235,25 @@ uint32_t FPGAAccelerator::readRegister(Addr offset) {
             return (uint32_t)(veffAddr & 0xFFFFFFFF);
         case REG_VEFF_ADDR_HI:
             return (uint32_t)(veffAddr >> 32);
+
+        case REG_ROI_STATUS:
+            return roiStatusReg;
+        case REG_ROI_START_TICK_LO:
+            return static_cast<uint32_t>(roiStartTick & 0xFFFFFFFFULL);
+        case REG_ROI_START_TICK_HI:
+            return static_cast<uint32_t>(roiStartTick >> 32);
+        case REG_ROI_END_TICK_LO:
+            return static_cast<uint32_t>(roiEndTick & 0xFFFFFFFFULL);
+        case REG_ROI_END_TICK_HI:
+            return static_cast<uint32_t>(roiEndTick >> 32);
+        case REG_ROI_BEGIN_COUNT:
+            return roiBeginCount;
+        case REG_ROI_END_COUNT:
+            return roiEndCount;
+        case REG_ROI_COMMAND_COUNT:
+            return electronsRoiCommandCount;
+        case REG_ROI_COMPLETION_COUNT:
+            return electronsRoiCompletionCount;
             
         default:
             DPRINTF(FPGAAccelerator, "Read from unknown register 0x%x\n", offset);
@@ -243,6 +268,7 @@ void FPGAAccelerator::writeRegister(Addr offset, uint32_t value) {
             if (value & CTRL_RESET) {
                 statusReg = STATUS_READY;
                 controlReg &= ~CTRL_RESET;
+                resetOffloadRoi();
             }
             break;
 
@@ -345,6 +371,18 @@ void FPGAAccelerator::writeRegister(Addr offset, uint32_t value) {
             veffAddr = (veffAddr & 0xFFFFFFFF) | ((uint64_t)value << 32);
             break;
 
+        case REG_ROI_CONTROL:
+            if (value & ROI_CONTROL_RESET) {
+                resetOffloadRoi();
+            }
+            if (value & ROI_CONTROL_MARK_BEGIN) {
+                beginOffloadRoi();
+            }
+            if (value & ROI_CONTROL_MARK_END) {
+                endOffloadRoi();
+            }
+            break;
+
         default:
             DPRINTF(FPGAAccelerator, "Write to unknown register 0x%x\n", offset);
             break;
@@ -353,6 +391,53 @@ void FPGAAccelerator::writeRegister(Addr offset, uint32_t value) {
 
 bool FPGAAccelerator::immediateElectronsCompletion() const {
     return executionMode == ExecutionMode::Smoke;
+}
+
+void FPGAAccelerator::resetOffloadRoi() {
+    roiStartTick = 0;
+    roiEndTick = 0;
+    roiBeginCount = 0;
+    roiEndCount = 0;
+    electronsRoiCommandCount = 0;
+    electronsRoiCompletionCount = 0;
+    roiStatusReg = roiStatsEnabled ? ROI_STATUS_ENABLED : 0;
+
+    DPRINTF(FPGAAccelerator,
+            "Offload ROI reset: label=%s enabled=%d\n",
+            roiLabel.c_str(), roiStatsEnabled);
+}
+
+void FPGAAccelerator::beginOffloadRoi() {
+    if (!roiStatsEnabled) {
+        return;
+    }
+    roiStartTick = curTick();
+    roiEndTick = 0;
+    roiBeginCount++;
+    electronsRoiCommandCount = electronsCommandCount;
+    roiStatusReg = ROI_STATUS_ENABLED | ROI_STATUS_ACTIVE;
+
+    DPRINTF(FPGAAccelerator,
+            "Offload ROI begin: label=%s start_tick=%llu commands=%u; "
+            "guest/proxy m5_reset_stats hook should align to this boundary\n",
+            roiLabel.c_str(), static_cast<unsigned long long>(roiStartTick),
+            electronsRoiCommandCount);
+}
+
+void FPGAAccelerator::endOffloadRoi() {
+    if (!roiStatsEnabled || !(roiStatusReg & ROI_STATUS_ACTIVE)) {
+        return;
+    }
+    roiEndTick = curTick();
+    roiEndCount++;
+    electronsRoiCompletionCount = electronsCompletionCount;
+    roiStatusReg = ROI_STATUS_ENABLED | ROI_STATUS_COMPLETED;
+
+    DPRINTF(FPGAAccelerator,
+            "Offload ROI end: label=%s end_tick=%llu completions=%u; "
+            "guest/proxy m5_dump_stats hook should align to this boundary\n",
+            roiLabel.c_str(), static_cast<unsigned long long>(roiEndTick),
+            electronsRoiCompletionCount);
 }
 
 void FPGAAccelerator::completeElectrons(uint32_t completionSource) {
@@ -374,6 +459,7 @@ void FPGAAccelerator::completeElectrons(uint32_t completionSource) {
     electronsLastDoneTick = curTick();
     electronsCompletionSource = completionSource;
     pendingElectronsCompletionSource = COMPLETION_NONE;
+    endOffloadRoi();
 
     statusReg &= ~STATUS_BUSY;
     statusReg |= STATUS_COMPUTE_DONE;
@@ -393,6 +479,7 @@ void FPGAAccelerator::executeElectrons() {
     electronsCommandCount++;
     electronsLastCommandTick = curTick();
     electronsCompletionSource = COMPLETION_NONE;
+    beginOffloadRoi();
 
     DPRINTF(FPGAAccelerator, "Starting electrons loop: nbands=%d, nbasis=%d, nkpts=%d, max_iter=%d\n",
             electronsNBands, electronsNBasis, electronsNKpoints, electronsMaxIter);
@@ -781,6 +868,14 @@ void FPGAAccelerator::serialize(CheckpointOut &cp) const {
     SERIALIZE_SCALAR(electronsLastDoneTick);
     SERIALIZE_SCALAR(electronsCompletionSource);
     SERIALIZE_SCALAR(pendingElectronsCompletionSource);
+    SERIALIZE_SCALAR(roiStatsEnabled);
+    SERIALIZE_SCALAR(roiStatusReg);
+    SERIALIZE_SCALAR(roiStartTick);
+    SERIALIZE_SCALAR(roiEndTick);
+    SERIALIZE_SCALAR(roiBeginCount);
+    SERIALIZE_SCALAR(roiEndCount);
+    SERIALIZE_SCALAR(electronsRoiCommandCount);
+    SERIALIZE_SCALAR(electronsRoiCompletionCount);
 }
 
 void FPGAAccelerator::unserialize(CheckpointIn &cp) {
@@ -814,6 +909,14 @@ void FPGAAccelerator::unserialize(CheckpointIn &cp) {
     UNSERIALIZE_SCALAR(electronsLastDoneTick);
     UNSERIALIZE_SCALAR(electronsCompletionSource);
     UNSERIALIZE_SCALAR(pendingElectronsCompletionSource);
+    UNSERIALIZE_SCALAR(roiStatsEnabled);
+    UNSERIALIZE_SCALAR(roiStatusReg);
+    UNSERIALIZE_SCALAR(roiStartTick);
+    UNSERIALIZE_SCALAR(roiEndTick);
+    UNSERIALIZE_SCALAR(roiBeginCount);
+    UNSERIALIZE_SCALAR(roiEndCount);
+    UNSERIALIZE_SCALAR(electronsRoiCommandCount);
+    UNSERIALIZE_SCALAR(electronsRoiCompletionCount);
 }
 
 // DMA Engine Implementation

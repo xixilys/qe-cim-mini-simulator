@@ -104,6 +104,17 @@ class FPGAAccelerator : public PciEndpoint {
         REG_RHO_ADDR_HI           = 0x0214,
         REG_VEFF_ADDR_LO          = 0x0218,
         REG_VEFF_ADDR_HI          = 0x021C,
+
+        REG_ROI_CONTROL           = 0x0300,
+        REG_ROI_STATUS            = 0x0304,
+        REG_ROI_START_TICK_LO     = 0x0310,
+        REG_ROI_START_TICK_HI     = 0x0314,
+        REG_ROI_END_TICK_LO       = 0x0318,
+        REG_ROI_END_TICK_HI       = 0x031C,
+        REG_ROI_BEGIN_COUNT       = 0x0320,
+        REG_ROI_END_COUNT         = 0x0324,
+        REG_ROI_COMMAND_COUNT     = 0x0328,
+        REG_ROI_COMPLETION_COUNT  = 0x032C,
     };
 
     enum ControlBits {
@@ -118,6 +129,18 @@ class FPGAAccelerator : public PciEndpoint {
         STATUS_ERROR      = (1 << 2),
         STATUS_DMA_DONE   = (1 << 3),
         STATUS_COMPUTE_DONE = (1 << 4),
+    };
+
+    enum RoiControlBits {
+        ROI_CONTROL_RESET       = (1 << 0),
+        ROI_CONTROL_MARK_BEGIN  = (1 << 1),
+        ROI_CONTROL_MARK_END    = (1 << 2),
+    };
+
+    enum RoiStatusBits {
+        ROI_STATUS_ENABLED      = (1 << 0),
+        ROI_STATUS_ACTIVE       = (1 << 1),
+        ROI_STATUS_COMPLETED    = (1 << 2),
     };
 
     enum class ExecutionMode {
@@ -173,6 +196,15 @@ class FPGAAccelerator : public PciEndpoint {
     Tick electronsLastDoneTick;
     uint32_t electronsCompletionSource;
     uint32_t pendingElectronsCompletionSource;
+    bool roiStatsEnabled;
+    std::string roiLabel;
+    uint32_t roiStatusReg;
+    Tick roiStartTick;
+    Tick roiEndTick;
+    uint32_t roiBeginCount;
+    uint32_t roiEndCount;
+    uint32_t electronsRoiCommandCount;
+    uint32_t electronsRoiCompletionCount;
 
     class DMAEngine {
       private:
@@ -213,6 +245,9 @@ class FPGAAccelerator : public PciEndpoint {
     void executeCompute();
     void completeElectrons(uint32_t completionSource);
     bool immediateElectronsCompletion() const;
+    void resetOffloadRoi();
+    void beginOffloadRoi();
+    void endOffloadRoi();
 
     void raiseInterrupt();
     void clearInterrupt();

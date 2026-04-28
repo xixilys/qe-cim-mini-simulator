@@ -19,6 +19,9 @@ class FPGAAcceleratorModeSplitTests(unittest.TestCase):
         self.assertIn("real_bridge", text)
         self.assertIn("guarded real_bridge", text)
         self.assertIn("real_systemc_target", text)
+        self.assertIn("roi_stats_enabled", text)
+        self.assertIn("roi_label", text)
+        self.assertIn("m5_reset_stats/m5_dump_stats", text)
 
     def test_header_defines_completion_sources_and_counters(self) -> None:
         text = HEADER.read_text(encoding="utf-8")
@@ -28,6 +31,51 @@ class FPGAAcceleratorModeSplitTests(unittest.TestCase):
         self.assertIn("COMPLETION_REAL_BRIDGE_EVENT", text)
         self.assertIn("electronsCommandCount", text)
         self.assertIn("electronsCompletionCount", text)
+        self.assertIn("REG_ROI_CONTROL", text)
+        self.assertIn("REG_ROI_START_TICK_LO", text)
+        self.assertIn("REG_ROI_END_TICK_HI", text)
+        self.assertIn("ROI_CONTROL_MARK_BEGIN", text)
+        self.assertIn("ROI_STATUS_ACTIVE", text)
+        self.assertIn("beginOffloadRoi", text)
+        self.assertIn("endOffloadRoi", text)
+
+    def test_roi_window_wraps_electrons_offload(self) -> None:
+        text = SOURCE.read_text(encoding="utf-8")
+        self.assertIn("void FPGAAccelerator::beginOffloadRoi()", text)
+        self.assertIn("void FPGAAccelerator::endOffloadRoi()", text)
+        self.assertIn("guest/proxy m5_reset_stats hook should align", text)
+        self.assertIn("guest/proxy m5_dump_stats hook should align", text)
+
+        exec_start = text.index("void FPGAAccelerator::executeElectrons()")
+        exec_end = text.index("namespace TimingProxy", exec_start + 1)
+        exec_body = text[exec_start:exec_end]
+        command_count_index = exec_body.index("electronsCommandCount++")
+        begin_roi_index = exec_body.index("beginOffloadRoi()")
+        compute_delay_index = exec_body.index("compute_delay")
+        self.assertLess(command_count_index, begin_roi_index)
+        self.assertLess(begin_roi_index, compute_delay_index)
+
+        complete_start = text.index("void FPGAAccelerator::completeElectrons")
+        complete_end = text.index("void FPGAAccelerator::executeElectrons()", complete_start + 1)
+        complete_body = text[complete_start:complete_end]
+        completion_count_index = complete_body.index("electronsCompletionCount++")
+        end_roi_index = complete_body.index("endOffloadRoi()")
+        status_clear_index = complete_body.index("statusReg &= ~STATUS_BUSY")
+        self.assertLess(completion_count_index, end_roi_index)
+        self.assertLess(end_roi_index, status_clear_index)
+
+    def test_roi_registers_are_readable_writable_and_checkpointed(self) -> None:
+        text = SOURCE.read_text(encoding="utf-8")
+        self.assertIn("case REG_ROI_STATUS:", text)
+        self.assertIn("case REG_ROI_START_TICK_LO:", text)
+        self.assertIn("case REG_ROI_COMPLETION_COUNT:", text)
+        self.assertIn("case REG_ROI_CONTROL:", text)
+        self.assertIn("ROI_CONTROL_MARK_BEGIN", text)
+        self.assertIn("ROI_CONTROL_MARK_END", text)
+        self.assertIn("SERIALIZE_SCALAR(roiStartTick)", text)
+        self.assertIn("SERIALIZE_SCALAR(roiEndTick)", text)
+        self.assertIn("UNSERIALIZE_SCALAR(roiStartTick)", text)
+        self.assertIn("UNSERIALIZE_SCALAR(roiEndTick)", text)
 
     def test_smoke_mode_is_only_immediate_completion_path(self) -> None:
         text = SOURCE.read_text(encoding="utf-8")
