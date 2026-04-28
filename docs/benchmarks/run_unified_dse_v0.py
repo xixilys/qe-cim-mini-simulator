@@ -14,6 +14,7 @@ if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
 import unified_dse.architecture_space as architecture_space
+import unified_dse.backend_execution as backend_execution
 import unified_dse.stage_b0_descriptors as stage_b0_descriptors
 import unified_dse.stage_b3_gem5_smoke as stage_b3_gem5_smoke
 import unified_dse.stage_a_contracts as stage_a_contracts
@@ -126,6 +127,14 @@ def _build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument("--gem5-smoke-report", type=Path)
+    parser.add_argument(
+        "--backend-execution-report",
+        type=Path,
+        help=(
+            "Optional backend_execution_report_v0 artifact to reference in "
+            "stage status; the CLI validates but does not execute the backend."
+        ),
+    )
     parser.add_argument("--qe-correctness-report", type=Path)
     parser.add_argument("--implementation-evidence", type=Path)
     return parser
@@ -240,6 +249,8 @@ def _manifest(
     qe_correctness_summary: Mapping[str, Any] | None = None,
     implementation_evidence_ref: str | None = None,
     implementation_evidence_summary: Mapping[str, Any] | None = None,
+    backend_execution_report_ref: str | None = None,
+    backend_execution_report_summary: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     counts = {state: int(promotion_state_counts.get(state, 0)) for state in result_analysis.PROMOTION_STATES}
     gates = _stage_a_gates(results)
@@ -269,6 +280,21 @@ def _manifest(
                 ),
                 "stage_b0_descriptor_manifest_ref": STAGE_B0_DESCRIPTOR_MANIFEST_NAME,
                 "stage_b0_claim_ceiling": "descriptor_generation_only",
+                "backend_execution_request_generation_status": str(
+                    stage_b0_descriptor_manifest.get(
+                        "backend_execution_request_generation_status",
+                        "not_generated",
+                    )
+                ),
+                "backend_execution_request_count": int(
+                    stage_b0_descriptor_manifest.get("backend_execution_request_count", 0)
+                ),
+                "backend_execution_request_claim_ceiling": str(
+                    stage_b0_descriptor_manifest.get(
+                        "backend_execution_request_claim_ceiling",
+                        "not_applicable",
+                    )
+                ),
             }
         )
     else:
@@ -278,6 +304,9 @@ def _manifest(
                 "stage_b0_descriptor_count": 0,
                 "stage_b0_descriptor_manifest_ref": None,
                 "stage_b0_claim_ceiling": "not_applicable",
+                "backend_execution_request_generation_status": "not_requested",
+                "backend_execution_request_count": 0,
+                "backend_execution_request_claim_ceiling": "not_applicable",
             }
         )
     if systemc_feedback_ref is not None:
@@ -310,6 +339,30 @@ def _manifest(
                 "gem5_smoke_report_status": "not_requested",
                 "gem5_smoke_report_ref": None,
                 "stage_b3_claim_ceiling": "not_applicable",
+            }
+        )
+    if backend_execution_report_ref is not None and backend_execution_report_summary is not None:
+        manifest.update(
+            {
+                "backend_execution_report_status": "external_backend_report_validated_not_executed_by_cli",
+                "backend_execution_report_ref": backend_execution_report_ref,
+                "backend_execution_report_execution_status": backend_execution_report_summary.get(
+                    "execution_status"
+                ),
+                "backend_execution_report_fidelity": backend_execution_report_summary.get("fidelity"),
+                "backend_execution_report_claim_ceiling": backend_execution_report_summary.get(
+                    "claim_ceiling"
+                ),
+            }
+        )
+    else:
+        manifest.update(
+            {
+                "backend_execution_report_status": "not_requested",
+                "backend_execution_report_ref": None,
+                "backend_execution_report_execution_status": "not_executed",
+                "backend_execution_report_fidelity": None,
+                "backend_execution_report_claim_ceiling": "not_applicable",
             }
         )
     if qe_correctness_report_ref is not None and qe_correctness_summary is not None:
@@ -630,6 +683,11 @@ def main(argv: list[str] | None = None) -> int:
         gem5_smoke_report = stage_b3_gem5_smoke.load_and_validate_gem5_smoke_report(
             args.gem5_smoke_report
         )
+    backend_execution_report = None
+    if args.backend_execution_report is not None:
+        backend_execution_report = backend_execution.load_backend_execution_report(
+            args.backend_execution_report
+        ).to_dict()
     qe_correctness_report = None
     qe_correctness_summary = None
     if args.qe_correctness_report is not None:
@@ -700,6 +758,10 @@ def main(argv: list[str] | None = None) -> int:
             str(args.implementation_evidence) if implementation_evidence is not None else None
         ),
         implementation_evidence_summary=implementation_evidence_summary,
+        backend_execution_report_ref=(
+            str(args.backend_execution_report) if backend_execution_report is not None else None
+        ),
+        backend_execution_report_summary=backend_execution_report,
     )
 
     _write_json(args.output_dir / RESULT_JSON_NAME, bundle)
@@ -714,6 +776,10 @@ def main(argv: list[str] | None = None) -> int:
             ),
             systemc_feedback_ref=str(args.systemc_feedback) if args.systemc_feedback is not None else None,
             gem5_smoke_report_ref=str(args.gem5_smoke_report) if args.gem5_smoke_report else None,
+            backend_execution_report_ref=(
+                str(args.backend_execution_report) if backend_execution_report is not None else None
+            ),
+            backend_execution_report_summary=backend_execution_report,
             qe_correctness_report_ref=(
                 str(args.qe_correctness_report) if args.qe_correctness_report else None
             ),

@@ -194,14 +194,31 @@ class RunUnifiedDseV0Tests(unittest.TestCase):
                 manifest["stage_b0_descriptor_manifest_ref"],
                 "stage_b0_descriptor_manifest_v0.json",
             )
+            self.assertEqual(
+                manifest["backend_execution_request_generation_status"],
+                "generated_not_executed",
+            )
+            self.assertEqual(manifest["backend_execution_request_count"], 3)
+            self.assertEqual(
+                manifest["backend_execution_request_claim_ceiling"],
+                "descriptor_generation_only",
+            )
             self.assertEqual(descriptor_manifest["schema_version"], "stage_b0_descriptor_manifest_v0")
             self.assertEqual(descriptor_manifest["execution_status"], "not_executed")
             self.assertEqual(descriptor_manifest["claim_ceiling"], "descriptor_generation_only")
+            self.assertEqual(
+                descriptor_manifest["backend_execution_request_generation_status"],
+                "generated_not_executed",
+            )
+            self.assertEqual(descriptor_manifest["backend_execution_request_count"], 3)
             self.assertEqual(len(descriptor_manifest["descriptors"]), 3)
 
             first = descriptor_manifest["descriptors"][0]
             systemc_config = json.loads((out_dir / first["systemc_config_ref"]).read_text(encoding="utf-8"))
             gem5_descriptor = json.loads((out_dir / first["gem5_descriptor_ref"]).read_text(encoding="utf-8"))
+            backend_request = json.loads(
+                (out_dir / first["backend_execution_request_ref"]).read_text(encoding="utf-8")
+            )
 
             self.assertEqual(
                 systemc_config["schema_version"],
@@ -223,6 +240,29 @@ class RunUnifiedDseV0Tests(unittest.TestCase):
             self.assertEqual(gem5_descriptor["candidate_identity"]["candidate_id"], first["candidate_id"])
             self.assertFalse(gem5_descriptor["qe_anchor_refs"]["qe_equivalent_scf_claim"])
             self.assertIn("stage_b_gem5_systemc_scf_driver", gem5_descriptor["expected_command"])
+
+            self.assertEqual(backend_request["schema_version"], "backend_execution_request_v0")
+            self.assertEqual(backend_request["candidate_id"], first["candidate_id"])
+            self.assertEqual(backend_request["requested_fidelity"], "B2")
+            self.assertEqual(backend_request["execution_mode"], "systemc_timed_functional")
+            self.assertEqual(
+                backend_request["input_refs"]["systemc_config"],
+                f"../{first['systemc_config_ref']}",
+            )
+            self.assertEqual(
+                backend_request["input_refs"]["gem5_handoff_descriptor"],
+                f"../{first['gem5_descriptor_ref']}",
+            )
+            self.assertEqual(backend_request["expected_report_schema"], "backend_execution_report_v0")
+            self.assertFalse(
+                backend_request["domain_extension"]["qe"]["qe_equivalent_scf_claim"]
+            )
+            MODULE_ANY.backend_execution.BackendExecutionRequest.from_dict(backend_request)
+            request_root = (out_dir / first["backend_execution_request_ref"]).parent
+            self.assertTrue((request_root / backend_request["input_refs"]["systemc_config"]).resolve().exists())
+            self.assertTrue(
+                (request_root / backend_request["input_refs"]["gem5_handoff_descriptor"]).resolve().exists()
+            )
 
     def test_cli_can_ingest_systemc_feedback_artifact_for_ranking(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -322,6 +362,10 @@ class RunUnifiedDseV0Tests(unittest.TestCase):
                 "blocked_waiting_gem5_systemc_smoke_report",
             )
             self.assertEqual(
+                stages["stage_b_backend_execution_report"]["status"],
+                "blocked_waiting_backend_execution_report",
+            )
+            self.assertEqual(
                 stages["stage_c_qe_equivalent_scf"]["status"],
                 "blocked_waiting_qe_equivalent_correctness_report",
             )
@@ -329,6 +373,46 @@ class RunUnifiedDseV0Tests(unittest.TestCase):
                 stages["stage_d_fpga_asic_implementation"]["status"],
                 "blocked_waiting_fpga_asic_implementation_evidence",
             )
+
+    def test_cli_can_reference_backend_execution_report_without_execution(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_dir = Path(tmpdir)
+            report_ref = FIXTURE_DIR / "backend_execution_report_minimal.json"
+
+            rc = MODULE_ANY.main(
+                self.make_base_args(out_dir)
+                + [
+                    "--source-kind",
+                    "stub",
+                    "--max-design-points",
+                    "1",
+                    "--backend-execution-report",
+                    str(report_ref),
+                    "--emit-full-stage-status",
+                ]
+            )
+
+            self.assertEqual(rc, 0)
+            manifest = json.loads(
+                (out_dir / "unified_dse_manifest_v0.json").read_text(encoding="utf-8")
+            )
+            stage_status = json.loads(
+                (out_dir / "unified_dse_full_stage_status_v0.json").read_text(encoding="utf-8")
+            )
+
+            self.assertEqual(
+                manifest["backend_execution_report_status"],
+                "external_backend_report_validated_not_executed_by_cli",
+            )
+            self.assertEqual(manifest["backend_execution_report_execution_status"], "refused")
+            self.assertEqual(
+                manifest["backend_execution_report_claim_ceiling"],
+                "systemc_standalone_proxy_only",
+            )
+            backend_stage = stage_status["stages"]["stage_b_backend_execution_report"]
+            self.assertEqual(backend_stage["status"], "external_backend_report_referenced")
+            self.assertEqual(backend_stage["execution_status"], "refused")
+            self.assertEqual(backend_stage["claim_ceiling"], "systemc_standalone_proxy_only")
 
     def test_cli_validates_gem5_smoke_report_before_marking_stage_b3_referenced(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -432,6 +516,55 @@ class RunUnifiedDseV0Tests(unittest.TestCase):
                         "--emit-full-stage-status",
                     ]
                 )
+
+    def test_cli_rejects_gem5_smoke_report_with_hidden_equivalence_text(self) -> None:
+        for hidden_text in (
+            "QE-equivalence passed",
+            "domain_equivalent passed",
+            "domain equivalent passed",
+            "domain-equivalence passed",
+        ):
+            with self.subTest(hidden_text=hidden_text):
+                with tempfile.TemporaryDirectory() as tmpdir:
+                    out_dir = Path(tmpdir)
+                    report_path = out_dir / "hidden_bad_gem5_smoke_report.json"
+                    report_path.write_text(
+                        json.dumps(
+                            {
+                                "schema_version": "qe_dse_gem5_systemc_smoke_report_v0",
+                                "execution_status": "executed",
+                                "claim_ceiling": "gem5_systemc_smoke_only",
+                                "run_id": "hidden_bad_stage_b3_smoke",
+                                "candidate_id": "candidate",
+                                "environment": {},
+                                "scf_control_loop_status": "smoke_passed",
+                                "systemc_bridge_status": "smoke_passed",
+                                "qe_equivalence_status": "not_claimed",
+                                "metrics": {},
+                                "correctness_gate": {
+                                    "qe_equivalent_scf_claim": False,
+                                    "status": "not_evaluated",
+                                },
+                                "notes": [hidden_text],
+                            }
+                        )
+                        + "\n",
+                        encoding="utf-8",
+                    )
+
+                    with self.assertRaisesRegex(ValueError, "QE-equivalent"):
+                        MODULE_ANY.main(
+                            self.make_base_args(out_dir)
+                            + [
+                                "--source-kind",
+                                "stub",
+                                "--max-design-points",
+                                "1",
+                                "--gem5-smoke-report",
+                                str(report_path),
+                                "--emit-full-stage-status",
+                            ]
+                        )
 
     def test_cli_validates_qe_correctness_report_and_marks_stage_c_pass(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

@@ -1,0 +1,41 @@
+{
+  "candidate_id": "stage_b3_gem5_systemc_smoke_fixture",
+  "candidate_identity": {
+    "architecture_template_id": "F2",
+    "design_axes": {
+      "diag_policy": "device_first_fallback",
+      "family": "F2",
+      "offload_scope": "balanced"
+    },
+    "target_class": "fpga"
+  },
+  "domain_extension": {
+    "qe": {
+      "case_id": "minimal_qe_like_smoke",
+      "qe_equivalent_scf_claim": false,
+      "qe_tolerance_schema_id": "qe_gold_numerical_tolerance_schema_v0"
+    }
+  },
+  "execution_mode": "gem5_systemc_smoke",
+  "expected_report_schema": "backend_execution_report_v0",
+  "input_refs": {
+    "legacy_b3_smoke_report": "docs/benchmarks/results/qe_dse_gem5_systemc_smoke_report_v0.json"
+  },
+  "non_claims": [
+    "not_qe_equivalent_scf",
+    "not_cycle_accurate_rtl",
+    "not_rtl_hls_board_asic_evidence",
+    "not_final_architecture_winner"
+  ],
+  "requested_fidelity": "B3",
+  "schema_version": "backend_execution_request_v0",
+  "software_runtime": {
+    "control_policy": "sync",
+    "mode": "proxy_runtime"
+  },
+  "workload_identity": {
+    "adapter": "qe",
+    "domain": "dft",
+    "workload_id": "minimal_qe_like_smoke"
+  }
+}

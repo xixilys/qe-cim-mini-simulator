@@ -3,8 +3,9 @@
 #include <iostream>
 #include <iomanip>
 #include <cstring>
+#include <algorithm>
 
-// Timing parameters for cycle-accurate model
+// Timing parameters for timed-functional proxy model
 // All times in nanoseconds
 namespace TimingParams {
     // Register access latencies
@@ -33,7 +34,20 @@ Gem5TLMTarget::Gem5TLMTarget(sc_module_name name, qebs::DFTHybridSystemGem5* dft
       interrupt_reg_(0),
       dma_src_addr_(0),
       dma_dst_addr_(0),
-      dma_size_(0)
+      dma_size_(0),
+      electrons_command_count_(0),
+      host_launch_count_(0),
+      completion_count_(0),
+      fallback_count_(0),
+      polling_read_count_(0),
+      interrupt_count_(0),
+      dma_read_bytes_(0),
+      dma_write_bytes_(0),
+      bytes_moved_to_convergence_(0),
+      resident_reuse_ratio_(0.0),
+      spill_ratio_(0.0),
+      fallback_ratio_(0.0),
+      last_control_policy_("sync")
 {
   target_socket.register_b_transport(this, &Gem5TLMTarget::b_transport);
   target_socket.register_transport_dbg(this, &Gem5TLMTarget::transport_dbg);
@@ -42,7 +56,10 @@ Gem5TLMTarget::Gem5TLMTarget(sc_module_name name, qebs::DFTHybridSystemGem5* dft
   device_memory_.resize(DEVICE_MEMORY_SIZE, 0);
 
   std::cout << "[" << sc_time_stamp() << "] " << name
-            << ": TLM target initialized (timing-accurate mode)" << std::endl;
+            << ": TLM target initialized (timed-functional proxy mode, "
+            << "registers=0x0000-0x013f, hbm=0x" << std::hex
+            << DEVICE_MEMORY_BASE << "-0x" << (DEVICE_MEMORY_BASE + DEVICE_MEMORY_SIZE - 1)
+            << std::dec << ")" << std::endl;
 }
 
 Gem5TLMTarget::~Gem5TLMTarget() {
@@ -55,37 +72,38 @@ void Gem5TLMTarget::b_transport(tlm_generic_payload& trans, sc_time& delay) {
   uint64_t addr = trans.get_address();
   unsigned int data_length = trans.get_data_length();
 
-  // Route to appropriate handler with timing
-  if (addr >= DEVICE_MEMORY_SIZE && addr < 0x10000) {
-    // Register space (0x10000 - 0x1FFFF)
+  if (cmd != TLM_READ_COMMAND && cmd != TLM_WRITE_COMMAND) {
+    trans.set_response_status(TLM_COMMAND_ERROR_RESPONSE);
+    return;
+  }
+
+  if (is_register_address(addr)) {
     if (cmd == TLM_READ_COMMAND) {
       handle_read(trans, delay);
-    } else if (cmd == TLM_WRITE_COMMAND) {
-      handle_write(trans, delay);
     } else {
-      trans.set_response_status(TLM_COMMAND_ERROR_RESPONSE);
-      return;
+      handle_write(trans, delay);
     }
-  } else if (addr < DEVICE_MEMORY_SIZE) {
-    // Device memory space - variable latency based on size
+    return;
+  }
+
+  if (is_device_memory_range(addr, data_length)) {
     unsigned char* data_ptr = trans.get_data_ptr();
+    size_t offset = device_memory_offset(addr);
 
     if (cmd == TLM_READ_COMMAND) {
-      memcpy(data_ptr, &device_memory_[addr], data_length);
+      memcpy(data_ptr, &device_memory_[offset], data_length);
       // Memory read: 10 ns base + 1 ns per 32-bit word
       delay += sc_time(10.0 + data_length / 4.0, SC_NS);
-    } else if (cmd == TLM_WRITE_COMMAND) {
-      memcpy(&device_memory_[addr], data_ptr, data_length);
+    } else {
+      memcpy(&device_memory_[offset], data_ptr, data_length);
       // Memory write: 10 ns base + 1 ns per 32-bit word
       delay += sc_time(10.0 + data_length / 4.0, SC_NS);
     }
     trans.set_response_status(TLM_OK_RESPONSE);
-  } else {
-    trans.set_response_status(TLM_ADDRESS_ERROR_RESPONSE);
     return;
   }
 
-  trans.set_response_status(TLM_OK_RESPONSE);
+  trans.set_response_status(TLM_ADDRESS_ERROR_RESPONSE);
 }
 
 void Gem5TLMTarget::handle_read(tlm_generic_payload& trans, sc_time& delay) {
@@ -99,10 +117,14 @@ void Gem5TLMTarget::handle_read(tlm_generic_payload& trans, sc_time& delay) {
   }
 
   uint32_t value = read_register(addr);
-  *(uint32_t*)data_ptr = value;
+  if (addr == REG_STATUS || addr == REG_ELECTRONS_CONVERGED) {
+    ++polling_read_count_;
+  }
+  memcpy(data_ptr, &value, sizeof(value));
 
   // Add timing annotation based on register type
   delay += sc_time(get_register_read_latency(addr), SC_NS);
+  trans.set_response_status(TLM_OK_RESPONSE);
 
   std::cout << "[" << sc_time_stamp() << "] TLM READ: addr=0x"
             << std::hex << addr << std::dec
@@ -120,11 +142,13 @@ void Gem5TLMTarget::handle_write(tlm_generic_payload& trans, sc_time& delay) {
     return;
   }
 
-  uint32_t value = *(uint32_t*)data_ptr;
+  uint32_t value = 0;
+  memcpy(&value, data_ptr, sizeof(value));
   write_register(addr, value);
 
   // Add timing annotation based on register type
   delay += sc_time(get_register_write_latency(addr), SC_NS);
+  trans.set_response_status(TLM_OK_RESPONSE);
 
   std::cout << "[" << sc_time_stamp() << "] TLM WRITE: addr=0x"
             << std::hex << addr << std::dec
@@ -134,17 +158,17 @@ void Gem5TLMTarget::handle_write(tlm_generic_payload& trans, sc_time& delay) {
 
 double Gem5TLMTarget::get_register_read_latency(uint64_t addr) {
   // Return latency in nanoseconds based on register address
-  if (addr >= 0x0000 && addr < 0x0100) {
+  if (addr >= CONTROL_WINDOW_BASE && addr < CONTROL_WINDOW_BASE + CONTROL_WINDOW_SIZE) {
     // Control/Status/Interrupt: fast access
     return TimingParams::CTRL_REG_LATENCY;
-  } else if (addr >= 0x0100 && addr < 0x0200) {
-    // Configuration registers: medium latency
-    return TimingParams::CTRL_REG_LATENCY * 2;
-  } else if (addr >= 0x0200 && addr < 0x0300) {
-    // Matrix address registers: slower
+  } else if (addr >= DMA_DESC_WINDOW_BASE && addr < DMA_DESC_WINDOW_BASE + DMA_DESC_WINDOW_SIZE) {
+    // DMA descriptor/control registers
     return TimingParams::DMA_REG_LATENCY;
-  } else if (addr >= 0x0130 && addr < 0x0150) {
-    // Result registers: medium latency
+  } else if (addr >= COMMAND_WINDOW_BASE && addr < COMMAND_WINDOW_BASE + COMMAND_WINDOW_SIZE) {
+    // Command registers: medium latency
+    return TimingParams::CTRL_REG_LATENCY * 2;
+  } else if (addr >= RESULT_MAILBOX_WINDOW_BASE && addr < RESULT_MAILBOX_WINDOW_BASE + RESULT_MAILBOX_WINDOW_SIZE) {
+    // Result/mailbox registers: medium latency
     return TimingParams::CTRL_REG_LATENCY * 2;
   }
   return TimingParams::CTRL_REG_LATENCY;
@@ -160,6 +184,38 @@ double Gem5TLMTarget::get_register_write_latency(uint64_t addr) {
     return TimingParams::DMA_REG_LATENCY;
   }
   return get_register_read_latency(addr);
+}
+
+
+bool Gem5TLMTarget::is_register_address(uint64_t addr) const {
+  switch (addr) {
+    case REG_CONTROL:
+    case REG_STATUS:
+    case REG_INTERRUPT:
+    case REG_DMA_SRC_LO:
+    case REG_DMA_SRC_HI:
+    case REG_DMA_DST_LO:
+    case REG_DMA_DST_HI:
+    case REG_DMA_SIZE:
+    case REG_DMA_CONTROL:
+    case REG_ELECTRONS_CMD:
+    case REG_ELECTRONS_CONVERGED:
+      return true;
+    default:
+      return false;
+  }
+}
+
+bool Gem5TLMTarget::is_device_memory_range(uint64_t addr, unsigned int length) const {
+  if (length == 0 || addr < DEVICE_MEMORY_BASE) {
+    return false;
+  }
+  uint64_t offset = addr - DEVICE_MEMORY_BASE;
+  return offset < DEVICE_MEMORY_SIZE && length <= DEVICE_MEMORY_SIZE - offset;
+}
+
+size_t Gem5TLMTarget::device_memory_offset(uint64_t addr) const {
+  return static_cast<size_t>(addr - DEVICE_MEMORY_BASE);
 }
 
 uint32_t Gem5TLMTarget::read_register(uint64_t addr) {
@@ -180,6 +236,8 @@ uint32_t Gem5TLMTarget::read_register(uint64_t addr) {
       return (uint32_t)(dma_dst_addr_ >> 32);
     case REG_DMA_SIZE:
       return dma_size_;
+    case REG_ELECTRONS_CMD:
+      return electrons_command_count_;
     case REG_ELECTRONS_CONVERGED:
       return (status_reg_ & 0x00000010) ? 1 : 0;
     default:
@@ -222,16 +280,23 @@ void Gem5TLMTarget::write_register(uint64_t addr, uint32_t value) {
 
     case REG_DMA_CONTROL:
       if (value == 1) {
+        dma_read_bytes_ += dma_size_;
+        handle_dma_transfer();
+      } else if (value == 2) {
+        dma_write_bytes_ += dma_size_;
         handle_dma_transfer();
       }
       break;
 
     case REG_ELECTRONS_CMD:
-      if (value == 1 && dma_src_addr_ != 0 && dma_size_ > 0) {
-        if (dma_src_addr_ < DEVICE_MEMORY_SIZE) {
-          handle_electrons_command(&device_memory_[dma_src_addr_], dma_size_);
-        } else {
-          std::cerr << "Error: electrons request data not in device memory" << std::endl;
+      if (value == 1) {
+        ++electrons_command_count_;
+        if (dma_src_addr_ != 0 && dma_size_ > 0) {
+          if (is_device_memory_range(dma_src_addr_, dma_size_)) {
+            handle_electrons_command(&device_memory_[device_memory_offset(dma_src_addr_)], dma_size_);
+          } else {
+            std::cerr << "Error: electrons request data not in device memory" << std::endl;
+          }
         }
       }
       break;
@@ -261,6 +326,7 @@ void Gem5TLMTarget::handle_dma_transfer() {
   sc_time end_time = sc_time_stamp();
   status_reg_ |= 0x00000008;  // DMA done flag
   interrupt_reg_ = 1;
+  ++interrupt_count_;
 
   std::cout << "[" << end_time << "] DMA transfer complete: "
             << "time=" << (end_time - start_time).to_double() << "ns" << std::endl;
@@ -279,23 +345,49 @@ void Gem5TLMTarget::handle_electrons_command(const uint8_t* request_data, size_t
 
   status_reg_ |= 0x00000002;  // Busy flag
   status_reg_ &= ~0x00000010;  // Clear done flag
+  ++host_launch_count_;
 
   qebs::DFTHybridSystemGem5::ElectronsRequest req;
   if (request_size >= sizeof(req)) {
     memcpy(&req, request_data, sizeof(req));
+    last_control_policy_ = "sync";
+    switch (req.control_policy) {
+      case 1:
+        last_control_policy_ = "async_queue";
+        break;
+      case 2:
+        last_control_policy_ = "polling";
+        break;
+      case 3:
+        last_control_policy_ = "interrupt_ready";
+        break;
+      default:
+        last_control_policy_ = "sync";
+        break;
+    }
 
     std::cout << "  n_bands=" << req.n_bands
               << " max_iter=" << req.max_iterations
-              << " conv_thr=" << req.conv_threshold << std::endl;
+              << " conv_thr=" << req.conv_threshold
+              << " control_policy=" << last_control_policy_ << std::endl;
 
     // Execute with timing - this will consume SystemC time
     qebs::DFTHybridSystemGem5::ElectronsResult result =
         dft_system_->execute_electrons_from_gem5(req);
 
     // Copy result to device memory
-    if (dma_dst_addr_ < DEVICE_MEMORY_SIZE && request_size >= sizeof(result)) {
-      memcpy(&device_memory_[dma_dst_addr_], &result, sizeof(result));
+    if (is_device_memory_range(dma_dst_addr_, sizeof(result))) {
+      memcpy(&device_memory_[device_memory_offset(dma_dst_addr_)], &result, sizeof(result));
     }
+
+    dma_read_bytes_ += result.dma_read_bytes;
+    dma_write_bytes_ += result.dma_write_bytes;
+    bytes_moved_to_convergence_ = result.bytes_moved_to_convergence;
+    fallback_ratio_ = result.fallback_ratio;
+    resident_reuse_ratio_ = result.resident_reuse_ratio;
+    spill_ratio_ = result.spill_ratio;
+    fallback_count_ += static_cast<uint32_t>(result.fallback_ratio > 0.0 ? 1 : 0);
+    ++completion_count_;
 
     if (result.converged) {
       status_reg_ |= 0x00000010;  // Done flag
@@ -313,6 +405,7 @@ void Gem5TLMTarget::handle_electrons_command(const uint8_t* request_data, size_t
 
   status_reg_ &= ~0x00000002;  // Clear busy flag
   interrupt_reg_ = 1;
+  ++interrupt_count_;
 }
 
 unsigned int Gem5TLMTarget::transport_dbg(tlm_generic_payload& trans) {
@@ -321,11 +414,14 @@ unsigned int Gem5TLMTarget::transport_dbg(tlm_generic_payload& trans) {
   unsigned char* data_ptr = trans.get_data_ptr();
   unsigned int data_length = trans.get_data_length();
 
-  if (addr < DEVICE_MEMORY_SIZE) {
+  if (is_device_memory_range(addr, data_length)) {
+    size_t offset = device_memory_offset(addr);
     if (cmd == TLM_READ_COMMAND) {
-      memcpy(data_ptr, &device_memory_[addr], data_length);
+      memcpy(data_ptr, &device_memory_[offset], data_length);
     } else if (cmd == TLM_WRITE_COMMAND) {
-      memcpy(&device_memory_[addr], data_ptr, data_length);
+      memcpy(&device_memory_[offset], data_ptr, data_length);
+    } else {
+      return 0;
     }
     return data_length;
   }

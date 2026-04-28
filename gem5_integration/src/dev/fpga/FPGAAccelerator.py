@@ -30,3 +30,11 @@ class FPGAAccelerator(PciEndpoint):
     BAR5 = PciBarNone()
 
     pio_latency = Param.Latency('1ns', "PIO latency")
+    execution_mode = Param.String(
+        'smoke',
+        "Execution completion mode: smoke, timed_proxy, or guarded real_bridge"
+    )
+    real_systemc_target = Param.Bool(
+        False,
+        "Allow real_bridge only when an actual SystemC target binding is provided"
+    )

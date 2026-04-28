@@ -113,6 +113,8 @@ def emit_full_stage_status(
     stage_b0_descriptor_manifest_ref: str | None,
     systemc_feedback_ref: str | None,
     gem5_smoke_report_ref: str | None = None,
+    backend_execution_report_ref: str | None = None,
+    backend_execution_report_summary: Mapping[str, Any] | None = None,
     qe_correctness_report_ref: str | None = None,
     qe_correctness_summary: Mapping[str, Any] | None = None,
     implementation_evidence_ref: str | None = None,
@@ -166,6 +168,29 @@ def emit_full_stage_status(
                 blocked_status="blocked_waiting_gem5_systemc_smoke_report",
                 claim_ceiling="gem5_systemc_smoke_only",
             ),
+            "stage_b_backend_execution_report": {
+                "status": (
+                    "external_backend_report_referenced"
+                    if backend_execution_report_ref is not None
+                    else "blocked_waiting_backend_execution_report"
+                ),
+                "artifact_ref": backend_execution_report_ref,
+                "execution_status": (
+                    str(backend_execution_report_summary.get("execution_status"))
+                    if backend_execution_report_summary is not None
+                    else "not_executed"
+                ),
+                "fidelity": (
+                    backend_execution_report_summary.get("fidelity")
+                    if backend_execution_report_summary is not None
+                    else None
+                ),
+                "claim_ceiling": (
+                    backend_execution_report_summary.get("claim_ceiling")
+                    if backend_execution_report_summary is not None
+                    else "not_applicable"
+                ),
+            },
             "stage_c_qe_equivalent_scf": _stage_c_status(
                 qe_correctness_report_ref,
                 qe_correctness_summary,

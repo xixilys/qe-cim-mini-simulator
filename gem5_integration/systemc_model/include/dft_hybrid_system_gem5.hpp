@@ -9,6 +9,8 @@ class Gem5Bridge;
 
 namespace qebs {
 
+class DFTHybridSystem;
+
 class DFTHybridSystemGem5 : public sc_core::sc_module {
  public:
   DFTHybridSystemGem5(sc_core::sc_module_name name, 
@@ -16,6 +18,7 @@ class DFTHybridSystemGem5 : public sc_core::sc_module {
                       bool enable_gem5_bridge = true);
   
   explicit DFTHybridSystemGem5(sc_core::sc_module_name name);
+  ~DFTHybridSystemGem5() override;
   
   SCFState run_demo(const SystemRunConfig& run_config) const;
   SCFRunReport run_scf(const SystemRunConfig& run_config) const;
@@ -40,6 +43,7 @@ class DFTHybridSystemGem5 : public sc_core::sc_module {
     double mixing_beta;
     int mixing_ndim;
     bool enable_cim;
+    int control_policy;
   };
 
   struct ElectronsResult {
@@ -51,6 +55,13 @@ class DFTHybridSystemGem5 : public sc_core::sc_module {
     double c_bands_time_ns;
     double sum_band_time_ns;
     double mix_rho_time_ns;
+    uint64_t device_busy_ns;
+    uint64_t dma_read_bytes;
+    uint64_t dma_write_bytes;
+    uint64_t bytes_moved_to_convergence;
+    double fallback_ratio;
+    double resident_reuse_ratio;
+    double spill_ratio;
   };
 
   void execute_c_bands_from_gem5(const CBandsRequest& req);
@@ -63,6 +74,7 @@ class DFTHybridSystemGem5 : public sc_core::sc_module {
   ChipTop chip_;
   
   Gem5Bridge* gem5_bridge_;
+  DFTHybridSystem* main_system_;
 };
 
 }

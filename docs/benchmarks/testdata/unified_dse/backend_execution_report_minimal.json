@@ -1,0 +1,29 @@
+{
+  "artifact_refs": {},
+  "candidate_id": "si4__F1__stage_b1",
+  "claim_ceiling": "systemc_standalone_proxy_only",
+  "control_path": {
+    "completion_count": 0,
+    "completion_source": "not_executed",
+    "deadlock": false,
+    "fallback_count": 0,
+    "host_launch_count": 0
+  },
+  "correctness_gate": {
+    "domain": "dft",
+    "domain_equivalence_claim": false,
+    "workload_equivalent_claim": false
+  },
+  "environment": {},
+  "execution_status": "refused",
+  "fidelity": "systemc_standalone",
+  "metrics": {},
+  "non_claims": [
+    "no_qe_equivalent_scf_claim",
+    "no_cycle_accuracy_claim",
+    "no_rtl_hls_board_or_asic_implementation_claim",
+    "no_final_architecture_recommendation"
+  ],
+  "refusal_reason": "contract unit fixture",
+  "schema_version": "backend_execution_report_v0"
+}

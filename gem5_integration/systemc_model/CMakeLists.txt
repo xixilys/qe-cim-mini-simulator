@@ -27,8 +27,12 @@ include_directories(
 )
 
 set(QE_BAND_SOLVER_SOURCES
+  ${QE_BAND_SOLVER_MODEL_DIR}/src/architecture_template.cpp
   ${QE_BAND_SOLVER_MODEL_DIR}/src/architecture_config.cpp
   ${QE_BAND_SOLVER_MODEL_DIR}/src/interconnect.cpp
+  ${QE_BAND_SOLVER_MODEL_DIR}/src/host_scf.cpp
+  ${QE_BAND_SOLVER_MODEL_DIR}/src/fpga_orchestrator.cpp
+  ${QE_BAND_SOLVER_MODEL_DIR}/src/dft_hybrid_system.cpp
   ${QE_BAND_SOLVER_MODEL_DIR}/src/chip_top.cpp
   ${QE_BAND_SOLVER_MODEL_DIR}/src/clusters/cluster_graph_executor.cpp
   ${QE_BAND_SOLVER_MODEL_DIR}/src/clusters/episode_controller.cpp
@@ -79,6 +83,10 @@ target_link_libraries(gem5_systemc_bridge
 
 add_executable(gem5_systemc_standalone
   src/standalone_test.cpp
+  src/gem5_tlm_target.cpp
+  src/dft_hybrid_system_gem5.cpp
+  src/gem5_bridge.cpp
+  ${QE_BAND_SOLVER_SOURCES}
 )
 
 target_compile_definitions(gem5_systemc_standalone PRIVATE
@@ -86,7 +94,6 @@ target_compile_definitions(gem5_systemc_standalone PRIVATE
 )
 
 target_link_libraries(gem5_systemc_standalone
-  gem5_systemc_bridge
   systemc
 )
 

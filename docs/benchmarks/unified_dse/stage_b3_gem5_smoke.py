@@ -6,6 +6,34 @@ from typing import Any, Mapping
 
 
 GEM5_SYSTEMC_SMOKE_REPORT_SCHEMA_VERSION = "qe_dse_gem5_systemc_smoke_report_v0"
+_EQUIVALENCE_CLAIM_KEYS = {
+    "qe_equivalence_status",
+    "qe_equivalent_scf_claim",
+    "qe_equivalence_claim",
+    "workload_equivalent_claim",
+    "workload_equivalence_claim",
+    "domain_equivalence_claim",
+}
+_FORBIDDEN_EQUIVALENCE_CLAIM_TOKENS = (
+    "qe_equivalence",
+    "qe-equivalence",
+    "qe equivalence",
+    "qe_equivalent",
+    "qe-equivalent",
+    "qe equivalent",
+    "workload_equivalence",
+    "workload-equivalence",
+    "workload equivalence",
+    "workload_equivalent",
+    "workload-equivalent",
+    "workload equivalent",
+    "domain_equivalence",
+    "domain-equivalence",
+    "domain equivalence",
+    "domain_equivalent",
+    "domain-equivalent",
+    "domain equivalent",
+)
 
 
 def load_and_validate_gem5_smoke_report(path: Path | str) -> dict[str, Any]:
@@ -19,6 +47,51 @@ def _require_mapping(payload: Mapping[str, Any], key: str) -> Mapping[str, Any]:
     if not isinstance(value, Mapping):
         raise ValueError(f"gem5 smoke report requires mapping field: {key}")
     return value
+
+
+def _iter_json_items(value: Any, path: tuple[str, ...] = ()) -> list[tuple[tuple[str, ...], Any]]:
+    items = [(path, value)]
+    if isinstance(value, Mapping):
+        for key, child in value.items():
+            items.extend(_iter_json_items(child, path + (str(key),)))
+    elif isinstance(value, (list, tuple)):
+        for index, child in enumerate(value):
+            items.extend(_iter_json_items(child, path + (str(index),)))
+    return items
+
+
+def _is_non_claim_text(text: str) -> bool:
+    normalized = text.strip().lower().replace("-", "_")
+    if normalized.startswith("no_") or normalized.startswith("not_"):
+        return True
+    return any(
+        marker in text
+        for marker in (
+            "not ",
+            "no ",
+            "without ",
+            "unclaimed",
+            "not_claimed",
+            "non-claim",
+            "non_claim",
+        )
+    )
+
+
+def _reject_hidden_equivalence_claims(payload: Mapping[str, Any]) -> None:
+    for path, value in _iter_json_items(payload):
+        if not path:
+            continue
+        key = path[-1].lower()
+        if key in _EQUIVALENCE_CLAIM_KEYS and value not in (False, "not_claimed"):
+            if isinstance(value, str) and _is_non_claim_text(value.lower()):
+                continue
+            raise ValueError(f"{'.'.join(path)} must not claim QE-equivalent SCF")
+        if isinstance(value, str):
+            lowered = value.lower()
+            if any(token in lowered for token in _FORBIDDEN_EQUIVALENCE_CLAIM_TOKENS):
+                if not _is_non_claim_text(lowered):
+                    raise ValueError(f"{'.'.join(path)} must not claim QE-equivalent SCF")
 
 
 def validate_gem5_smoke_report(payload: Mapping[str, Any]) -> None:
@@ -55,3 +128,4 @@ def validate_gem5_smoke_report(payload: Mapping[str, Any]) -> None:
         raise ValueError("Stage B3 smoke report must keep QE-equivalent SCF claim false")
     _require_mapping(payload, "environment")
     _require_mapping(payload, "metrics")
+    _reject_hidden_equivalence_claims(payload)

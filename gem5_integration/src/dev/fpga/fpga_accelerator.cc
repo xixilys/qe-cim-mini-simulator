@@ -31,6 +31,12 @@ FPGAAccelerator::FPGAAccelerator(const Params &p)
       electronsTotalEnergy(0.0f), electronsTotalTime(0), electronsCbandsTime(0),
       electronsSumbandTime(0), electronsMixrhoTime(0),
       hMatrixAddr(0), sMatrixAddr(0), rhoAddr(0), veffAddr(0),
+      executionMode(ExecutionMode::Smoke),
+      realSystemCTarget(p.real_systemc_target),
+      electronsCommandCount(0), electronsCompletionCount(0),
+      electronsLastCommandTick(0), electronsLastDoneTick(0),
+      electronsCompletionSource(COMPLETION_NONE),
+      pendingElectronsCompletionSource(COMPLETION_NONE),
       dmaEngine(nullptr),
 #ifdef USE_SYSTEMC
       tlmMediator(nullptr),
@@ -43,15 +49,31 @@ FPGAAccelerator::FPGAAccelerator(const Params &p)
           raiseInterrupt();
       }, name()),
       electronsDoneEvent([this]{
-          statusReg &= ~STATUS_BUSY;
-          statusReg |= STATUS_COMPUTE_DONE;
-          raiseInterrupt();
+          completeElectrons(pendingElectronsCompletionSource);
       }, name()),
       tlmResponseEvent([]{ }, name())
 {
+    if (p.execution_mode == "smoke") {
+        executionMode = ExecutionMode::Smoke;
+    } else if (p.execution_mode == "timed_proxy") {
+        executionMode = ExecutionMode::TimedProxy;
+    } else if (p.execution_mode == "real_bridge") {
+        if (!p.real_systemc_target) {
+            panic("FPGAAccelerator real_bridge mode requires "
+                  "real_systemc_target=true and an actual SystemC bridge "
+                  "target; B4 must refuse when unavailable");
+        }
+        executionMode = ExecutionMode::RealBridge;
+    } else {
+        panic("Unsupported FPGAAccelerator execution_mode=%s; expected "
+              "smoke, timed_proxy, or real_bridge",
+              p.execution_mode.c_str());
+    }
+
     dmaEngine = new DMAEngine(this);
 
-    DPRINTF(FPGAAccelerator, "FPGAAccelerator created\n");
+    DPRINTF(FPGAAccelerator, "FPGAAccelerator created, execution_mode=%s\n",
+            p.execution_mode.c_str());
 }
 
 FPGAAccelerator::~FPGAAccelerator() {
@@ -66,7 +88,10 @@ void FPGAAccelerator::init() {
     PciDevice::init();
 
 #ifdef USE_SYSTEMC
-    if (sc_gem5::Kernel::status() == sc_core::SC_ELABORATION) {
+    if (executionMode != ExecutionMode::Smoke) {
+        DPRINTF(FPGAAccelerator,
+                "Skipping FPGATLMStub binding in non-smoke execution mode\n");
+    } else if (sc_gem5::Kernel::status() == sc_core::SC_ELABORATION) {
         tlmMediator = new FPGATLMMediator("fpga_tlm_mediator");
         tlmStub = new FPGATLMStub("fpga_tlm_stub");
         tlmMediator->tlmSocket.bind(tlmStub->tlmSocket);
@@ -326,108 +351,143 @@ void FPGAAccelerator::writeRegister(Addr offset, uint32_t value) {
     }
 }
 
+bool FPGAAccelerator::immediateElectronsCompletion() const {
+    return executionMode == ExecutionMode::Smoke;
+}
+
+void FPGAAccelerator::completeElectrons(uint32_t completionSource) {
+    electronsConverged = 1;
+    electronsIterations = electronsMaxIter;
+    electronsFinalError = electronsConvThr * 0.5f;
+    electronsTotalEnergy = -100.0f;
+    if (electronsTotalTime == 0) {
+        electronsTotalTime = std::max<Tick>(
+            1,
+            static_cast<Tick>(electronsMaxIter) *
+            static_cast<Tick>(electronsNBands) *
+            static_cast<Tick>(electronsNBasis) * 100);
+        electronsCbandsTime = electronsTotalTime * 4 / 10;
+        electronsSumbandTime = electronsTotalTime * 3 / 10;
+        electronsMixrhoTime = electronsTotalTime * 3 / 10;
+    }
+    electronsCompletionCount++;
+    electronsLastDoneTick = curTick();
+    electronsCompletionSource = completionSource;
+    pendingElectronsCompletionSource = COMPLETION_NONE;
+
+    statusReg &= ~STATUS_BUSY;
+    statusReg |= STATUS_COMPUTE_DONE;
+    statusReg |= STATUS_READY;
+    raiseInterrupt();
+
+    DPRINTF(FPGAAccelerator,
+            "Electrons completion: source=%u commands=%u completions=%u done_tick=%llu\n",
+            electronsCompletionSource, electronsCommandCount,
+            electronsCompletionCount, electronsLastDoneTick);
+}
+
 void FPGAAccelerator::executeElectrons() {
     statusReg &= ~STATUS_READY;
     statusReg |= STATUS_BUSY;
     statusReg &= ~STATUS_COMPUTE_DONE;
+    electronsCommandCount++;
+    electronsLastCommandTick = curTick();
+    electronsCompletionSource = COMPLETION_NONE;
 
     DPRINTF(FPGAAccelerator, "Starting electrons loop: nbands=%d, nbasis=%d, nkpts=%d, max_iter=%d\n",
             electronsNBands, electronsNBasis, electronsNKpoints, electronsMaxIter);
 
-    Tick compute_delay = electronsMaxIter * electronsNBands * electronsNBasis * 100;
+    Tick compute_delay = std::max<Tick>(
+        1,
+        static_cast<Tick>(electronsMaxIter) *
+        static_cast<Tick>(electronsNBands) *
+        static_cast<Tick>(electronsNBasis) * 100);
+    electronsTotalTime = compute_delay;
+    electronsCbandsTime = compute_delay * 4 / 10;
+    electronsSumbandTime = compute_delay * 3 / 10;
+    electronsMixrhoTime = compute_delay * 3 / 10;
 
 #ifdef USE_SYSTEMC
-    // 构造electrons请求数据包
-    struct ElectronsRequestPacket {
-        uint32_t n_bands;
-        uint32_t n_basis;
-        uint32_t n_kpoints;
-        uint32_t n_spin;
-        uint32_t max_iterations;
-        float conv_threshold;
-        float diag_threshold;
-        float mixing_beta;
-        uint32_t mixing_ndim;
-        uint32_t enable_cim;
-        uint64_t h_matrix_addr;
-        uint64_t s_matrix_addr;
-        uint64_t rho_addr;
-        uint64_t veff_addr;
-    } __attribute__((packed));
+    if (executionMode == ExecutionMode::Smoke) {
+        // 构造electrons请求数据包
+        struct ElectronsRequestPacket {
+            uint32_t n_bands;
+            uint32_t n_basis;
+            uint32_t n_kpoints;
+            uint32_t n_spin;
+            uint32_t max_iterations;
+            float conv_threshold;
+            float diag_threshold;
+            float mixing_beta;
+            uint32_t mixing_ndim;
+            uint32_t enable_cim;
+            uint64_t h_matrix_addr;
+            uint64_t s_matrix_addr;
+            uint64_t rho_addr;
+            uint64_t veff_addr;
+        } __attribute__((packed));
 
-    ElectronsRequestPacket req;
-    req.n_bands = electronsNBands;
-    req.n_basis = electronsNBasis;
-    req.n_kpoints = electronsNKpoints;
-    req.n_spin = electronsNSpin;
-    req.max_iterations = electronsMaxIter;
-    req.conv_threshold = electronsConvThr;
-    req.diag_threshold = electronsDiagThr;
-    req.mixing_beta = electronsMixingBeta;
-    req.mixing_ndim = electronsMixingNdim;
-    req.enable_cim = electronsEnableCim;
-    req.h_matrix_addr = hMatrixAddr;
-    req.s_matrix_addr = sMatrixAddr;
-    req.rho_addr = rhoAddr;
-    req.veff_addr = veffAddr;
+        ElectronsRequestPacket req;
+        req.n_bands = electronsNBands;
+        req.n_basis = electronsNBasis;
+        req.n_kpoints = electronsNKpoints;
+        req.n_spin = electronsNSpin;
+        req.max_iterations = electronsMaxIter;
+        req.conv_threshold = electronsConvThr;
+        req.diag_threshold = electronsDiagThr;
+        req.mixing_beta = electronsMixingBeta;
+        req.mixing_ndim = electronsMixingNdim;
+        req.enable_cim = electronsEnableCim;
+        req.h_matrix_addr = hMatrixAddr;
+        req.s_matrix_addr = sMatrixAddr;
+        req.rho_addr = rhoAddr;
+        req.veff_addr = veffAddr;
 
-    // 同步设置结果寄存器（使guest轮询能立即看到正确数据）
-    // 这在atomic CPU模式下尤其重要，因为事件调度需要事件循环运行
-    electronsConverged = 1;
-    electronsIterations = electronsMaxIter;
-    electronsFinalError = electronsConvThr * 0.5f;
-    electronsTotalEnergy = -100.0f;
-    electronsTotalTime = compute_delay;
-    electronsCbandsTime = compute_delay * 4 / 10;
-    electronsSumbandTime = compute_delay * 3 / 10;
-    electronsMixrhoTime = compute_delay * 3 / 10;
+        // Smoke mode may use the local TLM stub for control-path smoke only.
+        sendTLMTransaction(tlm::TLM_WRITE_COMMAND, REG_ELECTRONS_CMD,
+                          (uint8_t*)&req, sizeof(req));
 
-    // 立即设置完成状态（供guest轮询立即看到）
-    // 这解决了atomic CPU模式下事件不立即触发的问题
-    statusReg |= STATUS_COMPUTE_DONE;
-    statusReg &= ~STATUS_BUSY;
+        struct ElectronsResultPacket {
+            uint32_t converged;
+            uint32_t iterations;
+            float final_error;
+            float total_energy;
+            uint64_t total_time_ns;
+            uint64_t c_bands_time_ns;
+            uint64_t sum_band_time_ns;
+            uint64_t mix_rho_time_ns;
+        } __attribute__((packed));
 
-    DPRINTF(FPGAAccelerator,
-            "TLM sync: converged=%u iter=%u energy=%.1f (compute_delay=%llu)\n",
-            electronsConverged, electronsIterations, electronsTotalEnergy,
-            compute_delay);
-
-    // 发送TLM事务（异步，不阻塞等待响应）
-    sendTLMTransaction(tlm::TLM_WRITE_COMMAND, REG_ELECTRONS_CMD,
-                      (uint8_t*)&req, sizeof(req));
-
-    // TLM READ事务用于读取完整结果（stub同步返回）
-    struct ElectronsResultPacket {
-        uint32_t converged;
-        uint32_t iterations;
-        float final_error;
-        float total_energy;
-        uint64_t total_time_ns;
-        uint64_t c_bands_time_ns;
-        uint64_t sum_band_time_ns;
-        uint64_t mix_rho_time_ns;
-    } __attribute__((packed));
-
-    ElectronsResultPacket result;
-    sendTLMTransaction(tlm::TLM_READ_COMMAND, REG_ELECTRONS_CONVERGED,
-                      (uint8_t*)&result, sizeof(result));
-
-    // 调度事件用于触发中断（可选，因为状态已设置）
-    schedule(electronsDoneEvent, curTick() + compute_delay);
+        ElectronsResultPacket result;
+        sendTLMTransaction(tlm::TLM_READ_COMMAND, REG_ELECTRONS_CONVERGED,
+                          (uint8_t*)&result, sizeof(result));
+    } else if (executionMode == ExecutionMode::TimedProxy) {
+        DPRINTF(FPGAAccelerator,
+                "TimedProxy mode uses local scheduled completion, not FPGATLMStub\n");
+    } else if (executionMode == ExecutionMode::RealBridge) {
+        DPRINTF(FPGAAccelerator,
+                "RealBridge mode requires externally configured SystemC target\n");
+    }
 
 #else
-    // 无SystemC时的简单模拟
-    electronsConverged = 1;
-    electronsIterations = electronsMaxIter;
-    electronsFinalError = electronsConvThr * 0.5f;
-    electronsTotalEnergy = -100.0f;
-    electronsTotalTime = compute_delay;
-    electronsCbandsTime = compute_delay * 4 / 10;
-    electronsSumbandTime = compute_delay * 3 / 10;
-    electronsMixrhoTime = compute_delay * 3 / 10;
-
-    schedule(electronsDoneEvent, curTick() + compute_delay);
+    DPRINTF(FPGAAccelerator,
+            "SystemC disabled; using local electrons completion model\n");
 #endif
+
+    if (executionMode == ExecutionMode::RealBridge) {
+        panic("FPGAAccelerator real_bridge execution requires an external "
+              "SystemC target dispatch; no smoke/timed_proxy fallback is "
+              "implemented in this P1a build");
+    }
+
+    if (immediateElectronsCompletion()) {
+        completeElectrons(COMPLETION_SMOKE_IMMEDIATE);
+    } else {
+        pendingElectronsCompletionSource = COMPLETION_TIMED_EVENT;
+        if (!electronsDoneEvent.scheduled()) {
+            schedule(electronsDoneEvent, curTick() + compute_delay);
+        }
+    }
 
     DPRINTF(FPGAAccelerator, "Electrons loop scheduled, estimated delay=%llu ns\n",
             electronsTotalTime);
@@ -435,15 +495,13 @@ void FPGAAccelerator::executeElectrons() {
 
 #ifdef USE_SYSTEMC
 // =============================================================================
-// Timing-Accurate TLM Stub Implementation
-// Provides cycle-accurate timing for gem5 integration testing without SystemC
+// Timed-Proxy TLM Stub Implementation
+// Provides deterministic proxy timing for gem5 integration smoke/timed-proxy
+// testing without RTL timing claims.
 // =============================================================================
-namespace TimingAccurate {
+namespace TimingProxy {
 
-// Clock period: 200 MHz = 5 ns
-constexpr double CLOCK_PERIOD_NS = 5.0;
-
-// Cluster execution times (cycle-accurate)
+// Cluster execution times (proxy timing)
 constexpr double CLUSTER_A_TIME_PER_PAIR_PS = 500.0;     // ps per band pair (op sweep)
 constexpr double CLUSTER_B_TIME_PER_PANEL_PS = 250.0;    // ps per panel (reduced build)
 constexpr double CLUSTER_C_TIME_PER_BAND_PS = 10000.0;   // ps per band (hardware diag)
@@ -456,30 +514,30 @@ constexpr double CTRL_REG_LATENCY_NS = 5.0;              // Control/status regis
 constexpr double DMA_REG_LATENCY_NS = 10.0;             // DMA configuration
 constexpr double ELECTRONS_CMD_LATENCY_NS = 50.0;        // Command trigger
 
-}  // namespace TimingAccurate
+}  // namespace TimingProxy
 
 // Get register read/write latency in nanoseconds
 static double get_register_latency(uint64_t addr) {
-    using namespace TimingAccurate;
-    if (addr >= 0x0000 && addr < 0x0100) {
+    using namespace TimingProxy;
+    if (addr == 0x0128) {
+        return ELECTRONS_CMD_LATENCY_NS;  // Electrons command trigger
+    } else if (addr == 0x0130) {
+        return CTRL_REG_LATENCY_NS * 2;  // Result registers
+    } else if (addr >= 0x0000 && addr < 0x0100) {
         return CTRL_REG_LATENCY_NS;  // Control/Status/Interrupt
     } else if (addr >= 0x0100 && addr < 0x0200) {
         return CTRL_REG_LATENCY_NS * 2;  // Configuration registers
     } else if (addr >= 0x0200 && addr < 0x0300) {
         return DMA_REG_LATENCY_NS;  // Matrix address registers
-    } else if (addr == 0x0128) {
-        return ELECTRONS_CMD_LATENCY_NS;  // Electrons command trigger
-    } else if (addr == 0x0130) {
-        return CTRL_REG_LATENCY_NS * 2;  // Result registers
     }
     return CTRL_REG_LATENCY_NS;
 }
 
-// Calculate cycle-accurate electrons computation time
+// Calculate proxy electrons computation time
 static uint64_t calculate_electrons_time_ns(
     uint32_t n_bands, uint32_t n_basis, uint32_t n_kpoints,
     uint32_t n_spin, int max_iterations, float conv_threshold) {
-    using namespace TimingAccurate;
+    using namespace TimingProxy;
 
     double total_time_ps = 0.0;
     double dr2 = 1.0;
@@ -529,7 +587,7 @@ FPGATLMStub::FPGATLMStub(sc_core::sc_module_name name)
 
 void FPGATLMStub::b_transport(tlm::tlm_generic_payload &trans,
                               sc_core::sc_time &delay) {
-    using namespace TimingAccurate;
+    using namespace TimingProxy;
 
     tlm::tlm_command cmd = trans.get_command();
     uint64_t addr = trans.get_address();
@@ -558,7 +616,7 @@ void FPGATLMStub::b_transport(tlm::tlm_generic_payload &trans,
                 std::memcpy(&max_iter, data + 16, sizeof(max_iter));
                 std::memcpy(&conv_thr, data + 20, sizeof(conv_thr));
 
-                // Calculate cycle-accurate computation time
+                // Calculate proxy computation time
                 uint64_t compute_time_ns = calculate_electrons_time_ns(
                     n_bands, n_basis, n_kpoints, n_spin, max_iter, conv_thr);
 
@@ -661,6 +719,11 @@ void FPGAAccelerator::sendTLMTransaction(tlm::tlm_command cmd,
     sc_core::sc_time delay = sc_core::SC_ZERO_TIME;
 
     // 调用SystemC（blocking transport）
+    if (!tlmMediator) {
+        DPRINTF(FPGAAccelerator,
+                "TLM mediator unavailable; skipping smoke stub transaction\n");
+        return;
+    }
     tlmMediator->tlmSocket->b_transport(trans, delay);
 
     if (trans.is_response_error()) {
@@ -709,6 +772,15 @@ void FPGAAccelerator::serialize(CheckpointOut &cp) const {
     SERIALIZE_SCALAR(sMatrixAddr);
     SERIALIZE_SCALAR(rhoAddr);
     SERIALIZE_SCALAR(veffAddr);
+    uint32_t executionModeValue = static_cast<uint32_t>(executionMode);
+    SERIALIZE_SCALAR(executionModeValue);
+    SERIALIZE_SCALAR(realSystemCTarget);
+    SERIALIZE_SCALAR(electronsCommandCount);
+    SERIALIZE_SCALAR(electronsCompletionCount);
+    SERIALIZE_SCALAR(electronsLastCommandTick);
+    SERIALIZE_SCALAR(electronsLastDoneTick);
+    SERIALIZE_SCALAR(electronsCompletionSource);
+    SERIALIZE_SCALAR(pendingElectronsCompletionSource);
 }
 
 void FPGAAccelerator::unserialize(CheckpointIn &cp) {
@@ -730,6 +802,18 @@ void FPGAAccelerator::unserialize(CheckpointIn &cp) {
     UNSERIALIZE_SCALAR(sMatrixAddr);
     UNSERIALIZE_SCALAR(rhoAddr);
     UNSERIALIZE_SCALAR(veffAddr);
+    uint32_t executionModeValue = static_cast<uint32_t>(executionMode);
+    UNSERIALIZE_SCALAR(executionModeValue);
+    if (executionModeValue <= static_cast<uint32_t>(ExecutionMode::RealBridge)) {
+        executionMode = static_cast<ExecutionMode>(executionModeValue);
+    }
+    UNSERIALIZE_SCALAR(realSystemCTarget);
+    UNSERIALIZE_SCALAR(electronsCommandCount);
+    UNSERIALIZE_SCALAR(electronsCompletionCount);
+    UNSERIALIZE_SCALAR(electronsLastCommandTick);
+    UNSERIALIZE_SCALAR(electronsLastDoneTick);
+    UNSERIALIZE_SCALAR(electronsCompletionSource);
+    UNSERIALIZE_SCALAR(pendingElectronsCompletionSource);
 }
 
 // DMA Engine Implementation

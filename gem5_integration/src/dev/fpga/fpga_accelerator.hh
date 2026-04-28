@@ -8,6 +8,7 @@
 #include "dev/pci/device.hh"
 #include "dev/dma_device.hh"
 #include "params/FPGAAccelerator.hh"
+#include <string>
 #include <vector>
 
 #ifdef USE_SYSTEMC
@@ -119,6 +120,19 @@ class FPGAAccelerator : public PciEndpoint {
         STATUS_COMPUTE_DONE = (1 << 4),
     };
 
+    enum class ExecutionMode {
+        Smoke,
+        TimedProxy,
+        RealBridge,
+    };
+
+    enum CompletionSource {
+        COMPLETION_NONE = 0,
+        COMPLETION_SMOKE_IMMEDIATE = 1,
+        COMPLETION_TIMED_EVENT = 2,
+        COMPLETION_REAL_BRIDGE_EVENT = 3,
+    };
+
     uint32_t controlReg;
     uint32_t statusReg;
     uint32_t interruptReg;
@@ -150,6 +164,15 @@ class FPGAAccelerator : public PciEndpoint {
     uint64_t sMatrixAddr;
     uint64_t rhoAddr;
     uint64_t veffAddr;
+
+    ExecutionMode executionMode;
+    bool realSystemCTarget;
+    uint32_t electronsCommandCount;
+    uint32_t electronsCompletionCount;
+    Tick electronsLastCommandTick;
+    Tick electronsLastDoneTick;
+    uint32_t electronsCompletionSource;
+    uint32_t pendingElectronsCompletionSource;
 
     class DMAEngine {
       private:
@@ -188,6 +211,8 @@ class FPGAAccelerator : public PciEndpoint {
 
     void executeElectrons();
     void executeCompute();
+    void completeElectrons(uint32_t completionSource);
+    bool immediateElectronsCompletion() const;
 
     void raiseInterrupt();
     void clearInterrupt();
