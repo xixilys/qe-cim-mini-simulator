@@ -138,7 +138,12 @@ def _resolved_input_ref(request: Mapping[str, Any], request_root: Path, *keys: s
     return None
 
 
-def _request_env(request: Mapping[str, Any], request_root: Path, result_path: Path) -> dict[str, str]:
+def _request_env(
+    request: Mapping[str, Any],
+    request_root: Path,
+    result_path: Path,
+    backend_report_path: Path,
+) -> dict[str, str]:
     env: dict[str, str] = {}
     workload_identity = request.get("workload_identity")
     workload_identity = workload_identity if isinstance(workload_identity, Mapping) else {}
@@ -156,6 +161,8 @@ def _request_env(request: Mapping[str, Any], request_root: Path, result_path: Pa
     systemc_config = systemc_config if isinstance(systemc_config, Mapping) else {}
 
     _set_env(env, "QEBS_RESULT_JSON", result_path)
+    _set_env(env, "QEBS_BACKEND_EXECUTION_REPORT_JSON", backend_report_path)
+    _set_env(env, "QEBS_BACKEND_REPORT_JSON", backend_report_path)
     _set_env(env, "QEBS_CANDIDATE_ID", request.get("candidate_id"))
     _set_env(env, "QEBS_REQUESTED_FIDELITY", request.get("requested_fidelity"))
     _set_env(env, "QEBS_EXECUTION_MODE", request.get("execution_mode"))
@@ -200,6 +207,34 @@ def _request_env(request: Mapping[str, Any], request_root: Path, result_path: Pa
     _set_env(env, "QEBS_RESIDENT_POLICY", design_axes.get("resident_policy"))
     _set_env(env, "QEBS_ARCH_CONFIG", arch_config)
     return env
+
+
+def _accept_direct_backend_report(
+    request: Mapping[str, Any],
+    output_path: Path,
+    mode: str,
+) -> bool:
+    if not output_path.exists():
+        return False
+    try:
+        payload = load_json(output_path)
+        if not isinstance(payload, Mapping):
+            raise ValueError("direct BackendExecutionReport root must be an object")
+        validate_report(payload)
+        if payload.get("candidate_id") != request.get("candidate_id"):
+            raise ValueError("direct BackendExecutionReport candidate_id does not match request")
+        if payload.get("fidelity") != mode:
+            raise ValueError("direct BackendExecutionReport fidelity does not match CLI mode")
+    except Exception as exc:
+        report = refusal_report(
+            request,
+            mode=mode,
+            reason=f"direct BackendExecutionReport validation failed: {exc}",
+            artifact_refs={"direct_backend_execution_report": str(output_path)},
+        )
+        write_report(output_path, report)
+        return False
+    return True
 
 
 def _load_request_or_refuse(request_path: Path, output_path: Path, mode: str) -> tuple[dict[str, Any] | None, int | None]:
@@ -287,8 +322,10 @@ def _run_systemc(request: Mapping[str, Any], output_path: Path, mode: str, reque
     result_path.parent.mkdir(parents=True, exist_ok=True)
     if result_path.exists():
         result_path.unlink()
+    if output_path.exists():
+        output_path.unlink()
     env = os.environ.copy()
-    env.update(_request_env(request, request_root, result_path))
+    env.update(_request_env(request, request_root, result_path, output_path))
     completed = subprocess.run([str(executable)], cwd=str(executable.parent), env=env, check=False)
     if completed.returncode != 0:
         result_status = "present" if result_path.exists() else "missing"
@@ -306,6 +343,9 @@ def _run_systemc(request: Mapping[str, Any], output_path: Path, mode: str, reque
         report["status_reason"] = report.pop("refusal_reason")
         write_report(output_path, report)
         return 1
+    if output_path.exists():
+        _accept_direct_backend_report(request, output_path, mode)
+        return 0
     return _convert_existing_systemc_result(request, output_path, mode, result_path)
 
 

@@ -4,9 +4,13 @@
 #include "gem5_tlm_target.hpp"
 #include "dft_hybrid_system_gem5.hpp"
 
+#include <cstdlib>
 #include <cstdint>
 #include <cstring>
+#include <fstream>
+#include <iomanip>
 #include <iostream>
+#include <sstream>
 #include <string>
 
 using namespace sc_core;
@@ -33,6 +37,61 @@ bool expect_true(bool condition, const std::string& label) {
   }
   std::cerr << "[FAIL] " << label << std::endl;
   return false;
+}
+
+std::string env_or_default(const char* key, const std::string& default_value) {
+  const char* value = std::getenv(key);
+  return value != nullptr && value[0] != '\0' ? std::string(value) : default_value;
+}
+
+std::string json_escape(const std::string& value) {
+  std::ostringstream out;
+  for (char ch : value) {
+    switch (ch) {
+      case '"':
+        out << "\\\"";
+        break;
+      case '\\':
+        out << "\\\\";
+        break;
+      case '\n':
+        out << "\\n";
+        break;
+      case '\r':
+        out << "\\r";
+        break;
+      case '\t':
+        out << "\\t";
+        break;
+      default:
+        out << ch;
+        break;
+    }
+  }
+  return out.str();
+}
+
+std::string json_string(const std::string& value) {
+  return "\"" + json_escape(value) + "\"";
+}
+
+std::string report_mode_from_env() {
+  const std::string requested = env_or_default("QEBS_EXECUTION_MODE", "systemc_timed_functional");
+  if (requested == "systemc_standalone" || requested == "systemc_timed_functional") {
+    return requested;
+  }
+  return "systemc_timed_functional";
+}
+
+std::string claim_ceiling_for_mode(const std::string& mode) {
+  if (mode == "systemc_standalone") {
+    return "systemc_standalone_proxy_only";
+  }
+  return "systemc_timed_functional_proxy_only";
+}
+
+uint64_t metric_u64(double value) {
+  return value > 0.0 ? static_cast<uint64_t>(value) : 0;
 }
 
 uint32_t tlm_read32(Gem5TLMTarget& target, uint64_t addr, tlm_response_status& response) {
@@ -123,12 +182,16 @@ SC_MODULE(TestBench) {
   tlm_utils::simple_initiator_socket<TestBench> initiator_socket;
   DFTHybridSystemGem5* dft_system;
   Gem5TLMTarget* tlm_target;
+  DFTHybridSystemGem5::ElectronsResult last_electrons_result;
+  bool has_electrons_result;
   bool passed;
 
   SC_CTOR(TestBench)
       : initiator_socket("initiator_socket"),
         dft_system(nullptr),
         tlm_target(nullptr),
+        last_electrons_result{},
+        has_electrons_result(false),
         passed(true) {
     dft_system = new DFTHybridSystemGem5(
         "dft_system", ArchitectureConfig::create_default(), false);
@@ -242,6 +305,8 @@ SC_MODULE(TestBench) {
     const auto result =
         tlm_read_object<DFTHybridSystemGem5::ElectronsResult>(
             *tlm_target, result_addr, response);
+    last_electrons_result = result;
+    has_electrons_result = response == TLM_OK_RESPONSE;
     passed &= expect_true(response == TLM_OK_RESPONSE,
                           "electrons result payload reads from HBM");
     passed &= expect_true(tlm_target->electrons_command_count() == count_before + 1,
@@ -275,6 +340,96 @@ SC_MODULE(TestBench) {
     }
     sc_stop();
   }
+
+  bool write_backend_execution_report() const {
+    const std::string report_path = env_or_default("QEBS_BACKEND_EXECUTION_REPORT_JSON", "");
+    if (report_path.empty()) {
+      return true;
+    }
+
+    std::ofstream out(report_path);
+    if (!out) {
+      std::cerr << "[FAIL] unable to open backend report path: " << report_path << std::endl;
+      return false;
+    }
+
+    const std::string mode = report_mode_from_env();
+    const std::string candidate_id =
+        env_or_default("QEBS_CANDIDATE_ID", "gem5_systemc_standalone");
+    const std::string domain = env_or_default("QEBS_WORKLOAD_DOMAIN", "dft");
+    const uint64_t cycle_proxy =
+        has_electrons_result ? metric_u64(last_electrons_result.total_time_ns) : 0;
+    const double device_busy_s =
+        has_electrons_result ? static_cast<double>(last_electrons_result.device_busy_ns) / 1e9 : 0.0;
+    const uint64_t bytes_moved =
+        has_electrons_result ? last_electrons_result.bytes_moved_to_convergence : 0;
+
+    out << std::setprecision(12);
+    out << "{\n";
+    out << "  \"schema_version\": \"backend_execution_report_v0\",\n";
+    out << "  \"candidate_id\": " << json_string(candidate_id) << ",\n";
+    out << "  \"execution_status\": " << json_string(passed ? "executed" : "failed") << ",\n";
+    out << "  \"fidelity\": " << json_string(mode) << ",\n";
+    out << "  \"claim_ceiling\": " << json_string(claim_ceiling_for_mode(mode)) << ",\n";
+    out << "  \"environment\": {\n";
+    out << "    \"source\": \"gem5_systemc_standalone\",\n";
+    out << "    \"target\": \"Gem5TLMTarget local SystemC target\",\n";
+    out << "    \"execution_mode_env\": " << json_string(env_or_default("QEBS_EXECUTION_MODE", "")) << "\n";
+    out << "  },\n";
+    out << "  \"control_path\": {\n";
+    out << "    \"host_launch_count\": " << tlm_target->host_launch_count() << ",\n";
+    out << "    \"completion_count\": " << tlm_target->completion_count() << ",\n";
+    out << "    \"fallback_count\": " << tlm_target->fallback_count() << ",\n";
+    out << "    \"deadlock\": false,\n";
+    out << "    \"completion_source\": \"gem5_systemc_standalone_tlm_dispatch\",\n";
+    out << "    \"polling_read_count\": " << tlm_target->polling_read_count() << ",\n";
+    out << "    \"interrupt_count\": " << tlm_target->interrupt_count() << ",\n";
+    out << "    \"last_control_policy\": " << json_string(tlm_target->last_control_policy()) << "\n";
+    out << "  },\n";
+    out << "  \"metrics\": {\n";
+    out << "    \"time_to_completion_s\": " << sc_time_stamp().to_seconds() << ",\n";
+    out << "    \"cycle_proxy\": " << cycle_proxy << ",\n";
+    out << "    \"host_wait_s\": null,\n";
+    out << "    \"device_busy_s\": " << device_busy_s << ",\n";
+    out << "    \"dma_read_bytes\": " << tlm_target->dma_read_bytes() << ",\n";
+    out << "    \"dma_write_bytes\": " << tlm_target->dma_write_bytes() << ",\n";
+    out << "    \"bytes_moved_to_convergence\": " << bytes_moved << ",\n";
+    out << "    \"resident_reuse_ratio\": " << tlm_target->resident_reuse_ratio() << ",\n";
+    out << "    \"spill_ratio\": " << tlm_target->spill_ratio() << ",\n";
+    out << "    \"fallback_ratio\": " << tlm_target->fallback_ratio() << ",\n";
+    out << "    \"standalone_passed\": " << (passed ? "true" : "false") << "\n";
+    out << "  },\n";
+    out << "  \"correctness_gate\": {\n";
+    out << "    \"workload_equivalent_claim\": false,\n";
+    out << "    \"domain\": " << json_string(domain) << ",\n";
+    out << "    \"domain_equivalence_claim\": false\n";
+    out << "  },\n";
+    out << "  \"artifact_refs\": {\n";
+    out << "    \"source_schema_version\": \"gem5_systemc_standalone_backend_report_v0\",\n";
+    out << "    \"systemc_target\": \"Gem5TLMTarget\",\n";
+    out << "    \"systemc_model\": \"DFTHybridSystemGem5\",\n";
+    out << "    \"backend_dispatch\": \"local_tlm_dispatch_to_qe_band_solver_model_main_path\"\n";
+    out << "  },\n";
+    out << "  \"non_claims\": [\n";
+    out << "    \"no_qe_equivalent_scf_claim\",\n";
+    out << "    \"no_cycle_accuracy_claim\",\n";
+    out << "    \"no_rtl_hls_board_or_asic_implementation_claim\",\n";
+    out << "    \"no_real_gem5_bridge_claim\",\n";
+    out << "    \"no_full_qe_under_gem5_claim\"\n";
+    out << "  ],\n";
+    out << "  \"notes\": [\n";
+    out << "    \"Gem5-facing SystemC standalone target dispatch only; not a gem5 simulation run.\",\n";
+    out << "    \"Report is bounded to SystemC standalone/timed-functional proxy evidence.\"\n";
+    out << "  ]\n";
+    out << "}\n";
+    out.close();
+    if (!out) {
+      std::cerr << "[FAIL] unable to finish backend report path: " << report_path << std::endl;
+      return false;
+    }
+    std::cout << "[PASS] wrote backend execution report: " << report_path << std::endl;
+    return true;
+  }
 };
 
 int sc_main(int argc, char* argv[]) {
@@ -289,6 +444,9 @@ int sc_main(int argc, char* argv[]) {
   sc_start();
 
   std::cout << "\nSimulation completed at " << sc_time_stamp() << std::endl;
+  if (!tb.write_backend_execution_report()) {
+    return 1;
+  }
 
   return tb.passed ? 0 : 1;
 }

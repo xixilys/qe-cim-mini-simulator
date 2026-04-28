@@ -58,6 +58,70 @@ class BackendExecutionRunnerTests(unittest.TestCase):
     def read_report(self, path: Path) -> dict[str, Any]:
         return json.loads(path.read_text(encoding="utf-8"))
 
+    def write_direct_backend_report_executable(
+        self,
+        directory: Path,
+        name: str,
+        *,
+        candidate_id_expr: str = "os.environ['QEBS_CANDIDATE_ID']",
+        completion_source: str = "direct_backend_execution_report",
+    ) -> Path:
+        exe = directory / "bin" / name
+        exe.parent.mkdir(parents=True)
+        source = Path(name).stem
+        exe.write_text(
+            "#!/usr/bin/env python3\n"
+            "import json\n"
+            "import os\n"
+            "from pathlib import Path\n"
+            "out = Path(os.environ['QEBS_BACKEND_EXECUTION_REPORT_JSON'])\n"
+            "out.parent.mkdir(parents=True, exist_ok=True)\n"
+            f"candidate_id = {candidate_id_expr}\n"
+            f"completion_source = {completion_source!r}\n"
+            f"source = {source!r}\n"
+            "out.write_text(json.dumps({\n"
+            "  'schema_version': 'backend_execution_report_v0',\n"
+            "  'candidate_id': candidate_id,\n"
+            "  'execution_status': 'executed',\n"
+            "  'fidelity': os.environ['QEBS_EXECUTION_MODE'],\n"
+            "  'claim_ceiling': 'systemc_timed_functional_proxy_only',\n"
+            "  'environment': {'source': source},\n"
+            "  'control_path': {\n"
+            "    'host_launch_count': 1,\n"
+            "    'completion_count': 1,\n"
+            "    'fallback_count': 0,\n"
+            "    'deadlock': False,\n"
+            "    'completion_source': completion_source\n"
+            "  },\n"
+            "  'metrics': {\n"
+            "    'time_to_completion_s': 0.001,\n"
+            "    'cycle_proxy': 10,\n"
+            "    'host_wait_s': None,\n"
+            "    'device_busy_s': 0.000001,\n"
+            "    'dma_read_bytes': 64,\n"
+            "    'dma_write_bytes': 32,\n"
+            "    'bytes_moved_to_convergence': 96,\n"
+            "    'resident_reuse_ratio': 0.0,\n"
+            "    'spill_ratio': 0.0,\n"
+            "    'fallback_ratio': 0.0\n"
+            "  },\n"
+            "  'correctness_gate': {\n"
+            "    'workload_equivalent_claim': False,\n"
+            "    'domain': os.environ.get('QEBS_WORKLOAD_DOMAIN', 'dft'),\n"
+            "    'domain_equivalence_claim': False\n"
+            "  },\n"
+            "  'artifact_refs': {'source': source},\n"
+            "  'non_claims': [\n"
+            "    'no_qe_equivalent_scf_claim',\n"
+            "    'no_cycle_accuracy_claim',\n"
+            "    'no_rtl_hls_board_or_asic_implementation_claim'\n"
+            "  ]\n"
+            "}, indent=2, sort_keys=True) + '\\n', encoding='utf-8')\n",
+            encoding="utf-8",
+        )
+        exe.chmod(exe.stat().st_mode | 0o111)
+        return exe
+
     def assert_refused_report(self, report: dict[str, Any], mode: str) -> None:
         self.assertEqual(report["schema_version"], "backend_execution_report_v0")
         self.assertEqual(report["execution_status"], "refused")
@@ -452,6 +516,72 @@ class BackendExecutionRunnerTests(unittest.TestCase):
             self.assertEqual(env["QEBS_INPUT_REF_SYSTEMC_CONFIG"], str(cfg))
             self.assertEqual(env["QEBS_ARCH_CONFIG"], str(cfg))
             self.assertEqual(env["QEBS_RESULT_JSON"], str(raw_result))
+            self.assertEqual(env["QEBS_BACKEND_EXECUTION_REPORT_JSON"], str(output))
+            self.assertEqual(env["QEBS_BACKEND_REPORT_JSON"], str(output))
+
+    def test_systemc_execution_can_accept_direct_backend_report(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            self.write_direct_backend_report_executable(tmp, "direct_backend_report.py")
+            request = self.write_request(
+                tmp,
+                self.make_request(
+                    "systemc_timed_functional",
+                    input_refs={"systemc_executable": "bin/direct_backend_report.py"},
+                ),
+            )
+            output = tmp / "report.json"
+            raw_result = tmp / "report.systemc_candidate_result.json"
+
+            rc = RUNNER.main([
+                "--request",
+                str(request),
+                "--output",
+                str(output),
+                "--mode",
+                "systemc_timed_functional",
+                "--allow-execute",
+            ])
+
+            self.assertEqual(rc, 0)
+            self.assertFalse(raw_result.exists())
+            report = self.read_report(output)
+            self.assertEqual(report["execution_status"], "executed")
+            self.assertEqual(report["control_path"]["completion_source"], "direct_backend_execution_report")
+            self.assertEqual(report["claim_ceiling"], "systemc_timed_functional_proxy_only")
+
+    def test_systemc_direct_backend_report_rejects_candidate_mismatch(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            self.write_direct_backend_report_executable(
+                tmp,
+                "bad_direct_backend_report.py",
+                candidate_id_expr="'wrong_candidate'",
+                completion_source="bad_direct_backend_execution_report",
+            )
+            request = self.write_request(
+                tmp,
+                self.make_request(
+                    "systemc_timed_functional",
+                    input_refs={"systemc_executable": "bin/bad_direct_backend_report.py"},
+                ),
+            )
+            output = tmp / "report.json"
+
+            rc = RUNNER.main([
+                "--request",
+                str(request),
+                "--output",
+                str(output),
+                "--mode",
+                "systemc_timed_functional",
+                "--allow-execute",
+            ])
+
+            self.assertEqual(rc, 0)
+            report = self.read_report(output)
+            self.assert_refused_report(report, "systemc_timed_functional")
+            self.assertIn("candidate_id does not match request", report["refusal_reason"])
 
     def test_b4_direct_gem5_path_refuses_without_smoke_fallback(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
