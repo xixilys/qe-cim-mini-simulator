@@ -9,7 +9,7 @@ from . import constraints, domain_contracts
 
 DESCRIPTOR_MANIFEST_NAME = "stage_b0_descriptor_manifest_v0.json"
 SYSTEMC_CONFIG_SCHEMA_VERSION = "qe_dse_systemc_candidate_config_stage_b0_v0"
-ARCHITECTURE_CONFIG_SCHEMA_VERSION = "qe_dse_architecture_candidate_config_stage_b0_v0"
+ARCHITECTURE_CONFIG_SCHEMA_VERSION = "systemc_architecture_config_v1"
 GEM5_HANDOFF_DESCRIPTOR_SCHEMA_VERSION = "qe_dse_gem5_systemc_handoff_descriptor_stage_b0_v0"
 EMISSION_ALL_VALID_EXECUTABLE = "all_valid_executable"
 EMISSION_SCHEDULER_SELECTED_ONLY = "scheduler_selected_only"
@@ -183,12 +183,124 @@ def _systemc_config(row: Mapping[str, Any], sidecar_refs: Mapping[str, str], arc
     }
 
 
-def _gem5_descriptor(
-    row: Mapping[str, Any],
-    systemc_config_ref: str,
-    architecture_config_ref: str,
-    sidecar_refs: Mapping[str, str],
-) -> dict[str, Any]:
+
+def _architecture_family(identity: Mapping[str, Any], design_point: Mapping[str, Any]) -> str:
+    for value in (
+        identity.get("candidate_family"),
+        identity.get("architecture_template_id"),
+        design_point.get("family"),
+        design_point.get("architecture_family"),
+    ):
+        if isinstance(value, str) and value.strip():
+            token = value.strip().upper()
+            if token.startswith("F1"):
+                return "F1"
+            if token.startswith("F3"):
+                return "F3"
+            if token.startswith("F2"):
+                return "F2"
+    return "F2"
+
+
+def _architecture_config(row: Mapping[str, Any]) -> dict[str, Any]:
+    identity = _candidate_identity(row)
+    design_point = _require_mapping(row, "design_point")
+    family = _architecture_family(identity, design_point)
+    cluster_specs = (
+        ("cluster_a", "operator_sweep", 448),
+        ("cluster_b", "reduced_build", 128),
+        ("cluster_c", "hardware_diag", 256),
+        ("cluster_d", "refresh_residual", 128),
+    )
+    if family == "F3":
+        cluster_specs = (
+            ("cluster_a", "operator_sweep", 512),
+            ("cluster_b", "reduced_build", 192),
+            ("cluster_c", "hardware_diag", 384),
+            ("cluster_d", "refresh_residual", 192),
+        )
+    elif family == "F1":
+        cluster_specs = (
+            ("cluster_a", "operator_sweep", 448),
+            ("cluster_b", "reduced_build", 128),
+            ("cluster_c", "hardware_diag", 256),
+            ("cluster_d", "refresh_residual", 128),
+        )
+    compute_unit_type = "traditional_fpga" if "traditional" in str(identity.get("architecture_template_id", "")).lower() else "cim_array"
+    clusters = []
+    for cluster_id, cluster_type, buffer_kb in cluster_specs:
+        clusters.append(
+            {
+                "cluster_id": cluster_id,
+                "type": cluster_type,
+                "enabled": True,
+                "compute_unit": {
+                    "type": compute_unit_type,
+                    "parallelism": int(design_point.get("parallelism", 4) or 4),
+                    "enable_karatsuba": True,
+                    "cim_moduli_count": int(design_point.get("cim_moduli_count", 16) or 16),
+                    "cim_array_rows": int(design_point.get("cim_array_rows", 256) or 256),
+                    "cim_array_cols": int(design_point.get("cim_array_cols", 256) or 256),
+                    "cim_frequency_mhz": float(design_point.get("clock_mhz", 150.0) or 150.0),
+                    "fpga_tile_size": int(design_point.get("gemm_tile_size", 32) or 32),
+                    "fpga_dsp_count": int(design_point.get("fpga_dsp_count", 128) or 128),
+                    "fpga_frequency_mhz": float(design_point.get("clock_mhz", 300.0) or 300.0),
+                },
+                "on_chip_buffer_kb": int(design_point.get("on_chip_buffer_kb", buffer_kb) or buffer_kb),
+                "dma_bandwidth_gbps": int(design_point.get("dma_bandwidth_gbps", 100) or 100),
+                "enable_pipelining": True,
+                "pipeline_depth": int(design_point.get("pipeline_depth", 4) or 4),
+                "resident_policy": str(design_point.get("resident_policy", "fit_first")),
+                "resident_budget_scale": float(design_point.get("resident_budget_scale", 1.0) or 1.0),
+                "enable_backpressure": True,
+                "max_concurrent_ops": int(design_point.get("max_concurrent_ops", 8) or 8),
+            }
+        )
+    return {
+        "schema_version": ARCHITECTURE_CONFIG_SCHEMA_VERSION,
+        "template_id": str(identity.get("architecture_template_id") or family),
+        "template_label": str(identity.get("architecture_template_id") or family),
+        "architecture_family": family,
+        "clusters": clusters,
+        "global_policies": {
+            "offload_scope": str(design_point.get("offload_scope", "balanced")),
+            "diag_policy": str(design_point.get("diag_policy", "device_first_fallback")),
+            "enable_device_fft": family != "F1",
+            "force_host_diag": family == "F1",
+            "allow_cpu_diag_fallback": True,
+        },
+        "resource_limits": {
+            "max_dsp": 6840,
+            "max_bram_18k": 4320,
+            "max_uram": 960,
+            "max_lut": 1182240,
+            "max_ff": 2364480,
+        },
+        "interconnect": {
+            "axi_data_width": 512,
+            "axi_burst_length": 256,
+            "pcie_bandwidth_gbps": 32.0,
+            "ddr_bandwidth_gbps": 76.8,
+        },
+        "timing": {
+            "system_clock_mhz": float(design_point.get("system_clock_mhz", 250.0) or 250.0),
+            "use_proxy_formulas": True,
+            "proxy_uncertainty": 0.20,
+        },
+        "descriptor_provenance": {
+            "source": "stage_b0_architecture_config_projection",
+            "systemc_config_separated": True,
+            "claim_ceiling": "architecture_config_descriptor_only",
+        },
+        "non_claims": [
+            "not_systemc_executed",
+            "not_gem5_executed",
+            "not_qe_equivalent_scf",
+            "not_rtl_hls_board_evidence",
+        ],
+    }
+
+def _gem5_descriptor(row: Mapping[str, Any], systemc_config_ref: str, architecture_config_ref: str, sidecar_refs: Mapping[str, str]) -> dict[str, Any]:
     gem5_handoff = _require_mapping(row, "gem5_handoff_contract")
     return {
         "schema_version": GEM5_HANDOFF_DESCRIPTOR_SCHEMA_VERSION,
@@ -221,12 +333,7 @@ def _gem5_descriptor(
     }
 
 
-def _backend_execution_request(
-    row: Mapping[str, Any],
-    systemc_config_ref: str,
-    architecture_config_ref: str,
-    sidecar_refs: Mapping[str, str],
-) -> dict[str, Any]:
+def _backend_execution_request(row: Mapping[str, Any], systemc_config_ref: str, architecture_config_ref: str, sidecar_refs: Mapping[str, str]) -> dict[str, Any]:
     request = dict(_require_mapping(row, "backend_execution_request"))
     request["input_refs"] = dict(request.get("input_refs", {}))
     request["input_refs"].update(
@@ -236,6 +343,7 @@ def _backend_execution_request(
             "mapping": sidecar_refs["mapping_ref"],
             "architecture_config": architecture_config_ref,
             "systemc_config": systemc_config_ref,
+            "architecture_config": architecture_config_ref,
         }
     )
     return request
@@ -338,10 +446,11 @@ def emit_stage_b0_descriptors(
         sidecar_refs = _write_ir_sidecars(root, validated_row)
         architecture_config_ref = f"architecture_configs/{candidate_id}.json"
         systemc_config_ref = f"systemc_configs/{candidate_id}.json"
+        architecture_config_ref = f"architecture_configs/{candidate_id}.json"
         gem5_descriptor_ref = f"gem5_systemc_handoff/{candidate_id}.json"
         backend_execution_request_ref = f"backend_execution_requests/{candidate_id}.json"
-        _write_json(root / architecture_config_ref, _architecture_config(validated_row, sidecar_refs))
-        _write_json(root / systemc_config_ref, _systemc_config(validated_row, sidecar_refs, architecture_config_ref))
+        _write_json(root / systemc_config_ref, _systemc_config(validated_row, sidecar_refs))
+        _write_json(root / architecture_config_ref, _architecture_config(validated_row))
         _write_json(
             root / gem5_descriptor_ref,
             _gem5_descriptor(validated_row, systemc_config_ref, architecture_config_ref, sidecar_refs),
@@ -356,6 +465,7 @@ def emit_stage_b0_descriptors(
                 **dict(sidecar_refs),
                 "architecture_config_ref": architecture_config_ref,
                 "systemc_config_ref": systemc_config_ref,
+                "architecture_config_ref": architecture_config_ref,
                 "gem5_descriptor_ref": gem5_descriptor_ref,
                 "backend_execution_request_ref": backend_execution_request_ref,
                 "execution_status": "not_executed",

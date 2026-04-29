@@ -250,6 +250,7 @@ class RunUnifiedDseV0Tests(unittest.TestCase):
 
             first = descriptor_manifest["descriptors"][0]
             systemc_config = json.loads((out_dir / first["systemc_config_ref"]).read_text(encoding="utf-8"))
+            architecture_config = json.loads((out_dir / first["architecture_config_ref"]).read_text(encoding="utf-8"))
             gem5_descriptor = json.loads((out_dir / first["gem5_descriptor_ref"]).read_text(encoding="utf-8"))
             backend_request = json.loads(
                 (out_dir / first["backend_execution_request_ref"]).read_text(encoding="utf-8")
@@ -261,6 +262,9 @@ class RunUnifiedDseV0Tests(unittest.TestCase):
             )
             self.assertEqual(systemc_config["execution_status"], "not_executed")
             self.assertEqual(systemc_config["claim_ceiling"], "systemc_config_descriptor_only")
+            self.assertEqual(architecture_config["schema_version"], "systemc_architecture_config_v1")
+            self.assertEqual(architecture_config["descriptor_provenance"]["systemc_config_separated"], True)
+            self.assertEqual(architecture_config["non_claims"][0], "not_systemc_executed")
             self.assertEqual(systemc_config["candidate_identity"]["candidate_id"], first["candidate_id"])
             self.assertEqual(systemc_config["candidate_identity"]["design_axes"], systemc_config["design_point"])
             self.assertFalse(systemc_config["backend_neutral_schema"]["cim_lockin"])
@@ -281,11 +285,14 @@ class RunUnifiedDseV0Tests(unittest.TestCase):
             self.assertEqual(gem5_descriptor["execution_status"], "not_executed")
             self.assertEqual(gem5_descriptor["claim_ceiling"], "stage_b0_handoff_descriptor_only")
             self.assertEqual(gem5_descriptor["systemc_config_ref"], first["systemc_config_ref"])
+            self.assertEqual(gem5_descriptor["architecture_config_ref"], first["architecture_config_ref"])
             self.assertEqual(gem5_descriptor["candidate_identity"]["candidate_id"], first["candidate_id"])
             self.assertFalse(gem5_descriptor["qe_anchor_refs"]["qe_equivalent_scf_claim"])
             self.assertIn("stage_b_gem5_systemc_scf_driver", gem5_descriptor["expected_command"])
             self.assertEqual(backend_request["schema_version"], "backend_execution_request_v0")
             self.assertEqual(backend_request["expected_report_schema"], "backend_execution_report_v0")
+            self.assertEqual(backend_request["input_refs"]["systemc_config"], first["systemc_config_ref"])
+            self.assertEqual(backend_request["input_refs"]["architecture_config"], first["architecture_config_ref"])
             self.assertEqual(backend_request["workload_identity"]["adapter"], "qe")
             self.assertEqual(
                 backend_request["candidate_identity"]["validity_class"],

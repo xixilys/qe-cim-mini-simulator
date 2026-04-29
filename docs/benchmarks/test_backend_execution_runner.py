@@ -741,11 +741,14 @@ class BackendExecutionRunnerTests(unittest.TestCase):
             cfg = tmp / "cfg" / "systemc.json"
             cfg.parent.mkdir(parents=True)
             cfg.write_text("{}\n", encoding="utf-8")
+            arch_cfg = tmp / "cfg" / "architecture.json"
+            arch_cfg.write_text('{"schema_version":"systemc_architecture_config_v1"}\n', encoding="utf-8")
             request_payload = self.make_request(
                 "systemc_timed_functional",
                 input_refs={
                     "systemc_executable": "bin/fake_systemc.py",
                     "systemc_config": "cfg/systemc.json",
+                    "architecture_config": "cfg/architecture.json",
                 },
             )
             request_payload["candidate_identity"]["backend_profile_id"] = "unit_profile"
@@ -794,10 +797,60 @@ class BackendExecutionRunnerTests(unittest.TestCase):
             self.assertEqual(env["QEBS_ARCH_FAMILY"], "F2")
             self.assertEqual(env["QEBS_DESIGN_AXIS_DIAG_POLICY"], "device_first_fallback")
             self.assertEqual(env["QEBS_INPUT_REF_SYSTEMC_CONFIG"], str(cfg))
-            self.assertEqual(env["QEBS_ARCH_CONFIG"], str(cfg))
+            self.assertEqual(env["QEBS_INPUT_REF_ARCHITECTURE_CONFIG"], str(arch_cfg))
+            self.assertEqual(env["QEBS_SYSTEMC_CONFIG_FILE"], str(cfg))
+            self.assertEqual(env["QEBS_ARCH_CONFIG"], str(arch_cfg))
             self.assertEqual(env["QEBS_RESULT_JSON"], str(raw_result))
             self.assertEqual(env["QEBS_BACKEND_EXECUTION_REPORT_JSON"], str(output))
             self.assertEqual(env["QEBS_BACKEND_REPORT_JSON"], str(output))
+
+    def test_systemc_config_ref_does_not_fallback_to_arch_config(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            exe = tmp / "bin" / "fake_systemc.py"
+            exe.parent.mkdir(parents=True)
+            exe.write_text(
+                "#!/usr/bin/env python3\n"
+                "import json, os\n"
+                "from pathlib import Path\n"
+                "env = {k: v for k, v in os.environ.items() if k.startswith('QEBS_')}\n"
+                "Path(os.environ['QEBS_RESULT_JSON']).write_text(json.dumps({\n"
+                "  'schema_version': 'systemc_architecture_candidate_result_v0',\n"
+                "  'generated_at_utc': '2026-04-28T00:00:00Z',\n"
+                "  'case_id': 'si8_proxy',\n"
+                "  'architecture_family': 'F2',\n"
+                "  'assumption_set_id': 'unit_profile',\n"
+                "  'run_summary': {'total_episodes': 1, 'total_ref_cycles': 1},\n"
+                "  'final': {'converged': True, 'scf_iterations': 1},\n"
+                "  'iteration_diagnostics': [],\n"
+                "  'metrics': {},\n"
+                "  'cluster_metrics': {'qebs_env': env},\n"
+                "  'timing': {'wall_time_s': 0.001}\n"
+                "}, sort_keys=True), encoding='utf-8')\n",
+                encoding="utf-8",
+            )
+            exe.chmod(exe.stat().st_mode | 0o111)
+            cfg = tmp / "cfg" / "systemc.json"
+            cfg.parent.mkdir(parents=True)
+            cfg.write_text("{}\n", encoding="utf-8")
+            request = self.write_request(
+                tmp,
+                self.make_request(
+                    "systemc_timed_functional",
+                    input_refs={"systemc_executable": "bin/fake_systemc.py", "systemc_config": "cfg/systemc.json"},
+                ),
+            )
+            output = tmp / "report.json"
+
+            rc = RUNNER.main([
+                "--request", str(request), "--output", str(output),
+                "--mode", "systemc_timed_functional", "--allow-execute",
+            ])
+
+            self.assertEqual(rc, 0)
+            env = self.read_report(output)["artifact_refs"]["source_cluster_metrics"]["qebs_env"]
+            self.assertEqual(env["QEBS_SYSTEMC_CONFIG_FILE"], str(cfg))
+            self.assertNotIn("QEBS_ARCH_CONFIG", env)
 
     def test_systemc_execution_can_accept_direct_backend_report(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

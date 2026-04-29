@@ -548,6 +548,12 @@ def _request_env(
         "architecture_config",
         "arch_config",
     )
+    systemc_config_ref = _resolved_input_ref(
+        request,
+        request_root,
+        "systemc_config",
+        "systemc_config_json",
+    )
     systemc_config_ref = _resolved_input_ref(request, request_root, "systemc_config")
     _set_env(env, "QEBS_CASE_ID", qe_extension.get("case_id") or workload_identity.get("workload_id"))
     _set_env(
@@ -563,14 +569,8 @@ def _request_env(
     _set_env(env, "QEBS_SOLVER_PATH_CLASS", qe_extension.get("solver_path_class"))
     _set_env(env, "QEBS_OFFLOAD_SCOPE", design_axes.get("offload_scope"))
     _set_env(env, "QEBS_RESIDENT_POLICY", design_axes.get("resident_policy"))
-    # Keep architecture-template and SystemC execution configs separate.
-    # Older wrappers used QEBS_ARCH_CONFIG for both, which let BO/template-side
-    # architecture descriptors be confused with concrete SystemC run configs.
-    _set_env(env, "QEBS_ARCHITECTURE_CONFIG", architecture_config)
-    _set_env(env, "QEBS_ARCH_CONFIG", architecture_config)
-    _set_env(env, "QEBS_SYSTEMC_CONFIG_REF", systemc_config_ref)
+    _set_env(env, "QEBS_ARCH_CONFIG", arch_config)
     _set_env(env, "QEBS_SYSTEMC_CONFIG_FILE", systemc_config_ref)
-    _set_env(env, "QEBS_MODEL_CONFIG", architecture_config or systemc_config_ref)
     return env
 
 
