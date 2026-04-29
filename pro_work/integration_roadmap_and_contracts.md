@@ -486,6 +486,17 @@ qedse frontend adjudicate \
 
 ---
 
+## 10.5 Baseline QE/F2 与 real gem5/B4 独立验收补充
+
+当前闭环必须按两条 gate 独立验收：
+
+- **Baseline QE/F2 gate**：只验收 Stage-A/B0 descriptor、F2 eligibility、B2 SystemC timed-functional/proxy feedback shape、feedback ingest 和 release claim ceiling。它可以产生 metric-bearing proxy evidence，但不能声明 QE 数值等价、real gem5 执行、cycle accuracy、RTL/HLS/board/ASIC/physical FPGA 性能。
+- **Real gem5/B4 gate**：只验收 gem5 host/runtime/MMIO/DMA/cache/sync proxy 以及显式 SystemC bridge/target provenance。缺少 `systemc_bridge`/`systemc_bridge_library`/`systemc_target`/`real_systemc_target` 输入时必须 hard-refuse，不能 fallback 到 B3 smoke 或本地 timed proxy 后再宣称 B4 pass。
+
+`architecture_template_ref` / `mapping_ref` / `systemc_config` 要保持分离：前两者描述候选和映射语义，后者是后端可执行或待解析的 SystemC 配置。release/adjudicator 只能引用每个 artifact 自己的 claim ceiling；反馈和 calibration 可以改变同层 ranking，但不能提升 claim ceiling。
+
+详细 lane-by-lane review 和下一次 merge checklist 见 `pro_work/full_system_dse_closure_review_20260429.md`。
+
 ## 11. 最小可交付版本定义
 
 一个合格的 v1 MVP 应该具备：

@@ -401,6 +401,20 @@ proxy_programs/
 
 ---
 
+## 6.5 B4 real-gem5 hard gate 与报告 provenance
+
+B4 `gem5_systemc_timed_proxy` 必须默认 hard-fail：只有当 backend request 明确提供 `systemc_bridge`、`systemc_bridge_library`、`systemc_target` 或 `real_systemc_target` 输入引用，且对应 artifact 存在时，runner 才能尝试 B4。缺少该证据时应输出 refusal BackendExecutionReport，保留 `gem5_systemc_timed_proxy_only` claim ceiling，但这只是 gate refusal，不是 B4 pass。
+
+B4 accepted report 至少要保留以下 provenance：
+
+- gem5 executable、gem5 config、SystemC bridge artifact path/hash/status。
+- device execution mode（`smoke` / `timed_proxy` / `real_bridge`）和 `real_systemc_target` 状态。
+- control-path metrics：MMIO read/write、polling/interrupt、command issue、device accept、SystemC start/end、completion、DMA start/end。
+- datapath metrics：host queue wait、SystemC compute/device busy、DMA read/write、queue depth、backpressure、logical/observed/successful DMA bytes。
+- non-claims：not QE-equivalent SCF、not cycle-accurate RTL、not RTL/HLS/board/ASIC/physical FPGA performance。
+
+B3 smoke 可以证明 host control/completion smoke；B4 timed proxy 可以证明 explicit-bridge host/runtime proxy metrics。二者不能互相替代。
+
 ## 7. 后端成功标准
 
 后端推进成功的标志是：
