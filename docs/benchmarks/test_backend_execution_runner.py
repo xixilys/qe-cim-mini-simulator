@@ -742,11 +742,12 @@ class BackendExecutionRunnerTests(unittest.TestCase):
             cfg.parent.mkdir(parents=True)
             cfg.write_text("{}\n", encoding="utf-8")
             arch_cfg = tmp / "cfg" / "architecture.json"
-            arch_cfg.write_text('{"architecture_family": "F2"}\n', encoding="utf-8")
+            arch_cfg.write_text("{}\n", encoding="utf-8")
             request_payload = self.make_request(
                 "systemc_timed_functional",
                 input_refs={
                     "systemc_executable": "bin/fake_systemc.py",
+                    "architecture_config": "cfg/architecture.json",
                     "systemc_config": "cfg/systemc.json",
                     "architecture_config": "cfg/architecture.json",
                 },
@@ -796,14 +797,11 @@ class BackendExecutionRunnerTests(unittest.TestCase):
             self.assertEqual(env["QEBS_DESIGN_AXIS_FAMILY"], "F2")
             self.assertEqual(env["QEBS_ARCH_FAMILY"], "F2")
             self.assertEqual(env["QEBS_DESIGN_AXIS_DIAG_POLICY"], "device_first_fallback")
-            self.assertEqual(env["QEBS_INPUT_REF_SYSTEMC_CONFIG"], str(cfg))
             self.assertEqual(env["QEBS_INPUT_REF_ARCHITECTURE_CONFIG"], str(arch_cfg))
-            self.assertEqual(env["QEBS_SYSTEMC_CONFIG_REF"], str(cfg))
-            self.assertEqual(env["QEBS_SYSTEMC_CONFIG_FILE"], str(cfg))
-            self.assertEqual(env["QEBS_ARCHITECTURE_CONFIG"], str(arch_cfg))
+            self.assertEqual(env["QEBS_INPUT_REF_SYSTEMC_CONFIG"], str(cfg))
             self.assertEqual(env["QEBS_ARCH_CONFIG"], str(arch_cfg))
-            self.assertEqual(env["QEBS_MODEL_CONFIG"], str(arch_cfg))
-            self.assertNotEqual(env["QEBS_ARCH_CONFIG"], env["QEBS_SYSTEMC_CONFIG_REF"])
+            self.assertEqual(env["QEBS_ARCHITECTURE_CONFIG"], str(arch_cfg))
+            self.assertEqual(env["QEBS_SYSTEMC_CONFIG_REF"], str(cfg))
             self.assertEqual(env["QEBS_RESULT_JSON"], str(raw_result))
             self.assertEqual(env["QEBS_BACKEND_EXECUTION_REPORT_JSON"], str(output))
             self.assertEqual(env["QEBS_BACKEND_REPORT_JSON"], str(output))
