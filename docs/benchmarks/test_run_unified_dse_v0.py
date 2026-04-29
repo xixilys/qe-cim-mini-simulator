@@ -5,6 +5,7 @@ import contextlib
 import io
 import importlib.util
 import json
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -39,6 +40,53 @@ class RunUnifiedDseV0Tests(unittest.TestCase):
             "--max-design-points",
             "3",
         ]
+
+    def assert_no_generic_qe_leak(self, root: Path) -> None:
+        allowed_empty = {None, "", "None", "null", "not_applicable", False}
+
+        def meaningful(value: Any) -> bool:
+            if isinstance(value, str) and value and value[0] in "[{":
+                try:
+                    return meaningful(json.loads(value))
+                except json.JSONDecodeError:
+                    pass
+            if isinstance(value, dict):
+                return any(meaningful(item) for item in value.values())
+            if isinstance(value, list):
+                return any(meaningful(item) for item in value)
+            return value not in allowed_empty
+
+        def scan_json(value: Any, path: Path, trail: str = "$") -> None:
+            if isinstance(value, dict):
+                domain_extension = value.get("domain_extension")
+                if isinstance(domain_extension, dict) and "qe" in domain_extension:
+                    self.fail(f"domain_extension.qe leaked into {path}:{trail}.domain_extension")
+                if "qe_anchor_refs" in value and meaningful(value["qe_anchor_refs"]):
+                    self.fail(f"nonempty qe_anchor_refs leaked into {path}:{trail}.qe_anchor_refs")
+                for key, item in value.items():
+                    allowed_global_status = key in {
+                        "qe_anchor_refs_present",
+                        "qe_correctness_report_status",
+                        "qe_correctness_report_ref",
+                        "qe_equivalent_scf_claim",
+                    }
+                    if key.startswith("qe_") and meaningful(item) and not allowed_global_status:
+                        self.fail(f"meaningful {key} leaked into {path}:{trail}.{key}")
+                    scan_json(item, path, f"{trail}.{key}")
+            elif isinstance(value, list):
+                for index, item in enumerate(value):
+                    scan_json(item, path, f"{trail}[{index}]")
+
+        for path in root.rglob("*.json"):
+            scan_json(json.loads(path.read_text(encoding="utf-8")), path)
+        for path in root.rglob("*.csv"):
+            with path.open(newline="", encoding="utf-8") as handle:
+                for row_index, row in enumerate(csv.DictReader(handle), start=2):
+                    for key, value in row.items():
+                        if key and key.startswith("qe_") and meaningful(value):
+                            self.fail(f"meaningful {key} leaked into {path}:row{row_index}")
+                        if key == "domain_extension" and "qe" in (value or ""):
+                            self.fail(f"domain_extension.qe leaked into {path}:row{row_index}")
 
     def test_cli_writes_json_csv_and_manifest_as_evidence_only_without_final_winner(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -198,10 +246,14 @@ class RunUnifiedDseV0Tests(unittest.TestCase):
             self.assertEqual(descriptor_manifest["execution_status"], "not_executed")
             self.assertEqual(descriptor_manifest["claim_ceiling"], "descriptor_generation_only")
             self.assertEqual(len(descriptor_manifest["descriptors"]), 3)
+            self.assertEqual(descriptor_manifest["blocked_descriptors"], [])
 
             first = descriptor_manifest["descriptors"][0]
             systemc_config = json.loads((out_dir / first["systemc_config_ref"]).read_text(encoding="utf-8"))
             gem5_descriptor = json.loads((out_dir / first["gem5_descriptor_ref"]).read_text(encoding="utf-8"))
+            backend_request = json.loads(
+                (out_dir / first["backend_execution_request_ref"]).read_text(encoding="utf-8")
+            )
 
             self.assertEqual(
                 systemc_config["schema_version"],
@@ -212,6 +264,15 @@ class RunUnifiedDseV0Tests(unittest.TestCase):
             self.assertEqual(systemc_config["candidate_identity"]["candidate_id"], first["candidate_id"])
             self.assertEqual(systemc_config["candidate_identity"]["design_axes"], systemc_config["design_point"])
             self.assertFalse(systemc_config["backend_neutral_schema"]["cim_lockin"])
+            self.assertEqual(systemc_config["candidate_descriptor"]["schema_version"], "candidate_descriptor_v0")
+            self.assertEqual(
+                systemc_config["backend_execution_request"]["schema_version"],
+                "backend_execution_request_v0",
+            )
+            self.assertEqual(
+                systemc_config["workload_anchor_refs"]["workload_id"],
+                systemc_config["qe_anchor_refs"]["workload_id"],
+            )
 
             self.assertEqual(
                 gem5_descriptor["schema_version"],
@@ -223,6 +284,101 @@ class RunUnifiedDseV0Tests(unittest.TestCase):
             self.assertEqual(gem5_descriptor["candidate_identity"]["candidate_id"], first["candidate_id"])
             self.assertFalse(gem5_descriptor["qe_anchor_refs"]["qe_equivalent_scf_claim"])
             self.assertIn("stage_b_gem5_systemc_scf_driver", gem5_descriptor["expected_command"])
+            self.assertEqual(backend_request["schema_version"], "backend_execution_request_v0")
+            self.assertEqual(backend_request["expected_report_schema"], "backend_execution_report_v0")
+            self.assertEqual(backend_request["workload_identity"]["adapter"], "qe")
+            self.assertEqual(
+                backend_request["candidate_identity"]["validity_class"],
+                "valid_executable",
+            )
+            self.assertTrue(
+                backend_request["backend_capability_profile"][
+                    "supports_systemc_timed_functional"
+                ]
+            )
+            self.assertFalse(backend_request["backend_capability_profile"]["supports_real_bridge"])
+            required_groups = set(backend_request["metrics_contract"]["required_groups"])
+            for key in (
+                "time_to_completion_s",
+                "device_busy_s",
+                "host_wait_s",
+                "dma_read_bytes",
+                "dma_write_bytes",
+                "bytes_moved_to_convergence",
+                "resident_reuse_ratio",
+                "fallback_ratio",
+                "spill_ratio",
+                "cycle_proxy",
+            ):
+                self.assertIn(key, required_groups)
+            self.assertEqual(backend_request["claim_ceiling"], "descriptor_only")
+            self.assertIn("not_systemc_executed", backend_request["non_claims"])
+            self.assertIn("not_qe_correctness_executed", backend_request["non_claims"])
+
+    def test_generic_workload_emits_no_qe_domain_extension_or_anchors(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            workload_path = root / "generic_workload.json"
+            workload_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "generic_trace_workload_v0",
+                        "workload_id": "generic_spmv_small",
+                        "domain": "sparse_linear_algebra",
+                        "app_adapter": "generic_trace",
+                        "dimension_n": 64,
+                        "dimension_m": 4,
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            out_dir = root / "out"
+
+            rc = MODULE_ANY.main(
+                [
+                    "--design-space-spec",
+                    str(DESIGN_SPACE_PATH),
+                    "--workload",
+                    str(workload_path),
+                    "--output-dir",
+                    str(out_dir),
+                    "--source-kind",
+                    "stub",
+                    "--search-backend",
+                    "bounded_cartesian",
+                    "--max-design-points",
+                    "1",
+                    "--dry-run",
+                    "--emit-stage-b0-descriptors",
+                ]
+            )
+
+            self.assertEqual(rc, 0)
+            bundle = json.loads((out_dir / "unified_dse_results_v0.json").read_text(encoding="utf-8"))
+            row = bundle["results"][0]
+            self.assertEqual(row["workload_identity"]["domain"], "sparse_linear_algebra")
+            self.assertEqual(row["workload_identity"]["app_adapter"], "generic_trace")
+            self.assertEqual(row["workload_identity"]["adapter"], "generic")
+            self.assertEqual(row["domain_extension"], {})
+            self.assertEqual(row["qe_anchor_refs"], {})
+            descriptor_manifest = json.loads(
+                (out_dir / "stage_b0_descriptor_manifest_v0.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(len(descriptor_manifest["descriptors"]), 1)
+            backend_request = json.loads(
+                (
+                    out_dir
+                    / descriptor_manifest["descriptors"][0]["backend_execution_request_ref"]
+                ).read_text(encoding="utf-8")
+            )
+            self.assertEqual(backend_request["workload_identity"]["adapter"], "generic")
+            self.assertEqual(
+                backend_request["candidate_identity"]["validity_class"],
+                "valid_executable",
+            )
+            self.assertEqual(backend_request["domain_extension"], {})
+            self.assert_no_generic_qe_leak(out_dir)
 
     def test_cli_can_ingest_systemc_feedback_artifact_for_ranking(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -238,9 +394,17 @@ class RunUnifiedDseV0Tests(unittest.TestCase):
                         "schema_version": "qe_dse_systemc_feedback_artifact_v0",
                         "execution_status": "executed",
                         "source_kind": "timed_functional_proxy",
+                        "claim_ceiling": "timed_functional_proxy_feedback_only",
+                        "backend_class": "systemc_timed_functional_proxy",
+                        "report_schema_version": "backend_execution_report_v0",
                         "rows": [
                             {
                                 "candidate_id": candidate_id,
+                                "claim_ceiling": "timed_functional_proxy_feedback_only",
+                                "correctness_gate": {
+                                    "status": "not_evaluated",
+                                    "qe_equivalent_scf_claim": False,
+                                },
                                 "metrics": {
                                     "time_to_convergence_s": 1.0,
                                     "energy_to_convergence_j": 2.0,
@@ -283,7 +447,268 @@ class RunUnifiedDseV0Tests(unittest.TestCase):
             self.assertEqual(row["systemc_feedback_contract"]["status"], "feedback_artifact_ingested")
             self.assertEqual(row["systemc_feedback_contract"]["execution_status"], "executed")
             self.assertEqual(row["systemc_feedback_ingest"]["claim_ceiling"], "timed_functional_proxy_feedback_only")
+            self.assertEqual(manifest["systemc_feedback_candidate_count"], 1)
+            self.assertEqual(manifest["systemc_feedback_matched_candidate_count"], 1)
+            self.assertEqual(manifest["systemc_feedback_unmatched_candidate_ids"], [])
+            self.assertEqual(manifest["systemc_feedback_rejected_candidate_ids"], [])
             self.assertIsNone(row["final_public_family_winner"])
+
+    def test_cli_rejects_feedback_for_invalid_candidate_before_ranking(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_dir = Path(tmpdir)
+            candidate_id = (
+                "si4_pbe_uspp_small__F1__aggressive_device__single_hotpath__fit_first__"
+                "single_hotpath_partition"
+            )
+            feedback_path = out_dir / "invalid_candidate_feedback.json"
+            feedback_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "qe_dse_systemc_feedback_artifact_v0",
+                        "execution_status": "executed",
+                        "source_kind": "timed_functional_proxy",
+                        "claim_ceiling": "timed_functional_proxy_feedback_only",
+                        "backend_class": "systemc_timed_functional_proxy",
+                        "report_schema_version": "backend_execution_report_v0",
+                        "rows": [
+                            {
+                                "candidate_id": candidate_id,
+                                "claim_ceiling": "timed_functional_proxy_feedback_only",
+                                "correctness_gate": {
+                                    "status": "not_evaluated",
+                                    "qe_equivalent_scf_claim": False,
+                                },
+                                "metrics": {
+                                    "time_to_convergence_s": 1.0,
+                                    "energy_to_convergence_j": 2.0,
+                                    "bytes_moved_to_convergence": 3.0,
+                                    "fallback_ratio": 0.0,
+                                    "spill_ratio": 0.0,
+                                },
+                            }
+                        ],
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(ValueError, "feedback targets non-executable candidate"):
+                MODULE_ANY.main(
+                    self.make_base_args(out_dir)
+                    + [
+                        "--source-kind",
+                        "stub",
+                        "--max-design-points",
+                        "100",
+                        "--systemc-feedback",
+                        str(feedback_path),
+                    ]
+                )
+            self.assertFalse((out_dir / "unified_dse_manifest_v0.json").exists())
+
+    def test_cli_rejects_unknown_feedback_candidate_before_manifest_success(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_dir = Path(tmpdir)
+            feedback_path = out_dir / "unknown_candidate_feedback.json"
+            feedback_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "qe_dse_systemc_feedback_artifact_v0",
+                        "execution_status": "executed",
+                        "source_kind": "timed_functional_proxy",
+                        "claim_ceiling": "timed_functional_proxy_feedback_only",
+                        "backend_class": "systemc_timed_functional_proxy",
+                        "report_schema_version": "backend_execution_report_v0",
+                        "rows": [
+                            {
+                                "candidate_id": "unknown_candidate_should_not_match",
+                                "claim_ceiling": "timed_functional_proxy_feedback_only",
+                                "correctness_gate": {
+                                    "status": "not_evaluated",
+                                    "qe_equivalent_scf_claim": False,
+                                },
+                                "metrics": {
+                                    "time_to_convergence_s": 1.0,
+                                    "energy_to_convergence_j": 2.0,
+                                    "bytes_moved_to_convergence": 3.0,
+                                    "fallback_ratio": 0.0,
+                                    "spill_ratio": 0.0,
+                                },
+                            }
+                        ],
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(ValueError, "feedback contains unknown candidate IDs"):
+                MODULE_ANY.main(
+                    self.make_base_args(out_dir)
+                    + [
+                        "--source-kind",
+                        "stub",
+                        "--max-design-points",
+                        "3",
+                        "--systemc-feedback",
+                        str(feedback_path),
+                    ]
+                )
+            self.assertFalse((out_dir / "unified_dse_manifest_v0.json").exists())
+
+    def test_cli_zero_row_feedback_is_validated_but_not_reported_as_ingested(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_dir = Path(tmpdir)
+            feedback_path = out_dir / "zero_row_feedback.json"
+            feedback_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "qe_dse_systemc_feedback_artifact_v0",
+                        "execution_status": "executed",
+                        "source_kind": "timed_functional_proxy",
+                        "claim_ceiling": "timed_functional_proxy_feedback_only",
+                        "backend_class": "systemc_timed_functional_proxy",
+                        "report_schema_version": "backend_execution_report_v0",
+                        "rows": [],
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            rc = MODULE_ANY.main(
+                self.make_base_args(out_dir)
+                + [
+                    "--source-kind",
+                    "stub",
+                    "--max-design-points",
+                    "1",
+                    "--systemc-feedback",
+                    str(feedback_path),
+                ]
+            )
+
+            self.assertEqual(rc, 0)
+            bundle = json.loads((out_dir / "unified_dse_results_v0.json").read_text(encoding="utf-8"))
+            manifest = json.loads((out_dir / "unified_dse_manifest_v0.json").read_text(encoding="utf-8"))
+            self.assertEqual(manifest["systemc_feedback_ingest_status"], "artifact_validated_no_rows")
+            self.assertEqual(manifest["systemc_feedback_candidate_count"], 0)
+            self.assertEqual(manifest["systemc_feedback_matched_candidate_count"], 0)
+            self.assertEqual(manifest["systemc_feedback_unmatched_candidate_ids"], [])
+            self.assertFalse(any("systemc_feedback_ingest" in row for row in bundle["results"]))
+
+    def test_cli_rejects_overclaiming_systemc_feedback_artifact(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_dir = Path(tmpdir)
+            feedback_path = out_dir / "bad_systemc_feedback.json"
+            feedback_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "qe_dse_systemc_feedback_artifact_v0",
+                        "execution_status": "executed",
+                        "source_kind": "board_measured_overclaim",
+                        "claim_ceiling": "board_or_physical_measured",
+                        "backend_class": "physical_board",
+                        "report_schema_version": "backend_execution_report_v0",
+                        "rows": [],
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(ValueError, "source_kind|claim_ceiling|backend_class"):
+                MODULE_ANY.main(
+                    self.make_base_args(out_dir)
+                    + [
+                        "--source-kind",
+                        "stub",
+                        "--max-design-points",
+                        "1",
+                        "--systemc-feedback",
+                        str(feedback_path),
+                    ]
+                )
+
+    def test_cli_rejects_systemc_feedback_rows_without_correctness_gate(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_dir = Path(tmpdir)
+            feedback_path = out_dir / "bad_systemc_feedback_row.json"
+            feedback_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "qe_dse_systemc_feedback_artifact_v0",
+                        "execution_status": "executed",
+                        "source_kind": "timed_functional_proxy",
+                        "claim_ceiling": "timed_functional_proxy_feedback_only",
+                        "backend_class": "systemc_timed_functional_proxy",
+                        "report_schema_version": "backend_execution_report_v0",
+                        "rows": [
+                            {
+                                "candidate_id": "candidate",
+                                "claim_ceiling": "timed_functional_proxy_feedback_only",
+                                "metrics": {},
+                            }
+                        ],
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(ValueError, "correctness_gate|non_claims"):
+                MODULE_ANY.main(
+                    self.make_base_args(out_dir)
+                    + [
+                        "--source-kind",
+                        "stub",
+                        "--max-design-points",
+                        "1",
+                        "--systemc-feedback",
+                        str(feedback_path),
+                    ]
+                )
+
+    def test_cli_rejects_systemc_feedback_rows_with_empty_correctness_gate(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_dir = Path(tmpdir)
+            feedback_path = out_dir / "bad_systemc_feedback_empty_gate.json"
+            feedback_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "qe_dse_systemc_feedback_artifact_v0",
+                        "execution_status": "executed",
+                        "source_kind": "timed_functional_proxy",
+                        "claim_ceiling": "timed_functional_proxy_feedback_only",
+                        "backend_class": "systemc_timed_functional_proxy",
+                        "report_schema_version": "backend_execution_report_v0",
+                        "rows": [
+                            {
+                                "candidate_id": "candidate",
+                                "claim_ceiling": "timed_functional_proxy_feedback_only",
+                                "correctness_gate": {},
+                                "metrics": {},
+                            }
+                        ],
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(ValueError, "correctness_gate.status|non_claims"):
+                MODULE_ANY.main(
+                    self.make_base_args(out_dir)
+                    + [
+                        "--source-kind",
+                        "stub",
+                        "--max-design-points",
+                        "1",
+                        "--systemc-feedback",
+                        str(feedback_path),
+                    ]
+                )
 
     def test_cli_can_emit_full_stage_status_with_later_stage_blockers(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -656,7 +1081,201 @@ class RunUnifiedDseV0Tests(unittest.TestCase):
                     ]
                 )
 
-    def test_cli_rejects_non_stub_source_kind_for_current_fast_path(self) -> None:
+    def test_cli_backend_report_ingestion_emits_evidence_calibration_and_release_bundle(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_dir = Path(tmpdir) / "out"
+            report_path = Path(tmpdir) / "backend_report.json"
+            candidate_id = (
+                "si4_pbe_uspp_small__F1__cpu_only__single_hotpath__fit_first__"
+                "single_hotpath_partition"
+            )
+            report_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "backend_execution_report_v0",
+                        "candidate_id": candidate_id,
+                        "backend_class": "systemc_timed_functional_proxy",
+                        "source_kind": "timed_functional_proxy",
+                        "fidelity": "systemc_timed_functional",
+                        "execution_status": "executed",
+                        "metrics": {
+                            "time_to_convergence_s": 0.5,
+                            "energy_to_convergence_j": 1.0,
+                            "bytes_moved_to_convergence": 2.0,
+                            "fallback_ratio": 0.0,
+                            "spill_ratio": 0.0,
+                        },
+                        "claim_ceiling": "systemc_proxy_only",
+                        "correctness_gate": {
+                            "status": "not_evaluated",
+                            "qe_equivalent_scf_claim": False,
+                        },
+                        "non_claims": ["not_qe_equivalent_scf", "not_board_measured"],
+                        "artifact_refs": {"report": "external/systemc_report.json"},
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            rc = MODULE_ANY.main(
+                [
+                    "--design-space-spec",
+                    str(DESIGN_SPACE_PATH),
+                    "--workload",
+                    str(FIXTURE_DIR / "minimal_workload.json"),
+                    "--output-dir",
+                    str(out_dir),
+                    "--source-kind",
+                    "fast_model_screening",
+                    "--max-design-points",
+                    "1",
+                    "--backend-report",
+                    str(report_path),
+                    "--emit-release-bundle",
+                    "--dry-run",
+                ]
+            )
+
+            self.assertEqual(rc, 0)
+            bundle = json.loads((out_dir / "unified_dse_results_v0.json").read_text(encoding="utf-8"))
+            manifest = json.loads((out_dir / "unified_dse_manifest_v0.json").read_text(encoding="utf-8"))
+            release = json.loads((out_dir / "frontend_release_bundle_v0.json").read_text(encoding="utf-8"))
+            row = bundle["results"][0]
+
+            self.assertEqual(manifest["backend_report_ingest_status"], "evidence_ir_normalized")
+            self.assertEqual(manifest["evidence_ir_count"], 1)
+            self.assertEqual(row["evidence_ir"]["schema_version"], "evidence_ir_v0")
+            self.assertEqual(row["source_kind"], "timed_functional_proxy")
+            self.assertTrue((out_dir / "calibration_metadata_v0.json").exists())
+            self.assertEqual(release["schema_version"], "release_bundle_v0")
+            self.assertIsNone(release["final_public_family_winner"])
+            self.assertFalse(release["non_touch_guard"]["backend_execution_performed_by_frontend"])
+
+    def test_cli_ingests_refused_backend_execution_report_without_execution_claim(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_dir = Path(tmpdir) / "out"
+            report_path = Path(tmpdir) / "backend_refused_report.json"
+            candidate_id = (
+                "si4_pbe_uspp_small__F1__cpu_only__single_hotpath__fit_first__"
+                "single_hotpath_partition"
+            )
+            report_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "backend_execution_report_v0",
+                        "candidate_id": candidate_id,
+                        "backend_class": "systemc_timed_functional_proxy",
+                        "source_kind": "backend_runner_dry_run",
+                        "fidelity": "descriptor_only",
+                        "execution_status": "refused",
+                        "metrics": {},
+                        "claim_ceiling": "descriptor_only",
+                        "correctness_gate": {
+                            "status": "not_evaluated",
+                            "qe_equivalent_scf_claim": False,
+                        },
+                        "non_claims": [
+                            "not_backend_executed",
+                            "not_qe_correctness_claim",
+                            "not_board_or_physical_measurement_claim",
+                        ],
+                        "artifact_refs": {"report": "external/backend_refusal_report.json"},
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            rc = MODULE_ANY.main(
+                [
+                    "--design-space-spec",
+                    str(DESIGN_SPACE_PATH),
+                    "--workload",
+                    str(FIXTURE_DIR / "minimal_workload.json"),
+                    "--output-dir",
+                    str(out_dir),
+                    "--source-kind",
+                    "fast_model_screening",
+                    "--max-design-points",
+                    "1",
+                    "--backend-report",
+                    str(report_path),
+                    "--dry-run",
+                ]
+            )
+
+            self.assertEqual(rc, 0)
+            bundle = json.loads((out_dir / "unified_dse_results_v0.json").read_text(encoding="utf-8"))
+            manifest = json.loads((out_dir / "unified_dse_manifest_v0.json").read_text(encoding="utf-8"))
+            row = bundle["results"][0]
+
+            self.assertEqual(manifest["backend_report_ingest_status"], "evidence_ir_normalized")
+            self.assertEqual(manifest["evidence_ir_count"], 1)
+            self.assertEqual(row["evidence_ir"]["execution_status"], "refused")
+            self.assertEqual(row["evidence_ir"]["claim_ceiling"], "descriptor_only")
+            self.assertEqual(row["source_kind"], "backend_runner_dry_run")
+            self.assertNotEqual(row["result_status"], "executed")
+            self.assertIn("not_backend_executed", row["evidence_ir"]["non_claims"])
+
+    def test_scheduler_selected_stage_b0_emits_only_plan_selected_candidates(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_dir = Path(tmpdir)
+
+            rc = MODULE_ANY.main(
+                self.make_base_args(out_dir)
+                + [
+                    "--source-kind",
+                    "fast_model_screening",
+                    "--max-design-points",
+                    "9",
+                    "--shortlist-policy",
+                    "top_fast_uncertain_diverse",
+                    "--shortlist-size",
+                    "2",
+                    "--emit-multi-fidelity-plan",
+                    "--emit-stage-b0-descriptors",
+                    "--stage-b0-emission-mode",
+                    "scheduler_selected_only",
+                ]
+            )
+
+            self.assertEqual(rc, 0)
+            plan = json.loads((out_dir / "multi_fidelity_plan_v0.json").read_text(encoding="utf-8"))
+            descriptor_manifest = json.loads(
+                (out_dir / "stage_b0_descriptor_manifest_v0.json").read_text(encoding="utf-8")
+            )
+            selected_ids = {item["candidate_id"] for item in plan["selected_candidates"]}
+            emitted_ids = {item["candidate_id"] for item in descriptor_manifest["descriptors"]}
+
+            self.assertEqual(plan["schema_version"], "multi_fidelity_plan_v0")
+            self.assertEqual(descriptor_manifest["emission_mode"], "scheduler_selected_only")
+            self.assertEqual(emitted_ids, selected_ids)
+            self.assertEqual(descriptor_manifest["descriptor_count"], plan["selected_count"])
+            self.assertGreaterEqual(descriptor_manifest["unselected_valid_candidate_count"], 1)
+
+    def test_qedse_frontend_wrapper_help_for_all_subcommands(self) -> None:
+        script = ROOT / "docs/benchmarks/qedse_frontend.py"
+        for command in (
+            "enumerate",
+            "optimize",
+            "emit-handoff",
+            "ingest-feedback",
+            "calibrate",
+            "adjudicate",
+            "release",
+        ):
+            with self.subTest(command=command):
+                proc = subprocess.run(
+                    ["python3", str(script), "frontend", command, "--help"],
+                    text=True,
+                    capture_output=True,
+                    check=False,
+                )
+                self.assertEqual(proc.returncode, 0, proc.stderr)
+                self.assertIn("usage:", proc.stdout)
+
+    def test_cli_rejects_backend_source_kind_for_current_frontend_path(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             stderr = io.StringIO()
             with contextlib.redirect_stderr(stderr):
@@ -667,7 +1286,111 @@ class RunUnifiedDseV0Tests(unittest.TestCase):
                     )
 
             self.assertNotEqual(raised.exception.code, 0)
-            self.assertIn("current Unified DSE v0 CLI only supports --source-kind stub", stderr.getvalue())
+            self.assertIn("stub or fast_model_screening", stderr.getvalue())
+
+    def test_cli_fast_model_screening_is_frontend_only_and_ranked(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_dir = Path(tmpdir)
+
+            rc = MODULE_ANY.main(
+                self.make_base_args(out_dir)
+                + [
+                    "--source-kind",
+                    "fast_model_screening",
+                    "--max-design-points",
+                    "4",
+                    "--search-backend",
+                    "bounded_cartesian",
+                    "--shortlist-policy",
+                    "top_fast_uncertain_diverse",
+                    "--shortlist-size",
+                    "2",
+                    "--emit-stage-b0-descriptors",
+                ]
+            )
+
+            self.assertEqual(rc, 0)
+            bundle = json.loads((out_dir / "unified_dse_results_v0.json").read_text(encoding="utf-8"))
+            rows = bundle["results"]
+            self.assertTrue(any(row["result_status"] == "screened" for row in rows))
+            self.assertEqual({row["source_kind"] for row in rows}, {"fast_model_screening"})
+            ranked = [row for row in rows if row["promotion_state"] == "promotion-eligible"]
+            self.assertGreaterEqual(len(ranked), 1)
+            self.assertEqual({row["ranking_claim_ceiling"] for row in ranked}, {"fast_model_screening_only"})
+            self.assertIsNone(bundle["authority"]["final_public_family_winner"])
+            self.assertTrue(any(row["shortlisted_for_backend"] for row in rows))
+            first = rows[0]
+            self.assertEqual(first["model_metadata"]["claim_ceiling"], "fast_model_screening_only")
+            self.assertEqual(first["backend_neutral_schema"]["source_kind"], "fast_model_screening")
+            self.assertEqual(
+                first["candidate_descriptor"]["candidate_identity"]["source_kind"],
+                "fast_model_screening",
+            )
+            self.assertEqual(first["candidate_descriptor"]["schema_version"], "candidate_descriptor_v0")
+            self.assertEqual(
+                first["backend_execution_request"]["expected_report_schema"],
+                "backend_execution_report_v0",
+            )
+
+    def test_stage_b0_descriptor_emission_blocks_projection_only_rows_directly(self) -> None:
+        stage_b0_descriptors = importlib.import_module("unified_dse.stage_b0_descriptors")
+        stage_a_contracts = importlib.import_module("unified_dse.stage_a_contracts")
+        workload = json.loads((FIXTURE_DIR / "minimal_workload.json").read_text(encoding="utf-8"))
+        row = {
+            "workload": workload,
+            "design_point": {
+                "family": "F4",
+                "diag_policy": "device_first_fallback",
+                "offload_scope": "balanced",
+                "resident_policy": "fit_first",
+                "partition_strategy": "operator__build__diag__refresh",
+            },
+            "backend": "fast_model",
+            "result_status": "stub",
+            "source_kind": "stub",
+            "metrics": {},
+            "authority_scope": "supporting_evidence_only",
+            "promotion_state": "explain-only",
+            "final_public_family_winner": None,
+        }
+        row = stage_a_contracts.attach_stage_a_contracts(row)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            manifest = stage_b0_descriptors.emit_stage_b0_descriptors(Path(tmpdir), [row])
+
+            self.assertEqual(manifest["descriptor_count"], 0)
+            self.assertEqual(manifest["blocked_descriptor_count"], 1)
+            self.assertEqual(
+                manifest["blocked_descriptors"][0]["validity_class"],
+                "projection_only",
+            )
+            self.assertFalse((Path(tmpdir) / "systemc_configs").exists())
+
+    def test_stage_b0_descriptor_validation_matches_stage_a_row_validation(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_dir = Path(tmpdir)
+            rc = MODULE_ANY.main(
+                self.make_base_args(out_dir)
+                + ["--source-kind", "stub", "--max-design-points", "1", "--emit-stage-b0-descriptors"]
+            )
+
+            self.assertEqual(rc, 0)
+            bundle = json.loads((out_dir / "unified_dse_results_v0.json").read_text(encoding="utf-8"))
+            descriptor_manifest = json.loads(
+                (out_dir / "stage_b0_descriptor_manifest_v0.json").read_text(encoding="utf-8")
+            )
+            row = bundle["results"][0]
+            descriptor = descriptor_manifest["descriptors"][0]
+            systemc_config = json.loads(
+                (out_dir / descriptor["systemc_config_ref"]).read_text(encoding="utf-8")
+            )
+            gem5_descriptor = json.loads(
+                (out_dir / descriptor["gem5_descriptor_ref"]).read_text(encoding="utf-8")
+            )
+
+            self.assertEqual(systemc_config["design_validation"], row["design_validation"])
+            self.assertEqual(gem5_descriptor["design_validation"], row["design_validation"])
+            self.assertNotIn("target_resource_model", systemc_config["design_validation"]["missing_evidence"])
 
     def test_manifest_gates_reject_incomplete_contract_objects(self) -> None:
         valid_row = {

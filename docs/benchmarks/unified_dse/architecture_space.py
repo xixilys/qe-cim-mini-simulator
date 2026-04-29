@@ -15,6 +15,11 @@ class DesignSpaceSpec:
     authority_stage: dict[str, Any]
     design_axes: dict[str, list[str]]
 
+    def allowed_values(self, axis: str) -> list[str]:
+        if axis not in self.design_axes:
+            raise ValueError(f"unknown design axis: {axis}")
+        return list(self.design_axes[axis])
+
 
 @dataclass(frozen=True)
 class FamilySupportStatus:
@@ -44,8 +49,18 @@ def make_design_point(
     resident_policy: str,
     partition_strategy: str,
 ) -> DesignPoint:
-    if family not in spec.design_axes["family"]:
-        raise ValueError(f"unknown architecture family: {family}")
+    axis_values = {
+        "family": family,
+        "diag_policy": diag_policy,
+        "offload_scope": offload_scope,
+        "resident_policy": resident_policy,
+        "partition_strategy": partition_strategy,
+    }
+    for axis, value in axis_values.items():
+        if value not in spec.allowed_values(axis):
+            if axis == "family":
+                raise ValueError(f"unknown architecture family: {value}")
+            raise ValueError(f"unknown design axis value: {axis}={value}")
     return DesignPoint(
         family=family,
         diag_policy=diag_policy,
@@ -73,3 +88,27 @@ def family_support_status(spec: DesignSpaceSpec, family: str) -> FamilySupportSt
         runtime_executor_backed=True,
         runtime_projection_family=family,
     )
+
+
+def build_target_realization(
+    architecture_template: Mapping[str, Any],
+    mapping_ir: Mapping[str, Any],
+    target_class: str,
+) -> dict[str, Any]:
+    if target_class not in {"fpga", "asic", "cpu_only_baseline", "simulated_accelerator", "unknown"}:
+        raise ValueError(f"unsupported target class: {target_class}")
+    return {
+        "schema_version": "target_realization_ir_v0",
+        "target_class": target_class,
+        "realization_status": "descriptor_only_unresolved",
+        "architecture_template_id": architecture_template.get("template_id"),
+        "mapped_node_count": len(mapping_ir.get("mapped_nodes", {}))
+        if isinstance(mapping_ir.get("mapped_nodes"), Mapping)
+        else 0,
+        "requires_backend_resolution": True,
+        "non_claims": [
+            "not_backend_executed",
+            "not_resource_placed",
+            "not_timing_closed",
+        ],
+    }

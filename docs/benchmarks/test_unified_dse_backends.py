@@ -47,6 +47,67 @@ def make_design_point(interfaces: Any) -> Any:
     )
 
 
+def make_feedback(candidate_id: str, *, duplicate: bool = False) -> dict[str, Any]:
+    row = {
+        "candidate_id": candidate_id,
+        "claim_ceiling": "timed_functional_proxy_feedback_only",
+        "correctness_gate": {
+            "status": "not_evaluated",
+            "qe_equivalent_scf_claim": False,
+        },
+        "metrics": {
+            "time_to_convergence_s": 1.0,
+            "energy_to_convergence_j": 2.0,
+            "bytes_moved_to_convergence": 3.0,
+            "fallback_ratio": 0.0,
+            "spill_ratio": 0.0,
+        },
+    }
+    rows = [dict(row)]
+    if duplicate:
+        rows.append(dict(row))
+    return {
+        "schema_version": "qe_dse_systemc_feedback_artifact_v0",
+        "execution_status": "executed",
+        "source_kind": "timed_functional_proxy",
+        "claim_ceiling": "timed_functional_proxy_feedback_only",
+        "backend_class": "systemc_timed_functional_proxy",
+        "report_schema_version": "backend_execution_report_v0",
+        "rows": rows,
+    }
+
+
+def make_feedback_target_row(
+    *,
+    family: str = "F1",
+    diag_policy: str = "cpu_only",
+) -> dict[str, Any]:
+    workload = json.loads((FIXTURE_DIR / "minimal_workload.json").read_text(encoding="utf-8"))
+    row = {
+        "workload": workload,
+        "design_point": {
+            "family": family,
+            "diag_policy": diag_policy,
+            "offload_scope": "single_hotpath",
+            "resident_policy": "fit_first",
+            "partition_strategy": "single_hotpath_partition",
+        },
+        "backend": "fast_model",
+        "result_status": "stub",
+        "source_kind": "stub",
+        "metrics": {},
+        "authority_scope": "supporting_evidence_only",
+        "promotion_state": "explain-only",
+        "final_public_family_winner": None,
+    }
+    stage_a_contracts = load_unified_dse_module("stage_a_contracts")
+    return stage_a_contracts.attach_stage_a_contracts(row)
+
+
+def feedback_candidate_id(row: dict[str, Any]) -> str:
+    return str(row["systemc_feedback_contract"]["candidate_id"])
+
+
 class UnifiedDseBackendTests(unittest.TestCase):
     def test_fast_model_stub_result_remains_evidence_only(self) -> None:
         interfaces = load_unified_dse_module("interfaces")
@@ -166,6 +227,76 @@ class UnifiedDseBackendTests(unittest.TestCase):
         self.assertEqual(payload["authority_scope"], "supporting_evidence_only")
         self.assertFalse(payload["claim_bearing"])
         self.assertIn("implementation_backend_reserved", payload["stub_reason"])
+
+    def test_feedback_join_rejects_unknown_duplicate_and_non_executable_candidates(self) -> None:
+        systemc_feedback_adapter = load_unified_dse_module("systemc_feedback_adapter")
+        valid = make_feedback_target_row()
+        invalid = make_feedback_target_row(diag_policy="aggressive_device")
+        projection = make_feedback_target_row(family="F4")
+
+        with self.assertRaisesRegex(ValueError, "feedback contains unknown candidate IDs"):
+            systemc_feedback_adapter.apply_systemc_feedback(
+                [valid],
+                make_feedback("unknown_candidate"),
+            )
+        with self.assertRaisesRegex(ValueError, "duplicate feedback candidate ID"):
+            systemc_feedback_adapter.apply_systemc_feedback(
+                [valid],
+                make_feedback(feedback_candidate_id(valid), duplicate=True),
+            )
+        with self.assertRaisesRegex(ValueError, "feedback targets non-executable candidate"):
+            systemc_feedback_adapter.apply_systemc_feedback(
+                [invalid],
+                make_feedback(feedback_candidate_id(invalid)),
+            )
+        with self.assertRaisesRegex(ValueError, "feedback targets non-executable candidate"):
+            systemc_feedback_adapter.apply_systemc_feedback(
+                [projection],
+                make_feedback(feedback_candidate_id(projection)),
+            )
+
+    def test_feedback_join_rejects_missing_or_malformed_candidate_descriptor(self) -> None:
+        systemc_feedback_adapter = load_unified_dse_module("systemc_feedback_adapter")
+        missing_descriptor = make_feedback_target_row()
+        descriptor_id = feedback_candidate_id(missing_descriptor)
+        del missing_descriptor["candidate_descriptor"]
+
+        with self.assertRaisesRegex(ValueError, "feedback target missing candidate_descriptor"):
+            systemc_feedback_adapter.apply_systemc_feedback(
+                [missing_descriptor],
+                make_feedback(descriptor_id),
+            )
+
+        missing_descriptor_validation = make_feedback_target_row()
+        validation_id = feedback_candidate_id(missing_descriptor_validation)
+        del missing_descriptor_validation["candidate_descriptor"]["design_validation"]
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "feedback target missing candidate_descriptor.design_validation",
+        ):
+            systemc_feedback_adapter.apply_systemc_feedback(
+                [missing_descriptor_validation],
+                make_feedback(validation_id),
+            )
+
+    def test_zero_row_feedback_has_non_ingest_summary(self) -> None:
+        systemc_feedback_adapter = load_unified_dse_module("systemc_feedback_adapter")
+        valid = make_feedback_target_row()
+        feedback = make_feedback(feedback_candidate_id(valid))
+        feedback["rows"] = []
+
+        summary = systemc_feedback_adapter.feedback_ingest_summary([valid], feedback)
+        updated = systemc_feedback_adapter.apply_systemc_feedback([valid], feedback)
+
+        self.assertEqual(
+            summary["systemc_feedback_ingest_status"],
+            "artifact_validated_no_rows",
+        )
+        self.assertEqual(summary["systemc_feedback_candidate_count"], 0)
+        self.assertEqual(summary["systemc_feedback_matched_candidate_count"], 0)
+        self.assertEqual(summary["systemc_feedback_unmatched_candidate_ids"], [])
+        self.assertEqual(updated, [valid])
 
 
 if __name__ == "__main__":

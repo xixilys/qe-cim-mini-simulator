@@ -1,0 +1,141 @@
+{
+  "artifact_refs": {
+    "legacy_b3_smoke_report": "docs/benchmarks/results/qe_dse_gem5_systemc_smoke_report_v0.json",
+    "legacy_candidate_id": "stage_b3_fpga_device_test_fs_pci_dma_tlm_stub_smoke",
+    "legacy_fs_pci_smoke_command": "cd gem5_integration && GEM5_CPU_TYPE=kvm GEM5_MAX_TICKS=2000000000000 ./gem5/build/X86/gem5.opt -d m5out/fpga_fs_pci_smoke_kvm_pass --debug-flags=FPGAAccelerator,FPGADMA,FPGATLM --debug-file=fpga_debug.log configs/fpga_fs_pci_smoke.py",
+    "legacy_m5out_refs": [
+      "gem5_integration/m5out/fpga_device_test_verify",
+      "gem5_integration/m5out/fpga_fs_pci_smoke_kvm_pass",
+      "gem5_integration/m5out/fpga_fs_pci_smoke_kvm_pass/system.pc.com_1.device",
+      "gem5_integration/m5out/fpga_fs_pci_smoke_kvm_pass/fpga_debug.log",
+      "gem5_integration/m5out/fpga_fs_pci_smoke_kvm_pass/stats.txt"
+    ],
+    "legacy_run_id": "wsl_gem5_25_1_fpga_fs_pci_dma_tlm_stub_smoke_20260427",
+    "legacy_runtime_smoke_command": "cd gem5_integration && ./gem5/build/X86/gem5.opt -d m5out/fpga_device_test_verify configs/fpga_device_test.py",
+    "legacy_schema_version": "qe_dse_gem5_systemc_smoke_report_v0"
+  },
+  "backend_class": "gem5_systemc_smoke",
+  "candidate_id": "stage_b3_gem5_systemc_smoke_fixture",
+  "claim_ceiling": "gem5_systemc_smoke_only",
+  "control_path": {
+    "completion_count": 1,
+    "completion_source": "smoke_immediate_complete",
+    "deadlock": false,
+    "fallback_count": 0,
+    "host_launch_count": 12,
+    "qe_equivalence_status": "not_claimed",
+    "scf_control_loop_status": "smoke_passed",
+    "systemc_bridge_status": "smoke_passed"
+  },
+  "correctness_gate": {
+    "domain": "dft",
+    "domain_equivalence_claim": false,
+    "workload_equivalent_claim": false
+  },
+  "environment": {
+    "gem5_build_defines": {
+      "BUILD_TLM": false,
+      "HAVE_SYSTEMC": true,
+      "USE_KVM": true,
+      "USE_SYSTEMC": true,
+      "USE_X86_ISA": true
+    },
+    "gem5_build_ref": "gem5_integration/gem5/build/X86/gem5.opt",
+    "gem5_compile_stamp": "2026-04-27 21:18:26",
+    "gem5_version": "25.1.0.0",
+    "host_arch": "x86_64",
+    "host_os": "linux_wsl",
+    "initramfs_ref": "gem5_integration/minimal_rootfs/initramfs.cpio.gz",
+    "kernel_ref": "/home/xixilys/.cache/gem5/x86-linux-kernel-6.8.0-52-generic-1.0.0",
+    "requested_workspace_note": "User-requested /mnt/f/phd/year_2/project/dft\u52a0\u901f was not present in this WSL shell; active repo is the mounted ASCII-path copy.",
+    "root_gem5_build_ref_status": "missing: gem5/build/X86/gem5.opt; using gem5_integration/gem5/build/X86/gem5.opt",
+    "systemc_build_ref": "gem5 SystemC_Kernel plus in-device FPGATLMMediator/FPGATLMStub path; standalone DFTHybridSystem was not rerun for this report.",
+    "workspace": "/mnt/f/phd/year_2/project/dft_accelerate"
+  },
+  "execution_status": "executed",
+  "fidelity": "gem5_systemc_smoke",
+  "metrics": {
+    "bytes_moved_to_convergence": 43136,
+    "cycle_proxy": 425922318,
+    "device_busy_s": null,
+    "dma_guest_summary": {
+      "failed": 0,
+      "passed": 4,
+      "total": 4
+    },
+    "dma_read_bytes": null,
+    "dma_test_sizes_bytes": [
+      64,
+      1024,
+      4096,
+      16384
+    ],
+    "dma_write_bytes": 21568,
+    "fallback_ratio": null,
+    "fs_pci_smoke_command": "cd gem5_integration && GEM5_CPU_TYPE=kvm GEM5_MAX_TICKS=2000000000000 ./gem5/build/X86/gem5.opt -d m5out/fpga_fs_pci_smoke_kvm_pass --debug-flags=FPGAAccelerator,FPGADMA,FPGATLM --debug-file=fpga_debug.log configs/fpga_fs_pci_smoke.py",
+    "fs_pci_smoke_cpu_type": "kvm",
+    "fs_pci_smoke_exit_cause": "simulate() limit reached",
+    "fs_pci_smoke_mem_mode": "atomic_noncaching",
+    "fs_pci_smoke_status": "passed_bounded_after_guest_pass_banner",
+    "fs_pci_smoke_ticks": 2000000000000,
+    "gem5_dma_stat_bytes": 21568,
+    "gem5_pci_dma_packet_count": 2022,
+    "guest_bar0_assigned": "0xc0000000-0xc000ffff",
+    "guest_visible_pci_bar_transactions": 328,
+    "host_wait_s": null,
+    "host_warning_note": "gem5 printed repeated src/dev/dma_device.cc:72 Response pkt error warnings during the mock DMA path; guest DMA summary still passed 4/4 and stats show FPGA DMA traffic. Treat this as a follow-up modeling cleanup risk, not hardware correctness evidence.",
+    "logical_dma_payload_bytes_tested": 43136,
+    "m5out_refs": [
+      "gem5_integration/m5out/fpga_device_test_verify",
+      "gem5_integration/m5out/fpga_fs_pci_smoke_kvm_pass",
+      "gem5_integration/m5out/fpga_fs_pci_smoke_kvm_pass/system.pc.com_1.device",
+      "gem5_integration/m5out/fpga_fs_pci_smoke_kvm_pass/fpga_debug.log",
+      "gem5_integration/m5out/fpga_fs_pci_smoke_kvm_pass/stats.txt"
+    ],
+    "minimal_qe_like_final_error": 5e-07,
+    "minimal_qe_like_iterations": 12,
+    "minimal_qe_like_offload_status": "passed_stub_only",
+    "overall_stage_b3_status": "passed_minimal_gem5_25_1_pci_dma_tlm_stub_smoke",
+    "pc_attachio_path": "system.pc.attachIO(system.iobus)",
+    "pci_attach_path": "system.pc.attachPciDevice(system.fpga)",
+    "pci_bus": "system.pc.pci_bus",
+    "pci_endpoint_bdf": "0000:00:08.0",
+    "pci_endpoint_object": "system.fpga",
+    "pci_upstream": "system.pc.pci_host",
+    "pci_vendor_device": "10ee:9038",
+    "python_object_availability_command": "cd gem5_integration && python3 test_fpga_device.py",
+    "python_object_availability_status": "passed",
+    "resident_reuse_ratio": null,
+    "runtime_exit_cause": "exiting with last active thread context",
+    "runtime_smoke_binary": "gem5/tests/test-progs/hello/bin/x86/linux/hello",
+    "runtime_smoke_command": "cd gem5_integration && ./gem5/build/X86/gem5.opt -d m5out/fpga_device_test_verify configs/fpga_device_test.py",
+    "runtime_smoke_status": "passed",
+    "runtime_smoke_ticks": 425922318,
+    "spill_ratio": null,
+    "systemc_transactions": 1,
+    "time_to_completion_s": null,
+    "tlm_stub_command": "electrons",
+    "tlm_stub_computed_time_ns": 42553,
+    "tlm_stub_estimated_delay_ns": 4915200,
+    "tlm_stub_returned_time_ns": 1000000,
+    "tlm_stub_transactions": 1
+  },
+  "non_claims": [
+    "no_qe_equivalent_scf_claim",
+    "no_cycle_accuracy_claim",
+    "no_rtl_hls_board_or_asic_implementation_claim",
+    "no_full_dfthybridsystem_or_complete_qe_scf_bridge_claim",
+    "no_final_architecture_recommendation"
+  ],
+  "notes": [
+    "configs/fpga_device_test.py uses the gem5 25.1 x86 Pc platform, PcPciHost, PciBus, Pc.attachIO(), and Pc.attachPciDevice() path instead of a bare GenericPciHost.",
+    "The SE runtime smoke uses gem5's static x86 hello binary and exits cleanly through the last active thread context.",
+    "The FS KVM smoke enumerated PCI endpoint 0000:00:08.0 as [10ee:9038] and assigned BAR0 at 0xc0000000-0xc000ffff.",
+    "The guest initramfs DMA smoke reported 4/4 passing mock transfers and the minimal QE-like offload test reported PASSED.",
+    "FPGATLM debug output observed the in-device TLM stub electrons command. This is a TLM-stub bridge smoke only, not a full DFTHybridSystem or QE-equivalent SCF run.",
+    "The FS smoke is bounded at 2e12 ticks after the guest pass banner to avoid the expected init-process-exit kernel panic seen when rdinit returns.",
+    "Converted from legacy Stage B3 smoke report envelope."
+  ],
+  "schema_version": "backend_execution_report_v0",
+  "source_kind": "backend_runner_gem5_systemc"
+}

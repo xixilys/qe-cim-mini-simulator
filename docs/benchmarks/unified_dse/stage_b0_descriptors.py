@@ -4,10 +4,15 @@ import json
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+from . import constraints, domain_contracts
+
 
 DESCRIPTOR_MANIFEST_NAME = "stage_b0_descriptor_manifest_v0.json"
 SYSTEMC_CONFIG_SCHEMA_VERSION = "qe_dse_systemc_candidate_config_stage_b0_v0"
 GEM5_HANDOFF_DESCRIPTOR_SCHEMA_VERSION = "qe_dse_gem5_systemc_handoff_descriptor_stage_b0_v0"
+EMISSION_ALL_VALID_EXECUTABLE = "all_valid_executable"
+EMISSION_SCHEDULER_SELECTED_ONLY = "scheduler_selected_only"
+EMISSION_MODES = (EMISSION_ALL_VALID_EXECUTABLE, EMISSION_SCHEDULER_SELECTED_ONLY)
 
 
 def _require_mapping(row: Mapping[str, Any], key: str) -> Mapping[str, Any]:
@@ -32,14 +37,22 @@ def _write_json(path: Path, payload: Mapping[str, Any]) -> None:
 
 def _workload_identity(row: Mapping[str, Any]) -> dict[str, Any]:
     workload = _require_mapping(row, "workload")
-    qe_anchor_refs = _require_mapping(row, "qe_anchor_refs")
+    identity = dict(row.get("workload_identity", {}) if isinstance(row.get("workload_identity"), Mapping) else {})
+    if not identity:
+        identity = domain_contracts.workload_identity(workload)
+    if domain_contracts.is_qe_workload(workload):
+        qe_anchor_refs = _require_mapping(row, "qe_anchor_refs")
+        identity.update(
+            {
+                "case_id": qe_anchor_refs.get("case_id"),
+                "signature_id": workload.get("signature_id"),
+                "pseudopotential_family": workload.get("pseudopotential_family"),
+                "qe_tolerance_schema_id": workload.get("qe_tolerance_schema_id"),
+            }
+        )
     return {
-        "workload_id": workload.get("workload_id"),
-        "case_id": qe_anchor_refs.get("case_id"),
+        **identity,
         "workload_group_id": workload.get("workload_group_id"),
-        "signature_id": workload.get("signature_id"),
-        "pseudopotential_family": workload.get("pseudopotential_family"),
-        "qe_tolerance_schema_id": workload.get("qe_tolerance_schema_id"),
         "accounting_boundary_id": workload.get("accounting_boundary_id"),
         "observability_contract_id": workload.get("observability_contract_id"),
     }
@@ -49,6 +62,9 @@ def _candidate_identity(row: Mapping[str, Any]) -> dict[str, Any]:
     design_point = _require_mapping(row, "design_point")
     systemc_feedback = _require_mapping(row, "systemc_feedback_contract")
     backend_neutral_schema = _require_mapping(row, "backend_neutral_schema")
+    design_validation = row.get("design_validation", {})
+    if not isinstance(design_validation, Mapping):
+        design_validation = {}
     projection = row.get("projection", {})
     if not isinstance(projection, Mapping):
         projection = {}
@@ -61,11 +77,55 @@ def _candidate_identity(row: Mapping[str, Any]) -> dict[str, Any]:
         "runtime_projection_family": projection.get("runtime_projection_family"),
         "implementation_backend": backend_neutral_schema.get("implementation_backend"),
         "source_kind": backend_neutral_schema.get("source_kind"),
+        "validity_class": design_validation.get("validity_class"),
         "design_axes": dict(design_point),
     }
 
 
-def _systemc_config(row: Mapping[str, Any]) -> dict[str, Any]:
+def _sidecar_refs(row: Mapping[str, Any]) -> dict[str, str]:
+    workload = _require_mapping(row, "workload")
+    design_point = _require_mapping(row, "design_point")
+    identity = _candidate_identity(row)
+    architecture_template_id = str(identity.get("architecture_template_id") or "unknown_template")
+    candidate_id = str(identity.get("candidate_id") or _candidate_id(row))
+    return {
+        "application_graph_ref": domain_contracts.application_graph_ref(workload),
+        "architecture_template_ref": domain_contracts.architecture_template_ref(architecture_template_id),
+        "mapping_ref": domain_contracts.mapping_sidecar_ref(design_point),
+        "candidate_descriptor_ref": domain_contracts.candidate_descriptor_ref(candidate_id),
+    }
+
+
+def _write_ir_sidecars(root: Path, row: Mapping[str, Any]) -> dict[str, str]:
+    refs = _sidecar_refs(row)
+    workload = _require_mapping(row, "workload")
+    design_point = _require_mapping(row, "design_point")
+    identity = _candidate_identity(row)
+    architecture_template_id = str(identity.get("architecture_template_id") or "unknown_template")
+    target_class = str(identity.get("implementation_target_class") or "unknown")
+    candidate_descriptor = dict(_require_mapping(row, "candidate_descriptor"))
+    candidate_descriptor.update(
+        {
+            "application_graph_ref": refs["application_graph_ref"],
+            "architecture_template_ref": refs["architecture_template_ref"],
+            "mapping_ref": refs["mapping_ref"],
+        }
+    )
+    _write_json(root / refs["application_graph_ref"], domain_contracts.build_application_graph_ir(workload))
+    _write_json(
+        root / refs["architecture_template_ref"],
+        domain_contracts.build_architecture_template_ir(
+            architecture_template_id,
+            design_point,
+            target_class,
+        ),
+    )
+    _write_json(root / refs["mapping_ref"], domain_contracts.build_mapping_ir(design_point, workload))
+    _write_json(root / refs["candidate_descriptor_ref"], candidate_descriptor)
+    return refs
+
+
+def _systemc_config(row: Mapping[str, Any], sidecar_refs: Mapping[str, str]) -> dict[str, Any]:
     return {
         "schema_version": SYSTEMC_CONFIG_SCHEMA_VERSION,
         "execution_status": "not_executed",
@@ -73,8 +133,16 @@ def _systemc_config(row: Mapping[str, Any]) -> dict[str, Any]:
         "candidate_identity": _candidate_identity(row),
         "workload_identity": _workload_identity(row),
         "design_point": dict(_require_mapping(row, "design_point")),
+        "ir_refs": dict(sidecar_refs),
         "backend_neutral_schema": dict(_require_mapping(row, "backend_neutral_schema")),
         "systemc_feedback_contract": dict(_require_mapping(row, "systemc_feedback_contract")),
+        "candidate_descriptor": dict(_require_mapping(row, "candidate_descriptor")),
+        "backend_execution_request": dict(_require_mapping(row, "backend_execution_request")),
+        "workload_anchor_refs": dict(_require_mapping(row, "workload_anchor_refs")),
+        "domain_extension": dict(row.get("domain_extension", {}))
+        if isinstance(row.get("domain_extension", {}), Mapping)
+        else {},
+        "design_validation": dict(_require_mapping(row, "design_validation")),
         "qe_anchor_refs": dict(_require_mapping(row, "qe_anchor_refs")),
         "non_claims": [
             "not_systemc_executed",
@@ -85,7 +153,7 @@ def _systemc_config(row: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
-def _gem5_descriptor(row: Mapping[str, Any], systemc_config_ref: str) -> dict[str, Any]:
+def _gem5_descriptor(row: Mapping[str, Any], systemc_config_ref: str, sidecar_refs: Mapping[str, str]) -> dict[str, Any]:
     gem5_handoff = _require_mapping(row, "gem5_handoff_contract")
     return {
         "schema_version": GEM5_HANDOFF_DESCRIPTOR_SCHEMA_VERSION,
@@ -93,12 +161,21 @@ def _gem5_descriptor(row: Mapping[str, Any], systemc_config_ref: str) -> dict[st
         "claim_ceiling": "stage_b0_handoff_descriptor_only",
         "candidate_identity": _candidate_identity(row),
         "workload_identity": _workload_identity(row),
+        "ir_refs": dict(sidecar_refs),
         "systemc_config_ref": systemc_config_ref,
+        "backend_execution_request_ref": f"backend_execution_requests/{_candidate_id(row)}.json",
         "expected_command": gem5_handoff.get("expected_command"),
         "expected_report_ref": gem5_handoff.get("expected_report_ref"),
         "output_report_expected_keys": list(gem5_handoff.get("output_report_expected_keys", [])),
         "systemc_feedback_contract": dict(_require_mapping(row, "systemc_feedback_contract")),
         "gem5_handoff_contract": dict(gem5_handoff),
+        "candidate_descriptor": dict(_require_mapping(row, "candidate_descriptor")),
+        "backend_execution_request": dict(_require_mapping(row, "backend_execution_request")),
+        "workload_anchor_refs": dict(_require_mapping(row, "workload_anchor_refs")),
+        "domain_extension": dict(row.get("domain_extension", {}))
+        if isinstance(row.get("domain_extension", {}), Mapping)
+        else {},
+        "design_validation": dict(_require_mapping(row, "design_validation")),
         "qe_anchor_refs": dict(_require_mapping(row, "qe_anchor_refs")),
         "non_claims": [
             "descriptor_only",
@@ -108,23 +185,134 @@ def _gem5_descriptor(row: Mapping[str, Any], systemc_config_ref: str) -> dict[st
     }
 
 
+def _backend_execution_request(row: Mapping[str, Any], systemc_config_ref: str, sidecar_refs: Mapping[str, str]) -> dict[str, Any]:
+    request = dict(_require_mapping(row, "backend_execution_request"))
+    request["input_refs"] = dict(request.get("input_refs", {}))
+    request["input_refs"].update(
+        {
+            "application_graph": sidecar_refs["application_graph_ref"],
+            "architecture_template": sidecar_refs["architecture_template_ref"],
+            "mapping": sidecar_refs["mapping_ref"],
+            "systemc_config": systemc_config_ref,
+        }
+    )
+    return request
+
+
+def _design_validation(row: Mapping[str, Any]) -> dict[str, Any]:
+    validation = row.get("design_validation")
+    if isinstance(validation, Mapping):
+        return dict(validation)
+    return constraints.validate_design_point(
+        _require_mapping(row, "design_point"),
+        _require_mapping(row, "workload"),
+    )
+
+
+def _row_with_design_validation(
+    row: Mapping[str, Any],
+    validation: Mapping[str, Any],
+) -> dict[str, Any]:
+    copied = dict(row)
+    copied["design_validation"] = dict(validation)
+    candidate_descriptor = copied.get("candidate_descriptor")
+    if isinstance(candidate_descriptor, Mapping):
+        copied["candidate_descriptor"] = dict(candidate_descriptor)
+        copied["candidate_descriptor"]["validity_class"] = validation.get("validity_class")
+        copied["candidate_descriptor"]["design_validation"] = dict(validation)
+        descriptor_candidate_identity = copied["candidate_descriptor"].get("candidate_identity")
+        if isinstance(descriptor_candidate_identity, Mapping):
+            copied["candidate_descriptor"]["candidate_identity"] = dict(
+                descriptor_candidate_identity
+            )
+            copied["candidate_descriptor"]["candidate_identity"]["validity_class"] = validation.get(
+                "validity_class"
+            )
+    backend_execution_request = copied.get("backend_execution_request")
+    if isinstance(backend_execution_request, Mapping):
+        copied["backend_execution_request"] = dict(backend_execution_request)
+        request_candidate_identity = copied["backend_execution_request"].get("candidate_identity")
+        if isinstance(request_candidate_identity, Mapping):
+            copied["backend_execution_request"]["candidate_identity"] = dict(
+                request_candidate_identity
+            )
+            copied["backend_execution_request"]["candidate_identity"]["validity_class"] = validation.get(
+                "validity_class"
+            )
+    return copied
+
+
+def _selected_candidate_ids(multi_fidelity_plan: Mapping[str, Any] | None) -> set[str]:
+    if not isinstance(multi_fidelity_plan, Mapping):
+        return set()
+    selected = multi_fidelity_plan.get("selected_candidates", [])
+    if not isinstance(selected, list):
+        return set()
+    return {
+        str(item.get("candidate_id"))
+        for item in selected
+        if isinstance(item, Mapping) and item.get("candidate_id")
+    }
+
+
 def emit_stage_b0_descriptors(
     output_dir: Path | str,
     rows: Sequence[Mapping[str, Any]],
+    emission_mode: str = EMISSION_ALL_VALID_EXECUTABLE,
+    multi_fidelity_plan: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
+    if emission_mode not in EMISSION_MODES:
+        raise ValueError(f"unsupported Stage B0 emission mode: {emission_mode}")
     root = Path(output_dir)
     descriptors = []
+    blocked_descriptors = []
+    unselected_valid_candidates = []
+    selected_ids = _selected_candidate_ids(multi_fidelity_plan)
     for row in rows:
         candidate_id = _candidate_id(row)
+        validation = _design_validation(row)
+        if validation.get("validity_class") != "valid_executable":
+            blocked_descriptors.append(
+                {
+                    "candidate_id": candidate_id,
+                    "descriptor_status": "blocked_by_validation",
+                    "validity_class": validation.get("validity_class"),
+                    "promotion_blockers": list(validation.get("promotion_blockers", [])),
+                    "claim_ceiling": validation.get("claim_ceiling", "descriptor_only"),
+                }
+            )
+            continue
+        if emission_mode == EMISSION_SCHEDULER_SELECTED_ONLY and candidate_id not in selected_ids:
+            unselected_valid_candidates.append(
+                {
+                    "candidate_id": candidate_id,
+                    "descriptor_status": "not_selected_by_scheduler",
+                    "validity_class": "valid_executable",
+                    "claim_ceiling": "descriptor_only",
+                }
+            )
+            continue
+        validated_row = _row_with_design_validation(row, validation)
+        sidecar_refs = _write_ir_sidecars(root, validated_row)
         systemc_config_ref = f"systemc_configs/{candidate_id}.json"
         gem5_descriptor_ref = f"gem5_systemc_handoff/{candidate_id}.json"
-        _write_json(root / systemc_config_ref, _systemc_config(row))
-        _write_json(root / gem5_descriptor_ref, _gem5_descriptor(row, systemc_config_ref))
+        backend_execution_request_ref = f"backend_execution_requests/{candidate_id}.json"
+        _write_json(root / systemc_config_ref, _systemc_config(validated_row, sidecar_refs))
+        _write_json(
+            root / gem5_descriptor_ref,
+            _gem5_descriptor(validated_row, systemc_config_ref, sidecar_refs),
+        )
+        _write_json(
+            root / backend_execution_request_ref,
+            _backend_execution_request(validated_row, systemc_config_ref, sidecar_refs),
+        )
         descriptors.append(
             {
                 "candidate_id": candidate_id,
+                **dict(sidecar_refs),
                 "systemc_config_ref": systemc_config_ref,
                 "gem5_descriptor_ref": gem5_descriptor_ref,
+                "backend_execution_request_ref": backend_execution_request_ref,
                 "execution_status": "not_executed",
                 "claim_ceiling": "descriptor_generation_only",
             }
@@ -134,8 +322,17 @@ def emit_stage_b0_descriptors(
         "schema_version": DESCRIPTOR_MANIFEST_NAME.removesuffix(".json"),
         "execution_status": "not_executed",
         "claim_ceiling": "descriptor_generation_only",
+        "emission_mode": emission_mode,
+        "multi_fidelity_plan_ref": (
+            "multi_fidelity_plan_v0.json" if multi_fidelity_plan is not None else None
+        ),
         "descriptor_count": len(descriptors),
+        "blocked_descriptor_count": len(blocked_descriptors),
+        "unselected_valid_candidate_count": len(unselected_valid_candidates),
         "descriptors": descriptors,
+        "emitted_descriptors": descriptors,
+        "unselected_valid_candidates": unselected_valid_candidates,
+        "blocked_descriptors": blocked_descriptors,
     }
     _write_json(root / DESCRIPTOR_MANIFEST_NAME, manifest)
     return manifest

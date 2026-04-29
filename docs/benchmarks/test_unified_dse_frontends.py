@@ -57,6 +57,24 @@ class UnifiedDseFrontendTests(unittest.TestCase):
                 partition_strategy="operator__build__diag__refresh",
             )
 
+    def test_unknown_design_axis_values_are_rejected_before_backend_dispatch(self) -> None:
+        architecture_space = load_unified_dse_module("architecture_space")
+        spec = architecture_space.load_design_space_spec(DESIGN_SPACE_PATH)
+        base = {
+            "family": "F2",
+            "diag_policy": "device_first_fallback",
+            "offload_scope": "balanced",
+            "resident_policy": "fit_first",
+            "partition_strategy": "operator__build__diag__refresh",
+        }
+
+        for axis in ("diag_policy", "offload_scope", "resident_policy", "partition_strategy"):
+            with self.subTest(axis=axis):
+                payload = dict(base)
+                payload[axis] = "nonsense"
+                with self.assertRaisesRegex(ValueError, "unknown design axis value"):
+                    architecture_space.make_design_point(spec, **payload)
+
     def test_f4_f5_and_custom_are_projection_scaffolds_not_executor_support(self) -> None:
         architecture_space = load_unified_dse_module("architecture_space")
         spec = architecture_space.load_design_space_spec(DESIGN_SPACE_PATH)
@@ -69,6 +87,57 @@ class UnifiedDseFrontendTests(unittest.TestCase):
                 self.assertEqual(support.stage_a_status, "projection_only")
                 self.assertFalse(support.runtime_executor_backed)
                 self.assertEqual(support.runtime_projection_family, "F2")
+
+    def test_design_point_validator_classifies_projection_invalid_and_executable(self) -> None:
+        constraints = load_unified_dse_module("constraints")
+        validator = constraints.DesignPointValidator()
+        base = {
+            "family": "F2",
+            "diag_policy": "device_first_fallback",
+            "offload_scope": "balanced",
+            "resident_policy": "fit_first",
+            "partition_strategy": "operator__build__diag__refresh",
+        }
+
+        valid = validator.validate(base, backend_capability={"target_resource_model": True})
+        projection = validator.validate({**base, "family": "F5"})
+        invalid = validator.validate({**base, "family": "F9"})
+        aggressive = validator.validate({**base, "diag_policy": "aggressive_device"})
+        invalid_diag = validator.validate({**base, "diag_policy": "nonsense"})
+
+        self.assertEqual(valid.validity_class, "valid_executable")
+        self.assertIn("resident_capacity_evidence", valid.missing_evidence)
+        self.assertEqual(projection.validity_class, "projection_only")
+        self.assertIn("projection_family_not_backend_executable", projection.promotion_blockers)
+        self.assertEqual(invalid.validity_class, "invalid")
+        self.assertEqual(aggressive.validity_class, "invalid")
+        self.assertEqual(invalid_diag.validity_class, "invalid")
+        self.assertIn("unknown_design_axis_value:diag_policy:nonsense", invalid_diag.reasons)
+
+    def test_search_facade_supports_stratified_and_reports_optional_ax_unavailable(self) -> None:
+        search_engine = load_unified_dse_module("search_engine")
+        axes = {
+            "family": ["F1", "F2"],
+            "diag_policy": ["cpu_only"],
+            "offload_scope": ["single_hotpath", "balanced"],
+            "resident_policy": ["fit_first"],
+            "partition_strategy": ["single_hotpath_partition"],
+        }
+
+        stratified = search_engine.search_candidates(
+            axes,
+            limit=3,
+            backend="stratified_cartesian",
+        )
+        ax = search_engine.search_candidates(axes, limit=3, backend="ax_bayesian")
+
+        self.assertEqual(stratified.metadata["schema_version"], "search_metadata_v0")
+        self.assertEqual(stratified.metadata["generated_count"], 3)
+        self.assertEqual([row["family"] for row in stratified.candidates[:2]], ["F1", "F2"])
+        self.assertIn("available", ax.metadata)
+        if not ax.metadata["available"]:
+            self.assertEqual(ax.metadata["unavailable_optional_dependency"], "ax")
+            self.assertEqual(ax.candidates, [])
 
     def test_workload_frontend_loads_fixture_without_mutating_identity_keys(self) -> None:
         workload_frontend = load_unified_dse_module("workload_frontend")

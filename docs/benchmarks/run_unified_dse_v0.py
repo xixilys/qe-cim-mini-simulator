@@ -13,13 +13,18 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
+import unified_dse.active_multifidelity as active_multifidelity
+import unified_dse.backend_feedback_adapter as backend_feedback_adapter
+import unified_dse.adjudication as adjudication
 import unified_dse.architecture_space as architecture_space
+import unified_dse.constraints as constraints
 import unified_dse.stage_b0_descriptors as stage_b0_descriptors
 import unified_dse.stage_b3_gem5_smoke as stage_b3_gem5_smoke
 import unified_dse.stage_a_contracts as stage_a_contracts
 import unified_dse.stage_c_qe_correctness as stage_c_qe_correctness
 import unified_dse.stage_d_implementation_evidence as stage_d_implementation_evidence
 import unified_dse.stage_status as stage_status
+import unified_dse.release_bundle as release_bundle
 import unified_dse.systemc_feedback_adapter as systemc_feedback_adapter
 import unified_dse.workload_frontend as workload_frontend
 from unified_dse.fast_model import FastModelBackend
@@ -34,12 +39,16 @@ RESULT_CSV_NAME = "unified_dse_results_v0.csv"
 MANIFEST_JSON_NAME = "unified_dse_manifest_v0.json"
 STAGE_B0_DESCRIPTOR_MANIFEST_NAME = stage_b0_descriptors.DESCRIPTOR_MANIFEST_NAME
 FULL_STAGE_STATUS_NAME = stage_status.FULL_STAGE_STATUS_NAME
+MULTI_FIDELITY_PLAN_NAME = active_multifidelity.DEFAULT_PLAN_NAME
+RELEASE_BUNDLE_NAME = release_bundle.RELEASE_BUNDLE_NAME
+ADJUDICATION_SUMMARY_NAME = "frontend_adjudication_summary_v0.json"
 
 SOURCE_KINDS = (
     "stub",
     "timed_functional_proxy",
     "trace_calibrated_proxy",
     "mixed",
+    "fast_model_screening",
 )
 
 CSV_COLUMNS = (
@@ -61,8 +70,19 @@ CSV_COLUMNS = (
     "promotion_state",
     "authority_scope",
     "metrics",
+    "model_metadata",
     "projection",
     "calibration",
+    "calibrated_metrics",
+    "calibration_metadata",
+    "workload_identity",
+    "workload_anchor_refs",
+    "domain_extension",
+    "design_validation",
+    "candidate_descriptor",
+    "backend_execution_request",
+    "claim_ceiling",
+    "non_claims",
     "backend_neutral_schema",
     "systemc_feedback_contract",
     "systemc_feedback_contract_status",
@@ -81,6 +101,8 @@ CSV_COLUMNS = (
     "pareto_membership",
     "shortlist_reason",
     "ranking_claim_ceiling",
+    "shortlisted_for_backend",
+    "shortlist_policy",
     "final_public_family_winner",
 )
 
@@ -100,8 +122,27 @@ def _build_parser() -> argparse.ArgumentParser:
             "the CLI reads the artifact but does not execute SystemC."
         ),
     )
+    parser.add_argument(
+        "--backend-report",
+        type=Path,
+        help=(
+            "Optional backend_execution_report_v0 or collection artifact to normalize to "
+            "EvidenceIR; the CLI ingests JSON only and does not execute a backend."
+        ),
+    )
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--source-kind", choices=SOURCE_KINDS, default="stub")
+    parser.add_argument(
+        "--search-backend",
+        choices=search_engine.SEARCH_BACKENDS,
+        default="bounded_cartesian",
+    )
+    parser.add_argument(
+        "--shortlist-policy",
+        choices=active_multifidelity.SHORTLIST_POLICIES,
+        default=active_multifidelity.SHORTLIST_NONE,
+    )
+    parser.add_argument("--shortlist-size", type=int, default=0)
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument(
         "--execute-systemc",
@@ -116,6 +157,21 @@ def _build_parser() -> argparse.ArgumentParser:
             "Emit descriptor-only SystemC config and gem5 handoff sidecars for Stage B0; "
             "does not execute SystemC or gem5."
         ),
+    )
+    parser.add_argument(
+        "--stage-b0-emission-mode",
+        choices=stage_b0_descriptors.EMISSION_MODES,
+        default=stage_b0_descriptors.EMISSION_ALL_VALID_EXECUTABLE,
+    )
+    parser.add_argument(
+        "--emit-multi-fidelity-plan",
+        action="store_true",
+        help="Emit multi_fidelity_plan_v0 for scheduler-selected backend handoff.",
+    )
+    parser.add_argument(
+        "--emit-release-bundle",
+        action="store_true",
+        help="Emit frontend_release_bundle_v0 linking frontend artifacts and evidence refs.",
     )
     parser.add_argument(
         "--emit-full-stage-status",
@@ -137,16 +193,26 @@ def _load_json_if_provided(path: Path | None) -> dict[str, Any] | None:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def _generate_design_points(
+def _generate_design_points_with_metadata(
     spec: architecture_space.DesignSpaceSpec,
     max_design_points: int,
-) -> list[Any]:
+    search_backend: str,
+) -> tuple[list[Any], dict[str, Any]]:
     if max_design_points < 0:
         raise ValueError("--max-design-points must be non-negative")
 
-    candidates = search_engine.bounded_cartesian_product(spec.design_axes, max_design_points)
+    search_result = search_engine.search_candidates(
+        spec.design_axes,
+        max_design_points,
+        backend=search_backend,
+    )
+    if not search_result.metadata.get("available", True):
+        raise ValueError(
+            f"search backend {search_backend} unavailable: "
+            f"{search_result.metadata.get('skipped_reason')}"
+        )
     design_points = []
-    for candidate in candidates:
+    for candidate in search_result.candidates:
         design_points.append(
             architecture_space.make_design_point(
                 spec,
@@ -157,7 +223,17 @@ def _generate_design_points(
                 partition_strategy=candidate["partition_strategy"],
             )
         )
-    return design_points
+    return design_points, dict(search_result.metadata)
+
+
+def _generate_design_points(
+    spec: architecture_space.DesignSpaceSpec,
+    max_design_points: int,
+    search_backend: str,
+) -> list[Any]:
+    return _generate_design_points_with_metadata(
+        spec, max_design_points, search_backend
+    )[0]
 
 
 def _projection_payload(
@@ -181,17 +257,34 @@ def _evaluate_design_points(
     calibration_feedback: dict[str, Any] | None,
     source_kind: str,
     max_design_points: int,
-) -> list[dict[str, Any]]:
+    search_backend: str,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     backend = FastModelBackend(source_kind=source_kind)
     rows = []
-    for design_point in _generate_design_points(spec, max_design_points):
+    design_points, search_metadata = _generate_design_points_with_metadata(
+        spec, max_design_points, search_backend
+    )
+    for design_point in design_points:
         row = backend.evaluate(workload, design_point).to_dict()
         row["projection"] = _projection_payload(spec, design_point.family)
+        row["design_validation"] = constraints.validate_design_point(
+            design_point,
+            workload,
+            backend_capability={"target_resource_model": True},
+            design_space_spec=spec,
+        )
+        if (
+            source_kind == "fast_model_screening"
+            and row["design_validation"]["validity_class"] == "valid_executable"
+        ):
+            row["projection"]["ranking_grade_ready"] = result_analysis.metrics_are_ranking_grade(
+                row.get("metrics", {})
+            )
         if calibration_feedback is not None:
             row = calibration_engine.apply_calibration_feedback(row, calibration_feedback)
         row = stage_a_contracts.attach_stage_a_contracts(row)
         rows.append(row)
-    return result_analysis.summarize_results(rows)["rows"]
+    return result_analysis.summarize_results(rows)["rows"], search_metadata
 
 
 def _authority_bundle() -> dict[str, Any]:
@@ -209,7 +302,10 @@ def _result_bundle(
     source_kind: str,
     dry_run: bool,
     max_design_points: int,
+    search_backend: str,
     results: Sequence[Mapping[str, Any]],
+    search_metadata: Mapping[str, Any] | None = None,
+    multi_fidelity_plan_ref: str | None = None,
 ) -> dict[str, Any]:
     return {
         "schema_version": "unified_dse_result_bundle_v0",
@@ -224,7 +320,10 @@ def _result_bundle(
             "source_kind": source_kind,
             "dry_run": dry_run,
             "max_design_points": max_design_points,
+            "search_backend": search_backend,
         },
+        "search_metadata": dict(search_metadata or {}),
+        "multi_fidelity_plan_ref": multi_fidelity_plan_ref,
         "results": list(results),
     }
 
@@ -235,6 +334,12 @@ def _manifest(
     results: Sequence[Mapping[str, Any]],
     stage_b0_descriptor_manifest: Mapping[str, Any] | None = None,
     systemc_feedback_ref: str | None = None,
+    systemc_feedback_summary: Mapping[str, Any] | None = None,
+    backend_report_ref: str | None = None,
+    evidence_count: int = 0,
+    search_metadata: Mapping[str, Any] | None = None,
+    multi_fidelity_plan: Mapping[str, Any] | None = None,
+    release_bundle_ref: str | None = None,
     gem5_smoke_report_ref: str | None = None,
     qe_correctness_report_ref: str | None = None,
     qe_correctness_summary: Mapping[str, Any] | None = None,
@@ -253,6 +358,22 @@ def _manifest(
         "final_public_family_winner": None,
         "result_count": result_count,
         "promotion_state_counts": counts,
+        "search_metadata": dict(search_metadata or {}),
+        "multi_fidelity_plan_status": (
+            "generated_not_executed" if multi_fidelity_plan is not None else "not_requested"
+        ),
+        "multi_fidelity_plan_ref": (
+            MULTI_FIDELITY_PLAN_NAME if multi_fidelity_plan is not None else None
+        ),
+        "multi_fidelity_selected_count": int(
+            (multi_fidelity_plan or {}).get("selected_count", 0)
+        ) if isinstance(multi_fidelity_plan, Mapping) else 0,
+        "backend_report_ingest_status": (
+            "evidence_ir_normalized" if backend_report_ref is not None else "not_requested"
+        ),
+        "backend_report_ref": backend_report_ref,
+        "evidence_ir_count": evidence_count,
+        "release_bundle_ref": release_bundle_ref,
         **gates,
         "stage_a_gate_blockers": {
             key: "missing_or_incomplete_stage_a_contract_field"
@@ -281,11 +402,34 @@ def _manifest(
             }
         )
     if systemc_feedback_ref is not None:
+        feedback_summary = dict(systemc_feedback_summary or {})
+        feedback_status = str(
+            feedback_summary.get(
+                "systemc_feedback_ingest_status",
+                "artifact_ingested_not_executed_by_cli",
+            )
+        )
         manifest.update(
             {
-                "systemc_feedback_ingest_status": "artifact_ingested_not_executed_by_cli",
+                "systemc_feedback_ingest_status": feedback_status,
                 "systemc_feedback_ref": systemc_feedback_ref,
-                "stage_b1_b2_claim_ceiling": "timed_functional_proxy_feedback_only",
+                "systemc_feedback_candidate_count": int(
+                    feedback_summary.get("systemc_feedback_candidate_count", 0)
+                ),
+                "systemc_feedback_matched_candidate_count": int(
+                    feedback_summary.get("systemc_feedback_matched_candidate_count", 0)
+                ),
+                "systemc_feedback_unmatched_candidate_ids": list(
+                    feedback_summary.get("systemc_feedback_unmatched_candidate_ids", [])
+                ),
+                "systemc_feedback_rejected_candidate_ids": list(
+                    feedback_summary.get("systemc_feedback_rejected_candidate_ids", [])
+                ),
+                "stage_b1_b2_claim_ceiling": (
+                    "timed_functional_proxy_feedback_only"
+                    if feedback_status == "artifact_ingested_not_executed_by_cli"
+                    else "not_applicable"
+                ),
             }
         )
     else:
@@ -293,6 +437,10 @@ def _manifest(
             {
                 "systemc_feedback_ingest_status": "not_requested",
                 "systemc_feedback_ref": None,
+                "systemc_feedback_candidate_count": 0,
+                "systemc_feedback_matched_candidate_count": 0,
+                "systemc_feedback_unmatched_candidate_ids": [],
+                "systemc_feedback_rejected_candidate_ids": [],
                 "stage_b1_b2_claim_ceiling": "not_applicable",
             }
         )
@@ -454,6 +602,8 @@ def _valid_gem5_handoff(value: Any) -> bool:
 
 
 def _valid_qe_anchor_refs(value: Any) -> bool:
+    if value == {}:
+        return True
     if not _has_keys(
         value,
         (
@@ -491,7 +641,7 @@ def _valid_ranking_semantics(row: Mapping[str, Any]) -> bool:
         "screening_rank" in row
         and row.get("pareto_membership") in {"not_evaluated", "screening_candidate"}
         and isinstance(row.get("shortlist_reason"), str)
-        and row.get("ranking_claim_ceiling") == result_analysis.RANKING_CLAIM_CEILING
+        and row.get("ranking_claim_ceiling") in result_analysis.RANKING_CLAIM_CEILINGS
         and row.get("final_public_family_winner") is None
     )
 
@@ -504,6 +654,7 @@ def _stage_a_gates(results: Sequence[Mapping[str, Any]]) -> dict[str, bool]:
             "systemc_feedback_contract_present": False,
             "gem5_handoff_contract_present": False,
             "qe_anchor_refs_present": False,
+            "generic_frontend_contracts_present": False,
             "ranking_semantics_present": False,
             "claim_boundary_present": False,
         }
@@ -518,11 +669,21 @@ def _stage_a_gates(results: Sequence[Mapping[str, Any]]) -> dict[str, bool]:
             _valid_gem5_handoff(row.get("gem5_handoff_contract")) for row in rows
         ),
         "qe_anchor_refs_present": all(_valid_qe_anchor_refs(row.get("qe_anchor_refs")) for row in rows),
+        "generic_frontend_contracts_present": all(
+            isinstance(row.get("candidate_descriptor"), Mapping)
+            and row["candidate_descriptor"].get("schema_version") == "candidate_descriptor_v0"
+            and isinstance(row.get("backend_execution_request"), Mapping)
+            and row["backend_execution_request"].get("schema_version")
+            == "backend_execution_request_v0"
+            and isinstance(row.get("workload_anchor_refs"), Mapping)
+            and row["workload_anchor_refs"].get("schema_version") == "workload_anchor_refs_v0"
+            for row in rows
+        ),
         "ranking_semantics_present": all(_valid_ranking_semantics(row) for row in rows),
         "claim_boundary_present": all(
             row.get("authority_scope") == "supporting_evidence_only"
             and row.get("final_public_family_winner") is None
-            and row.get("ranking_claim_ceiling") == result_analysis.RANKING_CLAIM_CEILING
+            and row.get("ranking_claim_ceiling") in result_analysis.RANKING_CLAIM_CEILINGS
             for row in rows
         ),
     }
@@ -562,8 +723,19 @@ def _csv_row(row: Mapping[str, Any]) -> dict[str, str]:
         "promotion_state": row.get("promotion_state"),
         "authority_scope": row.get("authority_scope"),
         "metrics": row.get("metrics", {}),
+        "model_metadata": row.get("model_metadata", {}),
         "projection": row.get("projection", {}),
         "calibration": row.get("calibration", {}),
+        "calibrated_metrics": row.get("calibrated_metrics", {}),
+        "calibration_metadata": row.get("calibration_metadata", {}),
+        "workload_identity": row.get("workload_identity", {}),
+        "workload_anchor_refs": row.get("workload_anchor_refs", {}),
+        "domain_extension": row.get("domain_extension", {}),
+        "design_validation": row.get("design_validation", {}),
+        "candidate_descriptor": row.get("candidate_descriptor", {}),
+        "backend_execution_request": row.get("backend_execution_request", {}),
+        "claim_ceiling": row.get("claim_ceiling"),
+        "non_claims": row.get("non_claims", []),
         "backend_neutral_schema": row.get("backend_neutral_schema", {}),
         "systemc_feedback_contract": row.get("systemc_feedback_contract", {}),
         "systemc_feedback_contract_status": systemc_feedback.get("status"),
@@ -582,6 +754,8 @@ def _csv_row(row: Mapping[str, Any]) -> dict[str, str]:
         "pareto_membership": row.get("pareto_membership"),
         "shortlist_reason": row.get("shortlist_reason"),
         "ranking_claim_ceiling": row.get("ranking_claim_ceiling"),
+        "shortlisted_for_backend": row.get("shortlisted_for_backend"),
+        "shortlist_policy": row.get("shortlist_policy"),
         "final_public_family_winner": row.get("final_public_family_winner"),
     }
     for key in CSV_COLUMNS:
@@ -593,6 +767,7 @@ def _csv_row(row: Mapping[str, Any]) -> dict[str, str]:
 
 
 def _write_json(path: Path, payload: Mapping[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
@@ -613,11 +788,15 @@ def main(argv: list[str] | None = None) -> int:
             "SystemC execution remains via the canonical runner / future explicit adapter; "
             "Unified DSE v0 CLI does not execute SystemC"
         )
-    if args.source_kind != "stub":
+    if args.source_kind not in {"stub", "fast_model_screening"}:
         parser.error(
-            "current Unified DSE v0 CLI only supports --source-kind stub for FastModelBackend "
-            "stub/projection rows"
+            "this frontend-only CLI supports --source-kind stub or fast_model_screening; "
+            "SystemC/gem5 feedback remains external"
         )
+    if args.shortlist_size < 0:
+        parser.error("--shortlist-size must be non-negative")
+
+    args.output_dir.mkdir(parents=True, exist_ok=True)
 
     spec = architecture_space.load_design_space_spec(args.design_space_spec)
     workload = workload_frontend.load_workload_descriptor(args.workload)
@@ -625,6 +804,11 @@ def main(argv: list[str] | None = None) -> int:
     systemc_feedback = None
     if args.systemc_feedback is not None:
         systemc_feedback = systemc_feedback_adapter.load_systemc_feedback_artifact(args.systemc_feedback)
+    backend_report = None
+    evidence_rows: list[dict[str, Any]] = []
+    if args.backend_report is not None:
+        backend_report = backend_feedback_adapter.load_backend_report_artifact(args.backend_report)
+        evidence_rows = backend_feedback_adapter.normalize_backend_report_artifact(backend_report)
     gem5_smoke_report = None
     if args.gem5_smoke_report is not None:
         gem5_smoke_report = stage_b3_gem5_smoke.load_and_validate_gem5_smoke_report(
@@ -653,28 +837,68 @@ def main(argv: list[str] | None = None) -> int:
             )
         )
 
-    results = _evaluate_design_points(
+    results, search_metadata = _evaluate_design_points(
         spec=spec,
         workload=workload,
         calibration_feedback=calibration_feedback,
         source_kind=args.source_kind,
         max_design_points=args.max_design_points,
+        search_backend=args.search_backend,
     )
+    systemc_feedback_summary = None
     if systemc_feedback is not None:
+        systemc_feedback_summary = systemc_feedback_adapter.feedback_ingest_summary(
+            rows=results,
+            feedback=systemc_feedback,
+        )
         results = systemc_feedback_adapter.apply_systemc_feedback(
             rows=results,
             feedback=systemc_feedback,
             feedback_ref=str(args.systemc_feedback),
         )
+    if evidence_rows:
+        results = backend_feedback_adapter.apply_evidence_to_rows(
+            rows=results,
+            evidence_rows=evidence_rows,
+            evidence_ref=str(args.backend_report),
+        )
+        evidence_dir = args.output_dir / "evidence_ir"
+        for evidence in evidence_rows:
+            _write_json(evidence_dir / f"{evidence['candidate_id']}.json", evidence)
+        calibration_metadata = calibration_engine.fit_residual_calibration(results, evidence_rows)
+        _write_json(args.output_dir / "calibration_metadata_v0.json", calibration_metadata)
+        calibration_model = calibration_engine.fit_calibration_model(results, evidence_rows)
+        _write_json(args.output_dir / "calibration_model_v0.json", calibration_model)
+        results = calibration_engine.apply_calibration_metadata_to_rows(results, calibration_metadata)
+
     summary = result_analysis.summarize_results(results)
     results = summary["rows"]
+    results = active_multifidelity.apply_shortlist_policy(
+        rows=results,
+        policy=args.shortlist_policy,
+        shortlist_size=args.shortlist_size,
+    )
 
-    args.output_dir.mkdir(parents=True, exist_ok=True)
+    multi_fidelity_plan = None
+    if args.emit_multi_fidelity_plan or args.stage_b0_emission_mode == stage_b0_descriptors.EMISSION_SCHEDULER_SELECTED_ONLY:
+        plan_size = args.shortlist_size if args.shortlist_size > 0 else min(3, len(results))
+        plan_policy = args.shortlist_policy
+        if plan_policy == active_multifidelity.SHORTLIST_NONE and plan_size > 0:
+            plan_policy = active_multifidelity.SHORTLIST_TOP_FAST_UNCERTAIN_DIVERSE
+        multi_fidelity_plan = active_multifidelity.build_multi_fidelity_plan(
+            rows=results,
+            policy=plan_policy,
+            shortlist_size=plan_size,
+        )
+        _write_json(args.output_dir / MULTI_FIDELITY_PLAN_NAME, multi_fidelity_plan)
+
     stage_b0_descriptor_manifest = None
     if args.emit_stage_b0_descriptors:
         stage_b0_descriptor_manifest = stage_b0_descriptors.emit_stage_b0_descriptors(
             output_dir=args.output_dir,
             rows=results,
+            emission_mode=args.stage_b0_emission_mode,
+            multi_fidelity_plan=multi_fidelity_plan,
         )
     bundle = _result_bundle(
         spec=spec,
@@ -683,7 +907,12 @@ def main(argv: list[str] | None = None) -> int:
         source_kind=args.source_kind,
         dry_run=args.dry_run,
         max_design_points=args.max_design_points,
+        search_backend=args.search_backend,
         results=results,
+        search_metadata=search_metadata,
+        multi_fidelity_plan_ref=(
+            MULTI_FIDELITY_PLAN_NAME if multi_fidelity_plan is not None else None
+        ),
     )
     manifest = _manifest(
         result_count=len(results),
@@ -691,6 +920,11 @@ def main(argv: list[str] | None = None) -> int:
         results=results,
         stage_b0_descriptor_manifest=stage_b0_descriptor_manifest,
         systemc_feedback_ref=str(args.systemc_feedback) if args.systemc_feedback is not None else None,
+        systemc_feedback_summary=systemc_feedback_summary,
+        backend_report_ref=str(args.backend_report) if args.backend_report is not None else None,
+        evidence_count=len(evidence_rows),
+        search_metadata=search_metadata,
+        multi_fidelity_plan=multi_fidelity_plan,
         gem5_smoke_report_ref=str(args.gem5_smoke_report) if gem5_smoke_report is not None else None,
         qe_correctness_report_ref=(
             str(args.qe_correctness_report) if qe_correctness_report is not None else None
@@ -704,8 +938,54 @@ def main(argv: list[str] | None = None) -> int:
 
     _write_json(args.output_dir / RESULT_JSON_NAME, bundle)
     _write_csv(args.output_dir / RESULT_CSV_NAME, results)
+    if args.emit_release_bundle:
+        manifest["release_bundle_ref"] = RELEASE_BUNDLE_NAME
+        _write_json(args.output_dir / MANIFEST_JSON_NAME, manifest)
+        if args.emit_full_stage_status:
+            stage_status.emit_full_stage_status(
+                output_dir=args.output_dir,
+                manifest=manifest,
+                stage_b0_descriptor_manifest_ref=(
+                    STAGE_B0_DESCRIPTOR_MANIFEST_NAME if stage_b0_descriptor_manifest is not None else None
+                ),
+                systemc_feedback_ref=str(args.systemc_feedback) if args.systemc_feedback is not None else None,
+                gem5_smoke_report_ref=str(args.gem5_smoke_report) if args.gem5_smoke_report else None,
+                qe_correctness_report_ref=(
+                    str(args.qe_correctness_report) if args.qe_correctness_report else None
+                ),
+                qe_correctness_summary=qe_correctness_summary,
+                implementation_evidence_ref=(
+                    str(args.implementation_evidence) if args.implementation_evidence else None
+                ),
+                implementation_evidence_summary=implementation_evidence_summary,
+            )
+        adjudication_summary = adjudication.build_adjudication_summary(
+            results,
+            result_bundle_ref=RESULT_JSON_NAME,
+            calibration_model_ref=("calibration_model_v0.json" if evidence_rows else None),
+            evidence_refs=[str(args.backend_report)] if args.backend_report is not None else [],
+        )
+        _write_json(args.output_dir / ADJUDICATION_SUMMARY_NAME, adjudication_summary)
+        release_bundle.emit_release_bundle(
+            args.output_dir,
+            stage_status_ref=(FULL_STAGE_STATUS_NAME if args.emit_full_stage_status else None),
+            stage_b0_descriptor_manifest_ref=(
+                STAGE_B0_DESCRIPTOR_MANIFEST_NAME if stage_b0_descriptor_manifest is not None else None
+            ),
+            multi_fidelity_plan_ref=(
+                MULTI_FIDELITY_PLAN_NAME if multi_fidelity_plan is not None else None
+            ),
+            evidence_refs=[str(args.backend_report)] if args.backend_report is not None else [],
+            calibration_metadata_ref=(
+                "calibration_metadata_v0.json" if evidence_rows else None
+            ),
+            calibration_model_ref=(
+                "calibration_model_v0.json" if evidence_rows else None
+            ),
+            adjudication_summary_ref=ADJUDICATION_SUMMARY_NAME,
+        )
     _write_json(args.output_dir / MANIFEST_JSON_NAME, manifest)
-    if args.emit_full_stage_status:
+    if args.emit_full_stage_status and not args.emit_release_bundle:
         stage_status.emit_full_stage_status(
             output_dir=args.output_dir,
             manifest=manifest,

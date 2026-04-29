@@ -16,6 +16,15 @@ REQUIRED_PROMOTION_METRICS = (
 )
 
 RANKING_CLAIM_CEILING = "stage_a_screening_only"
+FAST_MODEL_RANKING_CLAIM_CEILING = "fast_model_screening_only"
+RANKING_CLAIM_CEILINGS = (
+    RANKING_CLAIM_CEILING,
+    FAST_MODEL_RANKING_CLAIM_CEILING,
+    "systemc_feedback_ranked",
+    "gem5_feedback_ranked",
+    "fast_model_calibrated_screening",
+    "backend_report_reference_only",
+)
 PARETO_NOT_EVALUATED = "not_evaluated"
 PARETO_SCREENING_CANDIDATE = "screening_candidate"
 SHORTLIST_NOT_RANKED = "insufficient_metrics_for_shortlist"
@@ -45,10 +54,20 @@ def _finite_metric(metrics: Mapping[str, Any], key: str) -> float | None:
     return value
 
 
+def _is_valid_executable_row(row: Mapping[str, Any]) -> bool:
+    design_validation = row.get("design_validation", {})
+    return (
+        isinstance(design_validation, Mapping)
+        and design_validation.get("validity_class") == "valid_executable"
+    )
+
+
 def _promotion_state_for_row(row: Mapping[str, Any]) -> str:
     if row.get("result_status") == "model_error":
         return "reject"
-    if row.get("result_status") != "executed":
+    if row.get("result_status") not in {"executed", "screened"}:
+        return "explain-only"
+    if not _is_valid_executable_row(row):
         return "explain-only"
 
     projection = row.get("projection", {})
@@ -74,7 +93,12 @@ def _ranking_sort_key(row: Mapping[str, Any]) -> tuple[float, float, float, floa
 
 
 def _apply_stage_a_ranking_defaults(row: dict[str, Any], screening_rank: int | None) -> None:
-    row["ranking_claim_ceiling"] = row.get("ranking_claim_ceiling") or RANKING_CLAIM_CEILING
+    default_claim = (
+        FAST_MODEL_RANKING_CLAIM_CEILING
+        if row.get("source_kind") == "fast_model_screening"
+        else RANKING_CLAIM_CEILING
+    )
+    row["ranking_claim_ceiling"] = row.get("ranking_claim_ceiling") or default_claim
     row["final_public_family_winner"] = None
     if screening_rank is None:
         row["screening_rank"] = None

@@ -16,6 +16,8 @@ DESIGN_POINT_IDENTITY_KEYS = (
 WORKLOAD_IDENTITY_KEYS = (
     "workload_id",
     "workload_group_id",
+    "domain",
+    "app_adapter",
     "qe_tolerance_schema_id",
     "accounting_boundary_id",
     "fairness_policy_id",
@@ -27,6 +29,8 @@ WORKLOAD_DESCRIPTOR_CORE_KEYS = (
     "schema_version",
     "workload_id",
     "workload_group_id",
+    "domain",
+    "app_adapter",
     "qe_tolerance_schema_id",
     "accounting_boundary_id",
     "fairness_policy_id",
@@ -62,6 +66,58 @@ def _copy_required(payload: Mapping[str, Any], keys: tuple[str, ...]) -> dict[st
     return {key: payload[key] for key in keys}
 
 
+def _workload_defaults(payload: Mapping[str, Any]) -> dict[str, Any]:
+    workload_id = str(payload.get("workload_id", "unknown_workload"))
+    explicit_domain = payload.get("domain")
+    explicit_adapter = payload.get("app_adapter") or payload.get("adapter")
+    qe_signature_keys = (
+        "qe_tolerance_schema_id",
+        "pseudopotential_family",
+        "solver_path_class",
+        "projector_pressure",
+        "nonlocal_pressure",
+    )
+    has_qe_signature = any(
+        payload.get(key) not in (None, "", "not_applicable")
+        for key in qe_signature_keys
+    )
+    domain_implies_qe = (
+        explicit_domain in {"dft", "qe"}
+        and explicit_adapter in (None, "", "not_applicable", "qe")
+    )
+    is_qe = explicit_adapter == "qe" or domain_implies_qe or has_qe_signature
+    domain = explicit_domain or ("dft" if is_qe else "generic")
+    app_adapter = explicit_adapter or ("qe" if is_qe else "generic_trace")
+    qe_tolerance_schema_id = (
+        payload.get("qe_tolerance_schema_id")
+        or (payload.get("correctness_contract_id") if is_qe else None)
+        or "not_applicable"
+    )
+    return {
+        "schema_version": payload.get("schema_version", "unified_dse_workload_descriptor_v0"),
+        "workload_id": workload_id,
+        "workload_group_id": payload.get("workload_group_id", "default_workload_group"),
+        "domain": domain,
+        "app_adapter": app_adapter,
+        "qe_tolerance_schema_id": qe_tolerance_schema_id,
+        "accounting_boundary_id": payload.get("accounting_boundary_id", "not_applicable"),
+        "fairness_policy_id": payload.get("fairness_policy_id", "not_applicable"),
+        "power_boundary_id": payload.get("power_boundary_id", "not_applicable"),
+        "observability_contract_id": payload.get("observability_contract_id", "not_applicable"),
+        "signature_id": payload.get("signature_id", workload_id),
+        "property_target": payload.get("property_target", "unknown"),
+        "pseudopotential_family": payload.get("pseudopotential_family", "not_applicable"),
+        "solver_path_class": payload.get("solver_path_class", "not_applicable"),
+        "workload_topology": payload.get("workload_topology", "unknown"),
+        "post_scf_extension_level": payload.get("post_scf_extension_level", "not_applicable"),
+        "projector_pressure": payload.get("projector_pressure", "not_applicable"),
+        "nonlocal_pressure": payload.get("nonlocal_pressure", "not_applicable"),
+        "dimension_n": int(payload.get("dimension_n", payload.get("npw", 0)) or 0),
+        "dimension_m": int(payload.get("dimension_m", payload.get("m", 0)) or 0),
+        "scf_iterations": int(payload.get("scf_iterations", 1) or 1),
+    }
+
+
 @dataclass(frozen=True)
 class DesignPoint:
     family: str
@@ -83,6 +139,8 @@ class WorkloadDescriptor:
     schema_version: str
     workload_id: str
     workload_group_id: str
+    domain: str
+    app_adapter: str
     qe_tolerance_schema_id: str
     accounting_boundary_id: str
     fairness_policy_id: str
@@ -103,13 +161,14 @@ class WorkloadDescriptor:
 
     @classmethod
     def from_dict(cls, payload: Mapping[str, Any]) -> "WorkloadDescriptor":
+        defaults = _workload_defaults(payload)
         extra_fields = {
             key: deepcopy(value)
             for key, value in payload.items()
             if key not in WORKLOAD_DESCRIPTOR_CORE_KEYS
         }
         return cls(
-            **_copy_required(payload, WORKLOAD_DESCRIPTOR_CORE_KEYS),
+            **_copy_required(defaults, WORKLOAD_DESCRIPTOR_CORE_KEYS),
             extra_fields=extra_fields or None,
         )
 

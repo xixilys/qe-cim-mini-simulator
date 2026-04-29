@@ -61,3 +61,10 @@ gem5_integration/test_programs/hello.x86
 .tmp_stage_b_adjudicator/
 opencode.json.bak-*
 docs/benchmarks/results/systemc_architecture_family_dse_bootstrap/
+
+# Python caches
+__pycache__/
+*.pyc
+
+# Local gem5 run output directories outside canonical m5out root
+**/m5out/

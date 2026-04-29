@@ -4,19 +4,61 @@ project(gem5_systemc_integration)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-set(SYSTEMC_HOME $ENV{SYSTEMC_HOME})
-if(NOT SYSTEMC_HOME)
-  set(SYSTEMC_HOME "/opt/homebrew")
+if(DEFINED SYSTEMC_HOME)
+  set(QEBS_SYSTEMC_HOME "${SYSTEMC_HOME}")
+elseif(DEFINED ENV{SYSTEMC_HOME})
+  set(QEBS_SYSTEMC_HOME "$ENV{SYSTEMC_HOME}")
+else()
+  foreach(QEBS_SYSTEMC_CANDIDATE /opt/homebrew /usr/local /usr)
+    if(EXISTS "${QEBS_SYSTEMC_CANDIDATE}/include/systemc" OR
+       EXISTS "${QEBS_SYSTEMC_CANDIDATE}/include/systemc.h")
+      set(QEBS_SYSTEMC_HOME "${QEBS_SYSTEMC_CANDIDATE}")
+      break()
+    endif()
+  endforeach()
+endif()
+
+if(NOT QEBS_SYSTEMC_HOME)
+  message(FATAL_ERROR
+    "SystemC was not found. Set SYSTEMC_HOME=<prefix> where include/systemc "
+    "or include/systemc.h and lib/libsystemc are available. This backend must "
+    "fail fast instead of silently assuming a host-specific /opt/homebrew path.")
+endif()
+
+if(NOT EXISTS "${QEBS_SYSTEMC_HOME}/include/systemc" AND
+   NOT EXISTS "${QEBS_SYSTEMC_HOME}/include/systemc.h")
+  message(FATAL_ERROR
+    "SystemC header not found under ${QEBS_SYSTEMC_HOME}/include. "
+    "Pass -DSYSTEMC_HOME=<prefix> or export SYSTEMC_HOME.")
+endif()
+
+find_library(QEBS_SYSTEMC_LIBRARY
+  NAMES systemc
+  PATHS
+    "${QEBS_SYSTEMC_HOME}/lib"
+    "${QEBS_SYSTEMC_HOME}/lib64"
+    "${QEBS_SYSTEMC_HOME}/lib/${CMAKE_LIBRARY_ARCHITECTURE}"
+  NO_DEFAULT_PATH
+)
+if(NOT QEBS_SYSTEMC_LIBRARY)
+  message(FATAL_ERROR
+    "SystemC library was not found under ${QEBS_SYSTEMC_HOME}/lib, lib64, "
+    "or lib/${CMAKE_LIBRARY_ARCHITECTURE}. "
+    "Pass -DSYSTEMC_HOME=<prefix> or export SYSTEMC_HOME.")
 endif()
 
 include_directories(
   ${CMAKE_CURRENT_SOURCE_DIR}/include
-  ${SYSTEMC_HOME}/include
+  ${QEBS_SYSTEMC_HOME}/include
 )
 
 link_directories(
-  ${SYSTEMC_HOME}/lib
+  ${QEBS_SYSTEMC_HOME}/lib
+  ${QEBS_SYSTEMC_HOME}/lib64
+  ${QEBS_SYSTEMC_HOME}/lib/${CMAKE_LIBRARY_ARCHITECTURE}
 )
+
+message(STATUS "Using SystemC from ${QEBS_SYSTEMC_HOME}")
 
 set(QE_BAND_SOLVER_MODEL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../model/qe_band_solver_model")
 
@@ -27,8 +69,12 @@ include_directories(
 )
 
 set(QE_BAND_SOLVER_SOURCES
+  ${QE_BAND_SOLVER_MODEL_DIR}/src/architecture_template.cpp
   ${QE_BAND_SOLVER_MODEL_DIR}/src/architecture_config.cpp
   ${QE_BAND_SOLVER_MODEL_DIR}/src/interconnect.cpp
+  ${QE_BAND_SOLVER_MODEL_DIR}/src/host_scf.cpp
+  ${QE_BAND_SOLVER_MODEL_DIR}/src/fpga_orchestrator.cpp
+  ${QE_BAND_SOLVER_MODEL_DIR}/src/dft_hybrid_system.cpp
   ${QE_BAND_SOLVER_MODEL_DIR}/src/chip_top.cpp
   ${QE_BAND_SOLVER_MODEL_DIR}/src/clusters/cluster_graph_executor.cpp
   ${QE_BAND_SOLVER_MODEL_DIR}/src/clusters/episode_controller.cpp
@@ -74,11 +120,15 @@ target_compile_definitions(gem5_systemc_bridge PRIVATE
 )
 
 target_link_libraries(gem5_systemc_bridge
-  systemc
+  ${QEBS_SYSTEMC_LIBRARY}
 )
 
 add_executable(gem5_systemc_standalone
   src/standalone_test.cpp
+  src/gem5_tlm_target.cpp
+  src/dft_hybrid_system_gem5.cpp
+  src/gem5_bridge.cpp
+  ${QE_BAND_SOLVER_SOURCES}
 )
 
 target_compile_definitions(gem5_systemc_standalone PRIVATE
@@ -86,8 +136,7 @@ target_compile_definitions(gem5_systemc_standalone PRIVATE
 )
 
 target_link_libraries(gem5_systemc_standalone
-  gem5_systemc_bridge
-  systemc
+  ${QEBS_SYSTEMC_LIBRARY}
 )
 
 install(TARGETS gem5_systemc_bridge gem5_systemc_standalone

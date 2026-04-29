@@ -28,6 +28,7 @@ if [ -z "$SYSTEMC_HOME" ]; then
         "/opt/systemc"
         "/usr/local/systemc"
         "$HOME/systemc"
+        "/usr"
     )
     
     for path in "${SYSTEMC_PATHS[@]}"; do
@@ -75,7 +76,9 @@ echo ""
 echo "Next steps:"
 echo "1. Build gem5 with SystemC support:"
 echo "   cd $GEM5_DIR"
-echo "   scons build/X86/gem5.opt USE_SYSTEMC=1 -j\$(nproc)"
+echo "   scons defconfig build/X86 build_opts/X86"
+echo "   scons setconfig build/X86 USE_SYSTEMC=y"
+echo "   scons build/X86/gem5.opt -j\$(nproc)"
 echo ""
 echo "2. Run FPGA test:"
 echo "   build/X86/gem5.opt $PROJECT_ROOT/configs/fpga/simple_fpga_test.py"
