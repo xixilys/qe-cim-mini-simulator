@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include "base/logging.hh"
 #include "base/trace.hh"
 #include "debug/FPGAAccelerator.hh"
 #include "debug/FPGADMA.hh"
@@ -31,6 +32,10 @@ FPGAAccelerator::FPGAAccelerator(const Params &p)
       electronsTotalEnergy(0.0f), electronsTotalTime(0), electronsCbandsTime(0),
       electronsSumbandTime(0), electronsMixrhoTime(0),
       hMatrixAddr(0), sMatrixAddr(0), rhoAddr(0), veffAddr(0),
+      executionMode(p.execution_mode),
+      realSystemCTarget(p.real_systemc_target),
+      roiStatsEnabled(p.roi_stats_enabled),
+      roiLabel(p.roi_label),
       dmaEngine(nullptr),
 #ifdef USE_SYSTEMC
       tlmMediator(nullptr),
@@ -49,9 +54,21 @@ FPGAAccelerator::FPGAAccelerator(const Params &p)
       }, name()),
       tlmResponseEvent([]{ }, name())
 {
+    if (executionMode != "smoke" &&
+        executionMode != "timed_proxy" &&
+        executionMode != "real_bridge") {
+        fatal("FPGAAccelerator execution_mode must be smoke, timed_proxy, or "
+              "real_bridge; got %s", executionMode.c_str());
+    }
+    if (executionMode == "real_bridge" && !realSystemCTarget) {
+        fatal("FPGAAccelerator real_bridge mode requires real_systemc_target=true");
+    }
     dmaEngine = new DMAEngine(this);
 
-    DPRINTF(FPGAAccelerator, "FPGAAccelerator created\n");
+    DPRINTF(FPGAAccelerator,
+            "FPGAAccelerator created: execution_mode=%s real_systemc_target=%d "
+            "roi_stats_enabled=%d roi_label=%s\n",
+            executionMode.c_str(), realSystemCTarget, roiStatsEnabled, roiLabel.c_str());
 }
 
 FPGAAccelerator::~FPGAAccelerator() {

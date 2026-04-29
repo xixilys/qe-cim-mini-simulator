@@ -30,3 +30,19 @@ class FPGAAccelerator(PciEndpoint):
     BAR5 = PciBarNone()
 
     pio_latency = Param.Latency('1ns', "PIO latency")
+    execution_mode = Param.String(
+        'smoke',
+        "FPGA proxy mode: smoke, timed_proxy, or real_bridge",
+    )
+    real_systemc_target = Param.Bool(
+        False,
+        "True only when a real SystemC bridge/target artifact is explicitly bound",
+    )
+    roi_stats_enabled = Param.Bool(
+        True,
+        "Enable device-local ROI counters for proxy reporting",
+    )
+    roi_label = Param.String(
+        'qebs_offload',
+        "Label attached to device-local ROI/provenance counters",
+    )

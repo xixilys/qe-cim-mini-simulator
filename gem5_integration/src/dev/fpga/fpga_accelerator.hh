@@ -8,6 +8,7 @@
 #include "dev/pci/device.hh"
 #include "dev/dma_device.hh"
 #include "params/FPGAAccelerator.hh"
+#include <string>
 #include <vector>
 
 #ifdef USE_SYSTEMC
@@ -150,6 +151,11 @@ class FPGAAccelerator : public PciEndpoint {
     uint64_t sMatrixAddr;
     uint64_t rhoAddr;
     uint64_t veffAddr;
+
+    const std::string executionMode;
+    const bool realSystemCTarget;
+    const bool roiStatsEnabled;
+    const std::string roiLabel;
 
     class DMAEngine {
       private:
