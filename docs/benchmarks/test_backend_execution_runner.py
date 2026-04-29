@@ -806,6 +806,71 @@ class BackendExecutionRunnerTests(unittest.TestCase):
             self.assertEqual(env["QEBS_BACKEND_EXECUTION_REPORT_JSON"], str(output))
             self.assertEqual(env["QEBS_BACKEND_REPORT_JSON"], str(output))
 
+    def test_systemc_request_under_backend_execution_requests_resolves_sibling_refs(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            frontend_root = tmp / "frontend_dse"
+            request_dir = frontend_root / "backend_execution_requests"
+            request_dir.mkdir(parents=True)
+            exe = frontend_root / "bin" / "fake_systemc.py"
+            exe.parent.mkdir(parents=True)
+            exe.write_text(
+                "#!/usr/bin/env python3\n"
+                "import json, os\n"
+                "from pathlib import Path\n"
+                "env = {k: v for k, v in os.environ.items() if k.startswith('QEBS_')}\n"
+                "Path(os.environ['QEBS_RESULT_JSON']).write_text(json.dumps({\n"
+                "  'schema_version': 'systemc_architecture_candidate_result_v0',\n"
+                "  'generated_at_utc': '2026-04-28T00:00:00Z',\n"
+                "  'case_id': 'si8_proxy',\n"
+                "  'architecture_family': 'F2',\n"
+                "  'assumption_set_id': 'unit_profile',\n"
+                "  'run_summary': {'total_episodes': 1, 'total_ref_cycles': 77},\n"
+                "  'final': {'converged': True, 'scf_iterations': 1},\n"
+                "  'iteration_diagnostics': [],\n"
+                "  'metrics': {},\n"
+                "  'cluster_metrics': {'qebs_env': env},\n"
+                "  'timing': {'wall_time_s': 0.001}\n"
+                "}, sort_keys=True), encoding='utf-8')\n",
+                encoding="utf-8",
+            )
+            exe.chmod(exe.stat().st_mode | 0o111)
+            arch_cfg = frontend_root / "architecture_configs" / "candidate.json"
+            arch_cfg.parent.mkdir(parents=True)
+            arch_cfg.write_text("{}\n", encoding="utf-8")
+            systemc_cfg = frontend_root / "systemc_configs" / "candidate.json"
+            systemc_cfg.parent.mkdir(parents=True)
+            systemc_cfg.write_text("{}\n", encoding="utf-8")
+            request_payload = self.make_request(
+                "systemc_timed_functional",
+                input_refs={
+                    "systemc_executable": "bin/fake_systemc.py",
+                    "architecture_config": "architecture_configs/candidate.json",
+                    "systemc_config": "systemc_configs/candidate.json",
+                },
+            )
+            request = request_dir / "candidate.json"
+            request.write_text(json.dumps(request_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            output = tmp / "report.json"
+
+            rc = RUNNER.main([
+                "--request",
+                str(request),
+                "--output",
+                str(output),
+                "--mode",
+                "systemc_timed_functional",
+                "--allow-execute",
+            ])
+
+            self.assertEqual(rc, 0)
+            env = self.read_report(output)["artifact_refs"]["source_cluster_metrics"]["qebs_env"]
+            self.assertEqual(env["QEBS_ARCH_CONFIG"], str(arch_cfg))
+            self.assertEqual(env["QEBS_ARCHITECTURE_CONFIG"], str(arch_cfg))
+            self.assertEqual(env["QEBS_SYSTEMC_CONFIG_REF"], str(systemc_cfg))
+            self.assertEqual(env["QEBS_INPUT_REF_ARCHITECTURE_CONFIG"], str(arch_cfg))
+            self.assertNotIn("backend_execution_requests/architecture_configs", env["QEBS_ARCH_CONFIG"])
+
     def test_systemc_config_ref_does_not_fallback_to_arch_config(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp = Path(tmpdir)
@@ -1080,6 +1145,44 @@ class BackendExecutionRunnerTests(unittest.TestCase):
             self.assertIn("requires an explicit systemc_bridge", report["refusal_reason"])
             self.assertEqual(report["artifact_refs"]["systemc_bridge_status"], "missing_input_ref")
 
+    def test_b4_refuses_when_real_bridge_capability_is_not_explicit(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            self.write_fake_gem5_report_executable(tmp)
+            config = tmp / "configs" / "fake_gem5_config.py"
+            config.parent.mkdir(parents=True)
+            config.write_text("# fake config\n", encoding="utf-8")
+            bridge = tmp / "lib" / "libgem5_systemc_bridge.a"
+            bridge.parent.mkdir(parents=True)
+            bridge.write_text("fake bridge artifact for unit test\n", encoding="utf-8")
+            payload = self.make_request(
+                "gem5_systemc_timed_proxy",
+                input_refs={
+                    "gem5_executable": "bin/gem5.opt",
+                    "gem5_config": "configs/fake_gem5_config.py",
+                    "systemc_bridge_library": "lib/libgem5_systemc_bridge.a",
+                },
+            )
+            payload["backend_capability_profile"]["supports_real_bridge"] = False
+            request = self.write_request(tmp, payload)
+            output = tmp / "report.json"
+
+            rc = RUNNER.main([
+                "--request",
+                str(request),
+                "--output",
+                str(output),
+                "--mode",
+                "gem5_systemc_timed_proxy",
+                "--allow-execute",
+            ])
+
+            self.assertEqual(rc, 0)
+            report = self.read_report(output)
+            self.assert_refused_report(report, "gem5_systemc_timed_proxy")
+            self.assertIn("supports_real_bridge=true", report["refusal_reason"])
+            self.assertEqual(report["artifact_refs"]["real_bridge_capability_status"], "missing_or_false")
+
     def test_b4_gem5_direct_report_executes_with_explicit_config_and_bridge(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp = Path(tmpdir)
@@ -1167,6 +1270,50 @@ class BackendExecutionRunnerTests(unittest.TestCase):
             report = self.read_report(output)
             self.assert_refused_report(report, "gem5_systemc_timed_proxy")
             self.assertIn("B4 timed proxy report requires", report["refusal_reason"])
+
+    def test_b4_direct_report_rejects_bridge_provenance_mismatch(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            self.write_fake_gem5_report_executable(tmp)
+            config = tmp / "configs" / "fake_gem5_config.py"
+            config.parent.mkdir(parents=True)
+            config.write_text("# fake config\n", encoding="utf-8")
+            expected_bridge = tmp / "lib" / "expected_bridge.so"
+            actual_bridge = tmp / "lib" / "actual_bridge.so"
+            expected_bridge.parent.mkdir(parents=True)
+            expected_bridge.write_text("expected bridge artifact\n", encoding="utf-8")
+            actual_bridge.write_text("actual bridge artifact\n", encoding="utf-8")
+            request = self.write_request(
+                tmp,
+                self.make_request(
+                    "gem5_systemc_timed_proxy",
+                    input_refs={
+                        "gem5_executable": "bin/gem5.opt",
+                        "gem5_config": "configs/fake_gem5_config.py",
+                        "systemc_bridge_library": "lib/expected_bridge.so",
+                    },
+                ),
+            )
+            output = tmp / "report.json"
+
+            rc = RUNNER.main([
+                "--request",
+                str(request),
+                "--output",
+                str(output),
+                "--mode",
+                "gem5_systemc_timed_proxy",
+                "--allow-execute",
+            ])
+
+            self.assertEqual(rc, 0)
+            report = self.read_report(output)
+            self.assertEqual(report["execution_status"], "executed")
+            with self.assertRaisesRegex(ValueError, "systemc_bridge does not match expected bridge"):
+                RUNNER._validate_b4_timed_proxy_report_shape(
+                    report,
+                    expected_systemc_bridge=actual_bridge,
+                )
 
     def test_b4_refuses_missing_explicit_systemc_bridge_artifact(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

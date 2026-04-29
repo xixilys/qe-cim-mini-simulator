@@ -27,6 +27,9 @@ DEFAULT_DESIGN_SPACE = REPO_ROOT / "docs/benchmarks/qe_architecture_family_desig
 DEFAULT_WORKLOAD = REPO_ROOT / "docs/benchmarks/testdata/unified_dse/minimal_workload.json"
 DEFAULT_B3_REQUEST = REPO_ROOT / "docs/benchmarks/testdata/unified_dse/backend_execution_request_b3_smoke.json"
 DEFAULT_LEGACY_B3_REPORT = REPO_ROOT / "docs/benchmarks/results/qe_dse_gem5_systemc_smoke_report_v0.json"
+DEFAULT_GEM5_EXECUTABLE = REPO_ROOT / "gem5_integration/gem5/build/X86/gem5.opt"
+DEFAULT_GEM5_B4_CONFIG = REPO_ROOT / "gem5_integration/configs/fpga/simple_fpga_test.py"
+DEFAULT_SYSTEMC_BRIDGE = REPO_ROOT / "gem5_integration/systemc_model/build/libgem5_systemc_bridge.a"
 
 
 class E2EError(RuntimeError):
@@ -85,17 +88,37 @@ def _run(cmd: Sequence[str], *, cwd: Path, log_dir: Path, name: str, timeout_s: 
     return result
 
 
-def _first_stage_b0_request(frontend_dir: Path) -> Path:
+def _stage_b0_request_family(request: Path) -> str | None:
+    try:
+        payload = _json_load(request)
+    except Exception:
+        return None
+    candidate_identity = payload.get("candidate_identity")
+    if not isinstance(candidate_identity, Mapping):
+        return None
+    design_axes = candidate_identity.get("design_axes")
+    if isinstance(design_axes, Mapping) and design_axes.get("family"):
+        return str(design_axes["family"])
+    template_id = candidate_identity.get("architecture_template_id")
+    return str(template_id) if template_id else None
+
+
+def _first_stage_b0_request(frontend_dir: Path, *, preferred_family: str = "F2") -> Path:
     manifest_path = frontend_dir / "stage_b0_descriptor_manifest_v0.json"
     manifest = _json_load(manifest_path)
     descriptors = manifest.get("descriptors")
     if not isinstance(descriptors, list) or not descriptors:
         raise E2EError(f"no Stage-B0 descriptors in {manifest_path}")
+    usable: list[Path] = []
     for item in descriptors:
         if isinstance(item, dict) and item.get("backend_execution_request_ref"):
             request = frontend_dir / str(item["backend_execution_request_ref"])
             if request.exists():
-                return request
+                usable.append(request)
+                if preferred_family and _stage_b0_request_family(request) == preferred_family:
+                    return request
+    if usable:
+        return usable[0]
     raise E2EError(f"Stage-B0 manifest has no usable backend request: {manifest_path}")
 
 
@@ -172,6 +195,102 @@ def _enforce_real_gem5_smoke_gate(report: Mapping[str, Any], report_path: Path) 
             f"{report_path}: {', '.join(failures)}"
         )
 
+
+def _enforce_real_gem5_b4_gate(report: Mapping[str, Any], report_path: Path, *, expected_bridge: Path) -> None:
+    """Require B4 to be an executed real-gem5 timed-proxy report with bridge provenance."""
+    artifact_refs = report.get("artifact_refs")
+    if not isinstance(artifact_refs, Mapping):
+        artifact_refs = {}
+    control_path = report.get("control_path")
+    if not isinstance(control_path, Mapping):
+        control_path = {}
+    metrics = report.get("metrics")
+    if not isinstance(metrics, Mapping):
+        metrics = {}
+    environment = report.get("environment")
+    if not isinstance(environment, Mapping):
+        environment = {}
+
+    failures: list[str] = []
+    if report.get("execution_status") != "executed":
+        failures.append(f"execution_status={report.get('execution_status')!r}")
+    if report.get("claim_ceiling") != "gem5_systemc_timed_proxy_only":
+        failures.append(f"claim_ceiling={report.get('claim_ceiling')!r}")
+    if report.get("backend_class") != "gem5_systemc_timed_proxy":
+        failures.append(f"backend_class={report.get('backend_class')!r}")
+    if environment.get("fpga_execution_mode") != "real_bridge":
+        failures.append(f"fpga_execution_mode={environment.get('fpga_execution_mode')!r}")
+    if environment.get("real_systemc_target") not in (True, "1", "true", "True"):
+        failures.append(f"real_systemc_target={environment.get('real_systemc_target')!r}")
+    if str(environment.get("systemc_bridge")) != str(expected_bridge):
+        failures.append(f"systemc_bridge={environment.get('systemc_bridge')!r}")
+    if str(artifact_refs.get("systemc_bridge")) != str(expected_bridge):
+        failures.append(f"artifact_refs.systemc_bridge={artifact_refs.get('systemc_bridge')!r}")
+    for key in (
+        "mmio_read_count",
+        "mmio_write_count",
+        "systemc_start_tick",
+        "systemc_end_tick",
+        "completion_tick",
+        "dma_start_tick",
+        "dma_end_tick",
+    ):
+        if key not in control_path:
+            failures.append(f"missing control_path.{key}")
+    for key in (
+        "host_control_mmio_read_count",
+        "host_control_mmio_write_count",
+        "systemc_datapath_device_busy_ns",
+        "successful_dma_transfer_bytes",
+        "dma_warning_count",
+    ):
+        if key not in metrics:
+            failures.append(f"missing metrics.{key}")
+    correctness_gate = report.get("correctness_gate")
+    if isinstance(correctness_gate, Mapping):
+        if correctness_gate.get("workload_equivalent_claim") is not False:
+            failures.append("workload_equivalent_claim_not_false")
+        if correctness_gate.get("domain_equivalence_claim") is not False:
+            failures.append("domain_equivalence_claim_not_false")
+
+    if failures:
+        raise E2EError(
+            "--require-real-gem5-b4 gate failed for "
+            f"{report_path}: {', '.join(failures)}"
+        )
+
+
+def _write_b4_request_from_stage_b0(
+    stage_b0_request_path: Path,
+    output_dir: Path,
+    *,
+    gem5_executable: Path,
+    gem5_config: Path,
+    systemc_bridge: Path,
+) -> Path:
+    request = _json_load(stage_b0_request_path)
+    request["requested_fidelity"] = "B4"
+    request["execution_mode"] = "gem5_systemc_timed_proxy"
+    input_refs = request.setdefault("input_refs", {})
+    if not isinstance(input_refs, dict):
+        raise E2EError(f"input_refs is not a JSON object in {stage_b0_request_path}")
+    input_refs["gem5_executable"] = str(gem5_executable)
+    input_refs["gem5_config"] = str(gem5_config)
+    input_refs["systemc_bridge_library"] = str(systemc_bridge)
+    profile = request.setdefault("backend_capability_profile", {})
+    if not isinstance(profile, dict):
+        raise E2EError(f"backend_capability_profile is not a JSON object in {stage_b0_request_path}")
+    profile["supports_gem5_timed_proxy"] = True
+    profile["supports_real_bridge"] = True
+    profile["claim_ceiling"] = "gem5_systemc_timed_proxy_only"
+    non_claims = profile.setdefault("non_claims", [])
+    if isinstance(non_claims, list) and "real_bridge_requires_explicit_systemc_bridge_artifact" not in non_claims:
+        non_claims.append("real_bridge_requires_explicit_systemc_bridge_artifact")
+    request["claim_ceiling"] = "descriptor_only"
+    output = output_dir / "b4_backend_execution_request.json"
+    _write_json(output, request)
+    return output
+
 def run_e2e(args: argparse.Namespace) -> dict[str, Any]:
     output_dir = Path(args.output_dir)
     if output_dir.exists() and args.clean:
@@ -210,7 +329,7 @@ def run_e2e(args: argparse.Namespace) -> dict[str, Any]:
     ]
     commands.append(_run(frontend_cmd, cwd=REPO_ROOT, log_dir=log_dir, name="frontend_dse", timeout_s=args.timeout_s))
 
-    request_path = _first_stage_b0_request(frontend_dir)
+    request_path = _first_stage_b0_request(frontend_dir, preferred_family=args.preferred_family)
     systemc_report = backend_dir / "systemc_timed_functional_report.json"
     backend_cmd = [
         sys.executable,
@@ -243,6 +362,10 @@ def run_e2e(args: argparse.Namespace) -> dict[str, Any]:
     gem5_report: Path | None = None
     gem5_payload: dict[str, Any] | None = None
     gem5_mode = "skipped"
+    gem5_b4_request: Path | None = None
+    gem5_b4_report: Path | None = None
+    gem5_b4_payload: dict[str, Any] | None = None
+    gem5_b4_mode = "skipped"
     if args.include_gem5_smoke:
         gem5_report = backend_dir / "gem5_systemc_smoke_report.json"
         gem5_cmd = [
@@ -277,6 +400,38 @@ def run_e2e(args: argparse.Namespace) -> dict[str, Any]:
         ]
         commands.append(_run(gem5_ingest_cmd, cwd=REPO_ROOT, log_dir=log_dir, name="frontend_ingest_gem5_smoke", timeout_s=args.timeout_s))
 
+    if args.include_gem5_b4 or args.require_real_gem5_b4:
+        gem5_b4_mode = "real_gem5_b4_requested" if args.require_real_gem5_b4 else "real_gem5_b4_optional"
+        gem5_b4_request = _write_b4_request_from_stage_b0(
+            request_path,
+            output_dir,
+            gem5_executable=Path(args.gem5_executable),
+            gem5_config=Path(args.gem5_b4_config),
+            systemc_bridge=Path(args.systemc_bridge_library),
+        )
+        gem5_b4_report = backend_dir / "gem5_systemc_timed_proxy_report.json"
+        gem5_b4_cmd = [
+            sys.executable,
+            "backend/runners/run_backend_execution_v0.py",
+            "--request",
+            str(gem5_b4_request),
+            "--output",
+            str(gem5_b4_report),
+            "--mode",
+            "gem5_systemc_timed_proxy",
+            "--allow-execute",
+            "--timeout-s",
+            str(args.gem5_timeout_s),
+        ]
+        commands.append(_run(gem5_b4_cmd, cwd=REPO_ROOT, log_dir=log_dir, name="backend_gem5_b4", timeout_s=args.gem5_timeout_s + 5))
+        gem5_b4_payload = _json_load(gem5_b4_report)
+        if args.require_real_gem5_b4:
+            _enforce_real_gem5_b4_gate(
+                gem5_b4_payload,
+                gem5_b4_report,
+                expected_bridge=Path(args.systemc_bridge_library),
+            )
+
     summary = {
         "schema_version": "qe_fpga_dse_performance_summary_v0",
         "generated_at_utc": strftime("%Y-%m-%dT%H:%M:%SZ", gmtime()),
@@ -284,9 +439,11 @@ def run_e2e(args: argparse.Namespace) -> dict[str, Any]:
         "selected_request_ref": str(request_path),
         "systemc_timed_functional": _report_summary(systemc_payload),
         "gem5_smoke": _report_summary(gem5_payload) if gem5_payload is not None else None,
+        "gem5_b4_timed_proxy": _report_summary(gem5_b4_payload) if gem5_b4_payload is not None else None,
         "known_metric_limits": [
             "systemc_timed_functional_proxy_only",
             "gem5_systemc_smoke_only_when_present",
+            "gem5_systemc_timed_proxy_only_when_B4_present",
             "cycle_proxy/device_busy may be absent or proxy-grade depending on backend report",
         ],
     }
@@ -304,6 +461,9 @@ def run_e2e(args: argparse.Namespace) -> dict[str, Any]:
         "gem5_smoke_mode": gem5_mode,
         "gem5_smoke_report": str(gem5_report) if gem5_report else None,
         "gem5_frontend_evidence_ir": str(gem5_ingest_dir / "evidence_ir_collection_v0.json") if gem5_report else None,
+        "gem5_b4_mode": gem5_b4_mode,
+        "gem5_b4_request": str(gem5_b4_request) if gem5_b4_request else None,
+        "gem5_b4_report": str(gem5_b4_report) if gem5_b4_report else None,
         "performance_summary": str(summary_path),
         "commands": commands,
         "non_claims": [
@@ -328,6 +488,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--search-backend", default="stratified_cartesian")
     parser.add_argument("--shortlist-policy", default="top_fast_uncertain_diverse")
     parser.add_argument("--shortlist-size", type=int, default=3)
+    parser.add_argument("--preferred-family", default="F2")
     parser.add_argument("--timeout-s", type=int, default=10)
     parser.add_argument("--clean", action="store_true", default=True)
     parser.add_argument("--no-clean", dest="clean", action="store_false")
@@ -336,6 +497,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--gem5-timeout-s", type=int, default=60)
     parser.add_argument("--gem5-smoke-request", default=str(DEFAULT_B3_REQUEST))
     parser.add_argument("--legacy-b3-report", default=str(DEFAULT_LEGACY_B3_REPORT))
+    parser.add_argument("--include-gem5-b4", action="store_true")
+    parser.add_argument("--require-real-gem5-b4", action="store_true")
+    parser.add_argument("--gem5-executable", default=str(DEFAULT_GEM5_EXECUTABLE))
+    parser.add_argument("--gem5-b4-config", default=str(DEFAULT_GEM5_B4_CONFIG))
+    parser.add_argument("--systemc-bridge-library", default=str(DEFAULT_SYSTEMC_BRIDGE))
     return parser
 
 
@@ -344,6 +510,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.require_real_gem5_smoke:
         args.include_gem5_smoke = True
+    if args.require_real_gem5_b4:
+        args.include_gem5_b4 = True
     try:
         result = run_e2e(args)
     except Exception as exc:  # pragma: no cover - CLI guard

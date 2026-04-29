@@ -120,6 +120,29 @@ def _request_input_refs(request: Mapping[str, Any]) -> Mapping[str, Any]:
     return value if isinstance(value, Mapping) else {}
 
 
+def _infer_request_ref_root(request_path: Path) -> Path:
+    """Return the artifact root used by relative input_refs.
+
+    Stage-B0 backend requests are stored under a leaf directory such as
+    ``frontend_dse/backend_execution_requests/`` while their input refs point
+    at sibling artifact directories (``architecture_configs/``,
+    ``systemc_configs/``, ``gem5_systemc_handoff/``).  Resolving those refs
+    relative to the request-file directory silently targets non-existent nested
+    paths and lets the SystemC model fall back to a 0-cluster run.  Keep direct
+    unit-test/request-file usage unchanged, but lift known request containers to
+    their parent artifact root.
+    """
+
+    request_dir = request_path.resolve().parent
+    if request_dir.name in {
+        "backend_execution_requests",
+        "gem5_systemc_handoff",
+        "backend_requests",
+    }:
+        return request_dir.parent
+    return request_dir
+
+
 def _path_from_ref(value: Any, request_root: Path) -> Path | None:
     if not isinstance(value, str) or not value:
         return None
@@ -545,10 +568,11 @@ def _request_env(
     systemc_config_ref = _resolved_input_ref(request, request_root, "systemc_config")
     architecture_config_ref = _resolved_input_ref(request, request_root, "architecture_config", "arch_config")
 
-    # Compatibility aliases consumed by the current qe_band_solver_model/sc_main.cpp.
-    # Prefer the separated architecture_config sidecar when present; fall back to
-    # systemc_config only for older descriptor bundles that predate the split.
-    arch_config = architecture_config_ref or systemc_config_ref
+    # Compatibility alias consumed by the current qe_band_solver_model/sc_main.cpp.
+    # Keep architecture_config and systemc_config separated: never pass the
+    # descriptor-only systemc_config as QEBS_ARCH_CONFIG, because the SystemC
+    # model expects a cluster-bearing ArchitectureConfig there.
+    arch_config = architecture_config_ref
     _set_env(env, "QEBS_CASE_ID", qe_extension.get("case_id") or workload_identity.get("workload_id"))
     _set_env(
         env,
@@ -566,6 +590,7 @@ def _request_env(
     _set_env(env, "QEBS_ARCH_CONFIG", arch_config)
     _set_env(env, "QEBS_ARCHITECTURE_CONFIG", architecture_config_ref)
     _set_env(env, "QEBS_SYSTEMC_CONFIG_REF", systemc_config_ref)
+    _set_env(env, "QEBS_SYSTEMC_CONFIG_FILE", systemc_config_ref)
     return env
 
 
@@ -606,7 +631,11 @@ def _b4_systemc_bridge_ref(request: Mapping[str, Any], request_root: Path) -> Pa
     )
 
 
-def _validate_b4_timed_proxy_report_shape(payload: Mapping[str, Any]) -> None:
+def _validate_b4_timed_proxy_report_shape(
+    payload: Mapping[str, Any],
+    *,
+    expected_systemc_bridge: Path | None = None,
+) -> None:
     environment = payload.get("environment")
     control_path = payload.get("control_path")
     metrics = payload.get("metrics")
@@ -622,8 +651,14 @@ def _validate_b4_timed_proxy_report_shape(payload: Mapping[str, Any]) -> None:
         raise ValueError("B4 timed proxy report requires environment.fpga_execution_mode=real_bridge")
     if environment.get("real_systemc_target") not in (True, "1", "true", "True"):
         raise ValueError("B4 timed proxy report requires environment.real_systemc_target=true")
-    if not environment.get("systemc_bridge"):
+    bridge_value = environment.get("systemc_bridge")
+    if not bridge_value:
         raise ValueError("B4 timed proxy report requires environment.systemc_bridge provenance")
+    if expected_systemc_bridge is not None and str(bridge_value) != str(expected_systemc_bridge):
+        raise ValueError(
+            "B4 timed proxy report environment.systemc_bridge does not match "
+            f"expected bridge artifact: {bridge_value} != {expected_systemc_bridge}"
+        )
     required_control = (
         "mmio_read_count",
         "mmio_write_count",
@@ -924,6 +959,27 @@ def _run_gem5(
         # B4 is deliberately guarded: it may execute only through an explicit gem5
         # config and an explicit real SystemC bridge/target artifact. It must never
         # silently reuse the B3 smoke stub or the local timed_proxy fallback path.
+        profile = request.get("backend_capability_profile")
+        if not (
+            isinstance(profile, Mapping)
+            and profile.get("supports_gem5_timed_proxy") is True
+            and profile.get("supports_real_bridge") is True
+        ):
+            report = refusal_report(
+                request,
+                mode=mode,
+                reason=(
+                    "B4 timed proxy requires backend_capability_profile to set "
+                    "supports_gem5_timed_proxy=true and supports_real_bridge=true"
+                ),
+                artifact_refs={
+                    "gem5_executable": str(executable),
+                    "gem5_config": str(gem5_config),
+                    "real_bridge_capability_status": "missing_or_false",
+                },
+            )
+            write_report(output_path, report)
+            return 0
         bridge_ref = _b4_systemc_bridge_ref(request, request_root)
         if bridge_ref is None:
             report = refusal_report(
@@ -1540,7 +1596,7 @@ def _run_gem5(
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     request_path = Path(args.request).resolve()
-    request_root = request_path.resolve().parent
+    request_root = _infer_request_ref_root(request_path)
     output_path = Path(args.output).resolve()
     mode = args.mode
 

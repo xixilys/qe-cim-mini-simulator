@@ -126,34 +126,6 @@ def _write_ir_sidecars(root: Path, row: Mapping[str, Any]) -> dict[str, str]:
     return refs
 
 
-def _architecture_config(row: Mapping[str, Any], sidecar_refs: Mapping[str, str]) -> dict[str, Any]:
-    return {
-        "schema_version": ARCHITECTURE_CONFIG_SCHEMA_VERSION,
-        "execution_status": "not_executed",
-        "claim_ceiling": "architecture_config_descriptor_only",
-        "candidate_identity": _candidate_identity(row),
-        "workload_identity": _workload_identity(row),
-        "design_point": dict(_require_mapping(row, "design_point")),
-        "ir_refs": dict(sidecar_refs),
-        "backend_neutral_schema": dict(_require_mapping(row, "backend_neutral_schema")),
-        "candidate_descriptor": dict(_require_mapping(row, "candidate_descriptor")),
-        "workload_anchor_refs": dict(_require_mapping(row, "workload_anchor_refs")),
-        "domain_extension": dict(row.get("domain_extension", {}))
-        if isinstance(row.get("domain_extension", {}), Mapping)
-        else {},
-        "design_validation": dict(_require_mapping(row, "design_validation")),
-        "qe_anchor_refs": dict(_require_mapping(row, "qe_anchor_refs")),
-        "non_claims": [
-            "architecture_descriptor_only",
-            "not_systemc_execution_config",
-            "not_systemc_executed",
-            "not_gem5_executed",
-            "not_qe_equivalent_scf",
-            "not_rtl_hls_board_evidence",
-        ],
-    }
-
-
 def _systemc_config(row: Mapping[str, Any], sidecar_refs: Mapping[str, str], architecture_config_ref: str) -> dict[str, Any]:
     return {
         "schema_version": SYSTEMC_CONFIG_SCHEMA_VERSION,
@@ -202,7 +174,7 @@ def _architecture_family(identity: Mapping[str, Any], design_point: Mapping[str,
     return "F2"
 
 
-def _architecture_config(row: Mapping[str, Any]) -> dict[str, Any]:
+def _architecture_config(row: Mapping[str, Any], sidecar_refs: Mapping[str, str]) -> dict[str, Any]:
     identity = _candidate_identity(row)
     design_point = _require_mapping(row, "design_point")
     family = _architecture_family(identity, design_point)
@@ -234,18 +206,12 @@ def _architecture_config(row: Mapping[str, Any]) -> dict[str, Any]:
                 "cluster_id": cluster_id,
                 "type": cluster_type,
                 "enabled": True,
-                "compute_unit": {
-                    "type": compute_unit_type,
-                    "parallelism": int(design_point.get("parallelism", 4) or 4),
-                    "enable_karatsuba": True,
-                    "cim_moduli_count": int(design_point.get("cim_moduli_count", 16) or 16),
-                    "cim_array_rows": int(design_point.get("cim_array_rows", 256) or 256),
-                    "cim_array_cols": int(design_point.get("cim_array_cols", 256) or 256),
-                    "cim_frequency_mhz": float(design_point.get("clock_mhz", 150.0) or 150.0),
-                    "fpga_tile_size": int(design_point.get("gemm_tile_size", 32) or 32),
-                    "fpga_dsp_count": int(design_point.get("fpga_dsp_count", 128) or 128),
-                    "fpga_frequency_mhz": float(design_point.get("clock_mhz", 300.0) or 300.0),
-                },
+                # The current SystemC JSON parser is intentionally lightweight and
+                # resolves the first `"type"` token inside each cluster object. Keep
+                # compute_unit as a string here so the cluster-level `type` remains
+                # unambiguous and the B2 run is metric-bearing rather than a
+                # 0-cluster/0-cycle descriptor parse.
+                "compute_unit": compute_unit_type,
                 "on_chip_buffer_kb": int(design_point.get("on_chip_buffer_kb", buffer_kb) or buffer_kb),
                 "dma_bandwidth_gbps": int(design_point.get("dma_bandwidth_gbps", 100) or 100),
                 "enable_pipelining": True,
@@ -258,6 +224,12 @@ def _architecture_config(row: Mapping[str, Any]) -> dict[str, Any]:
         )
     return {
         "schema_version": ARCHITECTURE_CONFIG_SCHEMA_VERSION,
+        "execution_status": "not_executed",
+        "claim_ceiling": "architecture_config_descriptor_only",
+        "candidate_identity": identity,
+        "workload_identity": _workload_identity(row),
+        "design_point": dict(design_point),
+        "ir_refs": dict(sidecar_refs),
         "template_id": str(identity.get("architecture_template_id") or family),
         "template_label": str(identity.get("architecture_template_id") or family),
         "architecture_family": family,
@@ -446,11 +418,10 @@ def emit_stage_b0_descriptors(
         sidecar_refs = _write_ir_sidecars(root, validated_row)
         architecture_config_ref = f"architecture_configs/{candidate_id}.json"
         systemc_config_ref = f"systemc_configs/{candidate_id}.json"
-        architecture_config_ref = f"architecture_configs/{candidate_id}.json"
         gem5_descriptor_ref = f"gem5_systemc_handoff/{candidate_id}.json"
         backend_execution_request_ref = f"backend_execution_requests/{candidate_id}.json"
-        _write_json(root / systemc_config_ref, _systemc_config(validated_row, sidecar_refs))
-        _write_json(root / architecture_config_ref, _architecture_config(validated_row))
+        _write_json(root / architecture_config_ref, _architecture_config(validated_row, sidecar_refs))
+        _write_json(root / systemc_config_ref, _systemc_config(validated_row, sidecar_refs, architecture_config_ref))
         _write_json(
             root / gem5_descriptor_ref,
             _gem5_descriptor(validated_row, systemc_config_ref, architecture_config_ref, sidecar_refs),
@@ -465,7 +436,6 @@ def emit_stage_b0_descriptors(
                 **dict(sidecar_refs),
                 "architecture_config_ref": architecture_config_ref,
                 "systemc_config_ref": systemc_config_ref,
-                "architecture_config_ref": architecture_config_ref,
                 "gem5_descriptor_ref": gem5_descriptor_ref,
                 "backend_execution_request_ref": backend_execution_request_ref,
                 "execution_status": "not_executed",

@@ -292,7 +292,7 @@ class RunUnifiedDseV0Tests(unittest.TestCase):
             architecture_config = json.loads((out_dir / first["architecture_config_ref"]).read_text(encoding="utf-8"))
             self.assertEqual(
                 architecture_config["schema_version"],
-                "qe_dse_architecture_candidate_config_stage_b0_v0",
+                "systemc_architecture_config_v1",
             )
             self.assertEqual(architecture_config["execution_status"], "not_executed")
             self.assertEqual(architecture_config["claim_ceiling"], "architecture_config_descriptor_only")
