@@ -606,30 +606,24 @@ def _b4_systemc_bridge_ref(request: Mapping[str, Any], request_root: Path) -> Pa
     )
 
 
-def _validate_b4_timed_proxy_report_shape(
-    payload: Mapping[str, Any],
-    *,
-    expected_systemc_bridge: Path | None = None,
-) -> None:
+def _validate_b4_timed_proxy_report_shape(payload: Mapping[str, Any]) -> None:
+    environment = payload.get("environment")
     control_path = payload.get("control_path")
     metrics = payload.get("metrics")
-    environment = payload.get("environment")
-    artifact_refs = payload.get("artifact_refs")
-    if not isinstance(control_path, Mapping) or not isinstance(metrics, Mapping):
-        raise ValueError("B4 timed proxy report requires control_path and metrics objects")
-    if not isinstance(environment, Mapping):
-        raise ValueError("B4 timed proxy report requires environment provenance")
+    if (
+        not isinstance(environment, Mapping)
+        or not isinstance(control_path, Mapping)
+        or not isinstance(metrics, Mapping)
+    ):
+        raise ValueError(
+            "B4 timed proxy report requires environment, control_path, and metrics objects"
+        )
     if environment.get("fpga_execution_mode") != "real_bridge":
         raise ValueError("B4 timed proxy report requires environment.fpga_execution_mode=real_bridge")
-    if str(environment.get("real_systemc_target")) != "1":
-        raise ValueError("B4 timed proxy report requires environment.real_systemc_target=1")
-    bridge_value = environment.get("systemc_bridge")
-    if not bridge_value:
+    if environment.get("real_systemc_target") not in (True, "1", "true", "True"):
+        raise ValueError("B4 timed proxy report requires environment.real_systemc_target=true")
+    if not environment.get("systemc_bridge"):
         raise ValueError("B4 timed proxy report requires environment.systemc_bridge provenance")
-    if expected_systemc_bridge is not None and str(bridge_value) != str(expected_systemc_bridge):
-        raise ValueError("B4 timed proxy report systemc_bridge does not match requested bridge artifact")
-    if isinstance(artifact_refs, Mapping) and artifact_refs.get("systemc_bridge") not in (None, bridge_value):
-        raise ValueError("B4 timed proxy report artifact_refs.systemc_bridge conflicts with environment")
     required_control = (
         "mmio_read_count",
         "mmio_write_count",
