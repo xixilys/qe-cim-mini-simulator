@@ -542,14 +542,13 @@ def _request_env(
     _set_mapping_env(env, "QEBS_SYSTEMC_CONFIG", systemc_config)
     env.update(_resolved_input_ref_env(request, request_root))
 
-    # Compatibility aliases consumed by the current qe_band_solver_model/sc_main.cpp.
-    arch_config = _resolved_input_ref(
+    architecture_config = _resolved_input_ref(
         request,
         request_root,
         "architecture_config",
         "arch_config",
-        "systemc_config",
     )
+    systemc_config_ref = _resolved_input_ref(request, request_root, "systemc_config")
     _set_env(env, "QEBS_CASE_ID", qe_extension.get("case_id") or workload_identity.get("workload_id"))
     _set_env(
         env,
@@ -564,7 +563,14 @@ def _request_env(
     _set_env(env, "QEBS_SOLVER_PATH_CLASS", qe_extension.get("solver_path_class"))
     _set_env(env, "QEBS_OFFLOAD_SCOPE", design_axes.get("offload_scope"))
     _set_env(env, "QEBS_RESIDENT_POLICY", design_axes.get("resident_policy"))
-    _set_env(env, "QEBS_ARCH_CONFIG", arch_config)
+    # Keep architecture-template and SystemC execution configs separate.
+    # Older wrappers used QEBS_ARCH_CONFIG for both, which let BO/template-side
+    # architecture descriptors be confused with concrete SystemC run configs.
+    _set_env(env, "QEBS_ARCHITECTURE_CONFIG", architecture_config)
+    _set_env(env, "QEBS_ARCH_CONFIG", architecture_config)
+    _set_env(env, "QEBS_SYSTEMC_CONFIG_REF", systemc_config_ref)
+    _set_env(env, "QEBS_SYSTEMC_CONFIG_FILE", systemc_config_ref)
+    _set_env(env, "QEBS_MODEL_CONFIG", architecture_config or systemc_config_ref)
     return env
 
 
@@ -605,11 +611,30 @@ def _b4_systemc_bridge_ref(request: Mapping[str, Any], request_root: Path) -> Pa
     )
 
 
-def _validate_b4_timed_proxy_report_shape(payload: Mapping[str, Any]) -> None:
+def _validate_b4_timed_proxy_report_shape(
+    payload: Mapping[str, Any],
+    *,
+    expected_systemc_bridge: Path | None = None,
+) -> None:
     control_path = payload.get("control_path")
     metrics = payload.get("metrics")
+    environment = payload.get("environment")
+    artifact_refs = payload.get("artifact_refs")
     if not isinstance(control_path, Mapping) or not isinstance(metrics, Mapping):
         raise ValueError("B4 timed proxy report requires control_path and metrics objects")
+    if not isinstance(environment, Mapping):
+        raise ValueError("B4 timed proxy report requires environment provenance")
+    if environment.get("fpga_execution_mode") != "real_bridge":
+        raise ValueError("B4 timed proxy report requires environment.fpga_execution_mode=real_bridge")
+    if str(environment.get("real_systemc_target")) != "1":
+        raise ValueError("B4 timed proxy report requires environment.real_systemc_target=1")
+    bridge_value = environment.get("systemc_bridge")
+    if not bridge_value:
+        raise ValueError("B4 timed proxy report requires environment.systemc_bridge provenance")
+    if expected_systemc_bridge is not None and str(bridge_value) != str(expected_systemc_bridge):
+        raise ValueError("B4 timed proxy report systemc_bridge does not match requested bridge artifact")
+    if isinstance(artifact_refs, Mapping) and artifact_refs.get("systemc_bridge") not in (None, bridge_value):
+        raise ValueError("B4 timed proxy report artifact_refs.systemc_bridge conflicts with environment")
     required_control = (
         "mmio_read_count",
         "mmio_write_count",
@@ -665,7 +690,10 @@ def _accept_direct_backend_report(
         if payload.get("fidelity") != mode:
             raise ValueError("direct BackendExecutionReport fidelity does not match CLI mode")
         if mode == "gem5_systemc_timed_proxy":
-            _validate_b4_timed_proxy_report_shape(payload)
+            expected_bridge = _b4_systemc_bridge_ref(request, output_path.parent)
+            _validate_b4_timed_proxy_report_shape(
+                payload, expected_systemc_bridge=expected_bridge
+            )
     except Exception as exc:
         preserved_report = _preserve_invalid_direct_report(output_path)
         report = refusal_report(
