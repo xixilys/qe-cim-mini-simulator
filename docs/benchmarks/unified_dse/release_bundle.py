@@ -41,6 +41,7 @@ def build_release_bundle(
         "schema_version": domain_contracts.RELEASE_BUNDLE_SCHEMA_VERSION,
         "authority_scope": "supporting_evidence_only",
         "claim_posture": "evidence_grade_recommendation_no_public_winner",
+        "claim_ceiling": "release_index_only",
         "decision_authority": "adjudicator_memo_only",
         "final_public_family_winner": None,
         "result_bundle_ref": result_bundle_ref,
@@ -117,6 +118,7 @@ def validate_release_bundle(payload: Mapping[str, Any]) -> None:
         "claim_posture",
         "decision_authority",
         "final_public_family_winner",
+        "claim_ceiling",
         "result_bundle_ref",
         "manifest_ref",
         "non_touch_guard",
@@ -129,6 +131,8 @@ def validate_release_bundle(payload: Mapping[str, Any]) -> None:
         raise ValueError("unsupported release bundle schema_version")
     if payload.get("final_public_family_winner") is not None:
         raise ValueError("release bundle must not declare final public family winner")
+    if payload.get("claim_ceiling") != "release_index_only":
+        raise ValueError("release bundle claim_ceiling must be release_index_only")
     guard = payload.get("non_touch_guard")
     if not isinstance(guard, Mapping) or guard.get("backend_execution_performed_by_frontend") is not False:
         raise ValueError("release bundle non-touch guard failed")

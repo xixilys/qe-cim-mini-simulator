@@ -129,6 +129,49 @@ def _report_summary(report: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+
+
+def _enforce_real_gem5_smoke_gate(report: Mapping[str, Any], report_path: Path) -> None:
+    """Require --require-real-gem5-smoke to prove a real executed gem5 smoke path.
+
+    The backend runner writes refusal reports with rc=0 for many safe failure paths.
+    That behavior is useful for artifact capture, but the E2E gate must be hard:
+    legacy B3 conversion, dry-run/refusal reports, and non-real smoke envelopes do
+    not satisfy the Real gem5/B4 acceptance gate.
+    """
+    artifact_refs = report.get("artifact_refs")
+    if not isinstance(artifact_refs, Mapping):
+        artifact_refs = {}
+    control_path = report.get("control_path")
+    if not isinstance(control_path, Mapping):
+        control_path = {}
+
+    failures: list[str] = []
+    if report.get("execution_status") != "executed":
+        failures.append(f"execution_status={report.get('execution_status')!r}")
+    if report.get("claim_ceiling") != "gem5_systemc_smoke_only":
+        failures.append(f"claim_ceiling={report.get('claim_ceiling')!r}")
+    if report.get("backend_class") != "gem5_systemc_smoke":
+        failures.append(f"backend_class={report.get('backend_class')!r}")
+    if artifact_refs.get("legacy_b3_smoke_report"):
+        failures.append("legacy_b3_conversion_used")
+    if artifact_refs.get("artifact_subtype") != "real_qe_gem5_se_scf_smoke_v0":
+        failures.append(f"artifact_subtype={artifact_refs.get('artifact_subtype')!r}")
+    if control_path.get("completion_source") != "gem5_se_real_pw_stdout_parser":
+        failures.append(f"completion_source={control_path.get('completion_source')!r}")
+    correctness_gate = report.get("correctness_gate")
+    if isinstance(correctness_gate, Mapping):
+        if correctness_gate.get("workload_equivalent_claim") is not False:
+            failures.append("workload_equivalent_claim_not_false")
+        if correctness_gate.get("qe_equivalent_scf_claim") is True:
+            failures.append("qe_equivalent_scf_claim_true")
+
+    if failures:
+        raise E2EError(
+            "--require-real-gem5-smoke gate failed for "
+            f"{report_path}: {', '.join(failures)}"
+        )
+
 def run_e2e(args: argparse.Namespace) -> dict[str, Any]:
     output_dir = Path(args.output_dir)
     if output_dir.exists() and args.clean:
@@ -220,6 +263,8 @@ def run_e2e(args: argparse.Namespace) -> dict[str, Any]:
             gem5_mode = "legacy_b3_conversion"
         commands.append(_run(gem5_cmd, cwd=REPO_ROOT, log_dir=log_dir, name="backend_gem5_smoke", timeout_s=args.gem5_timeout_s + 5))
         gem5_payload = _json_load(gem5_report)
+        if args.require_real_gem5_smoke:
+            _enforce_real_gem5_smoke_gate(gem5_payload, gem5_report)
         gem5_ingest_cmd = [
             sys.executable,
             "docs/benchmarks/qedse_frontend.py",

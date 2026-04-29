@@ -966,6 +966,13 @@ def main(argv: list[str] | None = None) -> int:
             evidence_refs=[str(args.backend_report)] if args.backend_report is not None else [],
         )
         _write_json(args.output_dir / ADJUDICATION_SUMMARY_NAME, adjudication_summary)
+        release_evidence_refs = []
+        if args.backend_report is not None:
+            release_evidence_refs.append(str(args.backend_report))
+        if args.systemc_feedback is not None:
+            release_evidence_refs.append(str(args.systemc_feedback))
+        if args.gem5_smoke_report is not None:
+            release_evidence_refs.append(str(args.gem5_smoke_report))
         release_bundle.emit_release_bundle(
             args.output_dir,
             stage_status_ref=(FULL_STAGE_STATUS_NAME if args.emit_full_stage_status else None),
@@ -975,7 +982,7 @@ def main(argv: list[str] | None = None) -> int:
             multi_fidelity_plan_ref=(
                 MULTI_FIDELITY_PLAN_NAME if multi_fidelity_plan is not None else None
             ),
-            evidence_refs=[str(args.backend_report)] if args.backend_report is not None else [],
+            evidence_refs=release_evidence_refs,
             calibration_metadata_ref=(
                 "calibration_metadata_v0.json" if evidence_rows else None
             ),
