@@ -289,10 +289,29 @@ class RunUnifiedDseV0Tests(unittest.TestCase):
             self.assertEqual(gem5_descriptor["candidate_identity"]["candidate_id"], first["candidate_id"])
             self.assertFalse(gem5_descriptor["qe_anchor_refs"]["qe_equivalent_scf_claim"])
             self.assertIn("stage_b_gem5_systemc_scf_driver", gem5_descriptor["expected_command"])
+            architecture_config = json.loads((out_dir / first["architecture_config_ref"]).read_text(encoding="utf-8"))
+            self.assertEqual(
+                architecture_config["schema_version"],
+                "qe_dse_architecture_candidate_config_stage_b0_v0",
+            )
+            self.assertEqual(architecture_config["execution_status"], "not_executed")
+            self.assertEqual(architecture_config["claim_ceiling"], "architecture_config_descriptor_only")
+            self.assertEqual(architecture_config["candidate_identity"], systemc_config["candidate_identity"])
+            self.assertEqual(architecture_config["design_point"], systemc_config["design_point"])
+            self.assertNotIn("systemc_feedback_contract", architecture_config)
+            self.assertNotIn("backend_execution_request", architecture_config)
+            self.assertEqual(systemc_config["architecture_config_ref"], first["architecture_config_ref"])
+            self.assertEqual(gem5_descriptor["architecture_config_ref"], first["architecture_config_ref"])
+            self.assertNotEqual(first["architecture_config_ref"], first["systemc_config_ref"])
+
             self.assertEqual(backend_request["schema_version"], "backend_execution_request_v0")
             self.assertEqual(backend_request["expected_report_schema"], "backend_execution_report_v0")
-            self.assertEqual(backend_request["input_refs"]["systemc_config"], first["systemc_config_ref"])
             self.assertEqual(backend_request["input_refs"]["architecture_config"], first["architecture_config_ref"])
+            self.assertEqual(backend_request["input_refs"]["systemc_config"], first["systemc_config_ref"])
+            self.assertNotEqual(
+                backend_request["input_refs"]["architecture_config"],
+                backend_request["input_refs"]["systemc_config"],
+            )
             self.assertEqual(backend_request["workload_identity"]["adapter"], "qe")
             self.assertEqual(
                 backend_request["candidate_identity"]["validity_class"],
