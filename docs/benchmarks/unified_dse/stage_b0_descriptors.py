@@ -9,6 +9,7 @@ from . import constraints, domain_contracts
 
 DESCRIPTOR_MANIFEST_NAME = "stage_b0_descriptor_manifest_v0.json"
 SYSTEMC_CONFIG_SCHEMA_VERSION = "qe_dse_systemc_candidate_config_stage_b0_v0"
+ARCHITECTURE_CONFIG_SCHEMA_VERSION = "qe_dse_architecture_candidate_config_stage_b0_v0"
 GEM5_HANDOFF_DESCRIPTOR_SCHEMA_VERSION = "qe_dse_gem5_systemc_handoff_descriptor_stage_b0_v0"
 EMISSION_ALL_VALID_EXECUTABLE = "all_valid_executable"
 EMISSION_SCHEDULER_SELECTED_ONLY = "scheduler_selected_only"
@@ -125,7 +126,36 @@ def _write_ir_sidecars(root: Path, row: Mapping[str, Any]) -> dict[str, str]:
     return refs
 
 
-def _systemc_config(row: Mapping[str, Any], sidecar_refs: Mapping[str, str]) -> dict[str, Any]:
+def _architecture_config(row: Mapping[str, Any], sidecar_refs: Mapping[str, str]) -> dict[str, Any]:
+    return {
+        "schema_version": ARCHITECTURE_CONFIG_SCHEMA_VERSION,
+        "execution_status": "not_executed",
+        "claim_ceiling": "architecture_config_descriptor_only",
+        "candidate_identity": _candidate_identity(row),
+        "workload_identity": _workload_identity(row),
+        "design_point": dict(_require_mapping(row, "design_point")),
+        "ir_refs": dict(sidecar_refs),
+        "architecture_config_ref": architecture_config_ref,
+        "backend_neutral_schema": dict(_require_mapping(row, "backend_neutral_schema")),
+        "candidate_descriptor": dict(_require_mapping(row, "candidate_descriptor")),
+        "workload_anchor_refs": dict(_require_mapping(row, "workload_anchor_refs")),
+        "domain_extension": dict(row.get("domain_extension", {}))
+        if isinstance(row.get("domain_extension", {}), Mapping)
+        else {},
+        "design_validation": dict(_require_mapping(row, "design_validation")),
+        "qe_anchor_refs": dict(_require_mapping(row, "qe_anchor_refs")),
+        "non_claims": [
+            "architecture_descriptor_only",
+            "not_systemc_execution_config",
+            "not_systemc_executed",
+            "not_gem5_executed",
+            "not_qe_equivalent_scf",
+            "not_rtl_hls_board_evidence",
+        ],
+    }
+
+
+def _systemc_config(row: Mapping[str, Any], sidecar_refs: Mapping[str, str], architecture_config_ref: str) -> dict[str, Any]:
     return {
         "schema_version": SYSTEMC_CONFIG_SCHEMA_VERSION,
         "execution_status": "not_executed",
@@ -153,7 +183,12 @@ def _systemc_config(row: Mapping[str, Any], sidecar_refs: Mapping[str, str]) -> 
     }
 
 
-def _gem5_descriptor(row: Mapping[str, Any], systemc_config_ref: str, sidecar_refs: Mapping[str, str]) -> dict[str, Any]:
+def _gem5_descriptor(
+    row: Mapping[str, Any],
+    systemc_config_ref: str,
+    architecture_config_ref: str,
+    sidecar_refs: Mapping[str, str],
+) -> dict[str, Any]:
     gem5_handoff = _require_mapping(row, "gem5_handoff_contract")
     return {
         "schema_version": GEM5_HANDOFF_DESCRIPTOR_SCHEMA_VERSION,
@@ -163,6 +198,7 @@ def _gem5_descriptor(row: Mapping[str, Any], systemc_config_ref: str, sidecar_re
         "workload_identity": _workload_identity(row),
         "ir_refs": dict(sidecar_refs),
         "systemc_config_ref": systemc_config_ref,
+        "architecture_config_ref": architecture_config_ref,
         "backend_execution_request_ref": f"backend_execution_requests/{_candidate_id(row)}.json",
         "expected_command": gem5_handoff.get("expected_command"),
         "expected_report_ref": gem5_handoff.get("expected_report_ref"),
@@ -185,7 +221,12 @@ def _gem5_descriptor(row: Mapping[str, Any], systemc_config_ref: str, sidecar_re
     }
 
 
-def _backend_execution_request(row: Mapping[str, Any], systemc_config_ref: str, sidecar_refs: Mapping[str, str]) -> dict[str, Any]:
+def _backend_execution_request(
+    row: Mapping[str, Any],
+    systemc_config_ref: str,
+    architecture_config_ref: str,
+    sidecar_refs: Mapping[str, str],
+) -> dict[str, Any]:
     request = dict(_require_mapping(row, "backend_execution_request"))
     request["input_refs"] = dict(request.get("input_refs", {}))
     request["input_refs"].update(
@@ -193,6 +234,7 @@ def _backend_execution_request(row: Mapping[str, Any], systemc_config_ref: str, 
             "application_graph": sidecar_refs["application_graph_ref"],
             "architecture_template": sidecar_refs["architecture_template_ref"],
             "mapping": sidecar_refs["mapping_ref"],
+            "architecture_config": architecture_config_ref,
             "systemc_config": systemc_config_ref,
         }
     )
@@ -294,22 +336,25 @@ def emit_stage_b0_descriptors(
             continue
         validated_row = _row_with_design_validation(row, validation)
         sidecar_refs = _write_ir_sidecars(root, validated_row)
+        architecture_config_ref = f"architecture_configs/{candidate_id}.json"
         systemc_config_ref = f"systemc_configs/{candidate_id}.json"
         gem5_descriptor_ref = f"gem5_systemc_handoff/{candidate_id}.json"
         backend_execution_request_ref = f"backend_execution_requests/{candidate_id}.json"
-        _write_json(root / systemc_config_ref, _systemc_config(validated_row, sidecar_refs))
+        _write_json(root / architecture_config_ref, _architecture_config(validated_row, sidecar_refs))
+        _write_json(root / systemc_config_ref, _systemc_config(validated_row, sidecar_refs, architecture_config_ref))
         _write_json(
             root / gem5_descriptor_ref,
-            _gem5_descriptor(validated_row, systemc_config_ref, sidecar_refs),
+            _gem5_descriptor(validated_row, systemc_config_ref, architecture_config_ref, sidecar_refs),
         )
         _write_json(
             root / backend_execution_request_ref,
-            _backend_execution_request(validated_row, systemc_config_ref, sidecar_refs),
+            _backend_execution_request(validated_row, systemc_config_ref, architecture_config_ref, sidecar_refs),
         )
         descriptors.append(
             {
                 "candidate_id": candidate_id,
                 **dict(sidecar_refs),
+                "architecture_config_ref": architecture_config_ref,
                 "systemc_config_ref": systemc_config_ref,
                 "gem5_descriptor_ref": gem5_descriptor_ref,
                 "backend_execution_request_ref": backend_execution_request_ref,
