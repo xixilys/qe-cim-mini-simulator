@@ -455,6 +455,7 @@ class RunUnifiedDseV0Tests(unittest.TestCase):
                     "1",
                     "--systemc-feedback",
                     str(feedback_path),
+                    "--emit-release-bundle",
                 ]
             )
 
@@ -477,6 +478,9 @@ class RunUnifiedDseV0Tests(unittest.TestCase):
             self.assertEqual(manifest["systemc_feedback_matched_candidate_count"], 1)
             self.assertEqual(manifest["systemc_feedback_unmatched_candidate_ids"], [])
             self.assertEqual(manifest["systemc_feedback_rejected_candidate_ids"], [])
+            release = json.loads((out_dir / "frontend_release_bundle_v0.json").read_text(encoding="utf-8"))
+            self.assertEqual(release["claim_ceiling"], "release_index_only")
+            self.assertIn(str(feedback_path), release["evidence_refs"])
             self.assertIsNone(row["final_public_family_winner"])
 
     def test_cli_rejects_feedback_for_invalid_candidate_before_ranking(self) -> None:
@@ -1175,6 +1179,8 @@ class RunUnifiedDseV0Tests(unittest.TestCase):
             self.assertEqual(row["source_kind"], "timed_functional_proxy")
             self.assertTrue((out_dir / "calibration_metadata_v0.json").exists())
             self.assertEqual(release["schema_version"], "release_bundle_v0")
+            self.assertEqual(release["claim_ceiling"], "release_index_only")
+            self.assertIn(str(report_path), release["evidence_refs"])
             self.assertIsNone(release["final_public_family_winner"])
             self.assertFalse(release["non_touch_guard"]["backend_execution_performed_by_frontend"])
 
