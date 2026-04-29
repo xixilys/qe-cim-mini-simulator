@@ -879,9 +879,7 @@ def _run_systemc(
         write_report(output_path, report)
         return 1
     if output_path.exists():
-        if not _accept_direct_backend_report(
-            request, output_path, mode, expected_systemc_bridge=bridge_ref
-        ):
+        if not _accept_direct_backend_report(request, output_path, mode):
             return 1 if strict_report_validation else 0
         return 0
     return _convert_existing_systemc_result(request, output_path, mode, result_path)

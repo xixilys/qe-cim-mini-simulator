@@ -1168,7 +1168,7 @@ class BackendExecutionRunnerTests(unittest.TestCase):
             self.assertEqual(rc, 0)
             report = self.read_report(output)
             self.assert_refused_report(report, "gem5_systemc_timed_proxy")
-            self.assertIn("B4 timed proxy report missing", report["refusal_reason"])
+            self.assertIn("B4 timed proxy report requires", report["refusal_reason"])
 
     def test_b4_refuses_missing_explicit_systemc_bridge_artifact(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
