@@ -542,19 +542,13 @@ def _request_env(
     _set_mapping_env(env, "QEBS_SYSTEMC_CONFIG", systemc_config)
     env.update(_resolved_input_ref_env(request, request_root))
 
-    architecture_config = _resolved_input_ref(
-        request,
-        request_root,
-        "architecture_config",
-        "arch_config",
-    )
-    systemc_config_ref = _resolved_input_ref(
-        request,
-        request_root,
-        "systemc_config",
-        "systemc_config_json",
-    )
     systemc_config_ref = _resolved_input_ref(request, request_root, "systemc_config")
+    architecture_config_ref = _resolved_input_ref(request, request_root, "architecture_config", "arch_config")
+
+    # Compatibility aliases consumed by the current qe_band_solver_model/sc_main.cpp.
+    # Prefer the separated architecture_config sidecar when present; fall back to
+    # systemc_config only for older descriptor bundles that predate the split.
+    arch_config = architecture_config_ref or systemc_config_ref
     _set_env(env, "QEBS_CASE_ID", qe_extension.get("case_id") or workload_identity.get("workload_id"))
     _set_env(
         env,
@@ -570,7 +564,8 @@ def _request_env(
     _set_env(env, "QEBS_OFFLOAD_SCOPE", design_axes.get("offload_scope"))
     _set_env(env, "QEBS_RESIDENT_POLICY", design_axes.get("resident_policy"))
     _set_env(env, "QEBS_ARCH_CONFIG", arch_config)
-    _set_env(env, "QEBS_SYSTEMC_CONFIG_FILE", systemc_config_ref)
+    _set_env(env, "QEBS_ARCHITECTURE_CONFIG", architecture_config_ref)
+    _set_env(env, "QEBS_SYSTEMC_CONFIG_REF", systemc_config_ref)
     return env
 
 
