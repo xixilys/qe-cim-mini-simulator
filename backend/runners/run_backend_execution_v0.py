@@ -672,6 +672,8 @@ def _accept_direct_backend_report(
     request: Mapping[str, Any],
     output_path: Path,
     mode: str,
+    *,
+    expected_systemc_bridge: Path | None = None,
 ) -> bool:
     if not output_path.exists():
         return False
@@ -685,9 +687,8 @@ def _accept_direct_backend_report(
         if payload.get("fidelity") != mode:
             raise ValueError("direct BackendExecutionReport fidelity does not match CLI mode")
         if mode == "gem5_systemc_timed_proxy":
-            expected_bridge = _b4_systemc_bridge_ref(request, output_path.parent)
             _validate_b4_timed_proxy_report_shape(
-                payload, expected_systemc_bridge=expected_bridge
+                payload, expected_systemc_bridge=expected_systemc_bridge
             )
     except Exception as exc:
         preserved_report = _preserve_invalid_direct_report(output_path)
@@ -878,7 +879,9 @@ def _run_systemc(
         write_report(output_path, report)
         return 1
     if output_path.exists():
-        if not _accept_direct_backend_report(request, output_path, mode):
+        if not _accept_direct_backend_report(
+            request, output_path, mode, expected_systemc_bridge=bridge_ref
+        ):
             return 1 if strict_report_validation else 0
         return 0
     return _convert_existing_systemc_result(request, output_path, mode, result_path)
@@ -1419,7 +1422,9 @@ def _run_gem5(
         return 1
 
     if output_path.exists():
-        if not _accept_direct_backend_report(request, output_path, mode):
+        if not _accept_direct_backend_report(
+            request, output_path, mode, expected_systemc_bridge=bridge_ref
+        ):
             return 1 if strict_report_validation else 0
         payload = load_json(output_path)
         payload_artifacts = payload.get("artifact_refs")
