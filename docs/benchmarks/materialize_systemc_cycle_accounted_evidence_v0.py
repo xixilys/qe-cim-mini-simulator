@@ -202,6 +202,7 @@ def resolve_identity(
             _assert_same_if_present("candidate_id", discovered_candidate_id, candidate_id)
         except CycleEvidenceInputError as exc:
             raise CycleEvidenceInputError(f"{source_name} {exc}") from exc
+    _assert_same_if_present("candidate_id", row_context.get("candidate_id"), config_context.get("candidate_id"))
     _assert_same_if_present("candidate_id", explicit_candidate_id, discovered_candidate_id)
     _assert_same_if_present("candidate_id", explicit_candidate_id, row_context.get("candidate_id"))
     _assert_same_if_present("candidate_id", explicit_candidate_id, config_context.get("candidate_id"))
