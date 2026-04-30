@@ -166,6 +166,23 @@ The calibration contract keeps the baseline phase config as authority for the tw
 
 The reporting IR separates mathematical tradeoff reporting from claim authority.
 
+Evidence-plane v1 adds a claim-boundary label to every candidate/report row.
+The label vocabulary is closed and must use these exact strings:
+
+| Evidence tier | Required evidence | Permitted reporting | Forbidden reporting |
+| --- | --- | --- | --- |
+| `survey-catalog` | Researched catalog provenance, assumptions, support status, and target stage. | Broad search coverage and unsupported/proposed microarchitecture inventory. | Executable ranking, final-best selection, GPU superiority, board/ASIC measured claims. |
+| `projection-screened` | Explicit proxy/screening assumptions and ranking inputs. | Level-1 shortlist discussion, projection caveats, Top-K closure queue input. | Final-best winner claims, RTL/cycle-accurate claims, physical timing, board/ASIC measured claims. |
+| `systemc-cycle-accounted` | Generated/configured SystemC cycle evidence for the same `candidate_id` and `workload_id`, including `systemc_cycle_evidence_ref`, `systemc_cycle_evidence_hash`, template/config hash, per-stage/per-component cycle tables, calibration refs, and non-claims. | Model-level cycle accounting with artifact refs and blockers for missing Stage C, strict B4, or Stage D evidence. | RTL/cycle-accurate hardware timing, physical timing, board/ASIC measured performance, or final-best selection by itself. |
+| `final-best-eligible` | Same-candidate Stage C correctness, strict B4 gem5/SystemC event evidence, Stage D implementation evidence, and generated SystemC cycle-accounted evidence. | Input to the explicit final-best policy/adjudicator layer. | Any claim that omits same-candidate refs, substitutes B3/synthetic evidence for strict B4, or treats synthetic fixtures as real-world winners. |
+
+The evidence tier is separate from the older `reject`, `explain-only`, and
+`promotion-eligible` screening states. Screening states describe Level-1 row
+quality; evidence tiers describe the claim ceiling. In particular, a
+`promotion-eligible` row can still be only `projection-screened` until the
+Top-K closure lane adds candidate-exact SystemC cycle evidence and the final
+Stage C + strict B4 + Stage D + SystemC evidence gate is satisfied.
+
 Allowed Stage A reporting:
 
 * row-level metrics and missing fields;
@@ -173,6 +190,10 @@ Allowed Stage A reporting:
 * `reject`, `explain-only`, and `promotion-eligible` state counts;
 * primary candidate, fallback candidate, and extra candidates inside the configured tie band;
 * family summaries with projection confidence;
+* evidence-tier counts for `survey-catalog`, `projection-screened`,
+  `systemc-cycle-accounted`, and `final-best-eligible`;
+* Top-K closure queue/status, candidate evidence refs, artifact hashes, and
+  non-claims for generated SystemC cycle evidence;
 * contradiction and blocker notes for adjudicator intake.
 
 Forbidden Stage A reporting:
@@ -182,6 +203,8 @@ Forbidden Stage A reporting:
 * lower whole-node power claims without the frozen power boundary evidence;
 * board-grounded causality from proxy rows;
 * treating `dse_v2_bo_poc` proposals as evaluated results.
+* treating `survey-catalog`, `projection-screened`, or
+  `systemc-cycle-accounted` rows as final-best winners.
 
 The promotion state machine remains the one frozen in `qe_next_stage_dse_simulator_phase_config_v0.json`: `reject`, `explain-only`, `promotion-eligible`, with a relative time tie-band after energy tiebreak at 0.05.
 
@@ -207,12 +230,19 @@ The intended full flow is:
 5. Reject candidates that violate schema, resource, policy, fairness, observability, or join-key constraints before execution.
 6. For runnable candidates, generate runtime config JSON and invoke the model only when the campaign explicitly allows it. In this docs-only package, no model execution is requested.
 7. Normalize row outputs into the result schema and compute fast-layer metrics.
-8. Classify rows as `reject`, `explain-only`, or `promotion-eligible`.
-9. Select primary, fallback, and tie-band candidates.
-10. Promote only shortlisted points to correctness-capable validation.
-11. Add calibration feedback and update uncertainty metadata without rewriting row identity.
-12. Report Pareto, promotion, blockers, and evidence bundles to the adjudicator.
-13. Let the adjudicator decide public posture and claim permission.
+8. Assign the evidence-plane label: `survey-catalog`, `projection-screened`,
+   `systemc-cycle-accounted`, or `final-best-eligible`.
+9. Classify rows as `reject`, `explain-only`, or `promotion-eligible`.
+10. Select primary, fallback, tie-band candidates, and the Top-K closure queue
+    without naming a final architecture winner.
+11. Promote only shortlisted points to correctness-capable validation,
+    strict-B4 closure, Stage-D implementation evidence collection, and
+    generated SystemC cycle-accounted materialization.
+12. Add calibration feedback and update uncertainty metadata without rewriting row identity.
+13. Report Pareto, promotion, blockers, evidence-tier counts,
+    `systemc_cycle_evidence_ref` / hash refs when higher tiers appear, and
+    non-claims to the adjudicator.
+14. Let the adjudicator decide public posture and claim permission.
 
 ### 4.1 Stage-A template-driven exploration flow
 
@@ -328,3 +358,12 @@ Stage-A expected result:
 This work package owns only the workflow document and companion design-space catalog named at the top of this task. It does not update templates, runners, C++ runtime, tests, timestamped artifacts, or frozen contracts.
 
 Future implementation work may add adapters, validators, or `dse_v2_bo_poc` code, but those changes must be separate work packages with their own validation and authority review.
+
+2026-05-01 Lane-E update: this document, the pro_work closure review, and
+`docs/benchmarks/check_qe_dse_release_claim_boundaries_v0.py` form the
+docs/release validator surface for evidence-plane v1. That validator is allowed
+to check Markdown/JSON release reports for exact tier labels, SystemC artifact
+refs for higher tiers, same-candidate Stage C / strict B4 / Stage D / SystemC
+requirements for `final-best-eligible`, and forbidden overclaim language. It
+does not edit templates, runners, C++ runtime, timestamped artifacts, or frozen
+contracts.

@@ -115,8 +115,12 @@ def _collect_text_overclaim_issues(path: Path, text: str) -> list[str]:
     issues: list[str] = []
     for rule_name, pattern in TEXT_OVERCLAIM_RULES:
         for match in pattern.finditer(text):
-            start = max(0, match.start() - 180)
-            end = min(len(text), match.end() + 180)
+            # Tables often put the boundary word in the heading
+            # ("What it must not claim", "Forbidden reporting") while the
+            # phrase being guarded appears in a row. Use a moderately broad
+            # window so guarded table cells do not look like positive claims.
+            start = max(0, match.start() - 500)
+            end = min(len(text), match.end() + 500)
             snippet = text[start:end]
             if _has_boundary_language(snippet):
                 continue

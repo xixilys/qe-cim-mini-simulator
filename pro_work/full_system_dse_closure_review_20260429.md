@@ -609,3 +609,52 @@ this Ralph cycle. The expected safe B4-only result is
 `decision_status=blocked_no_eligible_candidates` with missing Stage C/D reasons;
 a synthetic same-candidate Stage C + HLS Stage D + strict B4 fixture selects a
 winner under the HLS policy.
+
+## 11. 2026-05-01 Evidence-plane v1 release claim-boundary closure
+
+The complete-architecture DSE lane adds a release checker so human-facing docs
+and machine-readable release reports preserve the new evidence-plane v1 claim
+boundaries. The checker is a guardrail around wording and report structure; it
+does not promote any candidate by itself.
+
+Normative evidence-tier labels are exact strings:
+
+| Evidence tier | Meaning | Release boundary |
+|---|---|---|
+| `survey-catalog` | Provenance-backed researched microarchitecture or design-axis entry. | May appear in broad survey coverage only; it is not executable ranking evidence and cannot name a final best. |
+| `projection-screened` | Fast/proxy/estimated row that has passed explicit screening assumptions. | May inform Level-1 shortlist discussion, but cannot be a final-best winner or GPU/board/ASIC claim. |
+| `systemc-cycle-accounted` | Same candidate/workload has generated/configured SystemC cycle-accounted evidence with per-stage/per-component cycle tables and artifact refs. | Must cite `systemc_cycle_evidence_ref` and `systemc_cycle_evidence_hash`; it remains model-level accounting, not RTL/cycle-accurate or physical timing evidence. |
+| `final-best-eligible` | Same candidate has Stage C correctness, strict B4 gem5/SystemC event evidence, Stage D implementation evidence, and generated SystemC cycle-accounted evidence. | Only this tier may enter the final-best policy; missing any same-candidate ref yields `winner=null` / blockers. |
+
+Release checker:
+
+```bash
+python3 docs/benchmarks/check_qe_dse_release_claim_boundaries_v0.py
+```
+
+The checker scans this review, the complete architecture-family DSE framework
+doc, and any optional JSON/Markdown report paths passed on the command line. It
+fails on catalog/projection final-best overclaims, unguarded SystemC
+cycle-accuracy or physical-timing wording, unguarded CPU+FPGA-over-GPU
+superiority wording, board/ASIC measured-performance wording without explicit
+artifact boundaries, unknown evidence-tier labels, lower-tier JSON winner flags,
+and missing SystemC cycle evidence artifact refs for `systemc-cycle-accounted`
+or `final-best-eligible` rows.
+
+Current release posture remains conservative:
+
+- No current real-world row is documented here as `final-best-eligible`.
+- A `systemc-cycle-accounted` row must carry generated SystemC artifacts such as
+  `systemc_cycle_evidence_ref`, `systemc_cycle_evidence_hash`, template/config
+  hash, per-stage/per-component cycle table refs, calibration refs, and
+  non-claims.
+- A `final-best-eligible` row must carry same-candidate `stage_c_report_ref`,
+  `strict_b4_report_ref`, `stage_d_report_ref`, and
+  `systemc_cycle_evidence_ref` before the final-best policy may select it.
+- Synthetic positive fixtures may test policy plumbing only when labeled
+  synthetic/non-real-world; they do not create a real architecture winner.
+
+This closes the docs/pro_work release-boundary gap for the evidence-plane v1
+implementation. It still does not claim QE whole-application superiority over
+GPU, board-measured speedup, ASIC signoff, RTL cycle accuracy, physical timing,
+or production readiness.
