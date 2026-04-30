@@ -5,16 +5,31 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[2]
-FPGA_DEVICE_DIRS = (
-    ROOT / "gem5_integration/src/dev/fpga",
-    ROOT / "gem5_integration/gem5/src/dev/fpga",
-)
+SOURCE_FPGA_DEVICE_DIR = ROOT / "gem5_integration/src/dev/fpga"
+OPTIONAL_GEM5_CHECKOUT_FPGA_DEVICE_DIR = ROOT / "gem5_integration/gem5/src/dev/fpga"
 SIMPLE_FPGA_TEST_CONFIG = ROOT / "gem5_integration/configs/fpga/simple_fpga_test.py"
+
+
+def fpga_device_dirs() -> tuple[Path, ...]:
+    """Return SimObject source dirs that are present in this checkout.
+
+    The repository always carries the canonical gem5 device sources under
+    ``gem5_integration/src/dev/fpga``.  A built/vendor gem5 checkout under
+    ``gem5_integration/gem5`` is an environment artifact created by setup/build
+    workflows, so this contract test must not fail before the B4 runner has a
+    chance to report the missing gem5 executable/bridge as a guarded refusal.
+    """
+
+    dirs = [SOURCE_FPGA_DEVICE_DIR]
+    if OPTIONAL_GEM5_CHECKOUT_FPGA_DEVICE_DIR.exists():
+        dirs.append(OPTIONAL_GEM5_CHECKOUT_FPGA_DEVICE_DIR)
+    return tuple(dirs)
 
 
 class FPGAAcceleratorSimObjectContractTests(unittest.TestCase):
     def test_config_consumed_proxy_params_are_declared_and_stored(self) -> None:
-        for device_dir in FPGA_DEVICE_DIRS:
+        self.assertTrue(SOURCE_FPGA_DEVICE_DIR.exists())
+        for device_dir in fpga_device_dirs():
             with self.subTest(device_dir=device_dir):
                 simobject = (device_dir / "FPGAAccelerator.py").read_text(encoding="utf-8")
                 header = (device_dir / "fpga_accelerator.hh").read_text(encoding="utf-8")
@@ -39,7 +54,8 @@ class FPGAAcceleratorSimObjectContractTests(unittest.TestCase):
                     self.assertIn(member, impl)
 
     def test_real_bridge_mode_has_local_hard_gate(self) -> None:
-        for device_dir in FPGA_DEVICE_DIRS:
+        self.assertTrue(SOURCE_FPGA_DEVICE_DIR.exists())
+        for device_dir in fpga_device_dirs():
             with self.subTest(device_dir=device_dir):
                 impl = (device_dir / "fpga_accelerator.cc").read_text(encoding="utf-8")
                 self.assertIn('executionMode == "real_bridge"', impl)
