@@ -11,6 +11,7 @@ cycle accuracy, RTL/HLS/board evidence, or physical FPGA performance.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -43,6 +44,16 @@ DEFAULT_CLAIM_MATRIX_MARKDOWN_NAME = "claim_ceiling_status_matrix_v0.md"
 BACKEND_REPORT_COLLECTION_NAME = "backend_report_collection_v0.json"
 RERANKED_RESULTS_NAME = "reranked_results_v0.json"
 FINAL_BEST_DECISION_NAME = "qe_fpga_final_best_architecture_decision_v0.json"
+SURVEY_CATALOG_TIER = "survey-catalog"
+PROJECTION_SCREENED_TIER = "projection-screened"
+SYSTEMC_CYCLE_ACCOUNTED_TIER = "systemc-cycle-accounted"
+FINAL_BEST_ELIGIBLE_TIER = "final-best-eligible"
+EVIDENCE_TIER_LABELS = {
+    SURVEY_CATALOG_TIER,
+    PROJECTION_SCREENED_TIER,
+    SYSTEMC_CYCLE_ACCOUNTED_TIER,
+    FINAL_BEST_ELIGIBLE_TIER,
+}
 B4_STAGE_B0_FILE_INPUT_REF_KEYS = {
     "application_graph",
     "architecture_template",
@@ -139,6 +150,16 @@ def _json_load(path: Path) -> dict[str, Any]:
 def _write_json(path: Path, payload: Mapping[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def _sha256_file(path: Path | None) -> str | None:
+    if path is None or not path.exists() or not path.is_file():
+        return None
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def _relative(path: Path, base: Path) -> str:
@@ -352,6 +373,265 @@ def _report_summary(report: Mapping[str, Any]) -> dict[str, Any]:
             else None
         ),
         "non_claims": list(report.get("non_claims", [])) if isinstance(report.get("non_claims"), list) else [],
+    }
+
+
+def _load_systemc_cycle_accounted_evidence(path: Path | str | None) -> dict[str, Any] | None:
+    if path is None:
+        return None
+    payload = _json_load(Path(path))
+    if not isinstance(payload, dict):
+        raise E2EError(f"SystemC cycle-accounted evidence is not a JSON object: {path}")
+    return payload
+
+
+def _first_mapping_value(payload: Mapping[str, Any], *keys: str) -> Any:
+    for key in keys:
+        if "." not in key:
+            value = payload.get(key)
+            if value is not None:
+                return value
+            continue
+        current: Any = payload
+        for part in key.split("."):
+            if not isinstance(current, Mapping):
+                current = None
+                break
+            current = current.get(part)
+        if current is not None:
+            return current
+    return None
+
+
+def _has_non_empty_table(value: Any) -> bool:
+    return isinstance(value, (Mapping, list)) and bool(value)
+
+
+def _systemc_cycle_validation_blockers(
+    payload: Mapping[str, Any] | None,
+    *,
+    candidate_id: str | None,
+    workload_id: str | None,
+) -> list[str]:
+    if not isinstance(payload, Mapping):
+        return ["missing_systemc_cycle_accounted_evidence"]
+    blockers: list[str] = []
+    payload_candidate = payload.get("candidate_id")
+    if candidate_id is not None and str(payload_candidate or "") != str(candidate_id):
+        blockers.append("systemc_cycle_candidate_id_mismatch")
+    payload_workload = payload.get("workload_id") or payload.get("case_id")
+    if workload_id and payload_workload and str(payload_workload) != str(workload_id):
+        blockers.append("systemc_cycle_workload_id_mismatch")
+    evidence_tier = payload.get("evidence_tier")
+    if evidence_tier != SYSTEMC_CYCLE_ACCOUNTED_TIER:
+        blockers.append("systemc_cycle_evidence_tier_not_systemc_cycle_accounted")
+    per_stage = _first_mapping_value(
+        payload,
+        "per_stage_cycles",
+        "stage_cycles",
+        "stage_cycle_table",
+        "cycle_tables.per_stage",
+        "cycle_tables.stages",
+    )
+    if not _has_non_empty_table(per_stage):
+        blockers.append("systemc_cycle_missing_per_stage_cycles")
+    per_component = _first_mapping_value(
+        payload,
+        "per_component_cycles",
+        "component_cycles",
+        "component_cycle_table",
+        "cycle_tables.per_component",
+        "cycle_tables.components",
+    )
+    if not _has_non_empty_table(per_component):
+        blockers.append("systemc_cycle_missing_per_component_cycles")
+    total_cycles = _first_mapping_value(payload, "total_cycles", "metrics.total_cycles")
+    if not isinstance(total_cycles, (int, float)) or total_cycles < 0:
+        blockers.append("systemc_cycle_missing_total_cycles")
+    if not payload.get("model_support_status"):
+        blockers.append("systemc_cycle_missing_model_support_status")
+    if not isinstance(payload.get("non_claims"), list) or not payload.get("non_claims"):
+        blockers.append("systemc_cycle_missing_non_claims")
+    return blockers
+
+
+def _systemc_cycle_summary(
+    path: Path | None,
+    payload: Mapping[str, Any] | None,
+    *,
+    blockers: Sequence[str] | None = None,
+) -> dict[str, Any]:
+    blockers = list(blockers or [])
+    if not isinstance(payload, Mapping):
+        return {
+            "report_ref": str(path) if path is not None else None,
+            "report_sha256": _sha256_file(path),
+            "valid": False,
+            "blockers": blockers or ["missing_systemc_cycle_accounted_evidence"],
+        }
+    artifact_refs = payload.get("artifact_refs")
+    if not isinstance(artifact_refs, Mapping):
+        artifact_refs = {}
+    artifact_hashes = payload.get("artifact_hashes")
+    if not isinstance(artifact_hashes, Mapping):
+        artifact_hashes = {}
+    return {
+        "report_ref": str(path) if path is not None else None,
+        "report_sha256": _sha256_file(path),
+        "evidence_tier": payload.get("evidence_tier"),
+        "candidate_id": payload.get("candidate_id"),
+        "workload_id": payload.get("workload_id") or payload.get("case_id"),
+        "template_config_hash": _first_mapping_value(
+            payload,
+            "template_config_hash",
+            "config_hash",
+            "architecture_config_hash",
+            "artifact_hashes.template_config_hash",
+        ),
+        "total_cycles": _first_mapping_value(payload, "total_cycles", "metrics.total_cycles"),
+        "model_support_status": payload.get("model_support_status"),
+        "has_per_stage_cycles": _has_non_empty_table(
+            _first_mapping_value(
+                payload,
+                "per_stage_cycles",
+                "stage_cycles",
+                "stage_cycle_table",
+                "cycle_tables.per_stage",
+                "cycle_tables.stages",
+            )
+        ),
+        "has_per_component_cycles": _has_non_empty_table(
+            _first_mapping_value(
+                payload,
+                "per_component_cycles",
+                "component_cycles",
+                "component_cycle_table",
+                "cycle_tables.per_component",
+                "cycle_tables.components",
+            )
+        ),
+        "calibration_refs": payload.get("calibration_refs"),
+        "artifact_refs": dict(artifact_refs),
+        "artifact_hashes": dict(artifact_hashes),
+        "non_claims": list(payload.get("non_claims", [])) if isinstance(payload.get("non_claims"), list) else [],
+        "valid": not blockers,
+        "blockers": blockers,
+    }
+
+
+def _append_unique(items: list[str], additions: Sequence[str]) -> None:
+    for item in additions:
+        if item not in items:
+            items.append(item)
+
+
+def _candidate_rows_by_id(claim_matrix: Mapping[str, Any] | None) -> dict[str, Mapping[str, Any]]:
+    if not isinstance(claim_matrix, Mapping):
+        return {}
+    rows = claim_matrix.get("rows")
+    if not isinstance(rows, list):
+        return {}
+    result: dict[str, Mapping[str, Any]] = {}
+    for row in rows:
+        if isinstance(row, Mapping) and row.get("candidate_id") is not None:
+            result[str(row["candidate_id"])] = row
+    return result
+
+
+def _classify_evidence_tier(run: Mapping[str, Any], row: Mapping[str, Any]) -> str:
+    blockers = row.get("blockers")
+    if not isinstance(blockers, list):
+        blockers = []
+    systemc_cycle = row.get("systemc_cycle_accounted")
+    has_valid_systemc_cycle = isinstance(systemc_cycle, Mapping) and systemc_cycle.get("valid") is True
+    if (
+        has_valid_systemc_cycle
+        and not blockers
+        and row.get("same_candidate_evidence_only") is not False
+        and _strict_b4_event_observed(run)
+    ):
+        return FINAL_BEST_ELIGIBLE_TIER
+    if has_valid_systemc_cycle:
+        return SYSTEMC_CYCLE_ACCOUNTED_TIER
+    if (
+        run.get("screening_rank") is not None
+        or isinstance(run.get("systemc_payload"), Mapping)
+        or isinstance(run.get("gem5_b4_payload"), Mapping)
+    ):
+        return PROJECTION_SCREENED_TIER
+    return SURVEY_CATALOG_TIER
+
+
+def _evidence_tier_counts(rows: Sequence[Mapping[str, Any]]) -> dict[str, int]:
+    counts = {label: 0 for label in sorted(EVIDENCE_TIER_LABELS)}
+    for row in rows:
+        label = str(row.get("evidence_tier") or SURVEY_CATALOG_TIER)
+        if label not in counts:
+            counts[label] = 0
+        counts[label] += 1
+    return counts
+
+
+def _top_k_closure_status(
+    candidate_runs: Sequence[Mapping[str, Any]],
+    claim_matrix: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    rows_by_candidate = _candidate_rows_by_id(claim_matrix)
+    queue: list[dict[str, Any]] = []
+    all_blockers: list[str] = []
+    for ordinal, run in enumerate(candidate_runs, start=1):
+        candidate_id = str(run.get("candidate_id") or f"candidate_{ordinal}")
+        row = rows_by_candidate.get(candidate_id, {})
+        blockers = row.get("blockers") if isinstance(row.get("blockers"), list) else []
+        _append_unique(all_blockers, [str(item) for item in blockers])
+        queue.append(
+            {
+                "queue_rank": ordinal,
+                "candidate_id": candidate_id,
+                "screening_rank": run.get("screening_rank"),
+                "stage_b0_request": str(run.get("stage_b0_request")) if run.get("stage_b0_request") else None,
+                "evidence_tier": row.get("evidence_tier") or PROJECTION_SCREENED_TIER,
+                "same_candidate_evidence_only": row.get("same_candidate_evidence_only"),
+                "closure_status": "closed" if row.get("evidence_tier") == FINAL_BEST_ELIGIBLE_TIER else "blocked",
+                "blockers": blockers,
+                "artifact_refs": {
+                    "systemc_backend_report": str(run.get("systemc_report")) if run.get("systemc_report") else None,
+                    "gem5_b4_report": str(run.get("gem5_b4_report")) if run.get("gem5_b4_report") else None,
+                    "systemc_cycle_accounted_evidence": row.get("systemc_cycle_accounted_evidence_ref"),
+                    "stage_c_report": row.get("stage_c_report_ref"),
+                    "stage_d_report": row.get("stage_d_report_ref"),
+                },
+                "artifact_hashes": {
+                    "systemc_backend_report_sha256": _sha256_file(Path(str(run["systemc_report"]))) if run.get("systemc_report") else None,
+                    "gem5_b4_report_sha256": _sha256_file(Path(str(run["gem5_b4_report"]))) if run.get("gem5_b4_report") else None,
+                    "systemc_cycle_accounted_evidence_sha256": (
+                        row.get("systemc_cycle_accounted", {}).get("report_sha256")
+                        if isinstance(row.get("systemc_cycle_accounted"), Mapping)
+                        else None
+                    ),
+                },
+            }
+        )
+    tiers = [row for row in rows_by_candidate.values()]
+    return {
+        "schema_version": "qe_top_k_evidence_closure_status_v0",
+        "queue_count": len(queue),
+        "queue": queue,
+        "evidence_tier_counts": _evidence_tier_counts(tiers),
+        "blockers": all_blockers,
+        "closure_policy": {
+            "requires_exact_same_candidate_join": True,
+            "requires_stage_c_qe_correctness": True,
+            "requires_strict_b4_event_timed_evidence": True,
+            "requires_stage_d_implementation_evidence": True,
+            "requires_systemc_cycle_accounted_evidence": True,
+            "final_best_label": FINAL_BEST_ELIGIBLE_TIER,
+        },
+        "non_claims": [
+            "top_k_closure_status_is_not_a_final_best_claim",
+            "projection_screened_rows_are_not_final_best_eligible",
+            "systemc_cycle_accounted_is_not_rtl_cycle_accurate",
+        ],
     }
 
 
@@ -586,6 +866,8 @@ def _write_claim_ceiling_status_matrix(
     gem5_b4_payload: Mapping[str, Any] | None = None,
     qe_correctness_report: Path | None = None,
     implementation_evidence: Path | None = None,
+    systemc_cycle_evidence: Path | None = None,
+    systemc_cycle_payload: Mapping[str, Any] | None = None,
     requested_matrix_path: Path | None = None,
 ) -> dict[str, Path]:
     context = _stage_b0_request_context(stage_b0_request_path)
@@ -597,6 +879,8 @@ def _write_claim_ceiling_status_matrix(
     )
     stage_c_payload = claim_ceiling_matrix.load_stage_c_report(qe_correctness_report)
     stage_d_payload = claim_ceiling_matrix.load_implementation_evidence(implementation_evidence)
+    if systemc_cycle_payload is None:
+        systemc_cycle_payload = _load_systemc_cycle_accounted_evidence(systemc_cycle_evidence)
     matrix = claim_ceiling_matrix.build_matrix(
         output_ref=matrix_path,
         candidate_id=context["candidate_id"],
@@ -614,6 +898,32 @@ def _write_claim_ceiling_status_matrix(
         b4_report_ref=gem5_b4_report,
         b4_report=gem5_b4_payload,
     )
+    row = matrix["rows"][0]
+    systemc_cycle_blockers = _systemc_cycle_validation_blockers(
+        systemc_cycle_payload,
+        candidate_id=context["candidate_id"],
+        workload_id=context["workload_id"],
+    )
+    row["systemc_cycle_accounted_evidence_ref"] = (
+        str(systemc_cycle_evidence) if systemc_cycle_evidence is not None else None
+    )
+    row["systemc_cycle_accounted"] = _systemc_cycle_summary(
+        systemc_cycle_evidence,
+        systemc_cycle_payload,
+        blockers=systemc_cycle_blockers,
+    )
+    row["same_candidate_evidence_only"] = (
+        row["systemc_cycle_accounted"].get("candidate_id") in (None, context["candidate_id"])
+    )
+    _append_unique(row.setdefault("blockers", []), systemc_cycle_blockers)
+    row["evidence_tier"] = _classify_evidence_tier(
+        {
+            "candidate_id": context["candidate_id"],
+            "systemc_payload": systemc_payload,
+            "gem5_b4_payload": gem5_b4_payload,
+        },
+        row,
+    )
     claim_ceiling_matrix.write_json(matrix_path, matrix)
     claim_ceiling_matrix.write_markdown(markdown_path, matrix)
     return {"matrix": matrix_path, "markdown": markdown_path}
@@ -627,6 +937,8 @@ def _write_claim_ceiling_status_matrix_for_runs(
     implementation_evidence: Path | None = None,
     qe_correctness_report_for: Mapping[str, Path] | None = None,
     implementation_evidence_for: Mapping[str, Path] | None = None,
+    systemc_cycle_evidence: Path | None = None,
+    systemc_cycle_evidence_for: Mapping[str, Path] | None = None,
     requested_matrix_path: Path | None = None,
 ) -> dict[str, Path]:
     matrix_path = _claim_matrix_output_path(output_dir, requested_matrix_path)
@@ -658,6 +970,17 @@ def _write_claim_ceiling_status_matrix_for_runs(
         ),
         candidate_count=candidate_count,
     )
+    systemc_cycle_payload = _load_systemc_cycle_accounted_evidence(systemc_cycle_evidence)
+    systemc_cycle_resolver = _CandidateEvidenceResolver(
+        singular_ref=systemc_cycle_evidence,
+        singular_payload=systemc_cycle_payload,
+        per_candidate=_load_candidate_evidence_map(
+            systemc_cycle_evidence_for,
+            loader=_load_systemc_cycle_accounted_evidence,
+            option_name="--systemc-cycle-evidence-for",
+        ),
+        candidate_count=candidate_count,
+    )
     rows: list[dict[str, Any]] = []
     for run in candidate_runs:
         request_path = Path(str(run["stage_b0_request"]))
@@ -669,6 +992,12 @@ def _write_claim_ceiling_status_matrix_for_runs(
         b4_payload = run.get("gem5_b4_payload") if isinstance(run.get("gem5_b4_payload"), Mapping) else None
         stage_c_ref, row_stage_c_payload = stage_c_resolver.for_candidate(candidate_id)
         stage_d_ref, row_stage_d_payload = stage_d_resolver.for_candidate(candidate_id)
+        systemc_cycle_ref, row_systemc_cycle_payload = systemc_cycle_resolver.for_candidate(candidate_id)
+        if systemc_cycle_ref is None and run.get("systemc_cycle_accounted_evidence"):
+            systemc_cycle_ref = Path(str(run["systemc_cycle_accounted_evidence"]))
+            row_systemc_cycle_payload = run.get("systemc_cycle_accounted_payload")
+            if not isinstance(row_systemc_cycle_payload, Mapping):
+                row_systemc_cycle_payload = _load_systemc_cycle_accounted_evidence(systemc_cycle_ref)
         one = claim_ceiling_matrix.build_matrix(
             output_ref=matrix_path,
             candidate_id=candidate_id,
@@ -696,16 +1025,37 @@ def _write_claim_ceiling_status_matrix_for_runs(
             "stage_d_candidate_id": (
                 row_stage_d_payload.get("candidate_id") if isinstance(row_stage_d_payload, Mapping) else None
             ),
+            "systemc_cycle_candidate_id": (
+                row_systemc_cycle_payload.get("candidate_id")
+                if isinstance(row_systemc_cycle_payload, Mapping)
+                else None
+            ),
         }
         row["same_candidate_evidence_only"] = (
             row["candidate_alignment"]["b2_candidate_id"] in (None, candidate_id)
             and row["candidate_alignment"]["b4_candidate_id"] in (None, candidate_id)
             and row["candidate_alignment"]["stage_c_candidate_id"] in (None, candidate_id)
             and row["candidate_alignment"]["stage_d_candidate_id"] in (None, candidate_id)
+            and row["candidate_alignment"]["systemc_cycle_candidate_id"] in (None, candidate_id)
         )
+        systemc_cycle_blockers = _systemc_cycle_validation_blockers(
+            row_systemc_cycle_payload,
+            candidate_id=candidate_id,
+            workload_id=context["workload_id"],
+        )
+        row["systemc_cycle_accounted_evidence_ref"] = (
+            str(systemc_cycle_ref) if systemc_cycle_ref is not None else None
+        )
+        row["systemc_cycle_accounted"] = _systemc_cycle_summary(
+            systemc_cycle_ref,
+            row_systemc_cycle_payload,
+            blockers=systemc_cycle_blockers,
+        )
+        _append_unique(row.setdefault("blockers", []), systemc_cycle_blockers)
         if not row["same_candidate_evidence_only"]:
             row.setdefault("blockers", []).append("candidate_evidence_alignment_mismatch")
             row["final_observed_conclusion_ceiling"] = "candidate_alignment_mismatch_no_conclusion"
+        row["evidence_tier"] = _classify_evidence_tier(run, row)
         rows.append(row)
     matrix = {
         "schema_version": claim_ceiling_matrix.SCHEMA_VERSION,
@@ -751,6 +1101,26 @@ def _write_backend_report_collection(
                 "report_ref": str(run.get("gem5_b4_report")),
                 "summary": _report_summary(b4_payload),
                 "materialization_manifest": str(run.get("gem5_b4_materialization_manifest")),
+            }
+        systemc_cycle_payload = run.get("systemc_cycle_accounted_payload")
+        if isinstance(systemc_cycle_payload, Mapping):
+            reports.append(dict(systemc_cycle_payload))
+            systemc_cycle_path = (
+                Path(str(run["systemc_cycle_accounted_evidence"]))
+                if run.get("systemc_cycle_accounted_evidence")
+                else None
+            )
+            candidate_reports[candidate_id]["systemc_cycle_accounted"] = {
+                "report_ref": str(systemc_cycle_path) if systemc_cycle_path is not None else None,
+                "summary": _systemc_cycle_summary(
+                    systemc_cycle_path,
+                    systemc_cycle_payload,
+                    blockers=_systemc_cycle_validation_blockers(
+                        systemc_cycle_payload,
+                        candidate_id=candidate_id,
+                        workload_id=None,
+                    ),
+                ),
             }
     payload = {
         "schema_version": "backend_execution_report_collection_v0",
@@ -822,6 +1192,8 @@ def _final_recommendation_candidate_ids(
         if blockers not in (None, []):
             continue
         if row.get("same_candidate_evidence_only") is False:
+            continue
+        if row.get("evidence_tier") != FINAL_BEST_ELIGIBLE_TIER:
             continue
         if str(candidate_id) not in strict_b4_candidates:
             continue
