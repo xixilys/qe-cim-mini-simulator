@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import hashlib
 import json
 import tempfile
 import unittest
@@ -100,7 +101,36 @@ def b4_payload(candidate_id: str, ticks: int, *, strict: bool = True) -> dict[st
     }
 
 
-def write_fixture(root: Path, *, include_stage_c: bool = True, stage_d_kind: str = "hls_synthesis", strict_b4: bool = True) -> tuple[Path, Path, Path]:
+def systemc_cycle_payload(candidate_id: str, total_cycles: int = 1000) -> dict[str, Any]:
+    return {
+        "schema_version": "qe_systemc_cycle_accounted_evidence_v0",
+        "candidate_id": candidate_id,
+        "workload_id": "si4_pbe_uspp_small",
+        "evidence_tier": "systemc-cycle-accounted",
+        "cycle_accounting": {
+            "total_cycles": total_cycles,
+            "components": {"control": 10, "dma": 20, "compute": total_cycles - 30},
+        },
+        "non_claims": [
+            "systemc_cycle_accounted_is_not_rtl_cycle_accurate_timing",
+            "not_board_or_asic_measured",
+        ],
+    }
+
+
+def sha256_path(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def write_fixture(
+    root: Path,
+    *,
+    include_stage_c: bool = True,
+    stage_d_kind: str = "hls_synthesis",
+    strict_b4: bool = True,
+    include_systemc_cycle: bool = True,
+    systemc_cycle_candidate_override: str | None = None,
+) -> tuple[Path, Path, Path]:
     candidate_ids = ["candidate_F3", "candidate_F2"]
     candidate_runs = []
     rows = []
@@ -110,27 +140,42 @@ def write_fixture(root: Path, *, include_stage_c: bool = True, stage_d_kind: str
         b4_ref = write_json(candidate_dir / "gem5_systemc_timed_proxy_report.json", b4_payload(candidate_id, 100 + index * 50, strict=strict_b4))
         stage_c_ref = write_json(root / f"{candidate_id}.stage_c.json", stage_c_payload(candidate_id)) if include_stage_c else None
         stage_d_ref = write_json(root / f"{candidate_id}.stage_d.json", stage_d_payload(candidate_id, stage_c_ref or Path("missing"), kind=stage_d_kind)) if include_stage_c else None
-        candidate_runs.append(
-            {
-                "candidate_id": candidate_id,
-                "stage_b0_request": str(root / f"{candidate_id}.stage_b0.json"),
-                "gem5_b4_report": str(b4_ref),
-            }
-        )
-        rows.append(
-            {
-                "candidate_id": candidate_id,
-                "family": "F3" if candidate_id.endswith("F3") else "F2",
-                "workload_id": "si4_pbe_uspp_small",
-                "case_id": "si4_pbe_uspp_small",
-                "screening_rank": index + 1,
-                "stage_c_report_ref": str(stage_c_ref) if stage_c_ref else None,
-                "stage_d_report_ref": str(stage_d_ref) if stage_d_ref else None,
-                "blockers": [] if include_stage_c else ["missing_stage_c_qe_correctness_report", "missing_stage_d_implementation_evidence"],
-                "same_candidate_evidence_only": True,
-                "final_observed_conclusion_ceiling": "qe_equivalent_scf_correctness_plus_hls_synthesis_only" if include_stage_c and stage_d_kind == "hls_synthesis" else "gem5_systemc_timed_proxy_only",
-            }
-        )
+        cycle_ref = None
+        cycle_sha = None
+        if include_systemc_cycle:
+            cycle_candidate = systemc_cycle_candidate_override or candidate_id
+            cycle_ref = write_json(
+                candidate_dir / "systemc_cycle_accounted_evidence.json",
+                systemc_cycle_payload(cycle_candidate, total_cycles=1000 + index * 100),
+            )
+            cycle_sha = sha256_path(cycle_ref)
+        candidate_run = {
+            "candidate_id": candidate_id,
+            "stage_b0_request": str(root / f"{candidate_id}.stage_b0.json"),
+            "gem5_b4_report": str(b4_ref),
+        }
+        if cycle_ref is not None:
+            candidate_run["systemc_cycle_evidence_ref"] = str(cycle_ref)
+            candidate_run["systemc_cycle_evidence_sha256"] = cycle_sha
+        candidate_runs.append(candidate_run)
+        row = {
+            "candidate_id": candidate_id,
+            "family": "F3" if candidate_id.endswith("F3") else "F2",
+            "workload_id": "si4_pbe_uspp_small",
+            "case_id": "si4_pbe_uspp_small",
+            "screening_rank": index + 1,
+            "stage_c_report_ref": str(stage_c_ref) if stage_c_ref else None,
+            "stage_d_report_ref": str(stage_d_ref) if stage_d_ref else None,
+            "blockers": [] if include_stage_c else ["missing_stage_c_qe_correctness_report", "missing_stage_d_implementation_evidence"],
+            "same_candidate_evidence_only": True,
+            "final_observed_conclusion_ceiling": "qe_equivalent_scf_correctness_plus_hls_synthesis_only" if include_stage_c and stage_d_kind == "hls_synthesis" else "gem5_systemc_timed_proxy_only",
+        }
+        if cycle_ref is not None:
+            row["systemc_cycle_evidence_ref"] = str(cycle_ref)
+            row["systemc_cycle_evidence_sha256"] = cycle_sha
+            row["evidence_refs"] = {"systemc_cycle_evidence": str(cycle_ref)}
+            row["evidence_hashes"] = {"systemc_cycle_evidence_sha256": cycle_sha}
+        rows.append(row)
         candidate_reports[candidate_id] = {"B4": {"report_ref": str(b4_ref), "summary": {"cycle_proxy": 100 + index * 50}}}
     manifest = write_json(
         root / "qe_fpga_dse_e2e_manifest_v0.json",
@@ -157,7 +202,7 @@ class QeFinalBestArchitectureDecisionTests(unittest.TestCase):
     def test_current_b4_only_fixture_has_no_winner(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
-            manifest, matrix, collection = write_fixture(root, include_stage_c=False)
+            manifest, matrix, collection = write_fixture(root, include_stage_c=False, include_systemc_cycle=False)
 
             decision = MODULE_ANY.build_decision(
                 manifest_path=manifest,
@@ -183,7 +228,47 @@ class QeFinalBestArchitectureDecisionTests(unittest.TestCase):
             self.assertEqual(decision["winner"]["candidate_id"], "candidate_F3")
             self.assertEqual(decision["claim_ceiling"], "final_best_under_hls_synthesis_policy")
             self.assertEqual(len(decision["eligible_candidates"]), 2)
+            self.assertEqual(decision["winner"]["evidence_tier"], "final-best-eligible")
+            self.assertTrue(decision["winner"]["systemc_cycle_evidence_ref"])
+            self.assertTrue(decision["winner"]["systemc_cycle_evidence_sha256"])
             self.assertTrue(decision["winner"]["evidence_hashes"]["stage_c_report_sha256"])
+            self.assertTrue(decision["winner"]["evidence_hashes"]["systemc_cycle_evidence_sha256"])
+
+    def test_missing_systemc_cycle_evidence_blocks_final_best(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            manifest, matrix, collection = write_fixture(root, include_systemc_cycle=False)
+
+            decision = MODULE_ANY.build_decision(
+                manifest_path=manifest,
+                claim_matrix_path=matrix,
+                backend_report_collection_path=collection,
+            )
+
+            self.assertIsNone(decision["winner"])
+            self.assertEqual(decision["decision_status"], "blocked_no_eligible_candidates")
+            reasons = decision["ineligible_candidates"][0]["ineligible_reasons"]
+            self.assertIn("missing_systemc_cycle_evidence", reasons)
+            self.assertIn("missing_systemc_cycle_evidence_ref", reasons)
+            self.assertEqual(decision["ineligible_candidates"][0]["evidence_tier"], "projection-screened")
+
+    def test_systemc_cycle_candidate_mismatch_blocks_final_best(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            manifest, matrix, collection = write_fixture(root, systemc_cycle_candidate_override="other_candidate")
+
+            decision = MODULE_ANY.build_decision(
+                manifest_path=manifest,
+                claim_matrix_path=matrix,
+                backend_report_collection_path=collection,
+            )
+
+            self.assertIsNone(decision["winner"])
+            self.assertIn(
+                "systemc_cycle_evidence_candidate_id_mismatch",
+                decision["ineligible_candidates"][0]["ineligible_reasons"],
+            )
+            self.assertEqual(decision["ineligible_candidates"][0]["evidence_tier"], "projection-screened")
 
     def test_projection_stage_d_is_not_final_best(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

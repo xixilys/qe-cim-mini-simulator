@@ -42,6 +42,12 @@ class FinalBestPolicyTests(unittest.TestCase):
         self.assertIn("stage_d_evidence_status_not_available", reasons)
         self.assertIn("implementation_projection_not_allowed_for_final_best", reasons)
         self.assertEqual(policy["minimum_stage_d_tier"], "hls_synthesis")
+        self.assertEqual(policy["required_final_best_evidence_tier"], "final-best-eligible")
+        self.assertTrue(policy["require_systemc_cycle_accounted_evidence"])
+        self.assertIn(
+            "no_final_best_without_same_candidate_stage_c_stage_d_strict_b4_and_systemc_cycle_evidence",
+            policy["non_claims"],
+        )
 
     def test_hls_available_satisfies_default_policy(self) -> None:
         policy = MODULE_ANY.load_policy(None)
@@ -63,6 +69,13 @@ class FinalBestPolicyTests(unittest.TestCase):
             ok, reasons = MODULE_ANY.stage_d_satisfies_policy(self.hls_evidence(), loaded)
             self.assertFalse(ok)
             self.assertIn("stage_d_tier_below_policy_minimum:hls_synthesis<rtl_simulation", reasons)
+
+    def test_policy_rejects_non_final_best_evidence_tier_requirement(self) -> None:
+        policy = MODULE_ANY.default_policy()
+        policy["required_final_best_evidence_tier"] = "systemc-cycle-accounted"
+
+        with self.assertRaisesRegex(MODULE_ANY.PolicyError, "final-best-eligible"):
+            MODULE_ANY.validate_policy(policy)
 
 
 if __name__ == "__main__":
