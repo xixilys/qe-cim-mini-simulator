@@ -2,8 +2,14 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import sys
 from typing import Any, Mapping
 
+SCRIPT_DIR = Path(__file__).resolve().parent
+if str(SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIR))
+
+import dse_evidence_tier_classifier_v0 as evidence_tiers
 
 POLICY_SCHEMA_VERSION = "qe_fpga_final_best_policy_v0"
 DEFAULT_POLICY_ID = "qe_fpga_final_best_policy_hls_v0"
@@ -38,12 +44,16 @@ DEFAULT_POLICY: dict[str, Any] = {
         "screening_rank_lower_is_better",
     ],
     "required_b4_cycle_source": "gem5_event_timed_device_observed",
+    "required_final_best_evidence_tier": evidence_tiers.FINAL_BEST_ELIGIBLE,
+    "require_systemc_cycle_accounted_evidence": True,
     "required_case_set": [],
     "non_claims": [
         "final_best_is_under_this_explicit_policy_only",
         "gem5_event_ticks_are_not_hardware_cycle_accuracy",
+        "systemc_cycle_accounted_is_not_rtl_cycle_accurate_timing",
         "no_board_measurement_claim_without_fpga_board_evidence",
         "no_asic_physical_claim_without_openroad_or_asic_ppa_evidence",
+        "no_final_best_without_same_candidate_stage_c_stage_d_strict_b4_and_systemc_cycle_evidence",
     ],
 }
 
@@ -68,6 +78,11 @@ def validate_policy(policy: Mapping[str, Any]) -> None:
         raise PolicyError("only strict_b4_event_delta_ticks_lower_is_better is supported in v0")
     if str(policy.get("required_b4_cycle_source")) != "gem5_event_timed_device_observed":
         raise PolicyError("v0 final-best policy requires gem5_event_timed_device_observed B4 source")
+    required_tier = str(policy.get("required_final_best_evidence_tier", evidence_tiers.FINAL_BEST_ELIGIBLE))
+    if required_tier != evidence_tiers.FINAL_BEST_ELIGIBLE:
+        raise PolicyError("v0 final-best policy requires final-best-eligible evidence tier")
+    if not isinstance(policy.get("require_systemc_cycle_accounted_evidence", True), bool):
+        raise PolicyError("require_systemc_cycle_accounted_evidence must be boolean")
 
 
 def load_policy(path_or_default: Path | str | None = None) -> dict[str, Any]:
