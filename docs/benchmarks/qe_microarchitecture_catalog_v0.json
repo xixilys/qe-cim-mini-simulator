@@ -1,0 +1,323 @@
+{
+  "schema_version": "qe_microarchitecture_catalog_v0",
+  "catalog_id": "qe_microarchitecture_catalog_v0",
+  "description": "Broad QE band-solver microarchitecture catalog for evidence-plane v1 Level-1 search. Entries are provenance-backed survey/projection inputs only; catalog membership never creates a final-best claim.",
+  "evidence_tier_labels": [
+    "survey-catalog",
+    "projection-screened",
+    "systemc-cycle-accounted",
+    "final-best-eligible"
+  ],
+  "support_status_values": [
+    "unsupported",
+    "projection_only",
+    "systemc_configurable",
+    "current_executor_supported"
+  ],
+  "non_claims": [
+    "catalog_entries_are_not_final_best_candidates",
+    "catalog_entries_do_not_claim_rtl_cycle_accuracy",
+    "catalog_entries_do_not_claim_board_or_asic_measurement",
+    "catalog_entries_do_not_claim_gpu_superiority"
+  ],
+  "entries": [
+    {
+      "microarchitecture_id": "tensor_systolic_dense_path",
+      "name": "Tensor-systolic dense path",
+      "target_stage": "operator_sweep",
+      "architecture_family": "F3",
+      "summary": "Device-heavy systolic tensor fabric hypothesis for h_psi/s_psi dense-block pressure and high arithmetic intensity cases.",
+      "provenance": [
+        {
+          "source_id": "template:f3_tensor_systolic_fpga_offload_v1",
+          "source_type": "local_design_template",
+          "title": "F3 tensor systolic FPGA offload scaffold",
+          "ref": "docs/architecture/architecture_templates/f3_tensor_systolic_fpga_offload_v1.json",
+          "notes": "Local scaffold documents the candidate family and projection knobs."
+        },
+        {
+          "source_id": "pattern:systolic_array",
+          "source_type": "literature_pattern",
+          "title": "Systolic array dataflow pattern",
+          "ref": "architecture literature pattern: spatially pipelined matrix/tensor array",
+          "notes": "Used only as a survey/projection pattern, not as measured evidence."
+        }
+      ],
+      "assumptions": [
+        "Dense small-block operations can be batched into a regular spatial dataflow.",
+        "Host/runtime overhead and fallback remain visible in downstream B4 evidence.",
+        "No final-best claim is possible without same-candidate Stage C, strict B4, Stage D, and SystemC cycle evidence."
+      ],
+      "parameter_ranges": {
+        "tile_m": {"kind": "range", "min": 8, "max": 64, "unit": "matrix_rows", "description": "Candidate systolic tile rows for projection sweeps."},
+        "tile_n": {"kind": "range", "min": 8, "max": 64, "unit": "matrix_cols", "description": "Candidate systolic tile columns for projection sweeps."},
+        "accumulator_precision": {"kind": "enum", "values": ["fp64", "mixed_fp64_accumulate"], "description": "Projection-only accumulation precision variants."}
+      },
+      "expected_effects": [
+        {"metric": "time_to_convergence_s", "direction": "decrease", "rationale": "May reduce dense operator latency when arithmetic intensity is high."},
+        {"metric": "fallback_ratio", "direction": "increase", "rationale": "Aggressive device offload may increase fallback exposure for irregular cases."}
+      ],
+      "support_status": "systemc_configurable",
+      "model_support_status": {
+        "status": "configurable_systemc_model",
+        "notes": "Can be represented through generated SystemC architecture config sidecars before stronger evidence is collected.",
+        "supporting_artifact_refs": [
+          "docs/benchmarks/template_to_systemc_config.py",
+          "model/qe_band_solver_model/README.md"
+        ]
+      },
+      "supported_evidence_tiers": ["survey-catalog", "projection-screened", "systemc-cycle-accounted"],
+      "non_claims": [
+        "not_a_final_best_winner_from_catalog",
+        "not_rtl_cycle_accurate",
+        "not_board_measured"
+      ]
+    },
+    {
+      "microarchitecture_id": "hbm_streaming_operator_pipeline",
+      "name": "HBM streaming operator pipeline",
+      "target_stage": "operator_sweep",
+      "architecture_family": "F3",
+      "summary": "Streaming memory-bandwidth-oriented pipeline hypothesis for operator application and vector movement pressure.",
+      "provenance": [
+        {
+          "source_id": "template:f3_hbm_streaming_operator_pipeline_v1",
+          "source_type": "local_design_template",
+          "title": "F3 HBM streaming operator pipeline scaffold",
+          "ref": "docs/architecture/architecture_templates/f3_hbm_streaming_operator_pipeline_v1.json",
+          "notes": "Local scaffold for HBM/streaming projection semantics."
+        }
+      ],
+      "assumptions": [
+        "Workload vectors can be chunked into streams with bounded host-device synchronization.",
+        "HBM effects are projection-only until a supported runtime and evidence artifacts exist."
+      ],
+      "parameter_ranges": {
+        "stream_width_bytes": {"kind": "range", "min": 64, "max": 1024, "unit": "bytes", "description": "Projected stream width per beat."},
+        "outstanding_streams": {"kind": "range", "min": 1, "max": 16, "unit": "streams", "description": "Candidate outstanding stream count."},
+        "hbm_channel_count": {"kind": "unknown", "unknown_reason": "Board/platform not selected in Stage A", "description": "Physical HBM channel count requires later platform evidence."}
+      },
+      "expected_effects": [
+        {"metric": "bytes_moved_to_convergence", "direction": "mixed", "rationale": "May reduce stalls but can increase explicit movement if residency is weak."},
+        {"metric": "time_to_convergence_s", "direction": "decrease", "rationale": "May improve memory-bound operator phases when streaming is effective."}
+      ],
+      "support_status": "projection_only",
+      "model_support_status": {
+        "status": "projection_only",
+        "notes": "Template metadata exists; no completed HBM runtime semantics are claimed.",
+        "supporting_artifact_refs": ["docs/architecture/architecture_templates/f3_hbm_streaming_operator_pipeline_v1.json"]
+      },
+      "supported_evidence_tiers": ["survey-catalog", "projection-screened"],
+      "non_claims": ["not_runtime_hbm_evidence", "not_board_measured", "not_final_best"]
+    },
+    {
+      "microarchitecture_id": "cim_dsp_vector_hybrid",
+      "name": "CIM + DSP vector hybrid",
+      "target_stage": "multi_stage",
+      "architecture_family": "F4",
+      "summary": "Hybrid compute-in-memory plus DSP vector datapath hypothesis for mixed operator/build workloads.",
+      "provenance": [
+        {
+          "source_id": "template:cim_dsp_vector_hybrid_v1",
+          "source_type": "local_design_template",
+          "title": "CIM + DSP vector hybrid scaffold",
+          "ref": "docs/architecture/architecture_templates/cim_dsp_vector_hybrid_v1.json",
+          "notes": "Projection scaffold for hybrid CIM/DSP partitioning."
+        },
+        {
+          "source_id": "contract:cim_macro_block",
+          "source_type": "local_contract",
+          "title": "CIM macro block and timing contract",
+          "ref": "docs/cim/cim_macro_block_and_timing_v0.md",
+          "notes": "Contract informs CIM block assumptions but is not performance measurement."
+        }
+      ],
+      "assumptions": [
+        "CIM blocks are modeled as architectural resources, not measured macros.",
+        "DSP fallback remains available for unsupported precision or sparsity cases."
+      ],
+      "parameter_ranges": {
+        "cim_array_count": {"kind": "range", "min": 1, "max": 16, "unit": "arrays", "description": "Projection-only CIM array multiplicity."},
+        "dsp_lane_count": {"kind": "range", "min": 8, "max": 256, "unit": "lanes", "description": "Projection-only DSP vector lane count."},
+        "cim_precision_mode": {"kind": "enum", "values": ["fp64_proxy", "mixed_precision_proxy"], "description": "Claim-safe precision modes for projection."
+        }
+      },
+      "expected_effects": [
+        {"metric": "energy_to_convergence_j", "direction": "decrease", "rationale": "May reduce movement/energy if data residency assumptions hold."},
+        {"metric": "spill_ratio", "direction": "mixed", "rationale": "Hybrid partition can either reduce spills or increase pressure if CIM capacity is insufficient."}
+      ],
+      "support_status": "projection_only",
+      "model_support_status": {
+        "status": "projection_only",
+        "notes": "Hybrid semantics are proposal metadata pending executor support.",
+        "supporting_artifact_refs": ["docs/architecture/architecture_templates/cim_dsp_vector_hybrid_v1.json"]
+      },
+      "supported_evidence_tiers": ["survey-catalog", "projection-screened"],
+      "non_claims": ["not_cim_silicon_measurement", "not_rtl_timing", "not_final_best"]
+    },
+    {
+      "microarchitecture_id": "near_memory_pim_resident_context",
+      "name": "Near-memory PIM resident context",
+      "target_stage": "memory_residency",
+      "architecture_family": "custom",
+      "summary": "Near-memory/PIM resident-context hypothesis for reducing repeated vector and subspace movement.",
+      "provenance": [
+        {
+          "source_id": "template:custom_near_memory_pim_resident_v1",
+          "source_type": "local_design_template",
+          "title": "Near-memory PIM resident scaffold",
+          "ref": "docs/architecture/architecture_templates/custom_near_memory_pim_resident_v1.json",
+          "notes": "Local projection scaffold for resident/PIM behavior."
+        },
+        {
+          "source_id": "contract:cim_resident_context",
+          "source_type": "local_contract",
+          "title": "Resident context and near-SRAM contract",
+          "ref": "docs/cim/cim_resident_context_and_near_sram_contract_v0.md",
+          "notes": "Used for residency assumptions only."
+        }
+      ],
+      "assumptions": [
+        "Resident context fits important subspace/vector state for selected workloads.",
+        "PIM behavior is not supported by the current executor and must stay survey/projection-only."
+      ],
+      "parameter_ranges": {
+        "resident_context_kib": {"kind": "range", "min": 128, "max": 8192, "unit": "KiB", "description": "Projected resident context capacity."},
+        "near_memory_op_set": {"kind": "enum", "values": ["axpy", "dot", "gemv_proxy"], "description": "Survey-level near-memory operation set."},
+        "memory_stack_topology": {"kind": "unknown", "unknown_reason": "No board/package target selected", "description": "Package topology requires future platform evidence."}
+      },
+      "expected_effects": [
+        {"metric": "bytes_moved_to_convergence", "direction": "decrease", "rationale": "Resident context may reduce repeated host/device transfers."},
+        {"metric": "fallback_ratio", "direction": "mixed", "rationale": "Unsupported resident behavior may increase fallback if capacity assumptions fail."}
+      ],
+      "support_status": "unsupported",
+      "model_support_status": {
+        "status": "not_supported",
+        "notes": "No completed runtime executor or board support; keep as broad catalog/projection only.",
+        "supporting_artifact_refs": ["docs/architecture/architecture_templates/custom_near_memory_pim_resident_v1.json"]
+      },
+      "supported_evidence_tiers": ["survey-catalog", "projection-screened"],
+      "non_claims": ["not_executable_in_current_runtime", "not_board_measured", "not_final_best"]
+    },
+    {
+      "microarchitecture_id": "cgra_dataflow_operator",
+      "name": "CGRA dataflow operator fabric",
+      "target_stage": "multi_stage",
+      "architecture_family": "F5",
+      "summary": "Coarse-grained reconfigurable dataflow fabric hypothesis for shared operator/build scheduling.",
+      "provenance": [
+        {
+          "source_id": "template:f5_cgra_dataflow_operator_v1",
+          "source_type": "local_design_template",
+          "title": "F5 CGRA dataflow operator scaffold",
+          "ref": "docs/architecture/architecture_templates/f5_cgra_dataflow_operator_v1.json",
+          "notes": "Local scaffold documents dataflow projection semantics."
+        }
+      ],
+      "assumptions": [
+        "Operator/build kernels can be scheduled over coarse-grained dataflow nodes.",
+        "Runtime scheduling support is future work and cannot be inferred from template metadata."
+      ],
+      "parameter_ranges": {
+        "pe_count": {"kind": "range", "min": 16, "max": 512, "unit": "processing_elements", "description": "Projected CGRA processing element count."},
+        "routing_topology": {"kind": "enum", "values": ["mesh", "torus", "clustered_mesh"], "description": "Survey/projection routing topology."},
+        "schedule_granularity": {"kind": "enum", "values": ["kernel", "block", "stage"], "description": "Projection scheduling granularity."
+        }
+      },
+      "expected_effects": [
+        {"metric": "time_to_convergence_s", "direction": "decrease", "rationale": "May improve fused multi-stage scheduling if mapping succeeds."},
+        {"metric": "resource_risk", "direction": "increase", "rationale": "Large fabric may increase resource and routing risk."}
+      ],
+      "support_status": "unsupported",
+      "model_support_status": {
+        "status": "not_supported",
+        "notes": "No current CGRA executor; catalog and projection only.",
+        "supporting_artifact_refs": ["docs/architecture/architecture_templates/f5_cgra_dataflow_operator_v1.json"]
+      },
+      "supported_evidence_tiers": ["survey-catalog", "projection-screened"],
+      "non_claims": ["not_executable_in_current_runtime", "not_rtl_implemented", "not_final_best"]
+    },
+    {
+      "microarchitecture_id": "multichiplet_noc_partition",
+      "name": "Multi-chiplet NoC partition",
+      "target_stage": "interconnect",
+      "architecture_family": "custom",
+      "summary": "Multi-chiplet/interposer NoC partition hypothesis for aggressive memory and compute distribution.",
+      "provenance": [
+        {
+          "source_id": "template:custom_multichiplet_noc_partition_v1",
+          "source_type": "local_design_template",
+          "title": "Multi-chiplet NoC partition scaffold",
+          "ref": "docs/architecture/architecture_templates/custom_multichiplet_noc_partition_v1.json",
+          "notes": "Local scaffold for communication and partition projection."
+        }
+      ],
+      "assumptions": [
+        "Communication costs can be represented as projection parameters in Level-1 search.",
+        "No package, board, or ASIC evidence exists for this entry."
+      ],
+      "parameter_ranges": {
+        "chiplet_count": {"kind": "range", "min": 2, "max": 8, "unit": "chiplets", "description": "Projected chiplet count."},
+        "noc_bandwidth_gbps": {"kind": "unknown", "unknown_reason": "No physical interconnect selected", "description": "Physical NoC bandwidth requires later platform evidence."},
+        "partition_policy": {"kind": "enum", "values": ["operator_split", "stage_split", "memory_compute_split"], "description": "Projection-level partition policy."}
+      },
+      "expected_effects": [
+        {"metric": "bytes_moved_to_convergence", "direction": "mixed", "rationale": "Partitioning may localize data or add inter-chiplet traffic."},
+        {"metric": "resource_risk", "direction": "increase", "rationale": "Packaging/interconnect assumptions are high risk without physical evidence."}
+      ],
+      "support_status": "unsupported",
+      "model_support_status": {
+        "status": "not_supported",
+        "notes": "No current multi-chiplet executor or physical package evidence.",
+        "supporting_artifact_refs": ["docs/architecture/architecture_templates/custom_multichiplet_noc_partition_v1.json"]
+      },
+      "supported_evidence_tiers": ["survey-catalog", "projection-screened"],
+      "non_claims": ["not_physical_package_evidence", "not_asic_ppa", "not_final_best"]
+    },
+    {
+      "microarchitecture_id": "fused_build_diag_cluster",
+      "name": "Fused build/diagonalization cluster",
+      "target_stage": "multi_stage",
+      "architecture_family": "F4",
+      "summary": "Fused reduced-build plus diagonalization cluster hypothesis for reducing intermediate movement between B and C stages.",
+      "provenance": [
+        {
+          "source_id": "template:3cluster_fused_build_diag_v1",
+          "source_type": "local_design_template",
+          "title": "3-cluster fused build+diag scaffold",
+          "ref": "docs/architecture/architecture_templates/3cluster_fused_build_diag_v1.json",
+          "notes": "Local scaffold for fused-stage projection."
+        },
+        {
+          "source_id": "workload:qe_kernel_characterization",
+          "source_type": "workload_analysis",
+          "title": "QE kernel characterization matrix",
+          "ref": "docs/benchmarks/qe_kernel_characterization_matrix_for_system_dse_v0.md",
+          "notes": "Informs stage pressure only, not measured fused performance."
+        }
+      ],
+      "assumptions": [
+        "Reduced-build outputs can feed diagonalization without excessive format conversion.",
+        "Fused-stage scheduling remains projection-only until runtime evidence exists."
+      ],
+      "parameter_ranges": {
+        "fusion_window": {"kind": "enum", "values": ["build_diag", "build_diag_refresh"], "description": "Candidate fused stage window."},
+        "shared_buffer_kib": {"kind": "range", "min": 256, "max": 16384, "unit": "KiB", "description": "Projected shared buffer size."},
+        "diag_fallback_threshold": {"kind": "unknown", "unknown_reason": "Needs correctness/fallback calibration", "description": "Threshold requires Stage C and B4 closure."
+        }
+      },
+      "expected_effects": [
+        {"metric": "bytes_moved_to_convergence", "direction": "decrease", "rationale": "Fusion may reduce intermediate movement between build and diag."},
+        {"metric": "fallback_ratio", "direction": "mixed", "rationale": "Aggressive fusion can increase fallback for difficult diagonalization cases."}
+      ],
+      "support_status": "projection_only",
+      "model_support_status": {
+        "status": "projection_only",
+        "notes": "Template projection exists; no completed fused executor semantics are claimed.",
+        "supporting_artifact_refs": ["docs/architecture/architecture_templates/3cluster_fused_build_diag_v1.json"]
+      },
+      "supported_evidence_tiers": ["survey-catalog", "projection-screened"],
+      "non_claims": ["not_runtime_fusion_evidence", "not_final_best", "not_cycle_accurate"]
+    }
+  ]
+}
