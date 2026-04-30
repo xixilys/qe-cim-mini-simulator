@@ -61,6 +61,26 @@ class RunQeFpgaDseE2ETests(unittest.TestCase):
             "production_release_ready": False,
         }
 
+    def systemc_cycle_payload(self, candidate_id: str) -> dict[str, Any]:
+        return {
+            "schema_version": "qe_systemc_cycle_accounted_evidence_v0",
+            "candidate_id": candidate_id,
+            "workload_id": "si4_pbe_uspp_small",
+            "evidence_tier": "systemc-cycle-accounted",
+            "template_config_hash": "sha256:template-fixture",
+            "per_stage_cycles": {"operator_sweep": 120, "reduced_build": 30},
+            "per_component_cycles": {"dma": 10, "compute": 140},
+            "total_cycles": 150,
+            "model_support_status": "generated_config_supported",
+            "calibration_refs": ["fixture://calibration"],
+            "artifact_refs": {"cycle_table": "cycle_table.json"},
+            "artifact_hashes": {"cycle_table_sha256": "sha256:cycle-table"},
+            "non_claims": [
+                "systemc_cycle_accounted_is_not_rtl_cycle_accurate",
+                "not_board_or_asic_measured",
+            ],
+        }
+
     def write_candidate_run(self, root: Path, candidate_id: str, family: str) -> dict[str, Any]:
         frontend_dir = root / "frontend_dse"
         request_dir = frontend_dir / "backend_execution_requests"
@@ -576,12 +596,14 @@ class RunQeFpgaDseE2ETests(unittest.TestCase):
                 "rows": [
                     {
                         "candidate_id": "candidate_A",
+                        "evidence_tier": "projection-screened",
                         "blockers": [],
                         "same_candidate_evidence_only": True,
                         "final_observed_conclusion_ceiling": "qe_equivalent_scf_correctness_plus_hls_synthesis_only",
                     },
                     {
                         "candidate_id": "candidate_B",
+                        "evidence_tier": "final-best-eligible",
                         "blockers": [],
                         "same_candidate_evidence_only": True,
                         "final_observed_conclusion_ceiling": "qe_equivalent_scf_correctness_plus_hls_synthesis_only",
@@ -599,8 +621,9 @@ class RunQeFpgaDseE2ETests(unittest.TestCase):
             self.assertEqual(payload["final_recommendation"]["candidate_id"], "candidate_B")
             self.assertEqual(
                 payload["final_recommendation"]["recommendation_scope"],
-                "same_candidate_stage_c_d_plus_strict_b4_event_tick_observed",
+                "same_candidate_stage_c_d_strict_b4_plus_systemc_cycle_accounted",
             )
+            self.assertEqual(payload["final_recommendation"]["evidence_tier"], "final-best-eligible")
             row_by_candidate = {row["candidate_id"]: row for row in payload["rows"]}
             self.assertFalse(row_by_candidate["candidate_A"]["eligible_for_final_recommendation"])
             self.assertTrue(row_by_candidate["candidate_B"]["eligible_for_final_recommendation"])
@@ -699,7 +722,57 @@ class RunQeFpgaDseE2ETests(unittest.TestCase):
                     self.assertEqual(row["final_observed_conclusion_ceiling"], "gem5_systemc_timed_proxy_only")
                     self.assertIn("missing_stage_c_qe_correctness_report", row["blockers"])
                     self.assertIn("missing_stage_d_implementation_evidence", row["blockers"])
+                    self.assertIn("missing_systemc_cycle_accounted_evidence", row["blockers"])
+                    self.assertEqual(row["evidence_tier"], "projection-screened")
                     self.assertTrue(row["same_candidate_evidence_only"])
+
+    def test_claim_status_matrix_for_runs_joins_systemc_cycle_evidence_by_candidate(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            runs = [
+                self.write_candidate_run(root, "candidate_F3", "F3"),
+                self.write_candidate_run(root, "candidate_F2", "F2"),
+            ]
+            systemc_cycle_f3 = root / "candidate_F3.systemc_cycle.json"
+            systemc_cycle_f3.write_text(
+                json.dumps(self.systemc_cycle_payload("candidate_F3"), indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+
+            refs = MODULE_ANY._write_claim_ceiling_status_matrix_for_runs(
+                output_dir=root,
+                candidate_runs=runs,
+                systemc_cycle_evidence_for={"candidate_F3": systemc_cycle_f3},
+            )
+
+            rows = {
+                row["candidate_id"]: row
+                for row in json.loads(refs["matrix"].read_text(encoding="utf-8"))["rows"]
+            }
+            self.assertEqual(rows["candidate_F3"]["systemc_cycle_accounted_evidence_ref"], str(systemc_cycle_f3))
+            self.assertTrue(rows["candidate_F3"]["systemc_cycle_accounted"]["valid"])
+            self.assertEqual(rows["candidate_F3"]["candidate_alignment"]["systemc_cycle_candidate_id"], "candidate_F3")
+            self.assertEqual(rows["candidate_F3"]["evidence_tier"], "systemc-cycle-accounted")
+            self.assertNotIn("missing_systemc_cycle_accounted_evidence", rows["candidate_F3"]["blockers"])
+            self.assertEqual(rows["candidate_F2"]["evidence_tier"], "projection-screened")
+            self.assertIn("missing_systemc_cycle_accounted_evidence", rows["candidate_F2"]["blockers"])
+
+    def test_claim_status_matrix_for_runs_rejects_systemc_cycle_candidate_mismatch(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            runs = [self.write_candidate_run(root, "candidate_F3", "F3")]
+            mismatched = root / "candidate_F2.systemc_cycle.json"
+            mismatched.write_text(
+                json.dumps(self.systemc_cycle_payload("candidate_F2"), indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(MODULE_ANY.E2EError, "candidate_id mismatch"):
+                MODULE_ANY._write_claim_ceiling_status_matrix_for_runs(
+                    output_dir=root,
+                    candidate_runs=runs,
+                    systemc_cycle_evidence_for={"candidate_F3": mismatched},
+                )
 
     def test_claim_status_matrix_for_runs_links_partial_candidate_stage_c_d_only_to_matching_row(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
