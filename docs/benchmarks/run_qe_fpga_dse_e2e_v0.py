@@ -1216,14 +1216,19 @@ def _write_reranked_results(
     claim_matrix: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     ranked_runs = sorted(candidate_runs, key=_ranking_metric)
+    claim_rows_by_candidate = _candidate_rows_by_id(claim_matrix)
     final_candidate_ids = _final_recommendation_candidate_ids(claim_matrix, ranked_runs)
     rows: list[dict[str, Any]] = []
     for observed_rank, run in enumerate(ranked_runs, start=1):
+        candidate_id = str(run.get("candidate_id")) if run.get("candidate_id") is not None else None
+        claim_row = claim_rows_by_candidate.get(candidate_id or "", {})
         screening_rank = run.get("screening_rank")
         b2_payload = run.get("systemc_payload")
         b4_payload = run.get("gem5_b4_payload")
         row = {
             "candidate_id": run.get("candidate_id"),
+            "evidence_tier": claim_row.get("evidence_tier") or _classify_evidence_tier(run, claim_row),
+            "systemc_cycle_accounted_evidence_ref": claim_row.get("systemc_cycle_accounted_evidence_ref"),
             "screening_rank": screening_rank,
             "observed_rank": observed_rank,
             "rank_delta": (
@@ -1238,6 +1243,7 @@ def _write_reranked_results(
             "recommendation_scope": "bounded_observed_proxy_rank",
             "strict_b4_event_observed": _strict_b4_event_observed(run),
             "eligible_for_final_recommendation": str(run.get("candidate_id")) in final_candidate_ids,
+            "blockers": claim_row.get("blockers") if isinstance(claim_row.get("blockers"), list) else [],
             "non_claims": [
                 "not_final_public_family_winner",
                 "not_qe_equivalent_scf_claim",
@@ -1264,7 +1270,8 @@ def _write_reranked_results(
             {
                 "candidate_id": final_best["candidate_id"],
                 "observed_rank": final_best["observed_rank"],
-                "recommendation_scope": "same_candidate_stage_c_d_plus_strict_b4_event_tick_observed",
+                "evidence_tier": FINAL_BEST_ELIGIBLE_TIER,
+                "recommendation_scope": "same_candidate_stage_c_d_strict_b4_plus_systemc_cycle_accounted",
             }
             if final_best
             else None
@@ -1273,6 +1280,8 @@ def _write_reranked_results(
             "requires_no_stage_c_d_blockers": True,
             "requires_same_candidate_evidence_only": True,
             "requires_strict_b4_cycle_source": "gem5_event_timed_device_observed",
+            "requires_systemc_cycle_accounted_evidence": True,
+            "requires_exact_evidence_tier": FINAL_BEST_ELIGIBLE_TIER,
             "blocked_candidates_remain_bounded_proxy_rank_only": True,
         },
         "rows": rows,
@@ -1304,6 +1313,31 @@ def _write_final_best_architecture_decision(
     )
     final_best_decision.write_json(path, decision)
     return decision
+
+
+def _attach_systemc_cycle_evidence_to_runs(
+    candidate_runs: list[dict[str, Any]],
+    *,
+    systemc_cycle_evidence: Path | None,
+    systemc_cycle_evidence_for: Mapping[str, Path] | None,
+) -> None:
+    resolver = _CandidateEvidenceResolver(
+        singular_ref=systemc_cycle_evidence,
+        singular_payload=_load_systemc_cycle_accounted_evidence(systemc_cycle_evidence),
+        per_candidate=_load_candidate_evidence_map(
+            systemc_cycle_evidence_for,
+            loader=_load_systemc_cycle_accounted_evidence,
+            option_name="--systemc-cycle-evidence-for",
+        ),
+        candidate_count=len(candidate_runs),
+    )
+    for run in candidate_runs:
+        candidate_id = str(run.get("candidate_id")) if run.get("candidate_id") is not None else None
+        ref, payload = resolver.for_candidate(candidate_id)
+        if ref is None or not isinstance(payload, Mapping):
+            continue
+        run["systemc_cycle_accounted_evidence"] = ref
+        run["systemc_cycle_accounted_payload"] = payload
 
 
 def run_e2e(args: argparse.Namespace) -> dict[str, Any]:
@@ -1358,6 +1392,7 @@ def run_e2e(args: argparse.Namespace) -> dict[str, Any]:
     )
     candidate_runs: list[dict[str, Any]] = []
     screening_rank_by_candidate: dict[str, int] = {}
+    selected_plan_by_candidate: dict[str, Mapping[str, Any]] = {}
     plan_path = frontend_dir / "multi_fidelity_plan_v0.json"
     if plan_path.exists():
         plan = _json_load(plan_path)
@@ -1365,6 +1400,7 @@ def run_e2e(args: argparse.Namespace) -> dict[str, Any]:
         if isinstance(selected_candidates, list):
             for item in selected_candidates:
                 if isinstance(item, Mapping) and item.get("candidate_id"):
+                    selected_plan_by_candidate[str(item["candidate_id"])] = item
                     rank = item.get("screening_rank")
                     if isinstance(rank, int):
                         screening_rank_by_candidate[str(item["candidate_id"])] = rank
@@ -1405,6 +1441,7 @@ def run_e2e(args: argparse.Namespace) -> dict[str, Any]:
                 "candidate_dir": candidate_dir,
                 "systemc_report": systemc_report,
                 "systemc_payload": systemc_payload,
+                "level1_search": dict(selected_plan_by_candidate.get(candidate_id, {})),
             }
         )
 
@@ -1519,6 +1556,16 @@ def run_e2e(args: argparse.Namespace) -> dict[str, Any]:
         args.implementation_evidence_for,
         "--implementation-evidence-for",
     )
+    systemc_cycle_evidence = Path(args.systemc_cycle_evidence) if args.systemc_cycle_evidence else None
+    systemc_cycle_evidence_for = _parse_candidate_path_bindings(
+        args.systemc_cycle_evidence_for,
+        "--systemc-cycle-evidence-for",
+    )
+    _attach_systemc_cycle_evidence_to_runs(
+        candidate_runs,
+        systemc_cycle_evidence=systemc_cycle_evidence,
+        systemc_cycle_evidence_for=systemc_cycle_evidence_for,
+    )
     claim_matrix_refs = _write_claim_ceiling_status_matrix_for_runs(
         output_dir=output_dir,
         candidate_runs=candidate_runs,
@@ -1526,9 +1573,12 @@ def run_e2e(args: argparse.Namespace) -> dict[str, Any]:
         implementation_evidence=implementation_evidence,
         qe_correctness_report_for=qe_correctness_report_for,
         implementation_evidence_for=implementation_evidence_for,
+        systemc_cycle_evidence=systemc_cycle_evidence,
+        systemc_cycle_evidence_for=systemc_cycle_evidence_for,
         requested_matrix_path=Path(args.claim_ceiling_status_matrix) if args.claim_ceiling_status_matrix else None,
     )
     claim_matrix_payload = _json_load(claim_matrix_refs["matrix"])
+    claim_rows_by_candidate = _candidate_rows_by_id(claim_matrix_payload)
     backend_collection_path = output_dir / BACKEND_REPORT_COLLECTION_NAME
     backend_collection = _write_backend_report_collection(
         backend_collection_path,
@@ -1552,6 +1602,7 @@ def run_e2e(args: argparse.Namespace) -> dict[str, Any]:
         candidate_runs,
         claim_matrix=claim_matrix_payload,
     )
+    top_k_closure = _top_k_closure_status(candidate_runs, claim_matrix_payload)
     final_best_decision_path = (
         output_dir / FINAL_BEST_DECISION_NAME
         if args.emit_final_best_decision
@@ -1573,6 +1624,10 @@ def run_e2e(args: argparse.Namespace) -> dict[str, Any]:
         non_claims.append("not_rtl_hls_board_or_asic_implementation_claim")
     else:
         non_claims.append("implementation_claim_limited_to_external_stage_d_evidence_ceiling")
+    if systemc_cycle_evidence is None and not systemc_cycle_evidence_for:
+        non_claims.append("not_systemc_cycle_accounted_claim")
+    else:
+        non_claims.append("systemc_cycle_accounted_claim_limited_to_external_generated_evidence")
 
     summary = {
         "schema_version": "qe_fpga_dse_performance_summary_v0",
@@ -1588,7 +1643,22 @@ def run_e2e(args: argparse.Namespace) -> dict[str, Any]:
             {
                 "candidate_id": run.get("candidate_id"),
                 "screening_rank": run.get("screening_rank"),
+                "evidence_tier": (
+                    claim_rows_by_candidate.get(str(run.get("candidate_id")), {}).get("evidence_tier")
+                    if run.get("candidate_id") is not None
+                    else None
+                ),
+                "blockers": (
+                    claim_rows_by_candidate.get(str(run.get("candidate_id")), {}).get("blockers", [])
+                    if run.get("candidate_id") is not None
+                    else []
+                ),
                 "systemc_timed_functional": _report_summary(run["systemc_payload"]),
+                "systemc_cycle_accounted": (
+                    claim_rows_by_candidate.get(str(run.get("candidate_id")), {}).get("systemc_cycle_accounted")
+                    if run.get("candidate_id") is not None
+                    else None
+                ),
                 "gem5_b4_timed_proxy": (
                     _report_summary(run["gem5_b4_payload"])
                     if isinstance(run.get("gem5_b4_payload"), Mapping)
@@ -1610,6 +1680,13 @@ def run_e2e(args: argparse.Namespace) -> dict[str, Any]:
             candidate_id: str(path)
             for candidate_id, path in sorted(implementation_evidence_for.items())
         },
+        "systemc_cycle_evidence": str(systemc_cycle_evidence) if systemc_cycle_evidence else None,
+        "systemc_cycle_evidence_for": {
+            candidate_id: str(path)
+            for candidate_id, path in sorted(systemc_cycle_evidence_for.items())
+        },
+        "top_k_closure": top_k_closure,
+        "evidence_tier_counts": top_k_closure["evidence_tier_counts"],
         "backend_report_collection": str(backend_collection_path),
         "reranked_results": str(reranked_results_path),
         "bounded_recommendation": reranked_results.get("bounded_recommendation"),
@@ -1623,6 +1700,7 @@ def run_e2e(args: argparse.Namespace) -> dict[str, Any]:
             "gem5_systemc_smoke_only_when_present",
             "gem5_systemc_timed_proxy_only_when_B4_present",
             "stage_c_and_stage_d_are_external_materialized_inputs_when_present",
+            "systemc_cycle_accounted_evidence_is_external_materialized_input_when_present",
             "cycle_proxy/device_busy may be absent or proxy-grade depending on backend report",
         ],
         "non_claims": non_claims,
@@ -1641,7 +1719,49 @@ def run_e2e(args: argparse.Namespace) -> dict[str, Any]:
             {
                 "candidate_id": run.get("candidate_id"),
                 "stage_b0_request": str(run["stage_b0_request"]),
+                "level1_search": run.get("level1_search", {}),
+                "evidence_tier": (
+                    claim_rows_by_candidate.get(str(run.get("candidate_id")), {}).get("evidence_tier")
+                    if run.get("candidate_id") is not None
+                    else None
+                ),
+                "blockers": (
+                    claim_rows_by_candidate.get(str(run.get("candidate_id")), {}).get("blockers", [])
+                    if run.get("candidate_id") is not None
+                    else []
+                ),
+                "same_candidate_evidence_only": (
+                    claim_rows_by_candidate.get(str(run.get("candidate_id")), {}).get("same_candidate_evidence_only")
+                    if run.get("candidate_id") is not None
+                    else None
+                ),
                 "systemc_backend_report": str(run["systemc_report"]),
+                "systemc_cycle_accounted_evidence": (
+                    claim_rows_by_candidate.get(str(run.get("candidate_id")), {}).get(
+                        "systemc_cycle_accounted_evidence_ref"
+                    )
+                    if run.get("candidate_id") is not None
+                    else None
+                ),
+                "artifact_hashes": {
+                    "systemc_backend_report_sha256": _sha256_file(Path(str(run["systemc_report"]))),
+                    "systemc_cycle_accounted_evidence_sha256": (
+                        claim_rows_by_candidate.get(str(run.get("candidate_id")), {})
+                        .get("systemc_cycle_accounted", {})
+                        .get("report_sha256")
+                        if run.get("candidate_id") is not None
+                        and isinstance(
+                            claim_rows_by_candidate.get(str(run.get("candidate_id")), {}).get("systemc_cycle_accounted"),
+                            Mapping,
+                        )
+                        else None
+                    ),
+                    "gem5_b4_report_sha256": (
+                        _sha256_file(Path(str(run["gem5_b4_report"])))
+                        if run.get("gem5_b4_report")
+                        else None
+                    ),
+                },
                 "gem5_b4_request": str(run["gem5_b4_request"]) if run.get("gem5_b4_request") else None,
                 "gem5_b4_report": str(run["gem5_b4_report"]) if run.get("gem5_b4_report") else None,
                 "gem5_b4_materialization_manifest": (
@@ -1677,6 +1797,8 @@ def run_e2e(args: argparse.Namespace) -> dict[str, Any]:
         "gem5_b4_report": str(gem5_b4_report) if gem5_b4_report else None,
         "backend_report_collection": str(backend_collection_path),
         "reranked_results": str(reranked_results_path),
+        "top_k_closure": top_k_closure,
+        "evidence_tier_counts": top_k_closure["evidence_tier_counts"],
         "performance_summary": str(summary_path),
         "claim_ceiling_status_matrix": str(claim_matrix_refs["matrix"]),
         "claim_ceiling_status_matrix_markdown": str(claim_matrix_refs["markdown"]),
@@ -1755,6 +1877,24 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "Attach a Stage D implementation-evidence report to exactly one candidate. "
             "May be repeated; the evidence JSON candidate_id must match the key."
+        ),
+    )
+    parser.add_argument(
+        "--systemc-cycle-evidence",
+        type=Path,
+        help=(
+            "Attach one generated SystemC cycle-accounted evidence report. "
+            "For Top-K runs with more than one candidate, prefer --systemc-cycle-evidence-for."
+        ),
+    )
+    parser.add_argument(
+        "--systemc-cycle-evidence-for",
+        action="append",
+        default=[],
+        metavar="candidate_id=path",
+        help=(
+            "Attach generated SystemC cycle-accounted evidence to exactly one candidate. "
+            "May be repeated; the report JSON candidate_id must match the key."
         ),
     )
     parser.add_argument("--emit-full-stage-status", action="store_true")
