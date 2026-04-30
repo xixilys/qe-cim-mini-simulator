@@ -14,6 +14,7 @@ if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
 import final_best_policy_v0 as final_policy
+import dse_evidence_tier_classifier_v0 as evidence_tiers
 from unified_dse import stage_c_qe_correctness, stage_d_implementation_evidence
 
 SCHEMA_VERSION = "qe_fpga_final_best_architecture_decision_v0"
@@ -44,6 +45,10 @@ def sha256_file(path: Path | None) -> str | None:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def _mapping(value: Any) -> Mapping[str, Any]:
+    return value if isinstance(value, Mapping) else {}
 
 
 def resolve_ref(ref: Any, *, base_dir: Path, repo_root: Path | None = None) -> Path | None:
@@ -96,6 +101,117 @@ def _metric(report: Mapping[str, Any] | None, key: str) -> Any:
     if isinstance(metrics, Mapping):
         return metrics.get(key)
     return None
+
+
+def _first_string(*values: Any) -> str | None:
+    for value in values:
+        if isinstance(value, str) and value:
+            return value
+    return None
+
+
+def _systemc_cycle_ref_from(
+    candidate_id: str,
+    run: Mapping[str, Any],
+    row: Mapping[str, Any],
+    backend_collection: Mapping[str, Any] | None,
+) -> tuple[str | None, str | None]:
+    row_refs = _mapping(row.get("evidence_refs"))
+    row_hashes = _mapping(row.get("evidence_hashes"))
+    run_refs = _mapping(run.get("evidence_refs"))
+    run_hashes = _mapping(run.get("evidence_hashes"))
+
+    backend_ref = None
+    backend_sha = None
+    if isinstance(backend_collection, Mapping):
+        candidate_reports = backend_collection.get("candidate_reports")
+        candidate_entry = _mapping(candidate_reports).get(candidate_id) if isinstance(candidate_reports, Mapping) else None
+        if isinstance(candidate_entry, Mapping):
+            for key in (
+                "systemc_cycle_evidence",
+                "systemc_cycle_accounted_evidence",
+                "SystemC-cycle-accounted",
+                "systemc-cycle-accounted",
+                "B2_cycle_accounted",
+            ):
+                entry = candidate_entry.get(key)
+                if isinstance(entry, Mapping):
+                    backend_ref = _first_string(
+                        entry.get("report_ref"),
+                        entry.get("artifact_ref"),
+                        entry.get("systemc_cycle_evidence_ref"),
+                    )
+                    backend_sha = _first_string(
+                        entry.get("sha256"),
+                        entry.get("artifact_sha256"),
+                        entry.get("systemc_cycle_evidence_sha256"),
+                    )
+                    if backend_ref or backend_sha:
+                        break
+
+    ref = _first_string(
+        row.get("systemc_cycle_evidence_ref"),
+        row.get("systemc_cycle_accounted_evidence_ref"),
+        row_refs.get("systemc_cycle_evidence"),
+        row_refs.get("systemc_cycle_accounted_evidence"),
+        run.get("systemc_cycle_evidence_ref"),
+        run.get("systemc_cycle_accounted_evidence_ref"),
+        run_refs.get("systemc_cycle_evidence"),
+        run_refs.get("systemc_cycle_accounted_evidence"),
+        backend_ref,
+    )
+    sha = _first_string(
+        row.get("systemc_cycle_evidence_sha256"),
+        row.get("systemc_cycle_accounted_evidence_sha256"),
+        row_hashes.get("systemc_cycle_evidence_sha256"),
+        row_hashes.get("systemc_cycle_accounted_evidence_sha256"),
+        run.get("systemc_cycle_evidence_sha256"),
+        run.get("systemc_cycle_accounted_evidence_sha256"),
+        run_hashes.get("systemc_cycle_evidence_sha256"),
+        run_hashes.get("systemc_cycle_accounted_evidence_sha256"),
+        backend_sha,
+    )
+    return ref, sha
+
+
+def _load_systemc_cycle_evidence(
+    candidate_id: str,
+    run: Mapping[str, Any],
+    row: Mapping[str, Any],
+    backend_collection: Mapping[str, Any] | None,
+    *,
+    manifest_dir: Path,
+    repo_root: Path | None,
+) -> tuple[Path | None, Mapping[str, Any] | None, str | None, list[str]]:
+    ref, declared_sha = _systemc_cycle_ref_from(candidate_id, run, row, backend_collection)
+    reasons: list[str] = []
+    if not ref:
+        return None, None, None, ["missing_systemc_cycle_evidence", "missing_systemc_cycle_evidence_ref"]
+
+    path = resolve_ref(ref, base_dir=manifest_dir, repo_root=repo_root)
+    computed_sha = sha256_file(path)
+    evidence_sha = computed_sha or declared_sha
+    payload: Mapping[str, Any] | None = None
+
+    if path is None or not path.exists() or not path.is_file():
+        reasons.append("missing_systemc_cycle_evidence_artifact")
+    else:
+        try:
+            payload = load_json(path)
+        except Exception as exc:
+            reasons.append(f"systemc_cycle_evidence_load_failed:{exc}")
+
+    if declared_sha and computed_sha and declared_sha != computed_sha:
+        reasons.append("systemc_cycle_evidence_sha256_mismatch")
+    if not evidence_sha:
+        reasons.append("missing_systemc_cycle_evidence_sha256")
+    if isinstance(payload, Mapping):
+        payload_candidate = payload.get("candidate_id")
+        if payload_candidate is None:
+            reasons.append("systemc_cycle_evidence_candidate_id_missing")
+        elif str(payload_candidate) != candidate_id:
+            reasons.append("systemc_cycle_evidence_candidate_id_mismatch")
+    return path, payload, evidence_sha, reasons
 
 
 def _load_b4_report(
@@ -277,7 +393,33 @@ def build_decision(
             repo_root=repo_root,
         )
         reasons.extend(b4_load_reasons)
-        reasons.extend(_strict_b4_reasons(b4_payload, policy))
+        strict_b4_reasons = _strict_b4_reasons(b4_payload, policy)
+        reasons.extend(strict_b4_reasons)
+        systemc_cycle_path, systemc_cycle_payload, systemc_cycle_sha, systemc_cycle_reasons = _load_systemc_cycle_evidence(
+            candidate_id,
+            run,
+            row,
+            backend_collection,
+            manifest_dir=manifest_dir,
+            repo_root=repo_root,
+        )
+        reasons.extend(systemc_cycle_reasons)
+
+        evidence_tier, classifier_reasons = evidence_tiers.classify_candidate_evidence(
+            same_candidate_evidence_only=row.get("same_candidate_evidence_only") is not False,
+            stage_c_correct=not stage_c_reasons,
+            strict_b4_evidence=not b4_load_reasons and not strict_b4_reasons,
+            stage_d_policy_satisfied=not stage_d_reasons,
+            systemc_cycle_evidence=not systemc_cycle_reasons,
+            projection_screened=(
+                row.get("screening_rank") is not None
+                or row.get("final_observed_conclusion_ceiling") not in (None, "", "no_evidence")
+                or b4_payload is not None
+            ),
+            catalog_provenance=bool(row.get("catalog_entry_id") or row.get("microarchitecture_catalog_id")),
+            existing_blockers=reasons,
+        )
+        reasons.extend(classifier_reasons)
 
         unique_reasons = []
         for reason in reasons:
@@ -289,11 +431,17 @@ def build_decision(
             "stage_c_report": str(stage_c_path) if stage_c_path else row.get("stage_c_report_ref"),
             "stage_d_report": str(stage_d_path) if stage_d_path else row.get("stage_d_report_ref"),
             "b4_report": str(b4_path) if b4_path else run.get("gem5_b4_report"),
+            "systemc_cycle_evidence": (
+                str(systemc_cycle_path)
+                if systemc_cycle_path
+                else _systemc_cycle_ref_from(candidate_id, run, row, backend_collection)[0]
+            ),
         }
         evidence_hashes = {
             "stage_c_report_sha256": sha256_file(stage_c_path),
             "stage_d_report_sha256": sha256_file(stage_d_path),
             "b4_report_sha256": sha256_file(b4_path),
+            "systemc_cycle_evidence_sha256": systemc_cycle_sha,
         }
         rank_row = {
             "candidate_id": candidate_id,
@@ -301,12 +449,15 @@ def build_decision(
             "workload_id": row.get("workload_id"),
             "case_id": row.get("case_id"),
             "screening_rank": row.get("screening_rank"),
+            "evidence_tier": evidence_tier,
             "strict_b4_event_delta_ticks": _metric(b4_payload, "candidate_device_event_delta_ticks"),
             "successful_dma_transfer_bytes": _metric(b4_payload, "successful_dma_transfer_bytes"),
             "stage_d_tier": final_policy.stage_d_tier_from_evidence(stage_d_payload),
             "stage_d_claim_ceiling": stage_d_payload.get("claim_ceiling") if isinstance(stage_d_payload, Mapping) else None,
+            "systemc_cycle_evidence_ref": evidence_refs["systemc_cycle_evidence"],
+            "systemc_cycle_evidence_sha256": systemc_cycle_sha,
             "final_observed_conclusion_ceiling": row.get("final_observed_conclusion_ceiling"),
-            "eligible": not unique_reasons,
+            "eligible": evidence_tier == evidence_tiers.FINAL_BEST_ELIGIBLE and not unique_reasons,
             "ineligible_reasons": unique_reasons,
             "evidence_refs": evidence_refs,
             "evidence_hashes": evidence_hashes,
@@ -329,8 +480,11 @@ def build_decision(
             "case_id": winner_row.get("case_id"),
             "decision_rank": 1,
             "claim_label": final_policy.claim_label_for_policy(winner_row, policy),
+            "evidence_tier": winner_row.get("evidence_tier"),
             "strict_b4_event_delta_ticks": winner_row.get("strict_b4_event_delta_ticks"),
             "stage_d_tier": winner_row.get("stage_d_tier"),
+            "systemc_cycle_evidence_ref": winner_row.get("systemc_cycle_evidence_ref"),
+            "systemc_cycle_evidence_sha256": winner_row.get("systemc_cycle_evidence_sha256"),
             "evidence_refs": winner_row.get("evidence_refs"),
             "evidence_hashes": winner_row.get("evidence_hashes"),
         }
@@ -363,8 +517,9 @@ def build_decision(
         ),
         "non_claims": list(policy.get("non_claims", [])) + [
             "bounded_proxy_rerank_is_not_final_best_architecture",
-            "no_final_best_without_same_candidate_stage_c_stage_d_strict_b4",
+            "no_final_best_without_same_candidate_stage_c_stage_d_strict_b4_and_systemc_cycle_evidence",
             "no_hardware_cycle_accuracy_claim_from_gem5_event_ticks",
+            "systemc_cycle_accounted_is_not_rtl_cycle_accurate_timing",
         ],
     }
     if output_ref is not None:
