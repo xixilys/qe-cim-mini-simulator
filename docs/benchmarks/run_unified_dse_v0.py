@@ -193,6 +193,164 @@ def _load_json_if_provided(path: Path | None) -> dict[str, Any] | None:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def _row_candidate_id(row: Mapping[str, Any]) -> str | None:
+    for key in ("systemc_feedback_contract", "candidate_descriptor"):
+        value = row.get(key)
+        if isinstance(value, Mapping) and value.get("candidate_id"):
+            return str(value["candidate_id"])
+    if row.get("candidate_id"):
+        return str(row["candidate_id"])
+    return None
+
+
+def _row_workload_id(row: Mapping[str, Any]) -> str | None:
+    workload = row.get("workload")
+    if isinstance(workload, Mapping) and workload.get("workload_id"):
+        return str(workload["workload_id"])
+    descriptor = row.get("candidate_descriptor")
+    if isinstance(descriptor, Mapping):
+        workload_identity = descriptor.get("workload_identity")
+        if isinstance(workload_identity, Mapping) and workload_identity.get("workload_id"):
+            return str(workload_identity["workload_id"])
+    return None
+
+
+def _row_case_id(row: Mapping[str, Any]) -> str | None:
+    qe_anchor_refs = row.get("qe_anchor_refs")
+    if isinstance(qe_anchor_refs, Mapping) and qe_anchor_refs.get("case_id"):
+        return str(qe_anchor_refs["case_id"])
+    descriptor = row.get("candidate_descriptor")
+    if isinstance(descriptor, Mapping):
+        domain_extension = descriptor.get("domain_extension")
+        if isinstance(domain_extension, Mapping):
+            qe_extension = domain_extension.get("qe")
+            if isinstance(qe_extension, Mapping) and qe_extension.get("case_id"):
+                return str(qe_extension["case_id"])
+    return _row_workload_id(row)
+
+
+def _known_result_rows(results: Sequence[Mapping[str, Any]]) -> dict[str, Mapping[str, Any]]:
+    known: dict[str, Mapping[str, Any]] = {}
+    for row in results:
+        candidate_id = _row_candidate_id(row)
+        if candidate_id:
+            if candidate_id in known:
+                raise ValueError(f"duplicate evaluated candidate ID: {candidate_id}")
+            known[candidate_id] = row
+    return known
+
+
+def _selected_candidate_ids(multi_fidelity_plan: Mapping[str, Any] | None) -> set[str]:
+    if not isinstance(multi_fidelity_plan, Mapping):
+        return set()
+    selected = multi_fidelity_plan.get("selected_candidates")
+    if not isinstance(selected, list):
+        return set()
+    return {
+        str(item["candidate_id"])
+        for item in selected
+        if isinstance(item, Mapping) and item.get("candidate_id")
+    }
+
+
+def _validate_selected_candidate_context(
+    *,
+    results: Sequence[Mapping[str, Any]],
+    candidate_id: str,
+    artifact_label: str,
+    multi_fidelity_plan: Mapping[str, Any] | None = None,
+) -> Mapping[str, Any]:
+    known = _known_result_rows(results)
+    if candidate_id not in known:
+        raise ValueError(f"{artifact_label} targets unknown evaluated candidate: {candidate_id}")
+    selected_ids = _selected_candidate_ids(multi_fidelity_plan)
+    if selected_ids and candidate_id not in selected_ids:
+        raise ValueError(f"{artifact_label} targets unselected candidate: {candidate_id}")
+    return known[candidate_id]
+
+
+def _validate_qe_correctness_join(
+    *,
+    results: Sequence[Mapping[str, Any]],
+    qe_correctness_report: Mapping[str, Any],
+    multi_fidelity_plan: Mapping[str, Any] | None = None,
+) -> None:
+    candidate_id = str(qe_correctness_report.get("candidate_id"))
+    row = _validate_selected_candidate_context(
+        results=results,
+        candidate_id=candidate_id,
+        artifact_label="QE correctness report",
+        multi_fidelity_plan=multi_fidelity_plan,
+    )
+    workload_id = str(qe_correctness_report.get("workload_id"))
+    case_id = str(qe_correctness_report.get("case_id"))
+    row_workload_id = _row_workload_id(row)
+    row_case_id = _row_case_id(row)
+    if workload_id != row_workload_id:
+        raise ValueError(
+            "QE correctness report workload_id does not match evaluated row: "
+            f"{workload_id!r} != {row_workload_id!r}"
+        )
+    if case_id != row_case_id:
+        raise ValueError(
+            "QE correctness report case_id does not match evaluated row: "
+            f"{case_id!r} != {row_case_id!r}"
+        )
+
+
+def _same_ref(left: Any, right: Path | None) -> bool:
+    if right is None:
+        return left in (None, "")
+    if not isinstance(left, str) or not left:
+        return False
+    left_path = Path(left).expanduser()
+    right_path = right.expanduser()
+    try:
+        return left_path.resolve(strict=False) == right_path.resolve(strict=False)
+    except OSError:
+        return str(left_path) == str(right_path)
+
+
+def _validate_implementation_evidence_join(
+    *,
+    results: Sequence[Mapping[str, Any]],
+    implementation_evidence: Mapping[str, Any],
+    qe_correctness_report: Mapping[str, Any] | None = None,
+    qe_correctness_report_ref: Path | None = None,
+    multi_fidelity_plan: Mapping[str, Any] | None = None,
+) -> None:
+    candidate_id = str(implementation_evidence.get("candidate_id"))
+    _validate_selected_candidate_context(
+        results=results,
+        candidate_id=candidate_id,
+        artifact_label="implementation evidence",
+        multi_fidelity_plan=multi_fidelity_plan,
+    )
+    correctness_dependency = implementation_evidence.get("correctness_dependency")
+    if not isinstance(correctness_dependency, Mapping):
+        raise ValueError("implementation evidence correctness_dependency must be a mapping")
+    dependency_claim = correctness_dependency.get("qe_equivalent_scf_claim") is True
+    dependency_ref = correctness_dependency.get("qe_correctness_report_ref")
+    if qe_correctness_report is None:
+        if dependency_claim:
+            raise ValueError("implementation evidence cannot claim QE dependency without Stage C report")
+        if dependency_ref not in (None, ""):
+            raise ValueError("implementation evidence references Stage C report that was not provided")
+        return
+
+    stage_c_candidate_id = str(qe_correctness_report.get("candidate_id"))
+    if candidate_id != stage_c_candidate_id:
+        raise ValueError(
+            "implementation evidence candidate_id does not match QE correctness report: "
+            f"{candidate_id!r} != {stage_c_candidate_id!r}"
+        )
+    stage_c_claim = qe_correctness_report.get("qe_equivalent_scf_claim") is True
+    if dependency_claim and not stage_c_claim:
+        raise ValueError("implementation evidence claims QE dependency but Stage C report did not pass")
+    if dependency_ref not in (None, "") and not _same_ref(dependency_ref, qe_correctness_report_ref):
+        raise ValueError("implementation evidence QE correctness report ref does not match selected Stage C report")
+
+
 def _generate_design_points_with_metadata(
     spec: architecture_space.DesignSpaceSpec,
     max_design_points: int,
@@ -892,6 +1050,21 @@ def main(argv: list[str] | None = None) -> int:
         )
         _write_json(args.output_dir / MULTI_FIDELITY_PLAN_NAME, multi_fidelity_plan)
 
+    if qe_correctness_report is not None:
+        _validate_qe_correctness_join(
+            results=results,
+            qe_correctness_report=qe_correctness_report,
+            multi_fidelity_plan=multi_fidelity_plan,
+        )
+    if implementation_evidence is not None:
+        _validate_implementation_evidence_join(
+            results=results,
+            implementation_evidence=implementation_evidence,
+            qe_correctness_report=qe_correctness_report,
+            qe_correctness_report_ref=args.qe_correctness_report,
+            multi_fidelity_plan=multi_fidelity_plan,
+        )
+
     stage_b0_descriptor_manifest = None
     if args.emit_stage_b0_descriptors:
         stage_b0_descriptor_manifest = stage_b0_descriptors.emit_stage_b0_descriptors(
@@ -963,7 +1136,15 @@ def main(argv: list[str] | None = None) -> int:
             results,
             result_bundle_ref=RESULT_JSON_NAME,
             calibration_model_ref=("calibration_model_v0.json" if evidence_rows else None),
-            evidence_refs=[str(args.backend_report)] if args.backend_report is not None else [],
+            evidence_refs=[
+                str(path)
+                for path in (
+                    args.backend_report,
+                    args.qe_correctness_report,
+                    args.implementation_evidence,
+                )
+                if path is not None
+            ],
         )
         _write_json(args.output_dir / ADJUDICATION_SUMMARY_NAME, adjudication_summary)
         release_evidence_refs = []
@@ -973,6 +1154,10 @@ def main(argv: list[str] | None = None) -> int:
             release_evidence_refs.append(str(args.systemc_feedback))
         if args.gem5_smoke_report is not None:
             release_evidence_refs.append(str(args.gem5_smoke_report))
+        if args.qe_correctness_report is not None:
+            release_evidence_refs.append(str(args.qe_correctness_report))
+        if args.implementation_evidence is not None:
+            release_evidence_refs.append(str(args.implementation_evidence))
         release_bundle.emit_release_bundle(
             args.output_dir,
             stage_status_ref=(FULL_STAGE_STATUS_NAME if args.emit_full_stage_status else None),

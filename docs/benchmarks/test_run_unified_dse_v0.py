@@ -41,6 +41,69 @@ class RunUnifiedDseV0Tests(unittest.TestCase):
             "3",
         ]
 
+    def stage_c_payload(
+        self,
+        candidate_id: str,
+        *,
+        workload_id: str = "si4_pbe_uspp_small",
+        case_id: str = "si4_pbe_uspp_small",
+    ) -> dict[str, Any]:
+        return {
+            "schema_version": "qe_dse_qe_equivalent_correctness_report_v0",
+            "execution_status": "executed",
+            "claim_ceiling": "qe_equivalent_scf_correctness_only",
+            "report_id": "stage_c_correctness_fixture",
+            "candidate_id": candidate_id,
+            "workload_id": workload_id,
+            "case_id": case_id,
+            "qe_tolerance_schema_id": "qe_gold_numerical_tolerance_schema_v0",
+            "correctness_status": "pass",
+            "qe_equivalent_scf_claim": True,
+            "compare_report": {
+                "schema_name": "qe_gold_numerical_tolerance_schema_v0",
+                "schema_version": "2026-04-13",
+                "overall_pass": True,
+                "summary": {"status": "pass", "failed_required_fields": []},
+            },
+            "evidence_refs": {
+                "baseline": "artifacts/baseline/si4.gold.json",
+                "candidate": "artifacts/candidate/si4.candidate.json",
+                "compare_report": "artifacts/compare/si4.compare.json",
+            },
+        }
+
+    def stage_d_payload(
+        self,
+        candidate_id: str,
+        *,
+        qe_claim: bool = False,
+        qe_correctness_report_ref: str | None = None,
+    ) -> dict[str, Any]:
+        return {
+            "schema_version": "qe_dse_fpga_asic_implementation_evidence_v0",
+            "execution_status": "external_evidence_referenced",
+            "evidence_id": "stage_d_hls_fixture",
+            "candidate_id": candidate_id,
+            "implementation_target_class": "fpga",
+            "evidence_kind": "hls_synthesis",
+            "evidence_status": "available",
+            "claim_ceiling": "hls_synthesis_only",
+            "artifact_refs": {
+                "hls_report": "artifacts/implementation/f1_hls_report.json",
+            },
+            "metrics": {
+                "estimated_lut": 1000,
+                "estimated_bram": 8,
+            },
+            "correctness_dependency": {
+                "qe_equivalent_scf_claim": qe_claim,
+                "qe_correctness_report_ref": qe_correctness_report_ref,
+            },
+            "final_public_family_winner": None,
+            "public_winner_claim": False,
+            "production_release_ready": False,
+        }
+
     def assert_no_generic_qe_leak(self, root: Path) -> None:
         allowed_empty = {None, "", "None", "null", "not_applicable", False}
 
@@ -1006,6 +1069,32 @@ class RunUnifiedDseV0Tests(unittest.TestCase):
                     ]
                 )
 
+    def test_cli_rejects_qe_correctness_report_with_wrong_workload_join(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_dir = Path(tmpdir)
+            report_path = out_dir / "wrong_workload_qe_correctness_report.json"
+            candidate_id = (
+                "si4_pbe_uspp_small__F1__cpu_only__single_hotpath__fit_first__"
+                "single_hotpath_partition"
+            )
+            report_path.write_text(
+                json.dumps(self.stage_c_payload(candidate_id, workload_id="wrong_workload")) + "\n",
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(ValueError, "workload_id does not match"):
+                MODULE_ANY.main(
+                    self.make_base_args(out_dir)
+                    + [
+                        "--source-kind",
+                        "stub",
+                        "--max-design-points",
+                        "1",
+                        "--qe-correctness-report",
+                        str(report_path),
+                    ]
+                )
+
     def test_cli_validates_implementation_evidence_and_marks_stage_d_referenced(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             out_dir = Path(tmpdir)
@@ -1069,6 +1158,107 @@ class RunUnifiedDseV0Tests(unittest.TestCase):
             self.assertEqual(stage_d["status"], "external_implementation_evidence_referenced")
             self.assertEqual(stage_d["claim_ceiling"], "hls_synthesis_only")
             self.assertFalse(stage_d["qe_equivalent_scf_dependency_met"])
+
+    def test_cli_rejects_implementation_evidence_dependency_candidate_mismatch(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_dir = Path(tmpdir)
+            stage_c_path = out_dir / "qe_correctness_report.json"
+            stage_d_path = out_dir / "implementation_evidence.json"
+            stage_c_candidate = (
+                "si4_pbe_uspp_small__F1__cpu_only__single_hotpath__fit_first__"
+                "single_hotpath_partition"
+            )
+            stage_d_candidate = (
+                "si4_pbe_uspp_small__F1__cpu_only__single_hotpath__fit_first__"
+                "operator_build_fused__diag__refresh"
+            )
+            stage_c_path.write_text(
+                json.dumps(self.stage_c_payload(stage_c_candidate), indent=2) + "\n",
+                encoding="utf-8",
+            )
+            stage_d_path.write_text(
+                json.dumps(
+                    self.stage_d_payload(
+                        stage_d_candidate,
+                        qe_claim=True,
+                        qe_correctness_report_ref=str(stage_c_path),
+                    ),
+                    indent=2,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(ValueError, "candidate_id does not match QE correctness report"):
+                MODULE_ANY.main(
+                    self.make_base_args(out_dir)
+                    + [
+                        "--source-kind",
+                        "stub",
+                        "--max-design-points",
+                        "2",
+                        "--qe-correctness-report",
+                        str(stage_c_path),
+                        "--implementation-evidence",
+                        str(stage_d_path),
+                    ]
+                )
+
+    def test_cli_release_bundle_links_stage_c_and_d_evidence_refs(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_dir = Path(tmpdir) / "out"
+            evidence_dir = Path(tmpdir) / "evidence"
+            evidence_dir.mkdir()
+            stage_c_path = evidence_dir / "qe_correctness_report.json"
+            stage_d_path = evidence_dir / "implementation_evidence.json"
+            candidate_id = (
+                "si4_pbe_uspp_small__F1__cpu_only__single_hotpath__fit_first__"
+                "single_hotpath_partition"
+            )
+            stage_c_path.write_text(
+                json.dumps(self.stage_c_payload(candidate_id), indent=2) + "\n",
+                encoding="utf-8",
+            )
+            stage_d_path.write_text(
+                json.dumps(
+                    self.stage_d_payload(
+                        candidate_id,
+                        qe_claim=True,
+                        qe_correctness_report_ref=str(stage_c_path),
+                    ),
+                    indent=2,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            rc = MODULE_ANY.main(
+                [
+                    "--design-space-spec",
+                    str(DESIGN_SPACE_PATH),
+                    "--workload",
+                    str(FIXTURE_DIR / "minimal_workload.json"),
+                    "--output-dir",
+                    str(out_dir),
+                    "--source-kind",
+                    "stub",
+                    "--max-design-points",
+                    "1",
+                    "--qe-correctness-report",
+                    str(stage_c_path),
+                    "--implementation-evidence",
+                    str(stage_d_path),
+                    "--emit-release-bundle",
+                    "--emit-full-stage-status",
+                    "--dry-run",
+                ]
+            )
+
+            self.assertEqual(rc, 0)
+            release = json.loads((out_dir / "frontend_release_bundle_v0.json").read_text(encoding="utf-8"))
+            self.assertIn(str(stage_c_path), release["evidence_refs"])
+            self.assertIn(str(stage_d_path), release["evidence_refs"])
+            MODULE_ANY.release_bundle.validate_release_bundle_links(release, out_dir)
 
     def test_cli_rejects_implementation_evidence_with_public_winner_claim(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

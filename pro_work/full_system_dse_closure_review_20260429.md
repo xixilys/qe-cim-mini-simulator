@@ -180,17 +180,432 @@ Do not use these phrases unless a separate validated artifact exists:
 
 ## 4. Integration checklist for the next merge
 
-- [ ] Baseline F2 artifacts keep `architecture_template_ref`, `mapping_ref`, and
+- [x] Baseline F2 artifacts keep `architecture_template_ref`, `mapping_ref`, and
       executable `systemc_config` distinct.
-- [ ] SystemC B2 reports include metrics and non-claims; descriptor-only rows are
+- [x] SystemC B2 reports include metrics and non-claims; descriptor-only rows are
       not promoted as executed.
-- [ ] FPGAAccelerator SimObject params, config script options, environment mode,
+- [x] FPGAAccelerator SimObject params, config script options, environment mode,
       and report mode are aligned.
-- [ ] B4 runner refuses missing bridge refs and missing bridge artifacts.
-- [ ] B4 accepted reports include required control-path and host/SystemC/DMA
+- [x] B4 runner refuses missing bridge refs and missing bridge artifacts.
+- [x] B4 accepted reports include required control-path and host/SystemC/DMA
       metrics.
-- [ ] Bridge provenance distinguishes standalone, smoke, timed proxy, explicit
+- [x] Bridge provenance distinguishes standalone, smoke, timed proxy, explicit
       bridge, and invalid-preserved report paths.
-- [ ] Feedback ingest never raises claim ceilings.
-- [ ] Release bundle includes a claim ceiling matrix and forbids final winner /
-      production-readiness claims.
+- [x] Feedback ingest never raises claim ceilings.
+- [x] Release/E2E package emits a claim ceiling matrix, and release bundle /
+      status artifacts forbid final winner or production-readiness claims.
+
+## 5. 2026-04-30 Option A+ B4 materialization closure
+
+Implementation closure for the real-gem5/B4 gate added producer-side B4 request
+materialization in `docs/benchmarks/run_qe_fpga_dse_e2e_v0.py` without changing
+the request/report schema:
+
+- B4-added refs (`gem5_executable`, `gem5_config`,
+  `systemc_bridge_library`) are resolved against the repository root before the
+  backend runner sees the request.
+- Copied Stage-B0 file refs (`application_graph`, `architecture_template`,
+  `mapping`, `architecture_config`, `systemc_config`) are resolved against the
+  selected Stage-B0 artifact root.
+- Scalar/non-path refs remain unchanged, and the original Stage-B0/B2 request
+  artifact remains relative/unchanged.
+- Bridge provenance comparisons now normalize equivalent filesystem spelling
+  while still hard-failing true bridge mismatches.
+
+Current verification evidence after the Top-K/B4 materialization update:
+
+```bash
+python3 -m unittest \
+  docs.benchmarks.test_run_unified_dse_v0 \
+  docs.benchmarks.test_backend_execution_runner \
+  docs.benchmarks.test_run_qe_fpga_dse_e2e_v0 \
+  docs.benchmarks.test_fpga_accelerator_simobject_contract
+```
+
+Result: covered by the later full-suite command in Section 7.
+
+```bash
+python3 docs/benchmarks/run_qe_fpga_dse_e2e_v0.py \
+  --output-dir tmp/qe_fpga_dse_top2_real_b4_probe \
+  --max-design-points 4 \
+  --shortlist-size 2 \
+  --top-k 2 \
+  --b4-top-n 2 \
+  --timeout-s 20 \
+  --require-real-gem5-b4 \
+  --gem5-timeout-s 60 \
+  --gem5-executable gem5_integration/gem5/build/X86/gem5.opt \
+  --gem5-b4-config gem5_integration/configs/fpga/simple_fpga_test.py \
+  --systemc-bridge-library gem5_integration/systemc_model/build/libgem5_systemc_bridge.a
+```
+
+Result artifacts:
+
+- `tmp/qe_fpga_dse_top2_real_b4_probe/qe_fpga_dse_e2e_manifest_v0.json`
+- `tmp/qe_fpga_dse_top2_real_b4_probe/qe_fpga_dse_performance_summary_v0.json`
+- `tmp/qe_fpga_dse_top2_real_b4_probe/backend_report_collection_v0.json`
+- `tmp/qe_fpga_dse_top2_real_b4_probe/reranked_results_v0.json`
+- `tmp/qe_fpga_dse_top2_real_b4_probe/claim_ceiling_status_matrix_v0.json`
+- `tmp/qe_fpga_dse_top2_real_b4_probe/candidate_runs/<candidate>/b4_materialized/backend_execution_request.json`
+- `tmp/qe_fpga_dse_top2_real_b4_probe/candidate_runs/<candidate>/b4_materialized/timing_sidecar.json`
+- `tmp/qe_fpga_dse_top2_real_b4_probe/candidate_runs/<candidate>/gem5_systemc_timed_proxy_report.json`
+
+The B4 reports are executed `gem5_systemc_timed_proxy_only` timed-proxy reports
+with explicit bridge and timing-sidecar provenance. `metrics.gem5_tick_observed`
+is preserved as gem5 harness provenance, while `metrics.cycle_proxy` follows the
+candidate-specific SystemC timing sidecar so Top-K candidates remain
+distinguishable:
+
+- F3 candidate: `cycle_proxy=7360210`, `successful_dma_transfer_bytes=3932160`.
+- F2 candidate: `cycle_proxy=9583067`, `successful_dma_transfer_bytes=2949120`.
+
+This closes the materialization bug for repo-relative B4 CLI paths. It does not
+raise the claim boundary: there is still no QE numerical-equivalence claim, no
+cycle-accuracy claim, and no RTL/HLS/board/ASIC/physical-FPGA performance claim.
+
+## 6. 2026-04-30 Stage C/D evidence and status-matrix closure
+
+Implementation closure for the Stage C/D evidence gap adds producer
+materializers and consumer hard gates without changing existing schemas:
+
+- `materialize_qe_stage_c_correctness_v0.py` converts an externally generated
+  `qe_gold_gate_summary_v0.json` into per-candidate
+  `qe_dse_qe_equivalent_correctness_report_v0` reports plus a
+  `stage_c_correctness_matrix_v0.json`.
+- `materialize_qe_stage_d_implementation_evidence_v0.py` converts externally
+  supplied FPGA/ASIC evidence refs into
+  `qe_dse_fpga_asic_implementation_evidence_v0`. Placeholder/template/empty
+  evidence is downgraded to `implementation_projection` / `partial`, not
+  promoted to HLS/RTL/board/ASIC evidence.
+- `run_unified_dse_v0.py` now validates that Stage C/D artifacts join to an
+  evaluated candidate, and to a selected candidate when a multi-fidelity plan is
+  emitted. Stage D correctness dependencies must match the same Stage C
+  candidate/report.
+- `run_qe_fpga_dse_e2e_v0.py` passes Stage C/D refs into the frontend when
+  provided and always emits `claim_ceiling_status_matrix_v0.json` /
+  `claim_ceiling_status_matrix_v0.md` next to the E2E manifest.
+- `build_qe_dse_claim_ceiling_status_matrix_v0.py` centralizes the evidence
+  status row while keeping `adjudicator_permission_scope=not_evaluated`.
+
+The new central matrix is evidence-status only. It reports the observed ceiling,
+for example
+`qe_equivalent_scf_correctness_plus_partial_implementation_projection_only`,
+and keeps blockers such as `stage_d_implementation_evidence_not_available`
+visible. It is not permission to claim cycle accuracy, board speedup, a final
+family winner, or production readiness.
+
+Verification evidence:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 python3 -m compileall -q backend docs/benchmarks
+
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest \
+  docs.benchmarks.test_stage_c_qe_correctness_materializer \
+  docs.benchmarks.test_stage_d_implementation_evidence_materializer \
+  docs.benchmarks.test_qe_dse_claim_ceiling_status_matrix_v0 \
+  docs.benchmarks.test_run_unified_dse_v0 \
+  docs.benchmarks.test_run_qe_fpga_dse_e2e_v0 \
+  docs.benchmarks.test_backend_execution_runner \
+  docs.benchmarks.test_fpga_accelerator_simobject_contract
+```
+
+Result at the time of this lane: 84 tests OK. The later Top-K/B4 closure in
+Section 7 supersedes this with 85 tests OK after adding the screening-rank and
+timing-sidecar regressions.
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 python3 docs/benchmarks/run_qe_fpga_dse_e2e_v0.py \
+  --output-dir tmp/qe_fpga_dse_stage_cd_probe \
+  --preferred-family F1 \
+  --max-design-points 1 \
+  --source-kind stub \
+  --timeout-s 10 \
+  --qe-correctness-report tmp/qe_fpga_dse_stage_cd_evidence/si4_pbe_uspp_small__F1__cpu_only__single_hotpath__fit_first__single_hotpath_partition.stage_c.json \
+  --implementation-evidence tmp/qe_fpga_dse_stage_cd_evidence/si4_pbe_uspp_small__F1__cpu_only__single_hotpath__fit_first__single_hotpath_partition.stage_d.json \
+  --emit-full-stage-status \
+  --include-gem5-smoke
+```
+
+Result artifacts:
+
+- `tmp/qe_fpga_dse_stage_cd_probe/qe_fpga_dse_e2e_manifest_v0.json`
+- `tmp/qe_fpga_dse_stage_cd_probe/qe_fpga_dse_performance_summary_v0.json`
+- `tmp/qe_fpga_dse_stage_cd_probe/claim_ceiling_status_matrix_v0.json`
+- `tmp/qe_fpga_dse_stage_cd_probe/claim_ceiling_status_matrix_v0.md`
+
+Observed matrix result:
+
+- `final_observed_conclusion_ceiling`:
+  `qe_equivalent_scf_correctness_plus_partial_implementation_projection_only`
+- `blockers`: `stage_d_implementation_evidence_not_available`
+
+This closes the release-bundle/status-matrix gap. It does not close cycle
+accuracy, board measurement, HLS/RTL implementation, ASIC PPA, final public
+winner, or production-readiness gates.
+
+## 7. 2026-04-30 Top-K DSE to candidate-specific gem5/SystemC B4 closure
+
+The implemented closed loop now avoids the prior cross-candidate evidence
+splicing failure:
+
+1. Unified DSE emits a multi-fidelity plan and Stage-B0 backend requests.
+2. The E2E runner selects Top-K candidate requests by `screening_rank`, not by
+   descriptor manifest order.
+3. Each selected candidate gets a separate B2 `systemc_timed_functional` run
+   under `candidate_runs/<candidate>/`.
+4. The first `--b4-top-n` ranked candidates get candidate-specific
+   `b4_materialized/` artifacts: B4 request, timing sidecar, generated shim, and
+   manifest.
+5. The backend runner refuses B4 unless the request has an explicit SystemC
+   bridge artifact and timing sidecar. The gem5 config receives the sidecar via
+   `QEBS_TIMING_SIDECAR_JSON`.
+6. The E2E runner writes candidate-aligned `backend_report_collection_v0.json`,
+   `reranked_results_v0.json`, and a multi-row
+   `claim_ceiling_status_matrix_v0.json`.
+
+Fresh verification command:
+
+```bash
+python3 -m compileall -q backend docs/benchmarks gem5_integration/configs
+
+python3 -m unittest \
+  docs.benchmarks.test_stage_c_qe_correctness_materializer \
+  docs.benchmarks.test_stage_d_implementation_evidence_materializer \
+  docs.benchmarks.test_qe_dse_claim_ceiling_status_matrix_v0 \
+  docs.benchmarks.test_run_unified_dse_v0 \
+  docs.benchmarks.test_run_qe_fpga_dse_e2e_v0 \
+  docs.benchmarks.test_backend_execution_runner \
+  docs.benchmarks.test_fpga_accelerator_simobject_contract
+```
+
+Result: 85 tests OK.
+
+Fresh Top-K/B4 smoke:
+
+```bash
+python3 docs/benchmarks/run_qe_fpga_dse_e2e_v0.py \
+  --output-dir tmp/qe_fpga_dse_top2_real_b4_probe \
+  --max-design-points 4 \
+  --shortlist-size 2 \
+  --top-k 2 \
+  --b4-top-n 2 \
+  --timeout-s 20 \
+  --require-real-gem5-b4 \
+  --gem5-timeout-s 60 \
+  --gem5-executable gem5_integration/gem5/build/X86/gem5.opt \
+  --gem5-b4-config gem5_integration/configs/fpga/simple_fpga_test.py \
+  --systemc-bridge-library gem5_integration/systemc_model/build/libgem5_systemc_bridge.a
+```
+
+Observed bounded proxy ranking:
+
+| Observed rank | Candidate | Screening rank | B2 cycle proxy | B4 cycle proxy | B4 bytes moved |
+|---:|---|---:|---:|---:|---:|
+| 1 | `si4_pbe_uspp_small__F3__cpu_only__single_hotpath__fit_first__single_hotpath_partition` | 1 | 3639 | 7360210 | 3932160 |
+| 2 | `si4_pbe_uspp_small__F2__cpu_only__single_hotpath__fit_first__single_hotpath_partition` | 2 | 3639 | 9583067 | 2949120 |
+
+This is a bounded proxy result only. The observed best under this smoke is F3
+by the current B4 `cycle_proxy`, but the matrix still reports blockers:
+`missing_stage_c_qe_correctness_report` and
+`missing_stage_d_implementation_evidence`. Therefore it is not a thesis-grade
+architecture winner, not a QE-equivalent SCF result, not a cycle-accurate result,
+and not board/HLS/RTL/ASIC evidence.
+
+## 8. 2026-04-30 Ralph closure: per-candidate evidence resolver and timing-source gate
+
+The Ralph-only follow-up closed the remaining trust plumbing without launching a
+team runtime:
+
+1. E2E Top-K status matrices now accept repeatable candidate-scoped evidence
+   bindings:
+   - `--qe-correctness-report-for '<candidate_id>=stage_c.json'`
+   - `--implementation-evidence-for '<candidate_id>=stage_d.json'`
+2. Each mapped artifact must have an internal `candidate_id` equal to the map
+   key. A mismatch is a hard error, so Stage C/D evidence cannot be spliced
+   across F2/F3 rows.
+3. Legacy singular `--qe-correctness-report` and `--implementation-evidence`
+   remain compatible for one-row/exact-match runs, but unmatched singular
+   artifacts are treated as absent for other Top-K rows.
+4. Stage C materialization can now use an explicit candidate map when old gold
+   rows lack `candidate_id`; missing or ambiguous map matches fail loudly.
+5. Stage D materialization can now emit a multi-candidate evidence matrix and
+   validates per-candidate Stage C dependencies.
+6. B4 reports now expose `metrics.cycle_source`. Current simple-gem5 B4 runs
+   report `timing_sidecar_projection`, with `gem5_tick_observed` retained as
+   provenance. The stricter `gem5_event_timed_device_observed` source is
+   rejected unless the report also proves nonzero MMIO activity,
+   `event_timed_device_activity_observed=true`, and a positive candidate event
+   delta.
+
+Fresh guarded Top-K/B4 run after the Ralph changes:
+
+```bash
+python3 docs/benchmarks/run_qe_fpga_dse_e2e_v0.py \
+  --output-dir tmp/ralph_dse_evidence_e2e_b4_no_stage_cd \
+  --top-k 2 \
+  --b4-top-n 2 \
+  --max-design-points 8 \
+  --require-real-gem5-b4 \
+  --gem5-timeout-s 45 \
+  --timeout-s 15
+```
+
+Observed matrix:
+
+| Candidate | Screening rank | B4 cycle proxy | Cycle source | Event-timed activity | Final ceiling | Blockers |
+|---|---:|---:|---|---|---|---|
+| `si4_pbe_uspp_small__F3__cpu_only__single_hotpath__fit_first__single_hotpath_partition` | 1 | 7360210 | `timing_sidecar_projection` | false | `gem5_systemc_timed_proxy_only` | `missing_stage_c_qe_correctness_report`, `missing_stage_d_implementation_evidence` |
+| `si4_pbe_uspp_small__F2__cpu_only__single_hotpath__fit_first__single_hotpath_partition` | 2 | 9583067 | `timing_sidecar_projection` | false | `gem5_systemc_timed_proxy_only` | `missing_stage_c_qe_correctness_report`, `missing_stage_d_implementation_evidence` |
+
+Current conclusion: F3 is still only the **bounded proxy triage leader** for the
+checked Top-2 B4 run. It is not a final architecture winner because Stage C
+QE-equivalent correctness and Stage D implementation evidence are still absent
+for the promoted F3/F2 candidates, and the B4 cycle number is sidecar-projected
+rather than event-timed/cycle-accurate hardware evidence.
+
+Fresh regression command:
+
+```bash
+python3 -m compileall -q backend docs/benchmarks gem5_integration/configs
+
+python3 -m unittest \
+  docs.benchmarks.test_qe_dse_claim_ceiling_status_matrix_v0 \
+  docs.benchmarks.test_stage_c_qe_correctness_materializer \
+  docs.benchmarks.test_stage_d_implementation_evidence_materializer \
+  docs.benchmarks.test_run_qe_fpga_dse_e2e_v0 \
+  docs.benchmarks.test_backend_execution_runner \
+  docs.benchmarks.test_fpga_accelerator_simobject_contract \
+  docs.benchmarks.test_run_unified_dse_v0
+```
+
+Result: 97 tests OK.
+
+## 9. 2026-04-30 Ralph closure: strict gem5 event/tick-observed B4 path
+
+The previous B4 lane was claim-safe but still sidecar-projected. This Ralph
+cycle adds and verifies the stricter closed-loop path requested for fast screen
+→ detailed simulation:
+
+1. B4 materialization emits `candidate_timing_profile_v0.json` beside the
+   timing sidecar and generated SystemC provenance files.
+2. The backend runner passes the profile into gem5 with
+   `QEBS_CANDIDATE_TIMING_PROFILE_JSON`,
+   `QEBS_STRICT_B4_RUNTIME_TIMING_INPUT`, and
+   `QEBS_STRICT_B4_EVENT_TIMING=1`.
+3. `FPGAAcceleratorSE` now consumes stable strict-event params, schedules
+   completion through a gem5 event, counts PIO reads/writes/polls, records
+   command/completion ticks, and writes
+   `qebs_gem5_fpga_se_event_report_v0`.
+4. `simple_fpga_test.py` strict mode runs
+   `gem5_integration/qe_test_program/fpga_strict_pio_test` rather than
+   `/bin/true`, maps the fixed PIO window in SE mode, and promotes
+   `metrics.cycle_source=gem5_event_timed_device_observed` only when the device
+   report has nonzero SimObject counters and a positive event delta.
+
+Fresh gem5 build:
+
+```bash
+cd gem5_integration/gem5
+scons build/X86/gem5.opt -j4
+```
+
+Result: build completed; only optional dependency warnings for png, HDF5, and
+capstone were emitted.
+
+Direct strict-device smoke used two runtime profiles and proved ordered
+candidate deltas:
+
+| Candidate | `cycle_source` | Device event delta ticks | SimObject reads | SimObject writes | Poll reads |
+|---|---|---:|---:|---:|---:|
+| `candidate_a` | `gem5_event_timed_device_observed` | 200000 | 7 | 3 | 1 |
+| `candidate_b` | `gem5_event_timed_device_observed` | 600000 | 8 | 3 | 2 |
+
+Backend-runner strict B4 smoke:
+
+```bash
+python3 backend/runners/run_backend_execution_v0.py \
+  --request tmp/ralph_strict_b4_backend/request.json \
+  --output tmp/ralph_strict_b4_backend/backend_report.json \
+  --mode gem5_systemc_timed_proxy \
+  --allow-execute \
+  --strict-report-validation \
+  --timeout-s 120
+```
+
+Observed: `execution_status=executed`,
+`cycle_source=gem5_event_timed_device_observed`,
+`candidate_device_event_delta_ticks=300000`,
+`observed_device_activity_source=gem5_simobject_counters`, 8 SimObject reads,
+3 writes, and 2 poll reads.
+
+Fresh Top-K strict B4 E2E command:
+
+```bash
+python3 docs/benchmarks/run_qe_fpga_dse_e2e_v0.py \
+  --output-dir tmp/qe_fpga_dse_event_tick_closed_loop_probe \
+  --max-design-points 4 \
+  --shortlist-size 2 \
+  --top-k 2 \
+  --b4-top-n 2 \
+  --timeout-s 30 \
+  --require-real-gem5-b4 \
+  --gem5-timeout-s 120 \
+  --gem5-executable gem5_integration/gem5/build/X86/gem5.opt \
+  --gem5-b4-config gem5_integration/configs/fpga/simple_fpga_test.py \
+  --systemc-bridge-library gem5_integration/systemc_model/build/libgem5_systemc_bridge.a \
+  --emit-full-stage-status \
+  --claim-ceiling-status-matrix claim_ceiling_status_matrix_v0.json
+```
+
+Observed Top-K strict B4 result:
+
+| Candidate | Screening rank | B4 `cycle_source` | Event delta ticks | SimObject reads/writes/polls | Matrix blockers |
+|---|---:|---|---:|---|---|
+| `si4_pbe_uspp_small__F3__cpu_only__single_hotpath__fit_first__single_hotpath_partition` | 1 | `gem5_event_timed_device_observed` | 7360210 | 23 / 3 / 17 | `missing_stage_c_qe_correctness_report`, `missing_stage_d_implementation_evidence` |
+| `si4_pbe_uspp_small__F2__cpu_only__single_hotpath__fit_first__single_hotpath_partition` | 2 | `gem5_event_timed_device_observed` | 9583067 | 27 / 3 / 21 | `missing_stage_c_qe_correctness_report`, `missing_stage_d_implementation_evidence` |
+
+Current conclusion: the requested closed loop now runs through a real gem5
+device event/tick-observed proxy for the Top-K B4 candidates. F3 remains the
+bounded proxy triage leader for this run. It is still not a final architecture
+winner, not QE-equivalent SCF evidence, and not cycle-accurate hardware
+evidence until same-candidate Stage C correctness and Stage D implementation
+artifacts are supplied and pass the matrix gates.
+
+## 10. 2026-04-30 Final-best architecture evidence-policy closure
+
+A final-best claim now has a separate policy/adjudicator layer instead of
+reusing `reranked_results_v0.json` as authority. This is intentionally stricter
+than the bounded proxy triage flow.
+
+New decision authority files:
+
+- `docs/benchmarks/final_best_policy_v0.py` defines
+  `qe_fpga_final_best_policy_v0`. The v0 default is HLS-synthesis minimum:
+  `minimum_stage_d_tier=hls_synthesis`,
+  `allow_implementation_projection=false`.
+- `docs/benchmarks/build_qe_final_best_architecture_decision_v0.py` emits
+  `qe_fpga_final_best_architecture_decision_v0.json` and selects a winner only
+  after same-candidate Stage C + Stage D + strict B4 pass.
+- `docs/benchmarks/build_qe_candidate_evidence_manifest_v0.py` provides the
+  candidate join manifest for external Stage C/D producer lanes.
+- `docs/benchmarks/run_qe_stage_c_correctness_for_candidates_v0.py` refuses
+  rather than fabricating Stage C when no real gold/QE summary is supplied.
+- `docs/benchmarks/stage_d_adapters/hls_synthesis_adapter_v0.py` is the first
+  Stage-D adapter; placeholder/template data is still downgraded to projection.
+
+Important claim boundary:
+
+- `reranked_results_v0.json` remains a bounded proxy ranking/triage artifact.
+- `qe_fpga_final_best_architecture_decision_v0.json` is the only final-best
+  decision artifact.
+- A B4-only run must remain `winner=null` even when strict gem5 event ticks are
+  observed, because gem5 event ticks do not prove QE numerical correctness or
+  implementation maturity.
+- The current final-best policy is **final-best-under-HLS-policy**, not board
+  measurement, not hardware cycle accuracy, and not ASIC signoff.
+
+Fresh focused verification for this closure is recorded in the final run log of
+this Ralph cycle. The expected safe B4-only result is
+`decision_status=blocked_no_eligible_candidates` with missing Stage C/D reasons;
+a synthetic same-candidate Stage C + HLS Stage D + strict B4 fixture selects a
+winner under the HLS policy.

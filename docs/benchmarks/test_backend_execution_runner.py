@@ -71,6 +71,95 @@ class BackendExecutionRunnerTests(unittest.TestCase):
     def read_report(self, path: Path) -> dict[str, Any]:
         return json.loads(path.read_text(encoding="utf-8"))
 
+    def write_timing_sidecar(self, directory: Path, name: str = "timing_sidecar.json") -> Path:
+        sidecar = directory / "timing" / name
+        sidecar.parent.mkdir(parents=True, exist_ok=True)
+        sidecar.write_text(
+            json.dumps(
+                {
+                    "schema_version": "qe_gem5_systemc_b4_timing_sidecar_v0",
+                    "candidate_id": "candidate_gem5_systemc_timed_proxy",
+                    "control_path": {
+                        "mmio_read_count": 5,
+                        "mmio_write_count": 8,
+                        "polling_read_count": 3,
+                        "interrupt_count": 0,
+                        "command_issue_tick": 100,
+                        "device_accept_tick": 110,
+                        "systemc_start_tick": 120,
+                        "systemc_end_tick": 520,
+                        "completion_tick": 560,
+                        "dma_start_tick": 130,
+                        "dma_end_tick": 300,
+                    },
+                    "metrics": {
+                        "cycle_proxy": 560,
+                        "cycle_source": "timing_sidecar_projection",
+                        "cycle_proxy_source": "timing_sidecar_projection",
+                        "event_timed_device_activity_observed": False,
+                        "candidate_device_event_delta_ticks": None,
+                        "logical_dma_payload_bytes": 6144,
+                    },
+                    "claim_ceiling": "gem5_systemc_timed_proxy_only",
+                    "non_claims": ["no_cycle_accuracy_claim"],
+                },
+                indent=2,
+                sort_keys=True,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        return sidecar
+
+    def write_candidate_timing_profile(self, directory: Path, name: str = "candidate_timing_profile_v0.json") -> Path:
+        profile = directory / "timing" / name
+        profile.parent.mkdir(parents=True, exist_ok=True)
+        profile.write_text(
+            json.dumps(
+                {
+                    "schema_version": "qe_gem5_systemc_b4_candidate_timing_profile_v0",
+                    "candidate_id": "candidate_gem5_systemc_timed_proxy",
+                    "runtime_timing_role": "strict_b4_runtime_profile_input",
+                    "event_schedule": {
+                        "command_issue_tick": 100,
+                        "device_accept_tick": 110,
+                        "systemc_start_tick": 120,
+                        "systemc_end_tick": 520,
+                        "completion_tick": 560,
+                        "candidate_event_delta_ticks": 460,
+                        "device_busy_ticks": 400,
+                    },
+                    "claim_ceiling": "gem5_event_scheduled_tick_observed_proxy_input_only",
+                    "non_claims": ["no_cycle_accuracy_claim"],
+                },
+                indent=2,
+                sort_keys=True,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        return profile
+
+    def b4_input_refs(
+        self,
+        *,
+        gem5_executable: str = "bin/gem5.opt",
+        gem5_config: str = "configs/fake_gem5_config.py",
+        systemc_bridge_library: str = "lib/libgem5_systemc_bridge.a",
+        timing_sidecar: str = "timing/timing_sidecar.json",
+        candidate_timing_profile: str | None = None,
+    ) -> dict[str, str]:
+        refs = {
+            "gem5_executable": gem5_executable,
+            "gem5_config": gem5_config,
+            "systemc_bridge_library": systemc_bridge_library,
+            "timing_sidecar": timing_sidecar,
+        }
+        if candidate_timing_profile is not None:
+            refs["candidate_timing_profile"] = candidate_timing_profile
+            refs["strict_b4_runtime_timing_input"] = candidate_timing_profile
+        return refs
+
     def write_direct_backend_report_executable(
         self,
         directory: Path,
@@ -187,7 +276,11 @@ class BackendExecutionRunnerTests(unittest.TestCase):
             "    'gem5_mode': os.environ.get('QEBS_GEM5_MODE'),\n"
             "    'fpga_execution_mode': os.environ.get('QEBS_FPGA_EXECUTION_MODE'),\n"
             "    'real_systemc_target': os.environ.get('QEBS_REAL_SYSTEMC_TARGET'),\n"
-            "    'systemc_bridge': os.environ.get('QEBS_SYSTEMC_BRIDGE')\n"
+            "    'systemc_bridge': os.environ.get('QEBS_SYSTEMC_BRIDGE'),\n"
+            "    'timing_sidecar': os.environ.get('QEBS_TIMING_SIDECAR_JSON'),\n"
+            "    'candidate_timing_profile': os.environ.get('QEBS_CANDIDATE_TIMING_PROFILE_JSON'),\n"
+            "    'strict_b4_event_timing': os.environ.get('QEBS_STRICT_B4_EVENT_TIMING'),\n"
+            "    'device_event_report': os.environ.get('QEBS_STRICT_B4_DEVICE_EVENT_REPORT_JSON')\n"
             "  },\n"
             "  'control_path': {\n"
             "    'host_launch_count': 1,\n"
@@ -210,6 +303,10 @@ class BackendExecutionRunnerTests(unittest.TestCase):
             "  'metrics': {\n"
             "    'time_to_completion_s': 0.01,\n"
             "    'cycle_proxy': 1000,\n"
+            "    'cycle_source': 'timing_sidecar_projection',\n"
+            "    'cycle_proxy_source': 'timing_sidecar_projection',\n"
+            "    'event_timed_device_activity_observed': False,\n"
+            "    'candidate_device_event_delta_ticks': None,\n"
             "    'host_wait_s': 0.001,\n"
             "    'device_busy_s': 0.004,\n"
             "    'dma_read_bytes': 4096,\n"
@@ -239,7 +336,15 @@ class BackendExecutionRunnerTests(unittest.TestCase):
             "    'domain': os.environ.get('QEBS_WORKLOAD_DOMAIN', 'dft'),\n"
             "    'domain_equivalence_claim': False\n"
             "  },\n"
-            "  'artifact_refs': {'fake_gem5_config': os.environ.get('QEBS_GEM5_CONFIG')},\n"
+            "  'artifact_refs': {\n"
+            "    'fake_gem5_config': os.environ.get('QEBS_GEM5_CONFIG'),\n"
+            "    'gem5_config': os.environ.get('QEBS_GEM5_CONFIG'),\n"
+            "    'systemc_bridge': os.environ.get('QEBS_SYSTEMC_BRIDGE'),\n"
+            "    'timing_sidecar': os.environ.get('QEBS_TIMING_SIDECAR_JSON'),\n"
+            "    'candidate_timing_profile': os.environ.get('QEBS_CANDIDATE_TIMING_PROFILE_JSON'),\n"
+            "    'strict_b4_runtime_timing_input': os.environ.get('QEBS_STRICT_B4_RUNTIME_TIMING_INPUT'),\n"
+            "    'device_event_report': os.environ.get('QEBS_STRICT_B4_DEVICE_EVENT_REPORT_JSON')\n"
+            "  },\n"
             "  'non_claims': [\n"
             "    'no_qe_equivalent_scf_claim',\n"
             "    'no_cycle_accuracy_claim',\n"
@@ -1193,15 +1298,12 @@ class BackendExecutionRunnerTests(unittest.TestCase):
             bridge = tmp / "lib" / "libgem5_systemc_bridge.a"
             bridge.parent.mkdir(parents=True)
             bridge.write_text("fake bridge artifact for unit test\n", encoding="utf-8")
+            sidecar = self.write_timing_sidecar(tmp)
             request = self.write_request(
                 tmp,
                 self.make_request(
                     "gem5_systemc_timed_proxy",
-                    input_refs={
-                        "gem5_executable": "bin/gem5.opt",
-                        "gem5_config": "configs/fake_gem5_config.py",
-                        "systemc_bridge_library": "lib/libgem5_systemc_bridge.a",
-                    },
+                    input_refs=self.b4_input_refs(),
                 ),
             )
             output = tmp / "report.json"
@@ -1223,15 +1325,63 @@ class BackendExecutionRunnerTests(unittest.TestCase):
             self.assertEqual(report["environment"]["fpga_execution_mode"], "real_bridge")
             self.assertEqual(report["environment"]["real_systemc_target"], "1")
             self.assertEqual(report["environment"]["systemc_bridge"], str(bridge))
+            self.assertEqual(report["environment"]["timing_sidecar"], str(sidecar))
             self.assertEqual(report["control_path"]["completion_source"], "timed_proxy_scheduled_event")
             self.assertNotEqual(report["control_path"]["completion_source"], "smoke_immediate_complete")
             self.assertEqual(report["control_path"]["systemc_start_tick"], 120)
             self.assertEqual(report["control_path"]["completion_tick"], 560)
+            self.assertEqual(report["metrics"]["cycle_source"], "timing_sidecar_projection")
+            self.assertFalse(report["metrics"]["event_timed_device_activity_observed"])
             self.assertEqual(report["metrics"]["successful_dma_transfer_bytes"], 6144)
             self.assertEqual(report["metrics"]["dma_warning_count"], 0)
             self.assertEqual(report["artifact_refs"]["gem5_config"], str(config))
             self.assertEqual(report["artifact_refs"]["systemc_bridge"], str(bridge))
+            self.assertEqual(report["artifact_refs"]["timing_sidecar"], str(sidecar))
             self.assertIn("gem5_stdout_log", report["artifact_refs"])
+
+    def test_b4_candidate_profile_enables_strict_event_env_for_gem5_config(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            self.write_fake_gem5_report_executable(tmp)
+            config = tmp / "configs" / "fake_gem5_config.py"
+            config.parent.mkdir(parents=True)
+            config.write_text("# fake config consumed by unit-test gem5 wrapper\n", encoding="utf-8")
+            bridge = tmp / "lib" / "libgem5_systemc_bridge.a"
+            bridge.parent.mkdir(parents=True)
+            bridge.write_text("fake bridge artifact for unit test\n", encoding="utf-8")
+            sidecar = self.write_timing_sidecar(tmp)
+            profile = self.write_candidate_timing_profile(tmp)
+            request = self.write_request(
+                tmp,
+                self.make_request(
+                    "gem5_systemc_timed_proxy",
+                    input_refs=self.b4_input_refs(
+                        candidate_timing_profile="timing/candidate_timing_profile_v0.json",
+                    ),
+                ),
+            )
+            output = tmp / "report.json"
+
+            rc = RUNNER.main([
+                "--request",
+                str(request),
+                "--output",
+                str(output),
+                "--mode",
+                "gem5_systemc_timed_proxy",
+                "--allow-execute",
+            ])
+
+            self.assertEqual(rc, 0)
+            report = self.read_report(output)
+            self.assertEqual(report["execution_status"], "executed")
+            self.assertEqual(report["environment"]["candidate_timing_profile"], str(profile))
+            self.assertEqual(report["environment"]["strict_b4_event_timing"], "1")
+            self.assertTrue(report["environment"]["device_event_report"].endswith(".device_event_report.json"))
+            self.assertEqual(report["artifact_refs"]["candidate_timing_profile"], str(profile))
+            self.assertEqual(report["artifact_refs"]["strict_b4_runtime_timing_input"], str(profile))
+            self.assertTrue(report["artifact_refs"]["device_event_report"].endswith(".device_event_report.json"))
+            self.assertEqual(report["artifact_refs"]["timing_sidecar"], str(sidecar))
 
     def test_b4_direct_report_rejects_missing_timed_proxy_counters(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -1243,15 +1393,12 @@ class BackendExecutionRunnerTests(unittest.TestCase):
             bridge = tmp / "lib" / "libgem5_systemc_bridge.a"
             bridge.parent.mkdir(parents=True)
             bridge.write_text("fake bridge artifact for unit test\n", encoding="utf-8")
+            self.write_timing_sidecar(tmp)
             request = self.write_request(
                 tmp,
                 self.make_request(
                     "gem5_systemc_timed_proxy",
-                    input_refs={
-                        "gem5_executable": "bin/bad_b4_report.py",
-                        "gem5_config": "configs/fake_gem5_config.py",
-                        "systemc_bridge_library": "lib/libgem5_systemc_bridge.a",
-                    },
+                    input_refs=self.b4_input_refs(gem5_executable="bin/bad_b4_report.py"),
                 ),
             )
             output = tmp / "report.json"
@@ -1283,15 +1430,12 @@ class BackendExecutionRunnerTests(unittest.TestCase):
             expected_bridge.parent.mkdir(parents=True)
             expected_bridge.write_text("expected bridge artifact\n", encoding="utf-8")
             actual_bridge.write_text("actual bridge artifact\n", encoding="utf-8")
+            self.write_timing_sidecar(tmp)
             request = self.write_request(
                 tmp,
                 self.make_request(
                     "gem5_systemc_timed_proxy",
-                    input_refs={
-                        "gem5_executable": "bin/gem5.opt",
-                        "gem5_config": "configs/fake_gem5_config.py",
-                        "systemc_bridge_library": "lib/expected_bridge.so",
-                    },
+                    input_refs=self.b4_input_refs(systemc_bridge_library="lib/expected_bridge.so"),
                 ),
             )
             output = tmp / "report.json"
@@ -1314,6 +1458,249 @@ class BackendExecutionRunnerTests(unittest.TestCase):
                     report,
                     expected_systemc_bridge=actual_bridge,
                 )
+
+    def test_b4_direct_report_accepts_normalized_bridge_provenance(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            bridge = tmp / "lib" / "expected_bridge.so"
+            sidecar = tmp / "timing" / "timing_sidecar.json"
+            bridge.parent.mkdir(parents=True)
+            sidecar.parent.mkdir(parents=True)
+            bridge.write_text("expected bridge artifact\n", encoding="utf-8")
+            sidecar.write_text("{}\n", encoding="utf-8")
+            equivalent_bridge = bridge.parent / ".." / "lib" / bridge.name
+            equivalent_sidecar = sidecar.parent / ".." / "timing" / sidecar.name
+
+            RUNNER._validate_b4_timed_proxy_report_shape(
+                {
+                    "environment": {
+                        "fpga_execution_mode": "real_bridge",
+                        "real_systemc_target": "1",
+                        "systemc_bridge": str(equivalent_bridge),
+                        "timing_sidecar": str(equivalent_sidecar),
+                    },
+                    "control_path": {
+                        "mmio_read_count": 5,
+                        "mmio_write_count": 8,
+                        "polling_read_count": 3,
+                        "interrupt_count": 0,
+                        "command_issue_tick": 100,
+                        "device_accept_tick": 110,
+                        "systemc_start_tick": 120,
+                        "systemc_end_tick": 520,
+                        "completion_tick": 560,
+                        "dma_start_tick": 130,
+                        "dma_end_tick": 300,
+                    },
+                    "metrics": {
+                        "host_control_mmio_read_count": 5,
+                        "host_control_mmio_write_count": 8,
+                        "host_control_polling_read_count": 3,
+                        "host_control_interrupt_count": 0,
+                        "host_control_queue_wait_ns": 10,
+                        "systemc_datapath_device_busy_ns": 4000000,
+                        "systemc_datapath_compute_ns": 3000000,
+                        "systemc_datapath_dma_read_ns": 1000,
+                        "systemc_datapath_dma_write_ns": 500,
+                        "systemc_datapath_queue_depth": 1,
+                        "systemc_datapath_backpressure_count": 0,
+                        "logical_dma_payload_bytes": 6144,
+                        "observed_gem5_dma_stat_bytes": 6144,
+                        "successful_dma_transfer_bytes": 6144,
+                        "dma_warning_count": 0,
+                        "cycle_source": "timing_sidecar_projection",
+                        "cycle_proxy_source": "timing_sidecar_projection",
+                        "event_timed_device_activity_observed": False,
+                        "candidate_device_event_delta_ticks": None,
+                    },
+                    "artifact_refs": {"timing_sidecar": str(equivalent_sidecar)},
+                },
+                expected_systemc_bridge=bridge,
+                expected_timing_sidecar=sidecar,
+            )
+
+    def test_b4_direct_report_rejects_event_timed_source_without_mmio_activity(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            bridge = tmp / "lib" / "expected_bridge.so"
+            sidecar = tmp / "timing" / "timing_sidecar.json"
+            bridge.parent.mkdir(parents=True)
+            sidecar.parent.mkdir(parents=True)
+            bridge.write_text("expected bridge artifact\n", encoding="utf-8")
+            sidecar.write_text("{}\n", encoding="utf-8")
+
+            with self.assertRaisesRegex(ValueError, "nonzero MMIO activity"):
+                RUNNER._validate_b4_timed_proxy_report_shape(
+                    {
+                        "environment": {
+                            "fpga_execution_mode": "real_bridge",
+                            "real_systemc_target": "1",
+                            "systemc_bridge": str(bridge),
+                            "timing_sidecar": str(sidecar),
+                        },
+                        "control_path": {
+                            "mmio_read_count": 0,
+                            "mmio_write_count": 0,
+                            "polling_read_count": 0,
+                            "interrupt_count": 0,
+                            "command_issue_tick": 100,
+                            "device_accept_tick": 110,
+                            "systemc_start_tick": 120,
+                            "systemc_end_tick": 520,
+                            "completion_tick": 560,
+                            "dma_start_tick": 130,
+                            "dma_end_tick": 300,
+                        },
+                        "metrics": {
+                            "host_control_mmio_read_count": 0,
+                            "host_control_mmio_write_count": 0,
+                            "host_control_polling_read_count": 0,
+                            "host_control_interrupt_count": 0,
+                            "host_control_queue_wait_ns": 10,
+                            "systemc_datapath_device_busy_ns": 4000000,
+                            "systemc_datapath_compute_ns": 3000000,
+                            "systemc_datapath_dma_read_ns": 1000,
+                            "systemc_datapath_dma_write_ns": 500,
+                            "systemc_datapath_queue_depth": 1,
+                            "systemc_datapath_backpressure_count": 0,
+                            "logical_dma_payload_bytes": 6144,
+                            "observed_gem5_dma_stat_bytes": 6144,
+                            "successful_dma_transfer_bytes": 6144,
+                            "dma_warning_count": 0,
+                            "cycle_source": "gem5_event_timed_device_observed",
+                            "event_timed_device_activity_observed": True,
+                            "candidate_device_event_delta_ticks": 460,
+                        },
+                        "artifact_refs": {"timing_sidecar": str(sidecar)},
+                    },
+                    expected_systemc_bridge=bridge,
+                    expected_timing_sidecar=sidecar,
+                )
+
+    def test_b4_direct_report_rejects_event_timed_source_without_candidate_profile(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            bridge = tmp / "lib" / "expected_bridge.so"
+            sidecar = tmp / "timing" / "timing_sidecar.json"
+            bridge.parent.mkdir(parents=True)
+            sidecar.parent.mkdir(parents=True)
+            bridge.write_text("expected bridge artifact\n", encoding="utf-8")
+            sidecar.write_text("{}\n", encoding="utf-8")
+
+            with self.assertRaisesRegex(ValueError, "candidate timing profile provenance"):
+                RUNNER._validate_b4_timed_proxy_report_shape(
+                    {
+                        "environment": {
+                            "fpga_execution_mode": "real_bridge",
+                            "real_systemc_target": "1",
+                            "systemc_bridge": str(bridge),
+                            "timing_sidecar": str(sidecar),
+                        },
+                        "control_path": {
+                            "mmio_read_count": 2,
+                            "mmio_write_count": 3,
+                            "polling_read_count": 1,
+                            "interrupt_count": 0,
+                            "command_issue_tick": 100,
+                            "device_accept_tick": 110,
+                            "systemc_start_tick": 120,
+                            "systemc_end_tick": 520,
+                            "completion_tick": 560,
+                            "dma_start_tick": 130,
+                            "dma_end_tick": 300,
+                            "mmio_activity_source": "gem5_simobject_counters",
+                        },
+                        "metrics": {
+                            "host_control_mmio_read_count": 2,
+                            "host_control_mmio_write_count": 3,
+                            "host_control_polling_read_count": 1,
+                            "host_control_interrupt_count": 0,
+                            "host_control_queue_wait_ns": 10,
+                            "systemc_datapath_device_busy_ns": 4000000,
+                            "systemc_datapath_compute_ns": 3000000,
+                            "systemc_datapath_dma_read_ns": 1000,
+                            "systemc_datapath_dma_write_ns": 500,
+                            "systemc_datapath_queue_depth": 1,
+                            "systemc_datapath_backpressure_count": 0,
+                            "logical_dma_payload_bytes": 6144,
+                            "observed_gem5_dma_stat_bytes": 6144,
+                            "successful_dma_transfer_bytes": 6144,
+                            "dma_warning_count": 0,
+                            "cycle_source": "gem5_event_timed_device_observed",
+                            "event_timed_device_activity_observed": True,
+                            "candidate_device_event_delta_ticks": 460,
+                            "observed_device_activity_source": "gem5_simobject_counters",
+                        },
+                        "artifact_refs": {"timing_sidecar": str(sidecar)},
+                    },
+                    expected_systemc_bridge=bridge,
+                    expected_timing_sidecar=sidecar,
+                )
+
+    def test_b4_direct_report_accepts_event_timed_source_with_profile_and_simobject_activity(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            bridge = tmp / "lib" / "expected_bridge.so"
+            sidecar = tmp / "timing" / "timing_sidecar.json"
+            profile = tmp / "timing" / "candidate_timing_profile_v0.json"
+            bridge.parent.mkdir(parents=True)
+            sidecar.parent.mkdir(parents=True)
+            bridge.write_text("expected bridge artifact\n", encoding="utf-8")
+            sidecar.write_text("{}\n", encoding="utf-8")
+            profile.write_text("{}\n", encoding="utf-8")
+
+            RUNNER._validate_b4_timed_proxy_report_shape(
+                {
+                    "environment": {
+                        "fpga_execution_mode": "real_bridge",
+                        "real_systemc_target": "1",
+                        "systemc_bridge": str(bridge),
+                        "timing_sidecar": str(sidecar),
+                        "candidate_timing_profile": str(profile),
+                    },
+                    "control_path": {
+                        "mmio_read_count": 2,
+                        "mmio_write_count": 3,
+                        "polling_read_count": 1,
+                        "interrupt_count": 0,
+                        "command_issue_tick": 100,
+                        "device_accept_tick": 110,
+                        "systemc_start_tick": 120,
+                        "systemc_end_tick": 520,
+                        "completion_tick": 560,
+                        "dma_start_tick": 130,
+                        "dma_end_tick": 300,
+                        "mmio_activity_source": "gem5_simobject_counters",
+                    },
+                    "metrics": {
+                        "host_control_mmio_read_count": 2,
+                        "host_control_mmio_write_count": 3,
+                        "host_control_polling_read_count": 1,
+                        "host_control_interrupt_count": 0,
+                        "host_control_queue_wait_ns": 10,
+                        "systemc_datapath_device_busy_ns": 4000000,
+                        "systemc_datapath_compute_ns": 3000000,
+                        "systemc_datapath_dma_read_ns": 1000,
+                        "systemc_datapath_dma_write_ns": 500,
+                        "systemc_datapath_queue_depth": 1,
+                        "systemc_datapath_backpressure_count": 0,
+                        "logical_dma_payload_bytes": 6144,
+                        "observed_gem5_dma_stat_bytes": 6144,
+                        "successful_dma_transfer_bytes": 6144,
+                        "dma_warning_count": 0,
+                        "cycle_source": "gem5_event_timed_device_observed",
+                        "event_timed_device_activity_observed": True,
+                        "candidate_device_event_delta_ticks": 460,
+                        "observed_device_activity_source": "gem5_simobject_counters",
+                    },
+                    "artifact_refs": {
+                        "timing_sidecar": str(sidecar),
+                        "candidate_timing_profile": str(profile),
+                    },
+                },
+                expected_systemc_bridge=bridge,
+                expected_timing_sidecar=sidecar,
+            )
 
     def test_b4_refuses_missing_explicit_systemc_bridge_artifact(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

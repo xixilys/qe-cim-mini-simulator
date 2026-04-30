@@ -142,16 +142,18 @@ def _as_reports(payload: Mapping[str, Any]) -> list[Mapping[str, Any]]:
 
 def validate_backend_report_artifact(payload: Mapping[str, Any]) -> None:
     reports = _as_reports(payload)
-    candidate_ids: set[str] = set()
-    duplicates: set[str] = set()
+    candidate_fidelity_keys: set[tuple[str, str]] = set()
+    duplicates: set[tuple[str, str]] = set()
     for report in reports:
         domain_contracts.validate_backend_execution_report(report)
         candidate_id = str(report.get("candidate_id"))
-        if candidate_id in candidate_ids:
-            duplicates.add(candidate_id)
-        candidate_ids.add(candidate_id)
+        fidelity = str(report.get("fidelity"))
+        key = (candidate_id, fidelity)
+        if key in candidate_fidelity_keys:
+            duplicates.add(key)
+        candidate_fidelity_keys.add(key)
     if duplicates:
-        raise ValueError(f"duplicate backend report candidate ID: {sorted(duplicates)}")
+        raise ValueError(f"duplicate backend report candidate/fidelity key: {sorted(duplicates)}")
 
 
 def normalize_backend_report_artifact(payload: Mapping[str, Any]) -> list[dict[str, Any]]:

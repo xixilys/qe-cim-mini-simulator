@@ -152,6 +152,12 @@ def _path_from_ref(value: Any, request_root: Path) -> Path | None:
     return path
 
 
+def _same_path_ref(left: Any, right: Path) -> bool:
+    if not isinstance(left, str) or not left:
+        return False
+    return Path(left).expanduser().resolve(strict=False) == right.expanduser().resolve(strict=False)
+
+
 def _input_ref_value(request: Mapping[str, Any], *keys: str) -> Any:
     refs = _request_input_refs(request)
     for key in keys:
@@ -601,6 +607,7 @@ def _gem5_env(
     mode: str,
     gem5_config: Path,
     systemc_bridge: Path | None = None,
+    timing_sidecar: Path | None = None,
 ) -> dict[str, str]:
     env = _request_env(
         request,
@@ -616,6 +623,19 @@ def _gem5_env(
     env["QEBS_REAL_SYSTEMC_TARGET"] = "1" if systemc_bridge is not None else "0"
     if systemc_bridge is not None:
         env["QEBS_SYSTEMC_BRIDGE"] = str(systemc_bridge)
+    if timing_sidecar is not None:
+        env["QEBS_TIMING_SIDECAR_JSON"] = str(timing_sidecar)
+        env["QEBS_B4_TIMING_SOURCE"] = "timing_sidecar_projection"
+    else:
+        env["QEBS_B4_TIMING_SOURCE"] = "gem5_exit_tick"
+    candidate_profile = _b4_candidate_timing_profile_ref(request, request_root)
+    if candidate_profile is not None:
+        env["QEBS_CANDIDATE_TIMING_PROFILE_JSON"] = str(candidate_profile)
+        env["QEBS_STRICT_B4_RUNTIME_TIMING_INPUT"] = str(candidate_profile)
+        env["QEBS_STRICT_B4_EVENT_TIMING"] = "1"
+        env["QEBS_STRICT_B4_DEVICE_EVENT_REPORT_JSON"] = str(
+            output_path.with_name(f"{output_path.stem}.device_event_report.json")
+        )
     env["QEBS_GEM5_OUTPUT_DIR"] = str(output_path.parent)
     return env
 
@@ -631,21 +651,44 @@ def _b4_systemc_bridge_ref(request: Mapping[str, Any], request_root: Path) -> Pa
     )
 
 
+def _b4_timing_sidecar_ref(request: Mapping[str, Any], request_root: Path) -> Path | None:
+    return _resolved_input_ref(
+        request,
+        request_root,
+        "timing_sidecar",
+        "gem5_systemc_timing_sidecar",
+        "candidate_timing_sidecar",
+    )
+
+
+def _b4_candidate_timing_profile_ref(request: Mapping[str, Any], request_root: Path) -> Path | None:
+    return _resolved_input_ref(
+        request,
+        request_root,
+        "candidate_timing_profile",
+        "strict_b4_runtime_timing_input",
+        "candidate_runtime_profile",
+    )
+
+
 def _validate_b4_timed_proxy_report_shape(
     payload: Mapping[str, Any],
     *,
     expected_systemc_bridge: Path | None = None,
+    expected_timing_sidecar: Path | None = None,
 ) -> None:
     environment = payload.get("environment")
     control_path = payload.get("control_path")
     metrics = payload.get("metrics")
+    artifact_refs = payload.get("artifact_refs")
     if (
         not isinstance(environment, Mapping)
         or not isinstance(control_path, Mapping)
         or not isinstance(metrics, Mapping)
+        or not isinstance(artifact_refs, Mapping)
     ):
         raise ValueError(
-            "B4 timed proxy report requires environment, control_path, and metrics objects"
+            "B4 timed proxy report requires environment, control_path, metrics, and artifact_refs objects"
         )
     if environment.get("fpga_execution_mode") != "real_bridge":
         raise ValueError("B4 timed proxy report requires environment.fpga_execution_mode=real_bridge")
@@ -654,10 +697,18 @@ def _validate_b4_timed_proxy_report_shape(
     bridge_value = environment.get("systemc_bridge")
     if not bridge_value:
         raise ValueError("B4 timed proxy report requires environment.systemc_bridge provenance")
-    if expected_systemc_bridge is not None and str(bridge_value) != str(expected_systemc_bridge):
+    if expected_systemc_bridge is not None and not _same_path_ref(bridge_value, expected_systemc_bridge):
         raise ValueError(
             "B4 timed proxy report environment.systemc_bridge does not match "
             f"expected bridge artifact: {bridge_value} != {expected_systemc_bridge}"
+        )
+    sidecar_value = environment.get("timing_sidecar") or artifact_refs.get("timing_sidecar")
+    if not sidecar_value:
+        raise ValueError("B4 timed proxy report requires timing_sidecar provenance")
+    if expected_timing_sidecar is not None and not _same_path_ref(sidecar_value, expected_timing_sidecar):
+        raise ValueError(
+            "B4 timed proxy report timing_sidecar does not match "
+            f"expected sidecar artifact: {sidecar_value} != {expected_timing_sidecar}"
         )
     required_control = (
         "mmio_read_count",
@@ -673,6 +724,7 @@ def _validate_b4_timed_proxy_report_shape(
         "dma_end_tick",
     )
     required_metrics = (
+        "cycle_source",
         "host_control_mmio_read_count",
         "host_control_mmio_write_count",
         "host_control_polling_read_count",
@@ -688,13 +740,50 @@ def _validate_b4_timed_proxy_report_shape(
         "observed_gem5_dma_stat_bytes",
         "successful_dma_transfer_bytes",
         "dma_warning_count",
+        "event_timed_device_activity_observed",
     )
     for key in required_control:
         if key not in control_path:
-            raise ValueError(f"B4 timed proxy report missing control_path.{key}")
+            raise ValueError(f"B4 timed proxy report requires control_path.{key}")
     for key in required_metrics:
         if key not in metrics:
-            raise ValueError(f"B4 timed proxy report missing metrics.{key}")
+            raise ValueError(f"B4 timed proxy report requires metrics.{key}")
+    cycle_source = str(metrics.get("cycle_source"))
+    allowed_cycle_sources = {
+        "timing_sidecar_projection",
+        "gem5_exit_tick",
+        "gem5_event_timed_device_observed",
+    }
+    if cycle_source not in allowed_cycle_sources:
+        raise ValueError(f"B4 timed proxy report has unsupported metrics.cycle_source={cycle_source!r}")
+    event_activity = metrics.get("event_timed_device_activity_observed") is True
+    mmio_activity = int(metrics.get("host_control_mmio_read_count") or 0) + int(
+        metrics.get("host_control_mmio_write_count") or 0
+    )
+    if cycle_source == "gem5_event_timed_device_observed":
+        if not event_activity:
+            raise ValueError("B4 event-timed cycle_source requires event_timed_device_activity_observed=true")
+        if mmio_activity <= 0:
+            raise ValueError("B4 event-timed cycle_source requires nonzero MMIO activity")
+        delta = metrics.get("candidate_device_event_delta_ticks")
+        if not isinstance(delta, int) or delta <= 0:
+            raise ValueError("B4 event-timed cycle_source requires positive candidate_device_event_delta_ticks")
+        profile_value = (
+            environment.get("candidate_timing_profile")
+            or artifact_refs.get("candidate_timing_profile")
+            or artifact_refs.get("strict_b4_runtime_timing_input")
+        )
+        if not profile_value:
+            raise ValueError("B4 event-timed cycle_source requires candidate timing profile provenance")
+        activity_source = (
+            metrics.get("observed_device_activity_source")
+            or control_path.get("mmio_activity_source")
+            or control_path.get("event_activity_source")
+        )
+        if activity_source not in {"gem5_simobject_counters", "gem5_device_event_report"}:
+            raise ValueError("B4 event-timed cycle_source requires SimObject-observed device activity source")
+    elif event_activity:
+        raise ValueError("B4 report cannot mark event_timed_device_activity_observed for sidecar/tick timing sources")
 
 
 def _accept_direct_backend_report(
@@ -703,6 +792,7 @@ def _accept_direct_backend_report(
     mode: str,
     *,
     expected_systemc_bridge: Path | None = None,
+    expected_timing_sidecar: Path | None = None,
 ) -> bool:
     if not output_path.exists():
         return False
@@ -717,7 +807,9 @@ def _accept_direct_backend_report(
             raise ValueError("direct BackendExecutionReport fidelity does not match CLI mode")
         if mode == "gem5_systemc_timed_proxy":
             _validate_b4_timed_proxy_report_shape(
-                payload, expected_systemc_bridge=expected_systemc_bridge
+                payload,
+                expected_systemc_bridge=expected_systemc_bridge,
+                expected_timing_sidecar=expected_timing_sidecar,
             )
     except Exception as exc:
         preserved_report = _preserve_invalid_direct_report(output_path)
@@ -1012,8 +1104,60 @@ def _run_gem5(
             )
             write_report(output_path, report)
             return 0
+        timing_sidecar_ref = _b4_timing_sidecar_ref(request, request_root)
+        if timing_sidecar_ref is None:
+            report = refusal_report(
+                request,
+                mode=mode,
+                reason=(
+                    "B4 timed proxy requires an explicit timing_sidecar/"
+                    "gem5_systemc_timing_sidecar input ref; no candidate-generic "
+                    "cycle proxy fallback was attempted"
+                ),
+                artifact_refs={
+                    "gem5_executable": str(executable),
+                    "gem5_config": str(gem5_config),
+                    "systemc_bridge": str(bridge_ref),
+                    "timing_sidecar_status": "missing_input_ref",
+                },
+            )
+            write_report(output_path, report)
+            return 0
+        if not timing_sidecar_ref.exists():
+            report = refusal_report(
+                request,
+                mode=mode,
+                reason=f"B4 timed proxy timing sidecar artifact is missing: {timing_sidecar_ref}",
+                artifact_refs={
+                    "gem5_executable": str(executable),
+                    "gem5_config": str(gem5_config),
+                    "systemc_bridge": str(bridge_ref),
+                    "timing_sidecar": str(timing_sidecar_ref),
+                    "timing_sidecar_status": "missing",
+                },
+            )
+            write_report(output_path, report)
+            return 0
+        candidate_profile_ref = _b4_candidate_timing_profile_ref(request, request_root)
+        if candidate_profile_ref is not None and not candidate_profile_ref.exists():
+            report = refusal_report(
+                request,
+                mode=mode,
+                reason=f"B4 strict event timing candidate profile artifact is missing: {candidate_profile_ref}",
+                artifact_refs={
+                    "gem5_executable": str(executable),
+                    "gem5_config": str(gem5_config),
+                    "systemc_bridge": str(bridge_ref),
+                    "timing_sidecar": str(timing_sidecar_ref),
+                    "candidate_timing_profile": str(candidate_profile_ref),
+                    "candidate_timing_profile_status": "missing",
+                },
+            )
+            write_report(output_path, report)
+            return 0
     else:
         bridge_ref = None
+        timing_sidecar_ref = None
 
     real_qe_context: dict[str, Any] | None = None
     if real_qe_smoke:
@@ -1330,7 +1474,17 @@ def _run_gem5(
         output_path.unlink()
     logs = _subprocess_log_paths(output_path, "gem5")
     env = os.environ.copy()
-    env.update(_gem5_env(request, request_root, output_path, mode, gem5_config, bridge_ref))
+    env.update(
+        _gem5_env(
+            request,
+            request_root,
+            output_path,
+            mode,
+            gem5_config,
+            bridge_ref,
+            timing_sidecar_ref,
+        )
+    )
     if real_qe_context is not None:
         qe_binary = real_qe_context["qe_binary"]
         qe_input = real_qe_context["qe_input"]
@@ -1471,7 +1625,11 @@ def _run_gem5(
 
     if output_path.exists():
         if not _accept_direct_backend_report(
-            request, output_path, mode, expected_systemc_bridge=bridge_ref
+            request,
+            output_path,
+            mode,
+            expected_systemc_bridge=bridge_ref,
+            expected_timing_sidecar=timing_sidecar_ref,
         ):
             return 1 if strict_report_validation else 0
         payload = load_json(output_path)
@@ -1483,6 +1641,8 @@ def _run_gem5(
             payload_artifacts.setdefault("gem5_stderr_log", str(logs["stderr"]))
             if bridge_ref is not None:
                 payload_artifacts.setdefault("systemc_bridge", str(bridge_ref))
+            if timing_sidecar_ref is not None:
+                payload_artifacts.setdefault("timing_sidecar", str(timing_sidecar_ref))
             if real_qe_context is not None:
                 payload_artifacts.setdefault("artifact_subtype", REAL_QE_GEM5_SE_ARTIFACT_SUBTYPE)
                 payload_artifacts.setdefault("run_manifest", str(real_qe_context["manifest_path"]))

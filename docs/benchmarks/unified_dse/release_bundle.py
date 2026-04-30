@@ -177,6 +177,14 @@ def validate_release_bundle_links(payload: Mapping[str, Any], root: Path | str) 
         for values in ir_refs.values():
             if isinstance(values, list):
                 refs.extend(str(item) for item in values)
-    missing = sorted(ref for ref in refs if not (root_path / ref).exists())
+    refs.extend(str(item) for item in payload.get("evidence_refs", []))
+
+    def ref_exists(ref: str) -> bool:
+        path = Path(ref)
+        if path.is_absolute():
+            return path.exists()
+        return (root_path / path).exists() or path.exists()
+
+    missing = sorted(ref for ref in refs if not ref_exists(ref))
     if missing:
         raise ValueError(f"release bundle has missing artifact refs: {missing}")

@@ -139,6 +139,8 @@ def build_multi_fidelity_plan(
     shortlist_size: int = 0,
     selected_fidelity: str = "B2",
     backend_capabilities: Mapping[str, Any] | None = None,
+    escalation_policy: str = "top_n_after_b2",
+    b4_default_top_n: int = 1,
 ) -> dict[str, Any]:
     copied = apply_shortlist_policy(rows, policy=policy, shortlist_size=shortlist_size)
     selected_candidates = []
@@ -163,24 +165,38 @@ def build_multi_fidelity_plan(
             continue
         if row.get("shortlisted_for_backend"):
             request_ref = f"backend_execution_requests/{candidate_id}.json"
+            evidence_gaps = list(validation.get("missing_evidence", [])) if isinstance(validation, Mapping) else []
+            design_point = row.get("design_point", {})
+            design_point = design_point if isinstance(design_point, Mapping) else {}
+            eligible_for_b4 = not any(
+                gap in evidence_gaps
+                for gap in (
+                    "host_device_link_bandwidth_evidence",
+                    "partition_dependency_evidence",
+                )
+            )
+            escalation_blockers = []
+            if not eligible_for_b4:
+                escalation_blockers.append("missing_required_b4_escalation_evidence")
             selected_candidates.append(
                 {
                     "candidate_id": candidate_id,
                     "selected_fidelity": selected_fidelity,
+                    "requested_fidelities": [selected_fidelity],
+                    "eligible_for_b4_escalation": eligible_for_b4,
+                    "escalation_blockers": escalation_blockers,
                     "rationale": row.get("shortlist_reason") or policy,
                     "screening_rank": row.get("screening_rank"),
                     "capability_requirements": {
                         "requested_fidelity": selected_fidelity,
-                        "requires_device_diag_engine": row.get("design_point", {}).get("diag_policy")
+                        "requires_device_diag_engine": design_point.get("diag_policy")
                         == "aggressive_device",
                         "requires_target_resource_model": True,
-                        "requires_host_device_link_model": row.get("design_point", {}).get("offload_scope")
+                        "requires_host_device_link_model": design_point.get("offload_scope")
                         == "device_heavy",
                     },
                     "backend_request_ref": request_ref,
-                    "evidence_gaps": list(validation.get("missing_evidence", []))
-                    if isinstance(validation, Mapping)
-                    else [],
+                    "evidence_gaps": evidence_gaps,
                 }
             )
         else:
@@ -196,6 +212,9 @@ def build_multi_fidelity_plan(
         "schema_version": domain_contracts.MULTI_FIDELITY_PLAN_SCHEMA_VERSION,
         "policy": policy,
         "selected_fidelity": selected_fidelity,
+        "escalation_policy": escalation_policy,
+        "b4_default_top_n": b4_default_top_n,
+        "candidate_alignment_keys": ["candidate_id", "workload_id", "case_id"],
         "selected_count": len(selected_candidates),
         "selected_candidates": selected_candidates,
         "unselected_valid_candidate_count": len(unselected_valid_candidates),
@@ -213,6 +232,7 @@ def build_multi_fidelity_plan(
             ],
             "adaptive_feedback_ready": True,
             "backend_execution_performed_by_frontend": False,
+            "b4_escalation_ready": True,
         },
         "claim_ceiling": "descriptor_generation_only",
         "non_claims": [
