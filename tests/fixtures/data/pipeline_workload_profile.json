@@ -1,0 +1,130 @@
+{
+  "schema_version": "workload_profile_v1",
+  "workload_id": "si4_pbe_uspp_small",
+  "source": {
+    "software": "Quantum ESPRESSO",
+    "version": "7.5",
+    "case": "si4_pbe_uspp_small"
+  },
+  "compute_graph": {
+    "nodes": [
+      {
+        "id": "h_psi",
+        "type": "GEMM",
+        "dominance": 0.45,
+        "flops_per_call": 1696896.0,
+        "call_count": 15,
+        "typical_sizes": {
+          "M": [
+            8
+          ],
+          "N": [
+            1473
+          ],
+          "K": [
+            72
+          ]
+        }
+      },
+      {
+        "id": "s_psi",
+        "type": "GEMM",
+        "dominance": 0.25,
+        "flops_per_call": 1696896.0,
+        "call_count": 15,
+        "typical_sizes": {
+          "M": [
+            8
+          ],
+          "N": [
+            1473
+          ],
+          "K": [
+            72
+          ]
+        }
+      },
+      {
+        "id": "build_H_sub",
+        "type": "REDUCTION",
+        "dominance": 0.15,
+        "flops_per_call": 188544.0,
+        "call_count": 15,
+        "typical_sizes": {
+          "M": [
+            8
+          ],
+          "N": [
+            8
+          ],
+          "K": [
+            1473
+          ]
+        }
+      },
+      {
+        "id": "cdiaghg",
+        "type": "EIGEN",
+        "dominance": 0.1,
+        "flops_per_call": 5120.0,
+        "call_count": 15,
+        "typical_sizes": {
+          "N": [
+            8
+          ],
+          "M": [
+            8
+          ]
+        }
+      },
+      {
+        "id": "refresh",
+        "type": "VECTOR",
+        "dominance": 0.05,
+        "flops_per_call": 94272.0,
+        "call_count": 15,
+        "typical_sizes": {
+          "M": [
+            8
+          ],
+          "N": [
+            1473
+          ]
+        }
+      }
+    ],
+    "edges": [
+      {
+        "from": "h_psi",
+        "to": "build_H_sub",
+        "data_type": "Hpsi(G)"
+      },
+      {
+        "from": "s_psi",
+        "to": "build_H_sub",
+        "data_type": "Spsi(G)"
+      },
+      {
+        "from": "build_H_sub",
+        "to": "cdiaghg",
+        "data_type": "H_sub/S_sub"
+      },
+      {
+        "from": "cdiaghg",
+        "to": "refresh",
+        "data_type": "eigenvectors"
+      }
+    ]
+  },
+  "execution_profile": {
+    "total_iterations": 15,
+    "stability": "converging"
+  },
+  "memory_profile": {
+    "working_set_mb": 0.001,
+    "peak_mb": 0.002
+  },
+  "data_movement": {
+    "host_to_device_mb_per_iter": 0.001
+  }
+}

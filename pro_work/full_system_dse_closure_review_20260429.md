@@ -624,7 +624,7 @@ Normative evidence-tier labels are exact strings:
 | `survey-catalog` | Provenance-backed researched microarchitecture or design-axis entry. | May appear in broad survey coverage only; it is not executable ranking evidence and cannot name a final best. |
 | `projection-screened` | Fast/proxy/estimated row that has passed explicit screening assumptions. | May inform Level-1 shortlist discussion, but cannot be a final-best winner or GPU/board/ASIC claim. |
 | `systemc-cycle-accounted` | Same candidate/workload has generated/configured SystemC cycle-accounted evidence with per-stage/per-component cycle tables and artifact refs. | Must cite `systemc_cycle_evidence_ref` and `systemc_cycle_evidence_hash`; it remains model-level accounting, not RTL/cycle-accurate or physical timing evidence. |
-| `final-best-eligible` | Same candidate has Stage C correctness, strict B4 gem5/SystemC event evidence, Stage D implementation evidence, and generated SystemC cycle-accounted evidence. | Only this tier may enter the final-best policy; missing any same-candidate ref yields `winner=null` / blockers. |
+| `final-best-eligible` | Same candidate has Stage C correctness, strict B4 gem5/SystemC event evidence, generated SystemC cycle-accounted evidence, frozen catalog membership, dominance closure, and Stage D implementation evidence when the active final-best policy requires it. | Only this tier may enter the final-best policy; under `systemc_b4_minimum`, missing Stage D/HLS is recorded as a residual risk, while missing Stage C, strict B4, SystemC, catalog freeze, or dominance closure still yields `winner=null` / blockers. |
 
 Release checker:
 
@@ -641,16 +641,21 @@ artifact boundaries, unknown evidence-tier labels, lower-tier JSON winner flags,
 and missing SystemC cycle evidence artifact refs for `systemc-cycle-accounted`
 or `final-best-eligible` rows.
 
-Current release posture remains conservative:
+Current release posture remains conservative and policy-aware:
 
-- No current real-world row is documented here as `final-best-eligible`.
+- The HLS-minimum policy still requires Stage D implementation evidence for a
+  final-best result.
+- The `systemc_b4_minimum` policy can select a closed-catalog-best result
+  without Stage D only when same-candidate Stage C, strict B4, generated SystemC
+  cycle evidence, frozen catalog membership, and dominance closure all pass.
 - A `systemc-cycle-accounted` row must carry generated SystemC artifacts such as
   `systemc_cycle_evidence_ref`, `systemc_cycle_evidence_hash`, template/config
   hash, per-stage/per-component cycle table refs, calibration refs, and
   non-claims.
 - A `final-best-eligible` row must carry same-candidate `stage_c_report_ref`,
-  `strict_b4_report_ref`, `stage_d_report_ref`, and
-  `systemc_cycle_evidence_ref` before the final-best policy may select it.
+  `strict_b4_report_ref`, `systemc_cycle_evidence_ref`,
+  catalog-freeze/dominance evidence, and `stage_d_report_ref` only when the
+  selected policy requires Stage D before the final-best policy may select it.
 - Synthetic positive fixtures may test policy plumbing only when labeled
   synthetic/non-real-world; they do not create a real architecture winner.
 
@@ -658,3 +663,100 @@ This closes the docs/pro_work release-boundary gap for the evidence-plane v1
 implementation. It still does not claim QE whole-application superiority over
 GPU, board-measured speedup, ASIC signoff, RTL cycle accuracy, physical timing,
 or production readiness.
+
+## 12. 2026-05-01 closed-catalog-best `systemc_b4_minimum` evidence closure
+
+The Ralph-only closed-catalog-best loop now has one bounded winner under the
+explicit `qe_fpga_final_best_policy_systemc_b4_minimum_v0` policy. This is not a
+global architecture optimum and not a board/RTL/ASIC/physical-timing result; it
+is the best candidate inside the frozen competitive/evaluable catalog partition
+for the checked `si8_pbe_uspp` run and evidence policy.
+
+Winner:
+
+- candidate:
+  `si8_pbe_uspp__F2__device_first_fallback__balanced__fit_first__single_hotpath_partition`
+- catalog entry: `systolic_fpga_dense_path`
+- catalog partition: `competitive_evaluable`
+- policy: `qe_fpga_final_best_policy_systemc_b4_minimum_v0`
+- evidence tier: `final-best-eligible`
+- strict B4 event/tick evidence:
+  `candidate_device_event_delta_ticks=9583067`,
+  `cycle_source=gem5_event_timed_device_observed`
+- residual risk:
+  `missing_optional_stage_d_hls_or_stronger_evidence`
+
+Primary release artifacts from the final pass:
+
+- `tmp/closed_catalog_best_si8_top40_pass5/qe_fpga_dse_e2e_manifest_v0.json`
+  (`sha256=6ceebff32daeee38d0c3df9f9db9af54ff5dca51e3ddab9891b14bd2bffcaa83`)
+- `tmp/closed_catalog_best_si8_top40_pass5/qe_fpga_dse_performance_summary_v0.json`
+  (`sha256=43decdb0fdfdd4222ed0c3802775060cc9a3e3df72b6f608f91c83a0df36b578`)
+- `tmp/closed_catalog_best_si8_top40_pass5/claim_ceiling_status_matrix_v0.json`
+  (`sha256=24f3a52061ddcbe8090847571b49b4a23c0d48aacd77d222f0cef7be872c9f7f`)
+- `tmp/closed_catalog_best_si8_top40_pass5/reranked_results_v0.json`
+  (`sha256=64700d77a6b749a51de6fcb90cb3eaa9ac4a8bf0a175085b672e63894a5cd28c`)
+- `tmp/closed_catalog_best_si8_top40_pass5/qe_fpga_final_best_architecture_decision_v0.json`
+  (`sha256=63d09cb02f51cd5a7074b7b61e72136ff5bc590024f0ee85d8f35d38bbf948c1`)
+- catalog freeze:
+  `docs/benchmarks/qe_microarchitecture_catalog_freeze_manifest_v0.json`
+  (`sha256=381e3ce843d510d14820f5db5f767ab5f22055a8dd10e40c9fcefe967e3d435a`)
+- policy:
+  `docs/benchmarks/qe_final_best_policy_systemc_b4_minimum_v0.json`
+  (`sha256=0e08de8c370b6214e3f1d88c0835abd9972e418f88fcc817a18f6645c9c95919`)
+
+Winner same-candidate evidence hashes in the decision artifact:
+
+- Stage C report:
+  `6542ad9ca6845da6022ed52f57b0368f76b0175132c99024713bd1929eb17621`
+- strict B4 report:
+  `b2ea10fa27ef22e2d6bd9e5fbc9877fecf69d06e6516f09fa102e120097468dc`
+- SystemC cycle-accounted evidence:
+  `0f7d9bad1b61bc36259a6edcf038481de17c5383070ca3535ebedfddc27a60fd`
+- Stage D report: absent by policy; recorded as
+  `missing_optional_stage_d_hls_or_stronger_evidence`
+
+The dominance closure is intentionally stronger than “highest fixable
+candidate.” Higher screening-ranked competitive F3 candidates are represented in
+the Top-K queue and final decision ranking table. They do not block the F2
+winner because their same-candidate Stage C reports are resolved as
+`stage_c_qe_equivalent_scf_not_proven`, not merely missing/unresolved. Missing
+Stage C for lower-ranked or nonwinner rows remains visible in
+`top_k_closure.blockers`; those blockers are queue diagnostics and do not
+override the final decision’s passed dominance closure for the selected winner.
+
+Fresh final E2E command shape:
+
+```bash
+python3 docs/benchmarks/run_qe_fpga_dse_e2e_v0.py \
+  --workload tmp/si8_workload.json \
+  --output-dir tmp/closed_catalog_best_si8_top40_pass5 \
+  --max-design-points 270 \
+  --shortlist-size 40 \
+  --top-k 40 \
+  --b4-top-n 40 \
+  --include-gem5-b4 \
+  --require-real-gem5-b4 \
+  --timeout-s 20 \
+  --gem5-timeout-s 120 \
+  --emit-final-best-decision \
+  --final-best-policy docs/benchmarks/qe_final_best_policy_systemc_b4_minimum_v0.json \
+  --catalog-freeze-manifest docs/benchmarks/qe_microarchitecture_catalog_freeze_manifest_v0.json \
+  --qe-correctness-report-for <candidate=stage_c_report> ... \
+  --systemc-cycle-evidence-for <candidate=systemc_cycle_report> ...
+```
+
+Fresh release-boundary validation for the emitted JSON reports:
+
+```bash
+python3 docs/benchmarks/check_qe_dse_release_claim_boundaries_v0.py --no-require-doc-language \
+  tmp/closed_catalog_best_si8_top40_pass5/qe_fpga_final_best_architecture_decision_v0.json \
+  tmp/closed_catalog_best_si8_top40_pass5/qe_fpga_dse_performance_summary_v0.json \
+  tmp/closed_catalog_best_si8_top40_pass5/claim_ceiling_status_matrix_v0.json \
+  tmp/closed_catalog_best_si8_top40_pass5/reranked_results_v0.json
+```
+
+Expected result: PASS. This checker enforces the same no-overclaim boundary as
+the human docs: no global best, no GPU superiority, no synthetic-final evidence,
+no Stage C bypass, no RTL/cycle-accurate/physical timing, and no board/ASIC/FPGA
+measurement claim.

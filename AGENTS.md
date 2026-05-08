@@ -44,7 +44,9 @@ python3 docs/benchmarks/run_systemc_architecture_family_dse_sweep.py
 
 ```
 .
+├── AGENTS.md                       # Root guide (this file)
 ├── model/                          # Implementation models
+│   ├── AGENTS.md                   # Model directory guide
 │   ├── ozaki_subspace_model/       # Algorithm validation (Ozaki-II, eigensolver)
 │   │   ├── AGENTS.md               # Detailed guide for algorithm validation
 │   │   ├── src/                    # C++ testbenches and engines
@@ -71,7 +73,29 @@ python3 docs/benchmarks/run_systemc_architecture_family_dse_sweep.py
 │   ├── cim/                        # CIM design specifications
 │   ├── control/                    # Control ISA specifications
 │   └── survey/                     # Industry surveys
-└── soft/qe-7.5/                    # QE workspace copy (instrumented)
+├── gem5_integration/               # gem5+SystemC co-simulation
+│   ├── AGENTS.md                   # Co-simulation guide
+│   ├── src/dev/fpga/               # gem5 FPGA device model
+│   ├── systemc_model/              # SystemC TLM model
+│   ├── qe_integration/             # QE offload hooks
+│   └── configs/fpga/               # gem5 system configs
+├── dse_v2/                         # Next-gen Bayesian DSE framework
+│   ├── AGENTS.md                   # DSE v2 guide
+│   ├── workloads/                  # Workload definitions
+│   ├── design_space/               # Parameter space
+│   ├── models/                     # Performance models
+│   └── optimization/               # BO algorithms
+├── runtime_api/                    # Domain-neutral C ABI
+│   ├── AGENTS.md                   # Runtime API guide
+│   ├── command_descriptor.h        # Offload command descriptor
+│   └── offload_runtime.h/.c        # Runtime implementation
+├── Survey/                         # Research pipeline: survey stage
+│   ├── AGENTS.md                   # Survey stage guide
+│   ├── references/                 # Literature references
+│   └── reports/                    # Survey reports
+├── soft/qe-7.5/                    # QE workspace copy (instrumented)
+└── tmp*/                           # Generated outputs and scratch
+```
 
 ## ⚠️ CRITICAL: Background Task Protocol
 
@@ -293,6 +317,60 @@ If you encounter this error:
 - The handoff document indicates the most important open work is algorithm freezing, not rebuilding the QE dataset from scratch.
 - Generalized Hermitian eigensolver work and Ozaki/CRT design decisions are the current mainline topics.
 - Avoid spending time on unrelated refactors unless they unblock the requested task.
+
+## Plan Agent Usage Guidelines
+
+### Problem
+Plan agent can timeout (30min+) on large complex tasks without visible progress, causing poor user experience.
+
+### Solutions
+
+1. **Segmented Planning**: Call plan agent for ONE phase at a time, not the entire project
+   - Good: "Plan Phase 1: SystemC backend implementation"
+   - Bad: "Plan all 5 waves of the entire DSE framework"
+
+2. **Background Execution**: Use `run_in_background=true` for plan agent
+   - Continue other work while plan agent runs
+   - Check results when system notification arrives
+
+3. **Small Granularity**: Each plan should cover 1-2 specific tasks
+   - Good: "Plan the SystemC output parser implementation"
+   - Bad: "Plan the entire 3-layer DSE framework"
+
+4. **Session Continuity**: Use `task_id` for follow-up questions
+   - First call: `task(subagent_type="plan", ...)` → returns task_id
+   - Follow-up: `task(task_id="...", prompt="clarify X")`
+   - Saves 70%+ tokens vs starting fresh
+
+5. **Fallback Strategy**: If plan agent times out twice, switch to:
+   - Direct implementation with oracle consultation
+   - Self-planning based on existing patterns
+   - Ask user for priority clarification
+
+### Example Workflow
+```python
+# Step 1: Plan current phase only
+task(subagent_type="plan", run_in_background=true, prompt="Plan Phase X: [specific task]")
+
+# Step 2: Continue other work while waiting
+# (edit files, run tests, etc.)
+
+# Step 3: When notification arrives, collect results
+background_output(task_id="...")
+
+# Step 4: Execute planned tasks
+# (direct implementation or delegate to category agents)
+```
+
+## AGENTS.md Hierarchy
+
+This repository uses hierarchical AGENTS.md files:
+- **Root** (`./AGENTS.md`): Project overview, quick navigation, global conventions
+- **Domain** (`docs/AGENTS.md`, `model/AGENTS.md`): Cross-cutting guidance for major directories
+- **Specialist** (`docs/architecture/AGENTS.md`, `docs/benchmarks/AGENTS.md`, `model/ozaki_subspace_model/AGENTS.md`, `model/qe_band_solver_model/AGENTS.md`): Detailed domain-specific instructions
+- **Integration** (`gem5_integration/AGENTS.md`, `dse_v2/AGENTS.md`, `runtime_api/AGENTS.md`, `Survey/AGENTS.md`): Component-specific guides
+
+Child AGENTS.md files never repeat parent content. Navigate up the hierarchy for shared conventions.
 
 ## Good Agent Behavior In This Repo
 

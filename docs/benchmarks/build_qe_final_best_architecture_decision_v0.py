@@ -51,6 +51,12 @@ def _mapping(value: Any) -> Mapping[str, Any]:
     return value if isinstance(value, Mapping) else {}
 
 
+def _list_of_strings(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(item) for item in value if isinstance(item, (str, int, float))]
+
+
 def resolve_ref(ref: Any, *, base_dir: Path, repo_root: Path | None = None) -> Path | None:
     if not isinstance(ref, str) or not ref:
         return None
@@ -87,6 +93,81 @@ def _manifest_candidate_runs(manifest: Mapping[str, Any]) -> list[Mapping[str, A
             for path in selected
         ]
     return []
+
+
+def _catalog_freeze_manifest_ref(manifest: Mapping[str, Any]) -> str | None:
+    for key in ("catalog_freeze_manifest", "catalog_freeze_manifest_ref", "microarchitecture_catalog_freeze_manifest"):
+        value = manifest.get(key)
+        if isinstance(value, str) and value:
+            return value
+    refs = manifest.get("source_refs")
+    if isinstance(refs, Mapping):
+        for key in ("catalog_freeze_manifest", "microarchitecture_catalog_freeze_manifest"):
+            value = refs.get(key)
+            if isinstance(value, str) and value:
+                return value
+    return None
+
+
+def _catalog_entry_id(candidate_id: str, run: Mapping[str, Any], row: Mapping[str, Any]) -> str:
+    for value in (
+        row.get("microarchitecture_id"),
+        row.get("catalog_entry_id"),
+        row.get("microarchitecture_catalog_id"),
+        run.get("microarchitecture_id"),
+        run.get("catalog_entry_id"),
+    ):
+        if isinstance(value, str) and value:
+            return value
+    level1 = run.get("level1_search")
+    if isinstance(level1, Mapping):
+        for key in ("microarchitecture_id", "catalog_entry_id", "microarchitecture_catalog_id"):
+            value = level1.get(key)
+            if isinstance(value, str) and value:
+                return value
+    return candidate_id
+
+
+def _freeze_partition_for_catalog_id(freeze_manifest: Mapping[str, Any] | None, catalog_entry_id: str) -> str | None:
+    if not isinstance(freeze_manifest, Mapping):
+        return None
+    partitions = freeze_manifest.get("partitions")
+    if not isinstance(partitions, Mapping):
+        return None
+    for partition, values in partitions.items():
+        if catalog_entry_id in _list_of_strings(values):
+            return str(partition)
+    return None
+
+
+def _competitive_catalog_ids(freeze_manifest: Mapping[str, Any] | None) -> set[str]:
+    if not isinstance(freeze_manifest, Mapping):
+        return set()
+    partitions = freeze_manifest.get("partitions")
+    if not isinstance(partitions, Mapping):
+        return set()
+    return set(_list_of_strings(partitions.get("competitive_evaluable")))
+
+
+def _is_unresolved_dominance_reason(reason: Any) -> bool:
+    text = str(reason)
+    return text.startswith(
+        (
+            "missing_",
+            "candidate_evidence_alignment_mismatch",
+            "systemc_cycle_evidence_load_failed",
+            "systemc_cycle_evidence_sha256_mismatch",
+            "catalog_freeze_manifest_not_passed",
+            "candidate_missing_from_catalog_freeze_manifest",
+        )
+    )
+
+
+def _is_unresolved_for_dominance(row: Mapping[str, Any]) -> bool:
+    reasons = row.get("ineligible_reasons")
+    if not isinstance(reasons, list):
+        return False
+    return any(_is_unresolved_dominance_reason(reason) for reason in reasons)
 
 
 def _candidate_id_from_run(run: Mapping[str, Any]) -> str | None:
@@ -289,9 +370,13 @@ def _load_stage_c(path_ref: Any, *, base_dir: Path, repo_root: Path | None, cand
 
 def _load_stage_d(path_ref: Any, *, base_dir: Path, repo_root: Path | None, candidate_id: str, policy: Mapping[str, Any]) -> tuple[Path | None, Mapping[str, Any] | None, list[str]]:
     if not path_ref:
+        if not final_policy.stage_d_required_for_final_best(policy):
+            return None, None, []
         return None, None, ["missing_stage_d_implementation_evidence"]
     path = resolve_ref(path_ref, base_dir=base_dir, repo_root=repo_root)
     if path is None or not path.exists():
+        if not final_policy.stage_d_required_for_final_best(policy):
+            return path, None, []
         return path, None, ["missing_stage_d_implementation_evidence"]
     try:
         payload = stage_d_implementation_evidence.load_and_validate_implementation_evidence(path)
@@ -317,6 +402,34 @@ def _score_candidate(item: Mapping[str, Any]) -> tuple[float, float, int, str]:
     if not isinstance(screening_rank, int):
         screening_rank = 10**9
     return (float(event_ticks), float(dma_bytes), screening_rank, str(item.get("candidate_id") or ""))
+
+
+def _release_gate_fields(
+    *,
+    policy: Mapping[str, Any],
+    evidence_refs: Mapping[str, Any],
+    evidence_hashes: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Flatten same-candidate evidence refs for release-boundary validators.
+
+    The decision payload already carries a structured ``evidence_refs`` object.
+    The release claim-boundary checker intentionally scans arbitrary JSON
+    objects without schema-specific joins, so final-best rows also need direct
+    fields whose names spell out Stage C / strict B4 / SystemC-cycle evidence.
+    """
+
+    return {
+        "policy_id": policy.get("policy_id"),
+        "stage_d_required_for_final_best": final_policy.stage_d_required_for_final_best(policy),
+        "stage_c_report_ref": evidence_refs.get("stage_c_report"),
+        "stage_c_report_sha256": evidence_hashes.get("stage_c_report_sha256"),
+        "strict_b4_report_ref": evidence_refs.get("b4_report"),
+        "strict_b4_report_sha256": evidence_hashes.get("b4_report_sha256"),
+        "stage_d_report_ref": evidence_refs.get("stage_d_report"),
+        "stage_d_report_sha256": evidence_hashes.get("stage_d_report_sha256"),
+        "systemc_cycle_evidence_ref": evidence_refs.get("systemc_cycle_evidence"),
+        "systemc_cycle_evidence_sha256": evidence_hashes.get("systemc_cycle_evidence_sha256"),
+    }
 
 
 def build_decision(
@@ -350,6 +463,18 @@ def build_decision(
         repo_root=repo_root,
     )
     backend_collection = load_json(backend_ref) if backend_ref is not None and Path(backend_ref).exists() else None
+    freeze_manifest_path = resolve_ref(
+        _catalog_freeze_manifest_ref(manifest),
+        base_dir=manifest_dir,
+        repo_root=repo_root,
+    )
+    freeze_manifest = (
+        load_json(freeze_manifest_path)
+        if freeze_manifest_path is not None and Path(freeze_manifest_path).exists()
+        else None
+    )
+    require_catalog_freeze = policy.get("require_catalog_freeze_membership") is True
+    require_dominance = policy.get("require_dominance_closure") is True
 
     eligible: list[dict[str, Any]] = []
     ineligible: list[dict[str, Any]] = []
@@ -364,9 +489,21 @@ def build_decision(
         if row is None:
             reasons.append("missing_claim_matrix_row")
             row = {}
+        catalog_entry_id = _catalog_entry_id(candidate_id, run, row)
+        freeze_partition = _freeze_partition_for_catalog_id(freeze_manifest, catalog_entry_id)
+        if require_catalog_freeze:
+            if not isinstance(freeze_manifest, Mapping):
+                reasons.append("missing_catalog_freeze_manifest")
+            elif freeze_manifest.get("freeze_status") != "passed":
+                reasons.append("catalog_freeze_manifest_not_passed")
+            elif freeze_partition != "competitive_evaluable":
+                if freeze_partition in {"coverage_only", "excluded_from_best_universe"}:
+                    reasons.append(f"candidate_not_in_competitive_catalog_partition:{freeze_partition}")
+                else:
+                    reasons.append("candidate_missing_from_catalog_freeze_manifest")
         blockers = row.get("blockers")
         if isinstance(blockers, list):
-            reasons.extend(str(item) for item in blockers if item)
+            reasons.extend(final_policy.filter_policy_blockers([str(item) for item in blockers if item], policy))
         if row.get("same_candidate_evidence_only") is False:
             reasons.append("candidate_evidence_alignment_mismatch")
 
@@ -384,7 +521,9 @@ def build_decision(
             candidate_id=candidate_id,
             policy=policy,
         )
-        reasons.extend(stage_d_reasons)
+        policy_stage_d_reasons = final_policy.filter_policy_blockers(stage_d_reasons, policy)
+        reasons.extend(policy_stage_d_reasons)
+        optional_precision_upgrade_risks = final_policy.optional_precision_upgrade_risks(stage_d_payload, policy)
         b4_path, b4_payload, b4_load_reasons = _load_b4_report(
             candidate_id,
             run,
@@ -409,7 +548,7 @@ def build_decision(
             same_candidate_evidence_only=row.get("same_candidate_evidence_only") is not False,
             stage_c_correct=not stage_c_reasons,
             strict_b4_evidence=not b4_load_reasons and not strict_b4_reasons,
-            stage_d_policy_satisfied=not stage_d_reasons,
+            stage_d_policy_satisfied=not policy_stage_d_reasons,
             systemc_cycle_evidence=not systemc_cycle_reasons,
             projection_screened=(
                 row.get("screening_rank") is not None
@@ -445,6 +584,8 @@ def build_decision(
         }
         rank_row = {
             "candidate_id": candidate_id,
+            "catalog_entry_id": catalog_entry_id,
+            "catalog_freeze_partition": freeze_partition,
             "family": row.get("family"),
             "workload_id": row.get("workload_id"),
             "case_id": row.get("case_id"),
@@ -454,6 +595,7 @@ def build_decision(
             "successful_dma_transfer_bytes": _metric(b4_payload, "successful_dma_transfer_bytes"),
             "stage_d_tier": final_policy.stage_d_tier_from_evidence(stage_d_payload),
             "stage_d_claim_ceiling": stage_d_payload.get("claim_ceiling") if isinstance(stage_d_payload, Mapping) else None,
+            "optional_precision_upgrade_risks": optional_precision_upgrade_risks,
             "systemc_cycle_evidence_ref": evidence_refs["systemc_cycle_evidence"],
             "systemc_cycle_evidence_sha256": systemc_cycle_sha,
             "final_observed_conclusion_ceiling": row.get("final_observed_conclusion_ceiling"),
@@ -461,6 +603,11 @@ def build_decision(
             "ineligible_reasons": unique_reasons,
             "evidence_refs": evidence_refs,
             "evidence_hashes": evidence_hashes,
+            **_release_gate_fields(
+                policy=policy,
+                evidence_refs=evidence_refs,
+                evidence_hashes=evidence_hashes,
+            ),
         }
         ranking_table.append(rank_row)
         if unique_reasons:
@@ -471,10 +618,65 @@ def build_decision(
     eligible_sorted = sorted(eligible, key=_score_candidate)
     ranking_table_sorted = sorted(ranking_table, key=lambda item: (0 if item.get("eligible") else 1, _score_candidate(item)))
     winner_row = eligible_sorted[0] if eligible_sorted else None
+    dominance_closure: dict[str, Any] = {
+        "required": require_dominance,
+        "status": "not_required" if not require_dominance else "not_evaluated",
+        "blocking_higher_ranked_competitive_candidates": [],
+        "resolved_higher_ranked_competitive_candidates": [],
+        "competitive_catalog_ids": sorted(_competitive_catalog_ids(freeze_manifest)),
+    }
+    if winner_row is not None and require_dominance:
+        winner_rank = winner_row.get("screening_rank")
+        blockers: list[dict[str, Any]] = []
+        resolved_higher: list[dict[str, Any]] = []
+        if not isinstance(winner_rank, int):
+            blockers.append(
+                {
+                    "candidate_id": winner_row.get("candidate_id"),
+                    "blocker": "winner_missing_screening_rank_for_dominance_closure",
+                }
+            )
+        else:
+            eligible_ids = {str(item.get("candidate_id")) for item in eligible}
+            for item in ranking_table:
+                item_rank = item.get("screening_rank")
+                if not isinstance(item_rank, int) or item_rank >= winner_rank:
+                    continue
+                if item.get("catalog_freeze_partition") != "competitive_evaluable":
+                    continue
+                if str(item.get("candidate_id")) in eligible_ids:
+                    continue
+                if not _is_unresolved_for_dominance(item):
+                    resolved_higher.append(
+                        {
+                            "candidate_id": item.get("candidate_id"),
+                            "catalog_entry_id": item.get("catalog_entry_id"),
+                            "screening_rank": item_rank,
+                            "resolution": "resolved_nonpass_or_evidence_reranked_below_winner",
+                            "ineligible_reasons": item.get("ineligible_reasons", []),
+                        }
+                    )
+                    continue
+                blockers.append(
+                    {
+                        "candidate_id": item.get("candidate_id"),
+                        "catalog_entry_id": item.get("catalog_entry_id"),
+                        "screening_rank": item_rank,
+                        "blocker": f"unresolved_higher_ranked_competitive_candidate:{item.get('candidate_id')}",
+                        "ineligible_reasons": item.get("ineligible_reasons", []),
+                    }
+                )
+        dominance_closure["blocking_higher_ranked_competitive_candidates"] = blockers
+        dominance_closure["resolved_higher_ranked_competitive_candidates"] = resolved_higher
+        dominance_closure["status"] = "passed" if not blockers else "blocked"
+        if blockers:
+            winner_row = None
     winner = None
     if winner_row is not None:
         winner = {
             "candidate_id": winner_row["candidate_id"],
+            "catalog_entry_id": winner_row.get("catalog_entry_id"),
+            "catalog_freeze_partition": winner_row.get("catalog_freeze_partition"),
             "family": winner_row.get("family"),
             "workload_id": winner_row.get("workload_id"),
             "case_id": winner_row.get("case_id"),
@@ -483,10 +685,16 @@ def build_decision(
             "evidence_tier": winner_row.get("evidence_tier"),
             "strict_b4_event_delta_ticks": winner_row.get("strict_b4_event_delta_ticks"),
             "stage_d_tier": winner_row.get("stage_d_tier"),
+            "optional_precision_upgrade_risks": winner_row.get("optional_precision_upgrade_risks"),
             "systemc_cycle_evidence_ref": winner_row.get("systemc_cycle_evidence_ref"),
             "systemc_cycle_evidence_sha256": winner_row.get("systemc_cycle_evidence_sha256"),
             "evidence_refs": winner_row.get("evidence_refs"),
             "evidence_hashes": winner_row.get("evidence_hashes"),
+            **_release_gate_fields(
+                policy=policy,
+                evidence_refs=_mapping(winner_row.get("evidence_refs")),
+                evidence_hashes=_mapping(winner_row.get("evidence_hashes")),
+            ),
         }
 
     payload: dict[str, Any] = {
@@ -501,23 +709,34 @@ def build_decision(
             "manifest": str(manifest_path),
             "claim_ceiling_status_matrix": str(matrix_path),
             "backend_report_collection": str(backend_ref) if backend_ref is not None else None,
+            "catalog_freeze_manifest": str(freeze_manifest_path) if freeze_manifest_path is not None else None,
         },
         "source_hashes": {
             "manifest_sha256": sha256_file(manifest_path),
             "claim_ceiling_status_matrix_sha256": sha256_file(matrix_path),
             "backend_report_collection_sha256": sha256_file(Path(backend_ref)) if backend_ref is not None else None,
+            "catalog_freeze_manifest_sha256": sha256_file(Path(freeze_manifest_path)) if freeze_manifest_path is not None else None,
         },
+        "dominance_closure": dominance_closure,
         "eligible_candidates": eligible_sorted,
         "ineligible_candidates": sorted(ineligible, key=_score_candidate),
         "ranking_table": ranking_table_sorted,
         "claim_ceiling": (
-            f"final_best_under_{policy.get('minimum_stage_d_tier')}_policy"
-            if winner is not None
-            else "bounded_proxy_leader_only_no_final_best"
+            "final_best_under_systemc_b4_minimum_policy"
+            if winner is not None and not final_policy.stage_d_required_for_final_best(policy)
+            else (
+                f"final_best_under_{policy.get('minimum_stage_d_tier')}_policy"
+                if winner is not None
+                else "bounded_proxy_leader_only_no_final_best"
+            )
         ),
         "non_claims": list(policy.get("non_claims", [])) + [
             "bounded_proxy_rerank_is_not_final_best_architecture",
-            "no_final_best_without_same_candidate_stage_c_stage_d_strict_b4_and_systemc_cycle_evidence",
+            (
+                "no_final_best_without_same_candidate_stage_c_strict_b4_systemc_cycle_catalog_freeze_and_dominance_evidence"
+                if not final_policy.stage_d_required_for_final_best(policy)
+                else "no_final_best_without_same_candidate_stage_c_stage_d_strict_b4_and_systemc_cycle_evidence"
+            ),
             "no_hardware_cycle_accuracy_claim_from_gem5_event_ticks",
             "systemc_cycle_accounted_is_not_rtl_cycle_accurate_timing",
         ],

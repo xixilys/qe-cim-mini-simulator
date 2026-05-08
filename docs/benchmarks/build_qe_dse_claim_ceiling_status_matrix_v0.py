@@ -14,6 +14,7 @@ if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
 from unified_dse import stage_c_qe_correctness, stage_d_implementation_evidence
+import final_best_policy_v0 as final_best_policy
 
 
 def load_json(path: Path | str | None) -> dict[str, Any] | None:
@@ -103,6 +104,7 @@ def observed_ceiling(
 def blockers(
     stage_c_report: Mapping[str, Any] | None,
     implementation_evidence: Mapping[str, Any] | None,
+    policy: Mapping[str, Any] | None = None,
 ) -> list[str]:
     items: list[str] = []
     if not isinstance(stage_c_report, Mapping):
@@ -113,6 +115,8 @@ def blockers(
         items.append("missing_stage_d_implementation_evidence")
     elif implementation_evidence.get("evidence_status") != "available":
         items.append("stage_d_implementation_evidence_not_available")
+    if policy is not None:
+        return final_best_policy.filter_policy_blockers(items, policy)
     return items
 
 
@@ -133,6 +137,7 @@ def build_matrix(
     b3_report: Mapping[str, Any] | None = None,
     b4_report_ref: Path | str | None = None,
     b4_report: Mapping[str, Any] | None = None,
+    policy: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     candidate_id = (
         candidate_id
@@ -168,13 +173,20 @@ def build_matrix(
         "b4": backend_summary(b4_report_ref, b4_report),
         "final_observed_conclusion_ceiling": observed_ceiling(stage_c_report, implementation_evidence, b4_report, b2_report),
         "adjudicator_permission_scope": "not_evaluated",
-        "blockers": blockers(stage_c_report, implementation_evidence),
+        "blockers": blockers(stage_c_report, implementation_evidence, policy),
         "non_claims": [
             "no_cycle_accuracy_claim_without_rtl_or_board_timing_evidence",
             "no_final_public_winner",
             "no_production_release_ready_claim",
         ],
     }
+    if policy is not None and not final_best_policy.stage_d_required_for_final_best(policy):
+        row["policy_id"] = policy.get("policy_id")
+        row["stage_d_required_for_final_best"] = False
+        row["optional_precision_upgrade_risks"] = final_best_policy.optional_precision_upgrade_risks(
+            implementation_evidence,
+            policy,
+        )
     payload = {
         "schema_version": SCHEMA_VERSION,
         "adjudicator_permission_scope": "not_evaluated",
@@ -233,6 +245,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--b2-report", type=Path)
     parser.add_argument("--b3-report", type=Path)
     parser.add_argument("--b4-report", type=Path)
+    parser.add_argument("--policy", type=Path, help="Optional final-best policy JSON for policy-aware blockers.")
     return parser
 
 
@@ -254,6 +267,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         b3_report=load_json(args.b3_report),
         b4_report_ref=args.b4_report,
         b4_report=load_json(args.b4_report),
+        policy=final_best_policy.load_policy(args.policy) if args.policy else None,
     )
     write_json(args.output, matrix)
     if args.markdown_output is not None:

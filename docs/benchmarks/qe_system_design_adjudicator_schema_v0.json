@@ -776,7 +776,10 @@
                 ]
               },
               "confidence_ceiling_applied": {
-                "const": "bounded"
+                "enum": [
+                  "exploratory",
+                  "bounded"
+                ]
               },
               "binding_precedence_category": {
                 "enum": [
@@ -2309,7 +2312,8 @@
             "supporting_only",
             "claim_enabling",
             "hard_gate",
-            "explain_only"
+            "explain_only",
+            "comparison_ineligible"
           ]
         },
         "related_claim_ids": {

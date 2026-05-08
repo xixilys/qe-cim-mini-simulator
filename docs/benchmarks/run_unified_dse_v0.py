@@ -28,6 +28,8 @@ import unified_dse.release_bundle as release_bundle
 import unified_dse.systemc_feedback_adapter as systemc_feedback_adapter
 import unified_dse.workload_frontend as workload_frontend
 from unified_dse.fast_model import FastModelBackend
+from unified_dse.interfaces import EvaluationConfig
+from unified_dse.systemc_backend import SystemCBackend
 
 calibration_engine = importlib.import_module("unified_dse.calibration_engine")
 result_analysis = importlib.import_module("unified_dse.result_analysis")
@@ -147,7 +149,19 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--execute-systemc",
         action="store_true",
-        help="Reserved explicit SystemC execution guard; v0 CLI never invokes SystemC directly.",
+        help="Execute the local SystemC TLM backend for each valid design point.",
+    )
+    parser.add_argument(
+        "--evaluation-fidelity",
+        choices=("L0", "L1", "L2", "L3", "L4"),
+        default=None,
+        help="Evaluation fidelity for Step 5 execution. Defaults to L2 when --execute-systemc is set, otherwise L0.",
+    )
+    parser.add_argument(
+        "--systemc-model-bin",
+        type=Path,
+        default=Path(__file__).resolve().parents[2] / "model/qe_band_solver_model/build/qe_band_solver_model",
+        help="SystemC runnable model executable used for L2 evaluation.",
     )
     parser.add_argument("--max-design-points", type=int, default=8)
     parser.add_argument(
@@ -416,8 +430,16 @@ def _evaluate_design_points(
     source_kind: str,
     max_design_points: int,
     search_backend: str,
+    evaluation_config: EvaluationConfig | None = None,
+    systemc_model_bin: Path | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
-    backend = FastModelBackend(source_kind=source_kind)
+    if evaluation_config is not None:
+        backend = SystemCBackend(
+            model_path=systemc_model_bin or Path("model/qe_band_solver_model/build/qe_band_solver_model"),
+            config=evaluation_config,
+        )
+    else:
+        backend = FastModelBackend(source_kind=source_kind)
     rows = []
     design_points, search_metadata = _generate_design_points_with_metadata(
         spec, max_design_points, search_backend
@@ -941,12 +963,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
 
-    if args.execute_systemc:
-        parser.error(
-            "SystemC execution remains via the canonical runner / future explicit adapter; "
-            "Unified DSE v0 CLI does not execute SystemC"
-        )
-    if args.source_kind not in {"stub", "fast_model_screening"}:
+    if args.source_kind not in {"stub", "fast_model_screening"} and not args.execute_systemc:
         parser.error(
             "this frontend-only CLI supports --source-kind stub or fast_model_screening; "
             "SystemC/gem5 feedback remains external"
@@ -995,6 +1012,17 @@ def main(argv: list[str] | None = None) -> int:
             )
         )
 
+    evaluation_config = None
+    if args.execute_systemc:
+        evaluation_config = EvaluationConfig(
+            fidelity_level=args.evaluation_fidelity or "L2",
+            output_dir=args.output_dir / "step5_systemc_execution",
+            allow_execute=True,
+            dry_run=args.dry_run,
+        )
+    elif args.evaluation_fidelity == "L0":
+        args.source_kind = "fast_model_screening"
+
     results, search_metadata = _evaluate_design_points(
         spec=spec,
         workload=workload,
@@ -1002,6 +1030,8 @@ def main(argv: list[str] | None = None) -> int:
         source_kind=args.source_kind,
         max_design_points=args.max_design_points,
         search_backend=args.search_backend,
+        evaluation_config=evaluation_config,
+        systemc_model_bin=args.systemc_model_bin,
     )
     systemc_feedback_summary = None
     if systemc_feedback is not None:

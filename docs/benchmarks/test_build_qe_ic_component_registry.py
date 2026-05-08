@@ -91,19 +91,21 @@ class BuildQeIcComponentRegistryTests(unittest.TestCase):
         self.assertNotIn('model/qe_band_solver_model/src/dft_hybrid_system.cpp', gaps)
         self.assertNotIn('model/qe_band_solver_model/src/chip_top.cpp', gaps)
         self.assertNotIn('model/qe_band_solver_model/src/clusters/cluster_graph_executor.cpp', gaps)
-        self.assertIn('model/qe_band_solver_model/src/architecture_template.cpp', gaps)
-        self.assertEqual(
-            gaps['model/qe_band_solver_model/src/architecture_template.cpp']['category'],
-            'intentional_v0_container_gap',
-        )
-        self.assertIn('model/qe_band_solver_model/sc_main.cpp', gaps)
-        self.assertEqual(
-            gaps['model/qe_band_solver_model/sc_main.cpp']['category'],
-            'runtime_support_not_seeded_yet',
-        )
+        expected_gap_categories = {
+            'model/qe_band_solver_model/src/architecture_template.cpp': 'intentional_v0_container_gap',
+            'model/qe_band_solver_model/sc_main.cpp': 'runtime_support_not_seeded_yet',
+            'model/qe_band_solver_model/src/architecture_config.cpp': 'runtime_support_not_seeded_yet',
+            'model/qe_band_solver_model/src/clusters/cluster_factory.cpp': 'future_flow_component_seed_candidate',
+            'model/qe_band_solver_model/src/clusters/cluster_wrapper.cpp': 'future_flow_component_seed_candidate',
+            'model/qe_band_solver_model/src/onchip/blocked_gemm_engine.cpp': 'future_component_seed_candidate',
+            'model/qe_band_solver_model/src/onchip/traditional_fpga_gemm_core.cpp': 'future_component_seed_candidate',
+        }
+        for path, category in expected_gap_categories.items():
+            self.assertIn(path, gaps)
+            self.assertEqual(gaps[path]['category'], category)
         self.assertEqual(registry['validation']['intentional_unmapped_active_source_count'], 1)
-        self.assertEqual(registry['validation']['future_catalog_expansion_candidate_count'], 1)
-        self.assertEqual(len(gaps), 2)
+        self.assertEqual(registry['validation']['future_catalog_expansion_candidate_count'], 6)
+        self.assertEqual(len(gaps), len(expected_gap_categories))
 
     def test_main_writes_registry_json(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

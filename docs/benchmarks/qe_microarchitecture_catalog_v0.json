@@ -74,6 +74,57 @@
       ]
     },
     {
+      "microarchitecture_id": "systolic_fpga_dense_path",
+      "name": "Traditional FPGA systolic dense path",
+      "target_stage": "operator_sweep",
+      "architecture_family": "F2",
+      "summary": "Device-first FPGA systolic dense path used by the current DSE family search for operator/build/diag/refresh candidate sweeps.",
+      "provenance": [
+        {
+          "source_id": "template:f2_systolic_fpga_dense_path_v1",
+          "source_type": "local_design_template",
+          "title": "F2 systolic FPGA dense path scaffold",
+          "ref": "docs/architecture/architecture_templates/f2_systolic_fpga_dense_path_v1.json",
+          "notes": "Local scaffold corresponds to the F2 device-first candidate family emitted by the current DSE frontend."
+        },
+        {
+          "source_id": "architecture:clustered_v1_template",
+          "source_type": "local_contract",
+          "title": "QE FPGA clustered v1 architecture model",
+          "ref": "docs/architecture/qe_fpga_clustered_v1_architecture_model_v0.md",
+          "notes": "Defines clustered FPGA responsibilities and stage decomposition for the F2/F3-style families."
+        }
+      ],
+      "assumptions": [
+        "Dense path parameters can be generated into SystemC/B4 candidate sidecars for exact candidate evidence.",
+        "The family remains claim-limited until Stage C correctness, strict B4 event/tick evidence, and SystemC cycle evidence join on the same candidate."
+      ],
+      "parameter_ranges": {
+        "tile_m": {"kind": "range", "min": 8, "max": 64, "unit": "matrix_rows", "description": "Candidate systolic tile rows for F2 sweeps."},
+        "tile_n": {"kind": "range", "min": 8, "max": 64, "unit": "matrix_cols", "description": "Candidate systolic tile columns for F2 sweeps."},
+        "fallback_policy": {"kind": "enum", "values": ["device_first_fallback", "host_checked_fallback"], "description": "Fallback policy exposed by the current DSE design axes."}
+      },
+      "expected_effects": [
+        {"metric": "time_to_convergence_s", "direction": "decrease", "rationale": "May reduce dense operator/build latency while preserving a conservative fallback path."},
+        {"metric": "fallback_ratio", "direction": "mixed", "rationale": "Device-first fallback can either lower unsupported work or expose more transfer overhead depending on workload."}
+      ],
+      "support_status": "systemc_configurable",
+      "model_support_status": {
+        "status": "configurable_systemc_model",
+        "notes": "Can be represented by generated SystemC architecture configs and B4 timing profiles in the current evidence loop.",
+        "supporting_artifact_refs": [
+          "docs/architecture/architecture_templates/f2_systolic_fpga_dense_path_v1.json",
+          "docs/benchmarks/template_to_systemc_config.py"
+        ]
+      },
+      "supported_evidence_tiers": ["survey-catalog", "projection-screened", "systemc-cycle-accounted"],
+      "non_claims": [
+        "not_a_final_best_winner_from_catalog",
+        "not_rtl_cycle_accurate",
+        "not_board_measured"
+      ]
+    },
+    {
       "microarchitecture_id": "hbm_streaming_operator_pipeline",
       "name": "HBM streaming operator pipeline",
       "target_stage": "operator_sweep",
@@ -318,6 +369,147 @@
       },
       "supported_evidence_tiers": ["survey-catalog", "projection-screened"],
       "non_claims": ["not_runtime_fusion_evidence", "not_final_best", "not_cycle_accurate"]
+    },
+    {
+      "microarchitecture_id": "host_managed_four_cluster_control_baseline",
+      "name": "Host-managed 4-cluster control baseline",
+      "target_stage": "multi_stage",
+      "architecture_family": "F1",
+      "summary": "Host + FPGA + chip orchestration baseline that keeps full-system control, DMA staging, and cluster boundaries explicit before aggressive specialization.",
+      "provenance": [
+        {
+          "source_id": "template:f1_host_heavy_cpu_baseline_v1",
+          "source_type": "local_design_template",
+          "title": "Host-heavy CPU/FPGA baseline scaffold",
+          "ref": "docs/architecture/architecture_templates/f1_host_heavy_cpu_baseline_v1.json",
+          "notes": "Defines the conservative full-system control baseline used to bound accelerator claims."
+        },
+        {
+          "source_id": "architecture:host_managed_full_scf",
+          "source_type": "local_contract",
+          "title": "Host-managed full SCF architecture",
+          "ref": "docs/architecture/host_managed_full_scf_architecture_v1_20260409.md",
+          "notes": "Local contract for host orchestration and full-system boundaries."
+        }
+      ],
+      "assumptions": [
+        "Host orchestration remains visible and is not hidden by accelerator-only timing.",
+        "This baseline is a coverage/control reference, not an optimized final-best claim."
+      ],
+      "parameter_ranges": {
+        "host_control_batch_size": {"kind": "range", "min": 1, "max": 64, "unit": "requests", "description": "Projected number of backend requests submitted per host control epoch."},
+        "dma_staging_policy": {"kind": "enum", "values": ["synchronous", "double_buffered", "queued"], "description": "Control-level data staging policy for projection studies."},
+        "host_runtime_overhead_ns": {"kind": "unknown", "unknown_reason": "Host/runtime measurement depends on later platform and QE harness evidence.", "description": "Host runtime overhead placeholder retained for auditability."}
+      },
+      "expected_effects": [
+        {"metric": "host_overhead_fraction", "direction": "increase", "rationale": "Conservative host-managed execution exposes control overheads."},
+        {"metric": "fallback_ratio", "direction": "decrease", "rationale": "Host-managed fallback reduces unsupported accelerator-path risk."}
+      ],
+      "support_status": "projection_only",
+      "model_support_status": {
+        "status": "projection_only",
+        "notes": "Control baseline is represented in design templates and reports, but is not a final-best executable candidate under the current SystemC+B4 minimum.",
+        "supporting_artifact_refs": [
+          "docs/architecture/architecture_templates/f1_host_heavy_cpu_baseline_v1.json",
+          "docs/architecture/host_managed_full_scf_architecture_v1_20260409.md"
+        ]
+      },
+      "supported_evidence_tiers": ["survey-catalog", "projection-screened"],
+      "non_claims": ["not_accelerator_final_best", "not_board_measured", "not_hidden_host_overhead"]
+    },
+    {
+      "microarchitecture_id": "four_cluster_cim_system_baseline",
+      "name": "4-cluster CIM-oriented system baseline",
+      "target_stage": "multi_stage",
+      "architecture_family": "F4",
+      "summary": "PPT-style 4-cluster Host + FPGA + Chip baseline covering operator sweep, reduced build, diagonalization, refresh/residual, and CIM-oriented data residency.",
+      "provenance": [
+        {
+          "source_id": "template:4cluster_cim_baseline_v1",
+          "source_type": "local_design_template",
+          "title": "4-cluster CIM baseline scaffold",
+          "ref": "docs/architecture/architecture_templates/4cluster_cim_baseline_v1.json",
+          "notes": "Captures the complete 4-cluster architecture family described by the project architecture materials."
+        },
+        {
+          "source_id": "architecture:master_spec",
+          "source_type": "local_contract",
+          "title": "System design master specification",
+          "ref": "docs/architecture/system_design_master_spec_v0.md",
+          "notes": "Defines Host + FPGA + Chip and cluster-level responsibility boundaries."
+        }
+      ],
+      "assumptions": [
+        "The four clusters can be parameterized as a projection family before per-cluster evidence is complete.",
+        "CIM-oriented behavior remains a model-level hypothesis until stronger implementation or measurement artifacts exist."
+      ],
+      "parameter_ranges": {
+        "cluster_count": {"kind": "range", "min": 4, "max": 4, "unit": "clusters", "description": "Frozen four-cluster baseline count."},
+        "cim_resident_state_kib": {"kind": "range", "min": 128, "max": 32768, "unit": "KiB", "description": "Projected CIM/resident state capacity across the chip-side fabric."},
+        "host_fpga_chip_link_policy": {"kind": "enum", "values": ["host_driven_dma", "fpga_queued_dma", "resident_context_reuse"], "description": "Data-movement policy family for full-system DSE."}
+      },
+      "expected_effects": [
+        {"metric": "bytes_moved_to_convergence", "direction": "decrease", "rationale": "Four-cluster residency may reduce repeated movement when reuse is high."},
+        {"metric": "resource_risk", "direction": "increase", "rationale": "CIM-oriented full-system specialization increases implementation uncertainty without Stage-D/HLS evidence."}
+      ],
+      "support_status": "projection_only",
+      "model_support_status": {
+        "status": "projection_only",
+        "notes": "The complete 4-cluster family is covered for closed-catalog search but remains coverage-only until exact SystemC+B4 evidence exists.",
+        "supporting_artifact_refs": [
+          "docs/architecture/architecture_templates/4cluster_cim_baseline_v1.json",
+          "docs/architecture/system_design_master_spec_v0.md"
+        ]
+      },
+      "supported_evidence_tiers": ["survey-catalog", "projection-screened"],
+      "non_claims": ["not_cim_silicon_measurement", "not_rtl_timing", "not_final_best_without_same_candidate_evidence"]
+    },
+    {
+      "microarchitecture_id": "refresh_residual_streaming_cluster",
+      "name": "Refresh/residual streaming cluster",
+      "target_stage": "refresh_residual",
+      "architecture_family": "F4",
+      "summary": "Dedicated refresh/residual pipeline hypothesis for Cluster D, residual vector update, and convergence-check traffic.",
+      "provenance": [
+        {
+          "source_id": "architecture:cluster_d_refresh_spec",
+          "source_type": "local_contract",
+          "title": "Cluster D refresh/residual specification",
+          "ref": "docs/architecture/qe_fpga_clustered_v1_cluster_d_refresh_spec_20260402.md",
+          "notes": "Defines refresh/residual responsibilities in the clustered architecture."
+        },
+        {
+          "source_id": "template:resident_dataflow_fabric_v1",
+          "source_type": "local_design_template",
+          "title": "Resident dataflow fabric scaffold",
+          "ref": "docs/architecture/architecture_templates/resident_dataflow_fabric_v1.json",
+          "notes": "Local scaffold for residual/dataflow residency projection."
+        }
+      ],
+      "assumptions": [
+        "Residual update and convergence-check streams can be isolated from dense operator traffic.",
+        "Refresh/residual acceleration remains projection-only until same-candidate SystemC+B4 evidence exists."
+      ],
+      "parameter_ranges": {
+        "residual_stream_width": {"kind": "range", "min": 64, "max": 1024, "unit": "bytes", "description": "Projected residual stream width per cycle/beat."},
+        "refresh_pipeline_depth": {"kind": "range", "min": 1, "max": 16, "unit": "stages", "description": "Projected refresh pipeline depth."},
+        "convergence_check_policy": {"kind": "enum", "values": ["host_checked", "fpga_reduced", "resident_threshold"], "description": "Projection-level convergence check placement."}
+      },
+      "expected_effects": [
+        {"metric": "time_to_convergence_s", "direction": "decrease", "rationale": "A dedicated refresh/residual stream may reduce tail latency in the final pipeline stage."},
+        {"metric": "bytes_moved_to_convergence", "direction": "mixed", "rationale": "Resident thresholding may reduce movement, but explicit stream materialization can add traffic."}
+      ],
+      "support_status": "projection_only",
+      "model_support_status": {
+        "status": "projection_only",
+        "notes": "Cluster-D refresh semantics are documented but not executable as a final-best candidate in the current backend.",
+        "supporting_artifact_refs": [
+          "docs/architecture/qe_fpga_clustered_v1_cluster_d_refresh_spec_20260402.md",
+          "docs/architecture/architecture_templates/resident_dataflow_fabric_v1.json"
+        ]
+      },
+      "supported_evidence_tiers": ["survey-catalog", "projection-screened"],
+      "non_claims": ["not_runtime_refresh_evidence", "not_final_best", "not_cycle_accurate"]
     }
   ]
 }

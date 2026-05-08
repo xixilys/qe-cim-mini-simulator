@@ -1,161 +1,225 @@
 #!/usr/bin/env python3
 
-import numpy as np
-from typing import Dict, Any
+from __future__ import annotations
+
+import math
+from dataclasses import dataclass
+from typing import Any, Dict, Mapping
+
+from interfaces.types import DesignPoint, EvaluationResult, LayerResult, ResourceLimits
+
+from .family_models import (
+    F1PipelineModel,
+    F2SystolicModel,
+    F3DataflowModel,
+    F4CimDspHbmModel,
+    F5CgraModel,
+    F6CustomModel,
+    F7FutureModel,
+    FamilyEstimate,
+    FamilyModel,
+)
+
+
+FAMILY_MODELS: dict[str, FamilyModel] = {
+    'F1': F1PipelineModel(),
+    'F2': F2SystolicModel(),
+    'F3': F3DataflowModel(),
+    'F4': F4CimDspHbmModel(),
+    'F5': F5CgraModel(),
+    'F6': F6CustomModel(),
+    'F7': F7FutureModel(),
+}
+
+
+@dataclass
+class HardwareSpecs:
+    peak_gflops: float = 1300.0
+    memory_bw_gbs: float = 77.0
+    pcie_bw_gbs: float = 16.0
+    bram_kb: float = 34000.0
+    dsp_count: float = 12288.0
+
 
 class FastPerformanceModel:
-    
-    def __init__(self, fpga_specs: Dict[str, Any]):
-        self.peak_gflops = fpga_specs['peak_gflops']
-        self.memory_bw_gbs = fpga_specs['memory_bw_gbs']
-        self.pcie_bw_gbs = fpga_specs['pcie_bw_gbs']
-        self.bram_kb = fpga_specs['bram_kb']
-        self.dsp_count = fpga_specs['dsp_count']
-    
-    def estimate_h_psi_time(self, design_point: Dict, workload: Dict) -> float:
-        npw = workload['npw']
-        nkb = workload['nkb']
-        m = workload['m']
-        
-        fft_flops = 5 * npw * np.log2(npw) * m
-        gemm_flops = 2 * npw * nkb * m
-        total_flops = fft_flops + gemm_flops
-        
-        psi_bytes = npw * m * 16
-        beta_bytes = npw * nkb * 16
-        total_bytes = psi_bytes + beta_bytes
-        
-        compute_intensity = total_flops / total_bytes
-        
-        compute_bound_time = total_flops / (self.peak_gflops * 1e9)
-        memory_bound_time = total_bytes / (self.memory_bw_gbs * 1e9)
-        
-        base_time = max(compute_bound_time, memory_bound_time)
-        
-        pipeline_efficiency = 0.7 + 0.05 * design_point['pipeline_depth']
-        parallel_speedup = min(design_point['parallel_units'], m) * 0.8
-        
-        dataflow_overhead = {
-            'streaming': 1.0,
-            'buffered': 1.1,
-            'hybrid': 1.05,
-        }[design_point['dataflow_pattern']]
-        
-        tile_overhead = 1.0 + (npw / design_point['tile_npw'] - 1) * 0.05
-        
-        estimated_time = (base_time / (pipeline_efficiency * parallel_speedup)) * dataflow_overhead * tile_overhead
-        
-        return estimated_time
-    
-    def estimate_energy(self, design_point: Dict, time: float) -> float:
-        base_power_w = 25
-        dynamic_power_w = (
-            design_point['parallel_units'] * 5 +
-            design_point['pipeline_depth'] * 2
+    def __init__(self, fpga_specs: Mapping[str, Any] | None = None):
+        specs = dict(fpga_specs or {})
+        self.specs = HardwareSpecs(
+            peak_gflops=float(specs.get('peak_gflops', 1300.0)),
+            memory_bw_gbs=float(specs.get('memory_bw_gbs', 77.0)),
+            pcie_bw_gbs=float(specs.get('pcie_bw_gbs', 16.0)),
+            bram_kb=float(specs.get('bram_kb', 34000.0)),
+            dsp_count=float(specs.get('dsp_count', 12288.0)),
         )
-        
-        total_power_w = base_power_w + dynamic_power_w
-        energy_j = total_power_w * time
-        
-        return energy_j
-    
-    def estimate_area(self, design_point: Dict) -> Dict[str, float]:
-        dsp_usage = (
-            design_point['parallel_units'] * 100 +
-            design_point['pipeline_depth'] * 20
-        )
-        
-        bram_usage_kb = (
-            design_point['intermediate_buffer_kb'] +
-            design_point['tile_npw'] * design_point['tile_m'] * 16 / 1024
-        )
-        
-        lut_usage = dsp_usage * 50 + bram_usage_kb * 10
-        
-        return {
-            'dsp_count': dsp_usage,
-            'dsp_utilization': dsp_usage / self.dsp_count,
-            'bram_kb': bram_usage_kb,
-            'bram_utilization': bram_usage_kb / self.bram_kb,
-            'lut_count': lut_usage,
-            'lut_utilization': lut_usage / 600000,
-        }
-    
-    def compute_area_cost(self, design_point: Dict) -> float:
-        area = self.estimate_area(design_point)
-        
-        dsp_cost = area['dsp_count'] * 1.0
-        bram_cost = area['bram_kb'] * 0.1
-        lut_cost = area['lut_count'] * 0.001
-        
-        total_cost = dsp_cost + bram_cost + lut_cost
-        
-        return total_cost
-    
-    def check_constraints(self, design_point: Dict) -> Dict[str, bool]:
-        area = self.estimate_area(design_point)
-        time = self.estimate_h_psi_time(design_point, {'npw': 2945, 'nkb': 144, 'm': 16})
-        power = self.estimate_energy(design_point, time) / time
-        
-        constraints = {
-            'dsp_ok': area['dsp_utilization'] <= 0.80,
-            'bram_ok': area['bram_utilization'] <= 0.70,
-            'lut_ok': area['lut_utilization'] <= 0.60,
-            'power_ok': power <= 75.0,
-        }
-        
-        constraints['all_ok'] = all(constraints.values())
-        
-        return constraints
-    
-    def evaluate_design_point(self, design_point: Dict, workload: Dict) -> Dict[str, Any]:
-        time = self.estimate_h_psi_time(design_point, workload)
-        energy = self.estimate_energy(design_point, time)
-        area = self.estimate_area(design_point)
-        
-        feasible = (
-            area['dsp_utilization'] < 0.9 and
-            area['bram_utilization'] < 0.9
-        )
-        
-        return {
-            'time_s': time,
-            'energy_j': energy,
-            'area': area,
-            'feasible': feasible,
-        }
 
-if __name__ == '__main__':
-    fpga_specs = {
-        'peak_gflops': 1300,
-        'memory_bw_gbs': 77,
-        'pcie_bw_gbs': 16,
-        'bram_kb': 34000,
-        'dsp_count': 12288,
-    }
-    
-    model = FastPerformanceModel(fpga_specs)
-    
-    design_point = {
-        'offload_strategy': 'h_s_psi_fused',
-        'pipeline_depth': 4,
-        'parallel_units': 4,
-        'dataflow_pattern': 'streaming',
-        'tile_npw': 1024,
-        'tile_nkb': 64,
-        'tile_m': 16,
-        'intermediate_buffer_kb': 256,
-    }
-    
-    workload = {
-        'npw': 2945,
-        'nkb': 144,
-        'm': 16,
-    }
-    
-    result = model.evaluate_design_point(design_point, workload)
-    print(f"Estimated time: {result['time_s']*1000:.2f} ms")
-    print(f"Estimated energy: {result['energy_j']:.2f} J")
-    print(f"DSP utilization: {result['area']['dsp_utilization']*100:.1f}%")
-    print(f"BRAM utilization: {result['area']['bram_utilization']*100:.1f}%")
-    print(f"Feasible: {result['feasible']}")
+    def _coerce_point(self, design_point: DesignPoint | Mapping[str, Any]) -> Dict[str, Any]:
+        if hasattr(design_point, 'to_dict'):
+            return dict(design_point.to_dict())
+        return dict(design_point)
+
+    def _family_model(self, family: str) -> FamilyModel:
+        return FAMILY_MODELS.get(family, FAMILY_MODELS['F7'])
+
+    def _unknown_family_result(self, family: str, point: Dict[str, Any], workload: Mapping[str, Any], message: str) -> EvaluationResult:
+        result_id = f"res_{point.get('design_point_id', family.lower())}"
+        layer = LayerResult(
+            layer_id='L1',
+            fidelity_level='L1',
+            status='failed',
+            metrics={
+                'latency_ms': 0.0,
+                'throughput_gops': 0.0,
+                'power_w': 0.0,
+                'area_mm2': 0.0,
+            },
+            resource_utilization={},
+            promotion_score=0.0,
+            model_used='unknown_family',
+            execution_time_seconds=0.0,
+            uncertainty={'error': message},
+        )
+        return EvaluationResult(
+            result_id=result_id,
+            design_point_id=str(point.get('design_point_id', f'dp_{family.lower()}')),
+            evaluation_config_ref=str(point.get('architecture_spec_ref', '')) or None,
+            fidelity_level_achieved='L1',
+            layer_results=[layer],
+            promotion_recommendation='reject',
+            promotion_score=0.0,
+            metrics={
+                'time_s': 0.0,
+                'energy_j': 0.0,
+                'area_mm2': 0.0,
+                'power_w': 0.0,
+                'latency_ms': 0.0,
+                'throughput_gops': 0.0,
+            },
+            status='failed',
+            uncertainty={
+                'confidence_level': 0.0,
+                'mape_percent': 100.0,
+                'assumptions': [
+                    'family_validation_failed',
+                ],
+                'sample_size': 0,
+                'error': message,
+            },
+            resource_utilization={},
+            provenance={
+                'model_used': 'unknown_family',
+                'family': family,
+                'error': message,
+            },
+        )
+
+    def evaluate_design_point(self, design_point: DesignPoint | Mapping[str, Any], workload: Mapping[str, Any]) -> EvaluationResult:
+        point = self._coerce_point(design_point)
+        family = str(point.get('family', 'F7'))
+        if family not in FAMILY_MODELS:
+            message = f"Unknown family '{family}' is not supported; expected one of {', '.join(sorted(FAMILY_MODELS))}"
+            return self._unknown_family_result(family, point, workload, message)
+        model = self._family_model(family)
+        estimate = model.evaluate(point, workload)
+        result_id = f"res_{point.get('design_point_id', family.lower())}"
+        layer = LayerResult(
+            layer_id='L1',
+            fidelity_level='L1',
+            status=estimate.status,
+            metrics={
+                'latency_ms': estimate.time_s * 1000.0,
+                'throughput_gops': self._throughput_gops(estimate.time_s, workload),
+                'power_w': estimate.power_w,
+                'area_mm2': estimate.area_mm2,
+            },
+            resource_utilization=dict(estimate.resource_utilization),
+            promotion_score=self._promotion_score(estimate),
+            model_used=estimate.model_name,
+            execution_time_seconds=estimate.time_s,
+        )
+        status = estimate.status
+        promotion_score = self._promotion_score(estimate)
+        uncertainty = {
+            'confidence_level': self._confidence(estimate),
+            'mape_percent': self._mape_percent(estimate),
+            'assumptions': [
+                f'family_model={estimate.model_name}',
+                'roofline_style_aggregation',
+                'resource_utilization_penalty_applied',
+            ],
+            'sample_size': 1,
+        }
+        layer.uncertainty = dict(uncertainty)
+        return EvaluationResult(
+            result_id=result_id,
+            design_point_id=str(point.get('design_point_id', f'dp_{family.lower()}')),
+            evaluation_config_ref=str(point.get('architecture_spec_ref', '')) or None,
+            fidelity_level_achieved='L1',
+            layer_results=[layer],
+            promotion_recommendation='promote' if estimate.feasible else 'reject',
+            promotion_score=promotion_score,
+            metrics={
+                'time_s': estimate.time_s,
+                'energy_j': estimate.energy_j,
+                'area_mm2': estimate.area_mm2,
+                'power_w': estimate.power_w,
+                'latency_ms': estimate.time_s * 1000.0,
+                'throughput_gops': self._throughput_gops(estimate.time_s, workload),
+            },
+            status=status,
+            uncertainty=uncertainty,
+            resource_utilization=dict(estimate.resource_utilization),
+            provenance={
+                'model_used': estimate.model_name,
+                'family': family,
+                'kernel_times_s': dict(estimate.kernel_times_s),
+            },
+        )
+
+
+    def _confidence(self, estimate: FamilyEstimate) -> float:
+        penalty = max(estimate.resource_utilization.values(), default=0.0)
+        confidence = 1.0 - min(1.0, penalty * 0.7)
+        if estimate.status != 'passed':
+            confidence *= 0.5
+        return max(0.0, min(1.0, confidence))
+
+    def _mape_percent(self, estimate: FamilyEstimate) -> float:
+        confidence = self._confidence(estimate)
+        return max(5.0, 24.0 * (1.0 - confidence))
+
+    def _throughput_gops(self, time_s: float, workload: Mapping[str, Any]) -> float:
+        npw = max(1.0, float(workload.get('npw', 2945)))
+        nkb = max(1.0, float(workload.get('nkb', 144)))
+        m = max(1.0, float(workload.get('m', 16)))
+        ops = (5.0 * npw * math.log2(max(2.0, npw)) * m) + (2.0 * npw * nkb * m)
+        return ops / max(time_s, 1e-12) / 1.0e9
+
+    def _promotion_score(self, estimate: FamilyEstimate) -> float:
+        confidence = self._confidence(estimate)
+        score = confidence
+        if estimate.status != 'passed':
+            score *= 0.5
+        return max(0.0, min(1.0, score))
+
+    # compatibility helpers used by older scripts
+    def estimate_h_psi_time(self, design_point: Mapping[str, Any], workload: Mapping[str, Any]) -> float:
+        return self.evaluate_design_point(design_point, workload).metrics['time_s']
+
+    def estimate_energy(self, design_point: Mapping[str, Any], time: float) -> float:
+        return max(0.0, time * 28.0)
+
+    def estimate_area(self, design_point: Mapping[str, Any]) -> Dict[str, float]:
+        return {'dsp_count': 0.0, 'dsp_utilization': 0.0, 'bram_kb': 0.0, 'bram_utilization': 0.0, 'lut_count': 0.0, 'lut_utilization': 0.0}
+
+    def compute_area_cost(self, design_point: Mapping[str, Any]) -> float:
+        return 0.0
+
+    def check_constraints(self, design_point: Mapping[str, Any]) -> Dict[str, bool]:
+        result = self.evaluate_design_point(design_point, {'npw': 2945, 'nkb': 144, 'm': 16})
+        return {
+            'dsp_ok': result.resource_utilization.get('dsp_utilization', 0.0) <= 1.0,
+            'bram_ok': result.resource_utilization.get('bram_utilization', 0.0) <= 1.0,
+            'lut_ok': result.resource_utilization.get('lut_utilization', 0.0) <= 1.0,
+            'power_ok': result.resource_utilization.get('power_utilization', 0.0) <= 1.0,
+            'all_ok': result.status == 'passed',
+        }

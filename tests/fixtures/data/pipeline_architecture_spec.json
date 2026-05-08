@@ -1,0 +1,22 @@
+{
+  "schema_version": "architecture_spec_v1",
+  "spec_id": "arch_si4_pbe_uspp_small",
+  "selected_family": "F4",
+  "family_rationale": "Tile-based architecture matches GEMM-heavy workload",
+  "partition": {
+    "host_scope": [
+      "rho_Veff",
+      "mix_rho",
+      "convergence"
+    ],
+    "device_scope": [
+      "h_psi",
+      "s_psi",
+      "build_H_sub",
+      "refresh"
+    ],
+    "fallback_scope": [
+      "cdiaghg"
+    ]
+  }
+}

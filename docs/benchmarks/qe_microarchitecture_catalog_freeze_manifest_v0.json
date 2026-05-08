@@ -1,0 +1,631 @@
+{
+  "catalog_id": "qe_microarchitecture_catalog_v0",
+  "catalog_ref": "/mnt/f/phd/year_2/project/dft_accelerate/docs/benchmarks/qe_microarchitecture_catalog_v0.json",
+  "catalog_schema_ref": "/mnt/f/phd/year_2/project/dft_accelerate/docs/benchmarks/qe_microarchitecture_catalog_schema_v0.json",
+  "catalog_schema_sha256": "8ca0a2da336b32dcd85e0fcc7c83c93edb245626f8ce872c880a4b03b53f9a71",
+  "catalog_sha256": "7919e420b5f174ef964bf7a87338f1493b5244faa32380c4ce61e3d2cdc521e6",
+  "coverage_summary": {
+    "covered_tags": [
+      "cim_or_hybrid",
+      "data_movement",
+      "diagonalization",
+      "host_fpga_chip",
+      "interconnect",
+      "memory_residency",
+      "multi_stage",
+      "operator_sweep",
+      "reduced_build",
+      "refresh_residual",
+      "systemc_configurable_candidate"
+    ],
+    "missing_coverage_tags": [],
+    "required_coverage_tags": [
+      "host_fpga_chip",
+      "operator_sweep",
+      "reduced_build",
+      "diagonalization",
+      "refresh_residual",
+      "memory_residency",
+      "interconnect",
+      "cim_or_hybrid",
+      "data_movement"
+    ]
+  },
+  "entries": [
+    {
+      "architecture_family": "F3",
+      "coverage_tags": [
+        "host_fpga_chip",
+        "operator_sweep",
+        "systemc_configurable_candidate"
+      ],
+      "freeze_partition": "competitive_evaluable",
+      "microarchitecture_id": "tensor_systolic_dense_path",
+      "model_support_status": {
+        "notes": "Can be represented through generated SystemC architecture config sidecars before stronger evidence is collected.",
+        "status": "configurable_systemc_model",
+        "supporting_artifact_refs": [
+          "docs/benchmarks/template_to_systemc_config.py",
+          "model/qe_band_solver_model/README.md"
+        ]
+      },
+      "name": "Tensor-systolic dense path",
+      "non_claims": [
+        "not_a_final_best_winner_from_catalog",
+        "not_rtl_cycle_accurate",
+        "not_board_measured"
+      ],
+      "parameter_space_hash": "4f1fa2a6e20bad976ee41dd8c6d989dda2b49effef6cb2192086da97a08556ae",
+      "partition_reason": "current backend can carry this entry to same-candidate SystemC cycle evidence; Stage C and strict B4 remain required before any final-best claim",
+      "provenance_refs": [
+        "docs/architecture/architecture_templates/f3_tensor_systolic_fpga_offload_v1.json",
+        "architecture literature pattern: spatially pipelined matrix/tensor array"
+      ],
+      "support_status": "systemc_configurable",
+      "supported_evidence_tiers": [
+        "survey-catalog",
+        "projection-screened",
+        "systemc-cycle-accounted"
+      ],
+      "target_stage": "operator_sweep"
+    },
+    {
+      "architecture_family": "F2",
+      "coverage_tags": [
+        "diagonalization",
+        "host_fpga_chip",
+        "operator_sweep",
+        "reduced_build",
+        "refresh_residual",
+        "systemc_configurable_candidate"
+      ],
+      "freeze_partition": "competitive_evaluable",
+      "microarchitecture_id": "systolic_fpga_dense_path",
+      "model_support_status": {
+        "notes": "Can be represented by generated SystemC architecture configs and B4 timing profiles in the current evidence loop.",
+        "status": "configurable_systemc_model",
+        "supporting_artifact_refs": [
+          "docs/architecture/architecture_templates/f2_systolic_fpga_dense_path_v1.json",
+          "docs/benchmarks/template_to_systemc_config.py"
+        ]
+      },
+      "name": "Traditional FPGA systolic dense path",
+      "non_claims": [
+        "not_a_final_best_winner_from_catalog",
+        "not_rtl_cycle_accurate",
+        "not_board_measured"
+      ],
+      "parameter_space_hash": "05f2b871d56aa065f34121dc0a649fcc6e49f82c755938fc59cc9e7d15734dfd",
+      "partition_reason": "current backend can carry this entry to same-candidate SystemC cycle evidence; Stage C and strict B4 remain required before any final-best claim",
+      "provenance_refs": [
+        "docs/architecture/architecture_templates/f2_systolic_fpga_dense_path_v1.json",
+        "docs/architecture/qe_fpga_clustered_v1_architecture_model_v0.md"
+      ],
+      "support_status": "systemc_configurable",
+      "supported_evidence_tiers": [
+        "survey-catalog",
+        "projection-screened",
+        "systemc-cycle-accounted"
+      ],
+      "target_stage": "operator_sweep"
+    },
+    {
+      "architecture_family": "F3",
+      "coverage_tags": [
+        "data_movement",
+        "interconnect",
+        "memory_residency",
+        "operator_sweep"
+      ],
+      "freeze_partition": "coverage_only",
+      "microarchitecture_id": "hbm_streaming_operator_pipeline",
+      "model_support_status": {
+        "notes": "Template metadata exists; no completed HBM runtime semantics are claimed.",
+        "status": "projection_only",
+        "supporting_artifact_refs": [
+          "docs/architecture/architecture_templates/f3_hbm_streaming_operator_pipeline_v1.json"
+        ]
+      },
+      "name": "HBM streaming operator pipeline",
+      "non_claims": [
+        "not_runtime_hbm_evidence",
+        "not_board_measured",
+        "not_final_best"
+      ],
+      "parameter_space_hash": "95ee2cdbd7305cae20911c6515c2531c7fa60496972464aecf347ab50f62509d",
+      "partition_reason": "projection/catalog coverage entry without same-candidate SystemC+B4 executable path; cannot block or win the closed-catalog-best decision",
+      "provenance_refs": [
+        "docs/architecture/architecture_templates/f3_hbm_streaming_operator_pipeline_v1.json"
+      ],
+      "support_status": "projection_only",
+      "supported_evidence_tiers": [
+        "survey-catalog",
+        "projection-screened"
+      ],
+      "target_stage": "operator_sweep"
+    },
+    {
+      "architecture_family": "F4",
+      "coverage_tags": [
+        "cim_or_hybrid",
+        "host_fpga_chip",
+        "memory_residency",
+        "multi_stage",
+        "operator_sweep",
+        "reduced_build"
+      ],
+      "freeze_partition": "coverage_only",
+      "microarchitecture_id": "cim_dsp_vector_hybrid",
+      "model_support_status": {
+        "notes": "Hybrid semantics are proposal metadata pending executor support.",
+        "status": "projection_only",
+        "supporting_artifact_refs": [
+          "docs/architecture/architecture_templates/cim_dsp_vector_hybrid_v1.json"
+        ]
+      },
+      "name": "CIM + DSP vector hybrid",
+      "non_claims": [
+        "not_cim_silicon_measurement",
+        "not_rtl_timing",
+        "not_final_best"
+      ],
+      "parameter_space_hash": "c4006a34737f580f33bf75876b6500e18c53a2a7ed9274570e7b89991853765c",
+      "partition_reason": "projection/catalog coverage entry without same-candidate SystemC+B4 executable path; cannot block or win the closed-catalog-best decision",
+      "provenance_refs": [
+        "docs/architecture/architecture_templates/cim_dsp_vector_hybrid_v1.json",
+        "docs/cim/cim_macro_block_and_timing_v0.md"
+      ],
+      "support_status": "projection_only",
+      "supported_evidence_tiers": [
+        "survey-catalog",
+        "projection-screened"
+      ],
+      "target_stage": "multi_stage"
+    },
+    {
+      "architecture_family": "custom",
+      "coverage_tags": [
+        "cim_or_hybrid",
+        "data_movement",
+        "memory_residency"
+      ],
+      "freeze_partition": "excluded_from_best_universe",
+      "microarchitecture_id": "near_memory_pim_resident_context",
+      "model_support_status": {
+        "notes": "No completed runtime executor or board support; keep as broad catalog/projection only.",
+        "status": "not_supported",
+        "supporting_artifact_refs": [
+          "docs/architecture/architecture_templates/custom_near_memory_pim_resident_v1.json"
+        ]
+      },
+      "name": "Near-memory PIM resident context",
+      "non_claims": [
+        "not_executable_in_current_runtime",
+        "not_board_measured",
+        "not_final_best"
+      ],
+      "parameter_space_hash": "8b8431745315272cb5f0a0e951cdc9f761318680588fa6b0e073abefee516b0f",
+      "partition_reason": "not executable in the current SystemC/B4 evidence loop; retained for search coverage only and excluded before final-best ranking",
+      "provenance_refs": [
+        "docs/architecture/architecture_templates/custom_near_memory_pim_resident_v1.json",
+        "docs/cim/cim_resident_context_and_near_sram_contract_v0.md"
+      ],
+      "support_status": "unsupported",
+      "supported_evidence_tiers": [
+        "survey-catalog",
+        "projection-screened"
+      ],
+      "target_stage": "memory_residency"
+    },
+    {
+      "architecture_family": "F5",
+      "coverage_tags": [
+        "host_fpga_chip",
+        "multi_stage",
+        "operator_sweep",
+        "reduced_build"
+      ],
+      "freeze_partition": "excluded_from_best_universe",
+      "microarchitecture_id": "cgra_dataflow_operator",
+      "model_support_status": {
+        "notes": "No current CGRA executor; catalog and projection only.",
+        "status": "not_supported",
+        "supporting_artifact_refs": [
+          "docs/architecture/architecture_templates/f5_cgra_dataflow_operator_v1.json"
+        ]
+      },
+      "name": "CGRA dataflow operator fabric",
+      "non_claims": [
+        "not_executable_in_current_runtime",
+        "not_rtl_implemented",
+        "not_final_best"
+      ],
+      "parameter_space_hash": "835ea2b02a0f86018134a93e9cbd88522ce1436a358bd9307e247a8178b92d28",
+      "partition_reason": "not executable in the current SystemC/B4 evidence loop; retained for search coverage only and excluded before final-best ranking",
+      "provenance_refs": [
+        "docs/architecture/architecture_templates/f5_cgra_dataflow_operator_v1.json"
+      ],
+      "support_status": "unsupported",
+      "supported_evidence_tiers": [
+        "survey-catalog",
+        "projection-screened"
+      ],
+      "target_stage": "multi_stage"
+    },
+    {
+      "architecture_family": "custom",
+      "coverage_tags": [
+        "host_fpga_chip",
+        "interconnect",
+        "memory_residency"
+      ],
+      "freeze_partition": "excluded_from_best_universe",
+      "microarchitecture_id": "multichiplet_noc_partition",
+      "model_support_status": {
+        "notes": "No current multi-chiplet executor or physical package evidence.",
+        "status": "not_supported",
+        "supporting_artifact_refs": [
+          "docs/architecture/architecture_templates/custom_multichiplet_noc_partition_v1.json"
+        ]
+      },
+      "name": "Multi-chiplet NoC partition",
+      "non_claims": [
+        "not_physical_package_evidence",
+        "not_asic_ppa",
+        "not_final_best"
+      ],
+      "parameter_space_hash": "a2a5b9ec41dbb297a4be2f73aacf6a01e485626a9c239c1ee3d158439fcb1548",
+      "partition_reason": "not executable in the current SystemC/B4 evidence loop; retained for search coverage only and excluded before final-best ranking",
+      "provenance_refs": [
+        "docs/architecture/architecture_templates/custom_multichiplet_noc_partition_v1.json"
+      ],
+      "support_status": "unsupported",
+      "supported_evidence_tiers": [
+        "survey-catalog",
+        "projection-screened"
+      ],
+      "target_stage": "interconnect"
+    },
+    {
+      "architecture_family": "F4",
+      "coverage_tags": [
+        "data_movement",
+        "diagonalization",
+        "host_fpga_chip",
+        "multi_stage",
+        "reduced_build"
+      ],
+      "freeze_partition": "coverage_only",
+      "microarchitecture_id": "fused_build_diag_cluster",
+      "model_support_status": {
+        "notes": "Template projection exists; no completed fused executor semantics are claimed.",
+        "status": "projection_only",
+        "supporting_artifact_refs": [
+          "docs/architecture/architecture_templates/3cluster_fused_build_diag_v1.json"
+        ]
+      },
+      "name": "Fused build/diagonalization cluster",
+      "non_claims": [
+        "not_runtime_fusion_evidence",
+        "not_final_best",
+        "not_cycle_accurate"
+      ],
+      "parameter_space_hash": "e4a4d248a9b2d8e58e9cf474b87bbd61cd21d61a95a3d333501b5c0782b8cd4b",
+      "partition_reason": "projection/catalog coverage entry without same-candidate SystemC+B4 executable path; cannot block or win the closed-catalog-best decision",
+      "provenance_refs": [
+        "docs/architecture/architecture_templates/3cluster_fused_build_diag_v1.json",
+        "docs/benchmarks/qe_kernel_characterization_matrix_for_system_dse_v0.md"
+      ],
+      "support_status": "projection_only",
+      "supported_evidence_tiers": [
+        "survey-catalog",
+        "projection-screened"
+      ],
+      "target_stage": "multi_stage"
+    },
+    {
+      "architecture_family": "F1",
+      "coverage_tags": [
+        "data_movement",
+        "host_fpga_chip",
+        "multi_stage"
+      ],
+      "freeze_partition": "coverage_only",
+      "microarchitecture_id": "host_managed_four_cluster_control_baseline",
+      "model_support_status": {
+        "notes": "Control baseline is represented in design templates and reports, but is not a final-best executable candidate under the current SystemC+B4 minimum.",
+        "status": "projection_only",
+        "supporting_artifact_refs": [
+          "docs/architecture/architecture_templates/f1_host_heavy_cpu_baseline_v1.json",
+          "docs/architecture/host_managed_full_scf_architecture_v1_20260409.md"
+        ]
+      },
+      "name": "Host-managed 4-cluster control baseline",
+      "non_claims": [
+        "not_accelerator_final_best",
+        "not_board_measured",
+        "not_hidden_host_overhead"
+      ],
+      "parameter_space_hash": "5b48cde77b8d451d3f8779ba689b3ee5043588efc131c38e593a6b1e33cad20b",
+      "partition_reason": "projection/catalog coverage entry without same-candidate SystemC+B4 executable path; cannot block or win the closed-catalog-best decision",
+      "provenance_refs": [
+        "docs/architecture/architecture_templates/f1_host_heavy_cpu_baseline_v1.json",
+        "docs/architecture/host_managed_full_scf_architecture_v1_20260409.md"
+      ],
+      "support_status": "projection_only",
+      "supported_evidence_tiers": [
+        "survey-catalog",
+        "projection-screened"
+      ],
+      "target_stage": "multi_stage"
+    },
+    {
+      "architecture_family": "F4",
+      "coverage_tags": [
+        "cim_or_hybrid",
+        "diagonalization",
+        "host_fpga_chip",
+        "memory_residency",
+        "multi_stage",
+        "operator_sweep",
+        "reduced_build",
+        "refresh_residual"
+      ],
+      "freeze_partition": "coverage_only",
+      "microarchitecture_id": "four_cluster_cim_system_baseline",
+      "model_support_status": {
+        "notes": "The complete 4-cluster family is covered for closed-catalog search but remains coverage-only until exact SystemC+B4 evidence exists.",
+        "status": "projection_only",
+        "supporting_artifact_refs": [
+          "docs/architecture/architecture_templates/4cluster_cim_baseline_v1.json",
+          "docs/architecture/system_design_master_spec_v0.md"
+        ]
+      },
+      "name": "4-cluster CIM-oriented system baseline",
+      "non_claims": [
+        "not_cim_silicon_measurement",
+        "not_rtl_timing",
+        "not_final_best_without_same_candidate_evidence"
+      ],
+      "parameter_space_hash": "4d318f715d2e49e44b0f04b839e02923f57b8f8169bd223c5cdf6c0054b93126",
+      "partition_reason": "projection/catalog coverage entry without same-candidate SystemC+B4 executable path; cannot block or win the closed-catalog-best decision",
+      "provenance_refs": [
+        "docs/architecture/architecture_templates/4cluster_cim_baseline_v1.json",
+        "docs/architecture/system_design_master_spec_v0.md"
+      ],
+      "support_status": "projection_only",
+      "supported_evidence_tiers": [
+        "survey-catalog",
+        "projection-screened"
+      ],
+      "target_stage": "multi_stage"
+    },
+    {
+      "architecture_family": "F4",
+      "coverage_tags": [
+        "data_movement",
+        "host_fpga_chip",
+        "memory_residency",
+        "refresh_residual"
+      ],
+      "freeze_partition": "coverage_only",
+      "microarchitecture_id": "refresh_residual_streaming_cluster",
+      "model_support_status": {
+        "notes": "Cluster-D refresh semantics are documented but not executable as a final-best candidate in the current backend.",
+        "status": "projection_only",
+        "supporting_artifact_refs": [
+          "docs/architecture/qe_fpga_clustered_v1_cluster_d_refresh_spec_20260402.md",
+          "docs/architecture/architecture_templates/resident_dataflow_fabric_v1.json"
+        ]
+      },
+      "name": "Refresh/residual streaming cluster",
+      "non_claims": [
+        "not_runtime_refresh_evidence",
+        "not_final_best",
+        "not_cycle_accurate"
+      ],
+      "parameter_space_hash": "a15f3c017f43545178bc57e77150b4f5fd0ae3fddd712a9bd05eb28fe9a23fe3",
+      "partition_reason": "projection/catalog coverage entry without same-candidate SystemC+B4 executable path; cannot block or win the closed-catalog-best decision",
+      "provenance_refs": [
+        "docs/architecture/qe_fpga_clustered_v1_cluster_d_refresh_spec_20260402.md",
+        "docs/architecture/architecture_templates/resident_dataflow_fabric_v1.json"
+      ],
+      "support_status": "projection_only",
+      "supported_evidence_tiers": [
+        "survey-catalog",
+        "projection-screened"
+      ],
+      "target_stage": "refresh_residual"
+    }
+  ],
+  "freeze_gates": [
+    {
+      "details": {
+        "entry_count": 11,
+        "missing_or_unresolved_refs": [],
+        "source_types_present": [
+          "literature_pattern",
+          "local_contract",
+          "local_design_template",
+          "workload_analysis"
+        ]
+      },
+      "gate_id": "research_coverage_proof",
+      "status": "passed"
+    },
+    {
+      "details": {
+        "covered_tags": [
+          "cim_or_hybrid",
+          "data_movement",
+          "diagonalization",
+          "host_fpga_chip",
+          "interconnect",
+          "memory_residency",
+          "multi_stage",
+          "operator_sweep",
+          "reduced_build",
+          "refresh_residual",
+          "systemc_configurable_candidate"
+        ],
+        "missing_coverage_tags": [],
+        "required_coverage_tags": [
+          "host_fpga_chip",
+          "operator_sweep",
+          "reduced_build",
+          "diagonalization",
+          "refresh_residual",
+          "memory_residency",
+          "interconnect",
+          "cim_or_hybrid",
+          "data_movement"
+        ]
+      },
+      "gate_id": "ppt_family_coverage",
+      "status": "passed"
+    },
+    {
+      "details": {
+        "missing_parameter_space_hashes": [],
+        "parameter_space_hashes_present_for": [
+          "tensor_systolic_dense_path",
+          "systolic_fpga_dense_path",
+          "hbm_streaming_operator_pipeline",
+          "cim_dsp_vector_hybrid",
+          "near_memory_pim_resident_context",
+          "cgra_dataflow_operator",
+          "multichiplet_noc_partition",
+          "fused_build_diag_cluster",
+          "host_managed_four_cluster_control_baseline",
+          "four_cluster_cim_system_baseline",
+          "refresh_residual_streaming_cluster"
+        ]
+      },
+      "gate_id": "auditable_parameter_space",
+      "status": "passed"
+    },
+    {
+      "details": {
+        "coverage_only_ids": [
+          "hbm_streaming_operator_pipeline",
+          "cim_dsp_vector_hybrid",
+          "fused_build_diag_cluster",
+          "host_managed_four_cluster_control_baseline",
+          "four_cluster_cim_system_baseline",
+          "refresh_residual_streaming_cluster"
+        ],
+        "excluded_from_best_universe_ids": [
+          "near_memory_pim_resident_context",
+          "cgra_dataflow_operator",
+          "multichiplet_noc_partition"
+        ],
+        "missing_exclusion_rationale": []
+      },
+      "gate_id": "exclusion_rationale",
+      "status": "passed"
+    },
+    {
+      "details": {
+        "competitive_candidate_ids": [
+          "tensor_systolic_dense_path",
+          "systolic_fpga_dense_path"
+        ],
+        "evidence_path_requirements": {
+          "systolic_fpga_dense_path": {
+            "candidate_id": "systolic_fpga_dense_path",
+            "optional_precision_upgrades": [
+              "stage_d_hls_or_stronger_implementation_evidence",
+              "fpga_board_measurement",
+              "asic_or_physical_timing_evidence"
+            ],
+            "required_policy_id": "qe_fpga_final_best_policy_systemc_b4_minimum_v0",
+            "required_refs": {
+              "claim_ceiling_status_matrix_row": "required_same_candidate_join",
+              "final_best_decision_row": "required_same_candidate_join",
+              "stage_c_qe_correctness_report": "required_same_candidate_artifact",
+              "strict_b4_gem5_systemc_event_tick_report": "required_same_candidate_artifact",
+              "systemc_cycle_accounted_evidence": "required_same_candidate_artifact",
+              "topk_closure_row": "required_same_candidate_join"
+            }
+          },
+          "tensor_systolic_dense_path": {
+            "candidate_id": "tensor_systolic_dense_path",
+            "optional_precision_upgrades": [
+              "stage_d_hls_or_stronger_implementation_evidence",
+              "fpga_board_measurement",
+              "asic_or_physical_timing_evidence"
+            ],
+            "required_policy_id": "qe_fpga_final_best_policy_systemc_b4_minimum_v0",
+            "required_refs": {
+              "claim_ceiling_status_matrix_row": "required_same_candidate_join",
+              "final_best_decision_row": "required_same_candidate_join",
+              "stage_c_qe_correctness_report": "required_same_candidate_artifact",
+              "strict_b4_gem5_systemc_event_tick_report": "required_same_candidate_artifact",
+              "systemc_cycle_accounted_evidence": "required_same_candidate_artifact",
+              "topk_closure_row": "required_same_candidate_join"
+            }
+          }
+        }
+      },
+      "gate_id": "evidence_path_per_competitive_candidate",
+      "status": "passed"
+    },
+    {
+      "details": {
+        "dominance_rule": "a lower-ranked competitive candidate cannot win until every higher-ranked competitive candidate is resolved worse or excluded by this freeze manifest",
+        "topk_closure_required_fields": [
+          "catalog_hash",
+          "policy_id",
+          "screening_rank",
+          "ranking_metric_inputs",
+          "tie_break_inputs",
+          "dominance_status",
+          "evidence_refs",
+          "evidence_hashes"
+        ]
+      },
+      "gate_id": "reproducible_topk_closure_refs",
+      "status": "passed"
+    }
+  ],
+  "freeze_status": "passed",
+  "generated_at_utc": "2026-05-01T01:51:09Z",
+  "manifest_id": "qe_microarchitecture_catalog_freeze_manifest_v0",
+  "manifest_ref": "docs/benchmarks/qe_microarchitecture_catalog_freeze_manifest_v0.json",
+  "manifest_sha256": "5fd7d0e2a729b4986712377ec538ad72bb133446bced7b45624fa0155c73938a",
+  "non_claims": [
+    "catalog_freeze_is_not_a_final_best_claim",
+    "closed_catalog_best_is_not_global_best",
+    "coverage_only_and_excluded_entries_cannot_win_or_block_final_best",
+    "systemc_b4_minimum_does_not_claim_rtl_or_physical_timing_accuracy",
+    "missing_hls_fpga_asic_or_board_measurement_remains_residual_risk_not_a_first_pass_blocker"
+  ],
+  "partitions": {
+    "competitive_evaluable": [
+      "tensor_systolic_dense_path",
+      "systolic_fpga_dense_path"
+    ],
+    "coverage_only": [
+      "hbm_streaming_operator_pipeline",
+      "cim_dsp_vector_hybrid",
+      "fused_build_diag_cluster",
+      "host_managed_four_cluster_control_baseline",
+      "four_cluster_cim_system_baseline",
+      "refresh_residual_streaming_cluster"
+    ],
+    "excluded_from_best_universe": [
+      "near_memory_pim_resident_context",
+      "cgra_dataflow_operator",
+      "multichiplet_noc_partition"
+    ]
+  },
+  "policy_id": "qe_fpga_final_best_policy_systemc_b4_minimum_v0",
+  "schema_version": "qe_microarchitecture_catalog_freeze_manifest_v0",
+  "topk_closure_contract": {
+    "policy_id": "qe_fpga_final_best_policy_systemc_b4_minimum_v0",
+    "ranking_universe": "competitive_evaluable",
+    "requires_dominance_closure_hash": true,
+    "requires_no_unresolved_higher_ranked_competitive_candidate": true,
+    "requires_reproducible_topk_hash": true
+  }
+}

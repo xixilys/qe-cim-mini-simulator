@@ -173,15 +173,18 @@ The label vocabulary is closed and must use these exact strings:
 | --- | --- | --- | --- |
 | `survey-catalog` | Researched catalog provenance, assumptions, support status, and target stage. | Broad search coverage and unsupported/proposed microarchitecture inventory. | Executable ranking, final-best selection, GPU superiority, board/ASIC measured claims. |
 | `projection-screened` | Explicit proxy/screening assumptions and ranking inputs. | Level-1 shortlist discussion, projection caveats, Top-K closure queue input. | Final-best winner claims, RTL/cycle-accurate claims, physical timing, board/ASIC measured claims. |
-| `systemc-cycle-accounted` | Generated/configured SystemC cycle evidence for the same `candidate_id` and `workload_id`, including `systemc_cycle_evidence_ref`, `systemc_cycle_evidence_hash`, template/config hash, per-stage/per-component cycle tables, calibration refs, and non-claims. | Model-level cycle accounting with artifact refs and blockers for missing Stage C, strict B4, or Stage D evidence. | RTL/cycle-accurate hardware timing, physical timing, board/ASIC measured performance, or final-best selection by itself. |
-| `final-best-eligible` | Same-candidate Stage C correctness, strict B4 gem5/SystemC event evidence, Stage D implementation evidence, and generated SystemC cycle-accounted evidence. | Input to the explicit final-best policy/adjudicator layer. | Any claim that omits same-candidate refs, substitutes B3/synthetic evidence for strict B4, or treats synthetic fixtures as real-world winners. |
+| `systemc-cycle-accounted` | Generated/configured SystemC cycle evidence for the same `candidate_id` and `workload_id`, including `systemc_cycle_evidence_ref`, `systemc_cycle_evidence_hash`, template/config hash, per-stage/per-component cycle tables, calibration refs, and non-claims. | Model-level cycle accounting with artifact refs and blockers for missing Stage C, strict B4, or policy-required Stage D evidence. | RTL/cycle-accurate hardware timing, physical timing, board/ASIC measured performance, or final-best selection by itself. |
+| `final-best-eligible` | Same-candidate Stage C correctness, strict B4 gem5/SystemC event evidence, generated SystemC cycle-accounted evidence, frozen catalog membership, dominance closure, and Stage D implementation evidence only when the active final-best policy requires it. | Input to the explicit final-best policy/adjudicator layer; under `systemc_b4_minimum`, missing Stage D/HLS is a residual risk rather than a hard blocker. | Any claim that omits same-candidate refs, substitutes B3/synthetic evidence for strict B4, bypasses Stage C, skips catalog/dominance closure, or treats synthetic fixtures as real-world winners. |
 
 The evidence tier is separate from the older `reject`, `explain-only`, and
 `promotion-eligible` screening states. Screening states describe Level-1 row
 quality; evidence tiers describe the claim ceiling. In particular, a
 `promotion-eligible` row can still be only `projection-screened` until the
 Top-K closure lane adds candidate-exact SystemC cycle evidence and the final
-Stage C + strict B4 + Stage D + SystemC evidence gate is satisfied.
+Stage C + strict B4 + SystemC evidence gate is satisfied, plus Stage D when
+the selected final-best policy requires it. The default HLS-minimum policy still
+requires Stage D; the `systemc_b4_minimum` policy records missing Stage D/HLS as
+an optional precision-upgrade residual risk.
 
 Allowed Stage A reporting:
 
@@ -363,7 +366,8 @@ Future implementation work may add adapters, validators, or `dse_v2_bo_poc` code
 `docs/benchmarks/check_qe_dse_release_claim_boundaries_v0.py` form the
 docs/release validator surface for evidence-plane v1. That validator is allowed
 to check Markdown/JSON release reports for exact tier labels, SystemC artifact
-refs for higher tiers, same-candidate Stage C / strict B4 / Stage D / SystemC
-requirements for `final-best-eligible`, and forbidden overclaim language. It
+refs for higher tiers, same-candidate Stage C / strict B4 / policy-required
+Stage D / SystemC requirements for `final-best-eligible`, and forbidden
+overclaim language. It
 does not edit templates, runners, C++ runtime, timestamped artifacts, or frozen
 contracts.

@@ -1,0 +1,137 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "DesignPoint",
+  "description": "Step 3 output / Step 4 input - Parameterized design point for evaluation",
+  "version": "1.0.0",
+  
+  "type": "object",
+  "required": ["schema_version", "design_point_id", "architecture_spec_ref", "parameters", "constraints", "provenance"],
+  
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "design_point_v1"
+    },
+    
+    "design_point_id": {
+      "type": "string",
+      "pattern": "^[a-zA-Z0-9_-]+$",
+      "description": "Unique design point identifier"
+    },
+
+    "family": {
+      "type": "string",
+      "enum": ["F1", "F2", "F3", "F4", "F5", "F6", "F7"],
+      "description": "Architecture family selected for this design point"
+    },
+
+    "topology_type": {
+      "type": "string",
+      "description": "Topology class used by the design point, such as mesh_2d, ring, noc, or chiplet"
+    },
+    
+    "architecture_spec_ref": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$",
+      "description": "SHA-256 hash of input ArchitectureSpec"
+    },
+    
+    "parameters": {
+      "type": "object",
+      "required": ["system_level"],
+      "properties": {
+        "system_level": {
+          "type": "object",
+          "properties": {
+            "family": {"type": "string", "enum": ["F1", "F2", "F3", "F4", "F5", "F6", "F7"]},
+            "offload_scope": {"type": "string", "enum": ["single_hotpath", "balanced", "device_heavy", "full_offload"]},
+            "resident_policy": {"type": "string", "enum": ["fit_first", "spill_tolerant", "aggressive_reuse"]},
+            "partition_strategy": {"type": "string"},
+            "diag_policy": {"type": "string", "enum": ["cpu_only", "device_first_fallback", "aggressive_device"]},
+            "n_gemm_tiles": {"type": "integer", "minimum": 1, "maximum": 16},
+            "n_eigen_tiles": {"type": "integer", "minimum": 1, "maximum": 8},
+            "tile_local_mem_kb": {"type": "integer", "minimum": 64, "maximum": 8192},
+            "mesh_topology": {"type": "string"},
+            "tile_link_bw_gbps": {"type": "number", "minimum": 1, "maximum": 1000}
+          }
+        },
+        "kernel_mapping": {
+          "type": "object",
+          "properties": {
+            "tile_npw": {"type": "integer", "minimum": 32},
+            "tile_nkb": {"type": "integer", "minimum": 8},
+            "tile_m": {"type": "integer", "minimum": 1},
+            "loop_ordering": {"type": "string"},
+            "dataflow": {"type": "string", "enum": ["weight_stationary", "output_stationary", "row_stationary", "streaming"]},
+            "buffer_hierarchy": {"type": "string"}
+          }
+        },
+        "microarchitecture": {
+          "type": "object",
+          "properties": {
+            "pe_array_size": {"type": "string"},
+            "pe_frequency_mhz": {"type": "integer", "minimum": 100, "maximum": 3000},
+            "l1_buffer_kb": {"type": "integer", "minimum": 4, "maximum": 256},
+            "l2_scratchpad_kb": {"type": "integer", "minimum": 64, "maximum": 8192},
+            "l3_global_mb": {"type": "integer", "minimum": 1, "maximum": 64}
+          }
+        }
+      }
+    },
+
+    "workload_specialization": {
+      "type": "object",
+      "required": ["workload_id", "kernels", "precision"],
+      "properties": {
+        "workload_id": {"type": "string"},
+        "kernels": {
+          "type": "array",
+          "items": {"type": "string"},
+          "minItems": 1
+        },
+        "precision": {"type": "string"},
+        "dominant_solver": {"type": "string"},
+        "notes": {"type": "string"}
+      }
+    },
+
+    "target_layers": {
+      "type": "array",
+      "items": {"type": "string", "enum": ["L0", "L1", "L2", "L3", "L4"]},
+      "minItems": 1,
+      "uniqueItems": true
+    },
+
+    "resource_limits": {
+      "type": "object",
+      "properties": {
+        "max_area_mm2": {"type": "number", "minimum": 0},
+        "max_power_w": {"type": "number", "minimum": 0},
+        "max_latency_ms": {"type": "number", "minimum": 0},
+        "min_throughput_gops": {"type": "number", "minimum": 0},
+        "max_cost_usd": {"type": "number", "minimum": 0}
+      }
+    },
+    
+    "constraints": {
+      "type": "object",
+      "properties": {
+        "max_area_mm2": {"type": "number", "minimum": 0},
+        "max_power_w": {"type": "number", "minimum": 0},
+        "max_latency_ms": {"type": "number", "minimum": 0},
+        "min_throughput_gops": {"type": "number", "minimum": 0},
+        "max_cost_usd": {"type": "number", "minimum": 0}
+      }
+    },
+    
+    "provenance": {
+      "type": "object",
+      "required": ["input_hash", "generated_at", "tool_version"],
+      "properties": {
+        "input_hash": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "generated_at": {"type": "string", "format": "date-time"},
+        "tool_version": {"type": "string"}
+      }
+    }
+  }
+}

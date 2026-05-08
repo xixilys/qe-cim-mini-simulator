@@ -112,6 +112,31 @@ class QeDseClaimCeilingStatusMatrixTests(unittest.TestCase):
             ["missing_stage_c_qe_correctness_report", "missing_stage_d_implementation_evidence"],
         )
 
+    def test_systemc_b4_policy_filters_stage_d_from_hard_blockers(self) -> None:
+        policy = MODULE_ANY.final_best_policy.systemc_b4_minimum_policy()
+
+        matrix = MODULE_ANY.build_matrix(
+            candidate_id="candidate_f1",
+            stage_c_report_ref=Path("stage_c.json"),
+            stage_c_report=stage_c_report(),
+            b4_report={
+                "candidate_id": "candidate_f1",
+                "execution_status": "executed",
+                "backend_class": "gem5_systemc_timed_proxy",
+                "claim_ceiling": "gem5_systemc_timed_proxy_only",
+                "metrics": {"cycle_proxy": 100},
+            },
+            policy=policy,
+        )
+
+        row = matrix["rows"][0]
+        self.assertEqual(row["blockers"], [])
+        self.assertFalse(row["stage_d_required_for_final_best"])
+        self.assertIn(
+            "missing_optional_stage_d_hls_or_stronger_evidence",
+            row["optional_precision_upgrade_risks"],
+        )
+
     def test_cli_writes_json_and_markdown_with_validated_stage_c_d_refs(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)

@@ -1,0 +1,760 @@
+{
+  "schema_version": "gpu_baseline_summary_v0",
+  "mode": "all",
+  "gpu_name": "NVIDIA GeForce RTX 3070 (MOCK)",
+  "gpu_uuid": "mock-uuid-12345",
+  "gpu_capabilities": {
+    "memory_total": "8192 MiB",
+    "fp64_ratio_vs_fp32": 0.015625,
+    "supports_strict_fp64": true
+  },
+  "dry_run": false,
+  "generated_at_utc": "2026-05-08T05:26:58.291126+00:00",
+  "case_count": 12,
+  "manifests": [
+    {
+      "schema_version": "qe_cpu_gpu_baseline_manifest_template_v0",
+      "baseline_class": "CPU+GPU",
+      "case_id": "si8_pbe_nc",
+      "gpu_mode": "strict_fp64",
+      "run_tag": "20260508-120000",
+      "host_id": "mock-host",
+      "gpu_id": "mock-gpu-rtx3070",
+      "qe_rev": "mock-qe-7.5",
+      "correctness_contract_id": "qe_gold_correctness_contract_v0",
+      "workload_group_id": "qe_fpga_phase1_workload_group_v0",
+      "fairness_policy_id": "qe_cpu_gpu_fpga_fairness_and_power_contract_v0",
+      "algorithm_rewrite_manifest_id": "qe_algorithm_rewrite_manifest_v0",
+      "gpu_mode_attempts": [
+        "strict_fp64"
+      ],
+      "mode_attempt_exemption_note": "",
+      "shared_rewrite_closed": false,
+      "host_platform_comparable": false,
+      "rewrite_mode": "none",
+      "qe_tolerance_schema_id": "qe_gold_numerical_tolerance_schema_v0",
+      "accounting_boundary_id": "scf_shell_convergence_scope_v1",
+      "power_boundary_id": "whole_node_steady_state_single_cpu_single_accelerator_v0",
+      "warmup_policy": "symmetric_warmup_once",
+      "host_normalization_note": "",
+      "command": "mock_qe_run_si8_pbe_nc_strict_fp64",
+      "env": {
+        "CUDA_VISIBLE_DEVICES": "0"
+      },
+      "artifact_paths": {
+        "stdout": "qe_si8_pbe_nc__cpu_gpu__strict_fp64__20260508-120000.stdout.txt",
+        "stderr": "qe_si8_pbe_nc__cpu_gpu__strict_fp64__20260508-120000.stderr.txt",
+        "timing": "qe_si8_pbe_nc__cpu_gpu__strict_fp64__20260508-120000.timing.json",
+        "correctness": "qe_si8_pbe_nc__cpu_gpu__strict_fp64__20260508-120000.correctness.json",
+        "convergence": "qe_si8_pbe_nc__cpu_gpu__strict_fp64__20260508-120000.convergence.json",
+        "power": "qe_si8_pbe_nc__cpu_gpu__strict_fp64__20260508-120000.power.json",
+        "summary": "qe_si8_pbe_nc__cpu_gpu__strict_fp64__20260508-120000.summary.md"
+      },
+      "baseline_state": "completed",
+      "notes": [
+        "MOCK DATA: Generated for testing purposes only"
+      ],
+      "measurements": {
+        "time_to_convergence_s": 2.881366777774303,
+        "per_stage_time_s": {
+          "h_psi": 1.2966150499984364,
+          "s_psi": 0.7203416944435758,
+          "build_H_sub": 0.43220501666614547,
+          "cdiaghg": 0.2881366777774303,
+          "refresh": 0.14406833888871515
+        },
+        "effective_gflops": 0.20175758410355907,
+        "avg_gpu_board_power_w": 165.0,
+        "total_flops": 581337600.0,
+        "correctness_validated": true
+      },
+      "gpu_capabilities": {
+        "fp64_ratio_vs_fp32": 0.015625,
+        "is_approximate": false
+      },
+      "generated_at_utc": "2026-05-08T05:26:58.291068+00:00"
+    },
+    {
+      "schema_version": "qe_cpu_gpu_baseline_manifest_template_v0",
+      "baseline_class": "CPU+GPU",
+      "case_id": "si8_pbe_nc",
+      "gpu_mode": "practical",
+      "run_tag": "20260508-120000",
+      "host_id": "mock-host",
+      "gpu_id": "mock-gpu-rtx3070",
+      "qe_rev": "mock-qe-7.5",
+      "correctness_contract_id": "qe_gold_correctness_contract_v0",
+      "workload_group_id": "qe_fpga_phase1_workload_group_v0",
+      "fairness_policy_id": "qe_cpu_gpu_fpga_fairness_and_power_contract_v0",
+      "algorithm_rewrite_manifest_id": "qe_algorithm_rewrite_manifest_v0",
+      "gpu_mode_attempts": [
+        "practical"
+      ],
+      "mode_attempt_exemption_note": "",
+      "shared_rewrite_closed": false,
+      "host_platform_comparable": false,
+      "rewrite_mode": "none",
+      "qe_tolerance_schema_id": "qe_gold_numerical_tolerance_schema_v0",
+      "accounting_boundary_id": "scf_shell_convergence_scope_v1",
+      "power_boundary_id": "whole_node_steady_state_single_cpu_single_accelerator_v0",
+      "warmup_policy": "symmetric_warmup_once",
+      "host_normalization_note": "",
+      "command": "mock_qe_run_si8_pbe_nc_practical",
+      "env": {
+        "CUDA_VISIBLE_DEVICES": "0"
+      },
+      "artifact_paths": {
+        "stdout": "qe_si8_pbe_nc__cpu_gpu__practical__20260508-120000.stdout.txt",
+        "stderr": "qe_si8_pbe_nc__cpu_gpu__practical__20260508-120000.stderr.txt",
+        "timing": "qe_si8_pbe_nc__cpu_gpu__practical__20260508-120000.timing.json",
+        "correctness": "qe_si8_pbe_nc__cpu_gpu__practical__20260508-120000.correctness.json",
+        "convergence": "qe_si8_pbe_nc__cpu_gpu__practical__20260508-120000.convergence.json",
+        "power": "qe_si8_pbe_nc__cpu_gpu__practical__20260508-120000.power.json",
+        "summary": "qe_si8_pbe_nc__cpu_gpu__practical__20260508-120000.summary.md"
+      },
+      "baseline_state": "completed",
+      "notes": [
+        "MOCK DATA: Generated for testing purposes only"
+      ],
+      "measurements": {
+        "time_to_convergence_s": 0.06570992088038857,
+        "per_stage_time_s": {
+          "h_psi": 0.029569464396174857,
+          "s_psi": 0.016427480220097143,
+          "build_H_sub": 0.009856488132058286,
+          "cdiaghg": 0.006570992088038858,
+          "refresh": 0.003285496044019429
+        },
+        "effective_gflops": 8.84702937107786,
+        "avg_gpu_board_power_w": 187.0,
+        "total_flops": 581337600.0,
+        "correctness_validated": true
+      },
+      "gpu_capabilities": {
+        "fp64_ratio_vs_fp32": 0.015625,
+        "is_approximate": true
+      },
+      "generated_at_utc": "2026-05-08T05:26:58.291082+00:00"
+    },
+    {
+      "schema_version": "qe_cpu_gpu_baseline_manifest_template_v0",
+      "baseline_class": "CPU+GPU",
+      "case_id": "si8_pbe_uspp",
+      "gpu_mode": "strict_fp64",
+      "run_tag": "20260508-120000",
+      "host_id": "mock-host",
+      "gpu_id": "mock-gpu-rtx3070",
+      "qe_rev": "mock-qe-7.5",
+      "correctness_contract_id": "qe_gold_correctness_contract_v0",
+      "workload_group_id": "qe_fpga_phase1_workload_group_v0",
+      "fairness_policy_id": "qe_cpu_gpu_fpga_fairness_and_power_contract_v0",
+      "algorithm_rewrite_manifest_id": "qe_algorithm_rewrite_manifest_v0",
+      "gpu_mode_attempts": [
+        "strict_fp64"
+      ],
+      "mode_attempt_exemption_note": "",
+      "shared_rewrite_closed": false,
+      "host_platform_comparable": false,
+      "rewrite_mode": "none",
+      "qe_tolerance_schema_id": "qe_gold_numerical_tolerance_schema_v0",
+      "accounting_boundary_id": "scf_shell_convergence_scope_v1",
+      "power_boundary_id": "whole_node_steady_state_single_cpu_single_accelerator_v0",
+      "warmup_policy": "symmetric_warmup_once",
+      "host_normalization_note": "",
+      "command": "mock_qe_run_si8_pbe_uspp_strict_fp64",
+      "env": {
+        "CUDA_VISIBLE_DEVICES": "0"
+      },
+      "artifact_paths": {
+        "stdout": "qe_si8_pbe_uspp__cpu_gpu__strict_fp64__20260508-120000.stdout.txt",
+        "stderr": "qe_si8_pbe_uspp__cpu_gpu__strict_fp64__20260508-120000.stderr.txt",
+        "timing": "qe_si8_pbe_uspp__cpu_gpu__strict_fp64__20260508-120000.timing.json",
+        "correctness": "qe_si8_pbe_uspp__cpu_gpu__strict_fp64__20260508-120000.correctness.json",
+        "convergence": "qe_si8_pbe_uspp__cpu_gpu__strict_fp64__20260508-120000.convergence.json",
+        "power": "qe_si8_pbe_uspp__cpu_gpu__strict_fp64__20260508-120000.power.json",
+        "summary": "qe_si8_pbe_uspp__cpu_gpu__strict_fp64__20260508-120000.summary.md"
+      },
+      "baseline_state": "completed",
+      "notes": [
+        "MOCK DATA: Generated for testing purposes only"
+      ],
+      "measurements": {
+        "time_to_convergence_s": 3.370664449453852,
+        "per_stage_time_s": {
+          "h_psi": 1.5167990022542335,
+          "s_psi": 0.842666112363463,
+          "build_H_sub": 0.5055996674180778,
+          "cdiaghg": 0.33706644494538524,
+          "refresh": 0.16853322247269262
+        },
+        "effective_gflops": 0.17246973370315574,
+        "avg_gpu_board_power_w": 165.0,
+        "total_flops": 581337600.0,
+        "correctness_validated": true
+      },
+      "gpu_capabilities": {
+        "fp64_ratio_vs_fp32": 0.015625,
+        "is_approximate": false
+      },
+      "generated_at_utc": "2026-05-08T05:26:58.291089+00:00"
+    },
+    {
+      "schema_version": "qe_cpu_gpu_baseline_manifest_template_v0",
+      "baseline_class": "CPU+GPU",
+      "case_id": "si8_pbe_uspp",
+      "gpu_mode": "practical",
+      "run_tag": "20260508-120000",
+      "host_id": "mock-host",
+      "gpu_id": "mock-gpu-rtx3070",
+      "qe_rev": "mock-qe-7.5",
+      "correctness_contract_id": "qe_gold_correctness_contract_v0",
+      "workload_group_id": "qe_fpga_phase1_workload_group_v0",
+      "fairness_policy_id": "qe_cpu_gpu_fpga_fairness_and_power_contract_v0",
+      "algorithm_rewrite_manifest_id": "qe_algorithm_rewrite_manifest_v0",
+      "gpu_mode_attempts": [
+        "practical"
+      ],
+      "mode_attempt_exemption_note": "",
+      "shared_rewrite_closed": false,
+      "host_platform_comparable": false,
+      "rewrite_mode": "none",
+      "qe_tolerance_schema_id": "qe_gold_numerical_tolerance_schema_v0",
+      "accounting_boundary_id": "scf_shell_convergence_scope_v1",
+      "power_boundary_id": "whole_node_steady_state_single_cpu_single_accelerator_v0",
+      "warmup_policy": "symmetric_warmup_once",
+      "host_normalization_note": "",
+      "command": "mock_qe_run_si8_pbe_uspp_practical",
+      "env": {
+        "CUDA_VISIBLE_DEVICES": "0"
+      },
+      "artifact_paths": {
+        "stdout": "qe_si8_pbe_uspp__cpu_gpu__practical__20260508-120000.stdout.txt",
+        "stderr": "qe_si8_pbe_uspp__cpu_gpu__practical__20260508-120000.stderr.txt",
+        "timing": "qe_si8_pbe_uspp__cpu_gpu__practical__20260508-120000.timing.json",
+        "correctness": "qe_si8_pbe_uspp__cpu_gpu__practical__20260508-120000.correctness.json",
+        "convergence": "qe_si8_pbe_uspp__cpu_gpu__practical__20260508-120000.convergence.json",
+        "power": "qe_si8_pbe_uspp__cpu_gpu__practical__20260508-120000.power.json",
+        "summary": "qe_si8_pbe_uspp__cpu_gpu__practical__20260508-120000.summary.md"
+      },
+      "baseline_state": "completed",
+      "notes": [
+        "MOCK DATA: Generated for testing purposes only"
+      ],
+      "measurements": {
+        "time_to_convergence_s": 0.05607794838435071,
+        "per_stage_time_s": {
+          "h_psi": 0.02523507677295782,
+          "s_psi": 0.014019487096087678,
+          "build_H_sub": 0.008411692257652606,
+          "cdiaghg": 0.0056077948384350715,
+          "refresh": 0.0028038974192175358
+        },
+        "effective_gflops": 10.366598935032187,
+        "avg_gpu_board_power_w": 187.0,
+        "total_flops": 581337600.0,
+        "correctness_validated": true
+      },
+      "gpu_capabilities": {
+        "fp64_ratio_vs_fp32": 0.015625,
+        "is_approximate": true
+      },
+      "generated_at_utc": "2026-05-08T05:26:58.291092+00:00"
+    },
+    {
+      "schema_version": "qe_cpu_gpu_baseline_manifest_template_v0",
+      "baseline_class": "CPU+GPU",
+      "case_id": "si4_pbe_uspp_small",
+      "gpu_mode": "strict_fp64",
+      "run_tag": "20260508-120000",
+      "host_id": "mock-host",
+      "gpu_id": "mock-gpu-rtx3070",
+      "qe_rev": "mock-qe-7.5",
+      "correctness_contract_id": "qe_gold_correctness_contract_v0",
+      "workload_group_id": "qe_fpga_phase1_workload_group_v0",
+      "fairness_policy_id": "qe_cpu_gpu_fpga_fairness_and_power_contract_v0",
+      "algorithm_rewrite_manifest_id": "qe_algorithm_rewrite_manifest_v0",
+      "gpu_mode_attempts": [
+        "strict_fp64"
+      ],
+      "mode_attempt_exemption_note": "",
+      "shared_rewrite_closed": false,
+      "host_platform_comparable": false,
+      "rewrite_mode": "none",
+      "qe_tolerance_schema_id": "qe_gold_numerical_tolerance_schema_v0",
+      "accounting_boundary_id": "scf_shell_convergence_scope_v1",
+      "power_boundary_id": "whole_node_steady_state_single_cpu_single_accelerator_v0",
+      "warmup_policy": "symmetric_warmup_once",
+      "host_normalization_note": "",
+      "command": "mock_qe_run_si4_pbe_uspp_small_strict_fp64",
+      "env": {
+        "CUDA_VISIBLE_DEVICES": "0"
+      },
+      "artifact_paths": {
+        "stdout": "qe_si4_pbe_uspp_small__cpu_gpu__strict_fp64__20260508-120000.stdout.txt",
+        "stderr": "qe_si4_pbe_uspp_small__cpu_gpu__strict_fp64__20260508-120000.stderr.txt",
+        "timing": "qe_si4_pbe_uspp_small__cpu_gpu__strict_fp64__20260508-120000.timing.json",
+        "correctness": "qe_si4_pbe_uspp_small__cpu_gpu__strict_fp64__20260508-120000.correctness.json",
+        "convergence": "qe_si4_pbe_uspp_small__cpu_gpu__strict_fp64__20260508-120000.convergence.json",
+        "power": "qe_si4_pbe_uspp_small__cpu_gpu__strict_fp64__20260508-120000.power.json",
+        "summary": "qe_si4_pbe_uspp_small__cpu_gpu__strict_fp64__20260508-120000.summary.md"
+      },
+      "baseline_state": "completed",
+      "notes": [
+        "MOCK DATA: Generated for testing purposes only"
+      ],
+      "measurements": {
+        "time_to_convergence_s": 0.2644528536987525,
+        "per_stage_time_s": {
+          "h_psi": 0.11900378416443862,
+          "s_psi": 0.06611321342468812,
+          "build_H_sub": 0.039667928054812875,
+          "cdiaghg": 0.02644528536987525,
+          "refresh": 0.013222642684937625
+        },
+        "effective_gflops": 0.20883087184572333,
+        "avg_gpu_board_power_w": 165.0,
+        "total_flops": 55225920.0,
+        "correctness_validated": true
+      },
+      "gpu_capabilities": {
+        "fp64_ratio_vs_fp32": 0.015625,
+        "is_approximate": false
+      },
+      "generated_at_utc": "2026-05-08T05:26:58.291098+00:00"
+    },
+    {
+      "schema_version": "qe_cpu_gpu_baseline_manifest_template_v0",
+      "baseline_class": "CPU+GPU",
+      "case_id": "si4_pbe_uspp_small",
+      "gpu_mode": "practical",
+      "run_tag": "20260508-120000",
+      "host_id": "mock-host",
+      "gpu_id": "mock-gpu-rtx3070",
+      "qe_rev": "mock-qe-7.5",
+      "correctness_contract_id": "qe_gold_correctness_contract_v0",
+      "workload_group_id": "qe_fpga_phase1_workload_group_v0",
+      "fairness_policy_id": "qe_cpu_gpu_fpga_fairness_and_power_contract_v0",
+      "algorithm_rewrite_manifest_id": "qe_algorithm_rewrite_manifest_v0",
+      "gpu_mode_attempts": [
+        "practical"
+      ],
+      "mode_attempt_exemption_note": "",
+      "shared_rewrite_closed": false,
+      "host_platform_comparable": false,
+      "rewrite_mode": "none",
+      "qe_tolerance_schema_id": "qe_gold_numerical_tolerance_schema_v0",
+      "accounting_boundary_id": "scf_shell_convergence_scope_v1",
+      "power_boundary_id": "whole_node_steady_state_single_cpu_single_accelerator_v0",
+      "warmup_policy": "symmetric_warmup_once",
+      "host_normalization_note": "",
+      "command": "mock_qe_run_si4_pbe_uspp_small_practical",
+      "env": {
+        "CUDA_VISIBLE_DEVICES": "0"
+      },
+      "artifact_paths": {
+        "stdout": "qe_si4_pbe_uspp_small__cpu_gpu__practical__20260508-120000.stdout.txt",
+        "stderr": "qe_si4_pbe_uspp_small__cpu_gpu__practical__20260508-120000.stderr.txt",
+        "timing": "qe_si4_pbe_uspp_small__cpu_gpu__practical__20260508-120000.timing.json",
+        "correctness": "qe_si4_pbe_uspp_small__cpu_gpu__practical__20260508-120000.correctness.json",
+        "convergence": "qe_si4_pbe_uspp_small__cpu_gpu__practical__20260508-120000.convergence.json",
+        "power": "qe_si4_pbe_uspp_small__cpu_gpu__practical__20260508-120000.power.json",
+        "summary": "qe_si4_pbe_uspp_small__cpu_gpu__practical__20260508-120000.summary.md"
+      },
+      "baseline_state": "completed",
+      "notes": [
+        "MOCK DATA: Generated for testing purposes only"
+      ],
+      "measurements": {
+        "time_to_convergence_s": 0.005746233614763567,
+        "per_stage_time_s": {
+          "h_psi": 0.0025858051266436054,
+          "s_psi": 0.0014365584036908918,
+          "build_H_sub": 0.000861935042214535,
+          "cdiaghg": 0.0005746233614763568,
+          "refresh": 0.0002873116807381784
+        },
+        "effective_gflops": 9.61080312817604,
+        "avg_gpu_board_power_w": 187.0,
+        "total_flops": 55225920.0,
+        "correctness_validated": true
+      },
+      "gpu_capabilities": {
+        "fp64_ratio_vs_fp32": 0.015625,
+        "is_approximate": true
+      },
+      "generated_at_utc": "2026-05-08T05:26:58.291101+00:00"
+    },
+    {
+      "schema_version": "qe_cpu_gpu_baseline_manifest_template_v0",
+      "baseline_class": "CPU+GPU",
+      "case_id": "graphene_pbe_uspp",
+      "gpu_mode": "strict_fp64",
+      "run_tag": "20260508-120000",
+      "host_id": "mock-host",
+      "gpu_id": "mock-gpu-rtx3070",
+      "qe_rev": "mock-qe-7.5",
+      "correctness_contract_id": "qe_gold_correctness_contract_v0",
+      "workload_group_id": "qe_fpga_phase1_workload_group_v0",
+      "fairness_policy_id": "qe_cpu_gpu_fpga_fairness_and_power_contract_v0",
+      "algorithm_rewrite_manifest_id": "qe_algorithm_rewrite_manifest_v0",
+      "gpu_mode_attempts": [
+        "strict_fp64"
+      ],
+      "mode_attempt_exemption_note": "",
+      "shared_rewrite_closed": false,
+      "host_platform_comparable": false,
+      "rewrite_mode": "none",
+      "qe_tolerance_schema_id": "qe_gold_numerical_tolerance_schema_v0",
+      "accounting_boundary_id": "scf_shell_convergence_scope_v1",
+      "power_boundary_id": "whole_node_steady_state_single_cpu_single_accelerator_v0",
+      "warmup_policy": "symmetric_warmup_once",
+      "host_normalization_note": "",
+      "command": "mock_qe_run_graphene_pbe_uspp_strict_fp64",
+      "env": {
+        "CUDA_VISIBLE_DEVICES": "0"
+      },
+      "artifact_paths": {
+        "stdout": "qe_graphene_pbe_uspp__cpu_gpu__strict_fp64__20260508-120000.stdout.txt",
+        "stderr": "qe_graphene_pbe_uspp__cpu_gpu__strict_fp64__20260508-120000.stderr.txt",
+        "timing": "qe_graphene_pbe_uspp__cpu_gpu__strict_fp64__20260508-120000.timing.json",
+        "correctness": "qe_graphene_pbe_uspp__cpu_gpu__strict_fp64__20260508-120000.correctness.json",
+        "convergence": "qe_graphene_pbe_uspp__cpu_gpu__strict_fp64__20260508-120000.convergence.json",
+        "power": "qe_graphene_pbe_uspp__cpu_gpu__strict_fp64__20260508-120000.power.json",
+        "summary": "qe_graphene_pbe_uspp__cpu_gpu__strict_fp64__20260508-120000.summary.md"
+      },
+      "baseline_state": "completed",
+      "notes": [
+        "MOCK DATA: Generated for testing purposes only"
+      ],
+      "measurements": {
+        "time_to_convergence_s": 6.410817667393794,
+        "per_stage_time_s": {
+          "h_psi": 2.8848679503272074,
+          "s_psi": 1.6027044168484486,
+          "build_H_sub": 0.9616226501090691,
+          "cdiaghg": 0.6410817667393794,
+          "refresh": 0.3205408833696897
+        },
+        "effective_gflops": 0.17202173844515595,
+        "avg_gpu_board_power_w": 165.0,
+        "total_flops": 1102800000.0,
+        "correctness_validated": true
+      },
+      "gpu_capabilities": {
+        "fp64_ratio_vs_fp32": 0.015625,
+        "is_approximate": false
+      },
+      "generated_at_utc": "2026-05-08T05:26:58.291105+00:00"
+    },
+    {
+      "schema_version": "qe_cpu_gpu_baseline_manifest_template_v0",
+      "baseline_class": "CPU+GPU",
+      "case_id": "graphene_pbe_uspp",
+      "gpu_mode": "practical",
+      "run_tag": "20260508-120000",
+      "host_id": "mock-host",
+      "gpu_id": "mock-gpu-rtx3070",
+      "qe_rev": "mock-qe-7.5",
+      "correctness_contract_id": "qe_gold_correctness_contract_v0",
+      "workload_group_id": "qe_fpga_phase1_workload_group_v0",
+      "fairness_policy_id": "qe_cpu_gpu_fpga_fairness_and_power_contract_v0",
+      "algorithm_rewrite_manifest_id": "qe_algorithm_rewrite_manifest_v0",
+      "gpu_mode_attempts": [
+        "practical"
+      ],
+      "mode_attempt_exemption_note": "",
+      "shared_rewrite_closed": false,
+      "host_platform_comparable": false,
+      "rewrite_mode": "none",
+      "qe_tolerance_schema_id": "qe_gold_numerical_tolerance_schema_v0",
+      "accounting_boundary_id": "scf_shell_convergence_scope_v1",
+      "power_boundary_id": "whole_node_steady_state_single_cpu_single_accelerator_v0",
+      "warmup_policy": "symmetric_warmup_once",
+      "host_normalization_note": "",
+      "command": "mock_qe_run_graphene_pbe_uspp_practical",
+      "env": {
+        "CUDA_VISIBLE_DEVICES": "0"
+      },
+      "artifact_paths": {
+        "stdout": "qe_graphene_pbe_uspp__cpu_gpu__practical__20260508-120000.stdout.txt",
+        "stderr": "qe_graphene_pbe_uspp__cpu_gpu__practical__20260508-120000.stderr.txt",
+        "timing": "qe_graphene_pbe_uspp__cpu_gpu__practical__20260508-120000.timing.json",
+        "correctness": "qe_graphene_pbe_uspp__cpu_gpu__practical__20260508-120000.correctness.json",
+        "convergence": "qe_graphene_pbe_uspp__cpu_gpu__practical__20260508-120000.convergence.json",
+        "power": "qe_graphene_pbe_uspp__cpu_gpu__practical__20260508-120000.power.json",
+        "summary": "qe_graphene_pbe_uspp__cpu_gpu__practical__20260508-120000.summary.md"
+      },
+      "baseline_state": "completed",
+      "notes": [
+        "MOCK DATA: Generated for testing purposes only"
+      ],
+      "measurements": {
+        "time_to_convergence_s": 0.12978772289725865,
+        "per_stage_time_s": {
+          "h_psi": 0.05840447530376639,
+          "s_psi": 0.03244693072431466,
+          "build_H_sub": 0.0194681584345888,
+          "cdiaghg": 0.012978772289725866,
+          "refresh": 0.006489386144862933
+        },
+        "effective_gflops": 8.496951602063227,
+        "avg_gpu_board_power_w": 187.0,
+        "total_flops": 1102800000.0,
+        "correctness_validated": true
+      },
+      "gpu_capabilities": {
+        "fp64_ratio_vs_fp32": 0.015625,
+        "is_approximate": true
+      },
+      "generated_at_utc": "2026-05-08T05:26:58.291108+00:00"
+    },
+    {
+      "schema_version": "qe_cpu_gpu_baseline_manifest_template_v0",
+      "baseline_class": "CPU+GPU",
+      "case_id": "au_slab_subspace",
+      "gpu_mode": "strict_fp64",
+      "run_tag": "20260508-120000",
+      "host_id": "mock-host",
+      "gpu_id": "mock-gpu-rtx3070",
+      "qe_rev": "mock-qe-7.5",
+      "correctness_contract_id": "qe_gold_correctness_contract_v0",
+      "workload_group_id": "qe_fpga_phase1_workload_group_v0",
+      "fairness_policy_id": "qe_cpu_gpu_fpga_fairness_and_power_contract_v0",
+      "algorithm_rewrite_manifest_id": "qe_algorithm_rewrite_manifest_v0",
+      "gpu_mode_attempts": [
+        "strict_fp64"
+      ],
+      "mode_attempt_exemption_note": "",
+      "shared_rewrite_closed": false,
+      "host_platform_comparable": false,
+      "rewrite_mode": "none",
+      "qe_tolerance_schema_id": "qe_gold_numerical_tolerance_schema_v0",
+      "accounting_boundary_id": "scf_shell_convergence_scope_v1",
+      "power_boundary_id": "whole_node_steady_state_single_cpu_single_accelerator_v0",
+      "warmup_policy": "symmetric_warmup_once",
+      "host_normalization_note": "",
+      "command": "mock_qe_run_au_slab_subspace_strict_fp64",
+      "env": {
+        "CUDA_VISIBLE_DEVICES": "0"
+      },
+      "artifact_paths": {
+        "stdout": "qe_au_slab_subspace__cpu_gpu__strict_fp64__20260508-120000.stdout.txt",
+        "stderr": "qe_au_slab_subspace__cpu_gpu__strict_fp64__20260508-120000.stderr.txt",
+        "timing": "qe_au_slab_subspace__cpu_gpu__strict_fp64__20260508-120000.timing.json",
+        "correctness": "qe_au_slab_subspace__cpu_gpu__strict_fp64__20260508-120000.correctness.json",
+        "convergence": "qe_au_slab_subspace__cpu_gpu__strict_fp64__20260508-120000.convergence.json",
+        "power": "qe_au_slab_subspace__cpu_gpu__strict_fp64__20260508-120000.power.json",
+        "summary": "qe_au_slab_subspace__cpu_gpu__strict_fp64__20260508-120000.summary.md"
+      },
+      "baseline_state": "completed",
+      "notes": [
+        "MOCK DATA: Generated for testing purposes only"
+      ],
+      "measurements": {
+        "time_to_convergence_s": 22.360657816852914,
+        "per_stage_time_s": {
+          "h_psi": 10.062296017583812,
+          "s_psi": 5.5901644542132285,
+          "build_H_sub": 3.354098672527937,
+          "cdiaghg": 2.2360657816852916,
+          "refresh": 1.1180328908426458
+        },
+        "effective_gflops": 0.2131102957270099,
+        "avg_gpu_board_power_w": 165.0,
+        "total_flops": 4765286400.0,
+        "correctness_validated": true
+      },
+      "gpu_capabilities": {
+        "fp64_ratio_vs_fp32": 0.015625,
+        "is_approximate": false
+      },
+      "generated_at_utc": "2026-05-08T05:26:58.291113+00:00"
+    },
+    {
+      "schema_version": "qe_cpu_gpu_baseline_manifest_template_v0",
+      "baseline_class": "CPU+GPU",
+      "case_id": "au_slab_subspace",
+      "gpu_mode": "practical",
+      "run_tag": "20260508-120000",
+      "host_id": "mock-host",
+      "gpu_id": "mock-gpu-rtx3070",
+      "qe_rev": "mock-qe-7.5",
+      "correctness_contract_id": "qe_gold_correctness_contract_v0",
+      "workload_group_id": "qe_fpga_phase1_workload_group_v0",
+      "fairness_policy_id": "qe_cpu_gpu_fpga_fairness_and_power_contract_v0",
+      "algorithm_rewrite_manifest_id": "qe_algorithm_rewrite_manifest_v0",
+      "gpu_mode_attempts": [
+        "practical"
+      ],
+      "mode_attempt_exemption_note": "",
+      "shared_rewrite_closed": false,
+      "host_platform_comparable": false,
+      "rewrite_mode": "none",
+      "qe_tolerance_schema_id": "qe_gold_numerical_tolerance_schema_v0",
+      "accounting_boundary_id": "scf_shell_convergence_scope_v1",
+      "power_boundary_id": "whole_node_steady_state_single_cpu_single_accelerator_v0",
+      "warmup_policy": "symmetric_warmup_once",
+      "host_normalization_note": "",
+      "command": "mock_qe_run_au_slab_subspace_practical",
+      "env": {
+        "CUDA_VISIBLE_DEVICES": "0"
+      },
+      "artifact_paths": {
+        "stdout": "qe_au_slab_subspace__cpu_gpu__practical__20260508-120000.stdout.txt",
+        "stderr": "qe_au_slab_subspace__cpu_gpu__practical__20260508-120000.stderr.txt",
+        "timing": "qe_au_slab_subspace__cpu_gpu__practical__20260508-120000.timing.json",
+        "correctness": "qe_au_slab_subspace__cpu_gpu__practical__20260508-120000.correctness.json",
+        "convergence": "qe_au_slab_subspace__cpu_gpu__practical__20260508-120000.convergence.json",
+        "power": "qe_au_slab_subspace__cpu_gpu__practical__20260508-120000.power.json",
+        "summary": "qe_au_slab_subspace__cpu_gpu__practical__20260508-120000.summary.md"
+      },
+      "baseline_state": "completed",
+      "notes": [
+        "MOCK DATA: Generated for testing purposes only"
+      ],
+      "measurements": {
+        "time_to_convergence_s": 0.4962499873457093,
+        "per_stage_time_s": {
+          "h_psi": 0.22331249430556918,
+          "s_psi": 0.12406249683642732,
+          "build_H_sub": 0.07443749810185639,
+          "cdiaghg": 0.049624998734570935,
+          "refresh": 0.024812499367285468
+        },
+        "effective_gflops": 9.60259248667808,
+        "avg_gpu_board_power_w": 187.0,
+        "total_flops": 4765286400.0,
+        "correctness_validated": true
+      },
+      "gpu_capabilities": {
+        "fp64_ratio_vs_fp32": 0.015625,
+        "is_approximate": true
+      },
+      "generated_at_utc": "2026-05-08T05:26:58.291117+00:00"
+    },
+    {
+      "schema_version": "qe_cpu_gpu_baseline_manifest_template_v0",
+      "baseline_class": "CPU+GPU",
+      "case_id": "sic32_subspace",
+      "gpu_mode": "strict_fp64",
+      "run_tag": "20260508-120000",
+      "host_id": "mock-host",
+      "gpu_id": "mock-gpu-rtx3070",
+      "qe_rev": "mock-qe-7.5",
+      "correctness_contract_id": "qe_gold_correctness_contract_v0",
+      "workload_group_id": "qe_fpga_phase1_workload_group_v0",
+      "fairness_policy_id": "qe_cpu_gpu_fpga_fairness_and_power_contract_v0",
+      "algorithm_rewrite_manifest_id": "qe_algorithm_rewrite_manifest_v0",
+      "gpu_mode_attempts": [
+        "strict_fp64"
+      ],
+      "mode_attempt_exemption_note": "",
+      "shared_rewrite_closed": false,
+      "host_platform_comparable": false,
+      "rewrite_mode": "none",
+      "qe_tolerance_schema_id": "qe_gold_numerical_tolerance_schema_v0",
+      "accounting_boundary_id": "scf_shell_convergence_scope_v1",
+      "power_boundary_id": "whole_node_steady_state_single_cpu_single_accelerator_v0",
+      "warmup_policy": "symmetric_warmup_once",
+      "host_normalization_note": "",
+      "command": "mock_qe_run_sic32_subspace_strict_fp64",
+      "env": {
+        "CUDA_VISIBLE_DEVICES": "0"
+      },
+      "artifact_paths": {
+        "stdout": "qe_sic32_subspace__cpu_gpu__strict_fp64__20260508-120000.stdout.txt",
+        "stderr": "qe_sic32_subspace__cpu_gpu__strict_fp64__20260508-120000.stderr.txt",
+        "timing": "qe_sic32_subspace__cpu_gpu__strict_fp64__20260508-120000.timing.json",
+        "correctness": "qe_sic32_subspace__cpu_gpu__strict_fp64__20260508-120000.correctness.json",
+        "convergence": "qe_sic32_subspace__cpu_gpu__strict_fp64__20260508-120000.convergence.json",
+        "power": "qe_sic32_subspace__cpu_gpu__strict_fp64__20260508-120000.power.json",
+        "summary": "qe_sic32_subspace__cpu_gpu__strict_fp64__20260508-120000.summary.md"
+      },
+      "baseline_state": "completed",
+      "notes": [
+        "MOCK DATA: Generated for testing purposes only"
+      ],
+      "measurements": {
+        "time_to_convergence_s": 62.024407876089256,
+        "per_stage_time_s": {
+          "h_psi": 27.910983544240167,
+          "s_psi": 15.506101969022314,
+          "build_H_sub": 9.303661181413387,
+          "cdiaghg": 6.202440787608926,
+          "refresh": 3.101220393804463
+        },
+        "effective_gflops": 0.2405420013006128,
+        "avg_gpu_board_power_w": 165.0,
+        "total_flops": 14919475200.0,
+        "correctness_validated": true
+      },
+      "gpu_capabilities": {
+        "fp64_ratio_vs_fp32": 0.015625,
+        "is_approximate": false
+      },
+      "generated_at_utc": "2026-05-08T05:26:58.291120+00:00"
+    },
+    {
+      "schema_version": "qe_cpu_gpu_baseline_manifest_template_v0",
+      "baseline_class": "CPU+GPU",
+      "case_id": "sic32_subspace",
+      "gpu_mode": "practical",
+      "run_tag": "20260508-120000",
+      "host_id": "mock-host",
+      "gpu_id": "mock-gpu-rtx3070",
+      "qe_rev": "mock-qe-7.5",
+      "correctness_contract_id": "qe_gold_correctness_contract_v0",
+      "workload_group_id": "qe_fpga_phase1_workload_group_v0",
+      "fairness_policy_id": "qe_cpu_gpu_fpga_fairness_and_power_contract_v0",
+      "algorithm_rewrite_manifest_id": "qe_algorithm_rewrite_manifest_v0",
+      "gpu_mode_attempts": [
+        "practical"
+      ],
+      "mode_attempt_exemption_note": "",
+      "shared_rewrite_closed": false,
+      "host_platform_comparable": false,
+      "rewrite_mode": "none",
+      "qe_tolerance_schema_id": "qe_gold_numerical_tolerance_schema_v0",
+      "accounting_boundary_id": "scf_shell_convergence_scope_v1",
+      "power_boundary_id": "whole_node_steady_state_single_cpu_single_accelerator_v0",
+      "warmup_policy": "symmetric_warmup_once",
+      "host_normalization_note": "",
+      "command": "mock_qe_run_sic32_subspace_practical",
+      "env": {
+        "CUDA_VISIBLE_DEVICES": "0"
+      },
+      "artifact_paths": {
+        "stdout": "qe_sic32_subspace__cpu_gpu__practical__20260508-120000.stdout.txt",
+        "stderr": "qe_sic32_subspace__cpu_gpu__practical__20260508-120000.stderr.txt",
+        "timing": "qe_sic32_subspace__cpu_gpu__practical__20260508-120000.timing.json",
+        "correctness": "qe_sic32_subspace__cpu_gpu__practical__20260508-120000.correctness.json",
+        "convergence": "qe_sic32_subspace__cpu_gpu__practical__20260508-120000.convergence.json",
+        "power": "qe_sic32_subspace__cpu_gpu__practical__20260508-120000.power.json",
+        "summary": "qe_sic32_subspace__cpu_gpu__practical__20260508-120000.summary.md"
+      },
+      "baseline_state": "completed",
+      "notes": [
+        "MOCK DATA: Generated for testing purposes only"
+      ],
+      "measurements": {
+        "time_to_convergence_s": 1.064350330458122,
+        "per_stage_time_s": {
+          "h_psi": 0.478957648706155,
+          "s_psi": 0.2660875826145305,
+          "build_H_sub": 0.1596525495687183,
+          "cdiaghg": 0.10643503304581221,
+          "refresh": 0.05321751652290611
+        },
+        "effective_gflops": 14.017447801776225,
+        "avg_gpu_board_power_w": 187.0,
+        "total_flops": 14919475200.0,
+        "correctness_validated": true
+      },
+      "gpu_capabilities": {
+        "fp64_ratio_vs_fp32": 0.015625,
+        "is_approximate": true
+      },
+      "generated_at_utc": "2026-05-08T05:26:58.291124+00:00"
+    }
+  ]
+}

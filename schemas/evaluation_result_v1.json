@@ -1,0 +1,179 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "EvaluationResult",
+  "description": "Step 5 output / Step 6 input - Evaluation results with metrics and uncertainty",
+  "version": "1.0.0",
+  
+  "type": "object",
+  "required": ["schema_version", "result_id", "evaluation_config_ref", "metrics", "status", "provenance"],
+  
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "evaluation_result_v1"
+    },
+    
+    "result_id": {
+      "type": "string",
+      "pattern": "^[a-zA-Z0-9_-]+$"
+    },
+
+    "design_point_id": {
+      "type": "string",
+      "pattern": "^[a-zA-Z0-9_-]+$",
+      "description": "DesignPoint identifier evaluated by this result"
+    },
+    
+    "evaluation_config_ref": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$",
+      "description": "SHA-256 hash of input EvaluationConfig"
+    },
+    
+    "metrics": {
+      "type": "object",
+      "required": ["latency_ms", "throughput_gops", "power_w"],
+      "properties": {
+        "latency_ms": {"type": "number", "minimum": 0},
+        "throughput_gops": {"type": "number", "minimum": 0},
+        "power_w": {"type": "number", "minimum": 0},
+        "area_mm2": {"type": "number", "minimum": 0},
+        "energy_efficiency_gops_per_w": {"type": "number", "minimum": 0},
+        "accuracy_vs_reference": {"type": "number", "minimum": 0, "maximum": 1},
+        "speedup_vs_cpu": {"type": "number", "minimum": 0},
+        "speedup_vs_gpu": {"type": "number", "minimum": 0},
+        "energy_per_op_pj": {"type": "number", "minimum": 0},
+        "edp_js": {"type": "number", "minimum": 0}
+      }
+    },
+    
+    "uncertainty": {
+      "type": "object",
+      "properties": {
+        "latency_ci_95": {
+          "type": "array",
+          "items": {"type": "number"},
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "throughput_ci_95": {
+          "type": "array",
+          "items": {"type": "number"},
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "confidence_level": {"type": "number", "minimum": 0, "maximum": 1},
+        "mape_percent": {"type": "number", "minimum": 0},
+        "sample_size": {"type": "integer", "minimum": 1}
+      }
+    },
+    
+    "resource_utilization": {
+      "type": "object",
+      "properties": {
+        "compute_percent": {"type": "number", "minimum": 0, "maximum": 100},
+        "memory_percent": {"type": "number", "minimum": 0, "maximum": 100},
+        "bandwidth_percent": {"type": "number", "minimum": 0, "maximum": 100},
+        "interconnect_percent": {"type": "number", "minimum": 0, "maximum": 100}
+      }
+    },
+    
+    "status": {
+      "type": "string",
+      "enum": ["passed", "failed", "inconclusive", "timeout", "error"]
+    },
+    
+    "promotion_recommendation": {
+      "type": "string",
+      "enum": ["promote", "hold", "reject"]
+    },
+    
+    "promotion_score": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Score used for promotion decision"
+    },
+    
+    "fidelity_level_achieved": {
+      "type": "string",
+      "enum": ["L0", "L1", "L2", "L3", "L4"]
+    },
+
+    "layer_results": {
+      "type": "array",
+      "description": "Per-layer or per-fidelity results accumulated during multi-fidelity evaluation",
+      "items": {
+        "type": "object",
+        "required": ["layer_id", "fidelity_level", "status", "metrics"],
+        "properties": {
+          "layer_id": {"type": "string"},
+          "fidelity_level": {"type": "string", "enum": ["L0", "L1", "L2", "L3", "L4"]},
+          "status": {"type": "string", "enum": ["passed", "failed", "inconclusive", "timeout", "error"]},
+          "metrics": {
+            "type": "object",
+            "properties": {
+              "latency_ms": {"type": "number", "minimum": 0},
+              "throughput_gops": {"type": "number", "minimum": 0},
+              "power_w": {"type": "number", "minimum": 0},
+              "area_mm2": {"type": "number", "minimum": 0},
+              "accuracy_vs_reference": {"type": "number", "minimum": 0, "maximum": 1}
+            },
+            "additionalProperties": {"type": "number"}
+          },
+          "uncertainty": {"type": "object"},
+          "resource_utilization": {"type": "object"},
+          "promotion_score": {"type": "number", "minimum": 0, "maximum": 1},
+          "model_used": {"type": "string"},
+          "execution_time_seconds": {"type": "number", "minimum": 0}
+        }
+      }
+    },
+    
+    "provenance": {
+      "type": "object",
+      "required": ["input_hash", "generated_at", "tool_version", "execution_time_seconds"],
+      "properties": {
+        "input_hash": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "generated_at": {"type": "string", "format": "date-time"},
+        "tool_version": {"type": "string"},
+        "execution_time_seconds": {"type": "number", "minimum": 0},
+        "model_used": {"type": "string"},
+        "hardware_platform": {"type": "string"}
+      }
+    }
+  },
+  
+  "allOf": [
+    {
+      "description": "Promotion recommendation requires passed status",
+      "if": {
+        "required": ["promotion_recommendation"],
+        "properties": {
+          "promotion_recommendation": {"const": "promote"}
+        }
+      },
+      "then": {
+        "properties": {
+          "status": {"const": "passed"}
+        }
+      }
+    },
+    {
+      "description": "Confidence intervals must be valid (lower < upper)",
+      "if": {"required": ["uncertainty"]},
+      "then": {
+        "properties": {
+          "uncertainty": {
+            "properties": {
+              "latency_ci_95": {
+                "type": "array",
+                "items": {"type": "number"}
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

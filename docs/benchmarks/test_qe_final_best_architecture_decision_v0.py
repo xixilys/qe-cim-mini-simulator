@@ -198,6 +198,36 @@ def write_fixture(
     return manifest, matrix, backend_collection
 
 
+def write_freeze_manifest(root: Path, *, competitive: list[str], coverage_only: list[str] | None = None, excluded: list[str] | None = None) -> Path:
+    return write_json(
+        root / "catalog_freeze_manifest.json",
+        {
+            "schema_version": "qe_microarchitecture_catalog_freeze_manifest_v0",
+            "freeze_status": "passed",
+            "policy_id": "qe_fpga_final_best_policy_systemc_b4_minimum_v0",
+            "partitions": {
+                "competitive_evaluable": competitive,
+                "coverage_only": coverage_only or [],
+                "excluded_from_best_universe": excluded or [],
+            },
+            "freeze_gates": [
+                {"gate_id": "research_coverage_proof", "status": "passed", "details": {}},
+                {"gate_id": "ppt_family_coverage", "status": "passed", "details": {}},
+                {"gate_id": "auditable_parameter_space", "status": "passed", "details": {}},
+                {"gate_id": "exclusion_rationale", "status": "passed", "details": {}},
+                {"gate_id": "evidence_path_per_competitive_candidate", "status": "passed", "details": {}},
+                {"gate_id": "reproducible_topk_closure_refs", "status": "passed", "details": {}},
+            ],
+        },
+    )
+
+
+def attach_freeze_manifest(e2e_manifest: Path, freeze_manifest: Path) -> None:
+    payload = json.loads(e2e_manifest.read_text(encoding="utf-8"))
+    payload["catalog_freeze_manifest"] = str(freeze_manifest)
+    e2e_manifest.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
 class QeFinalBestArchitectureDecisionTests(unittest.TestCase):
     def test_current_b4_only_fixture_has_no_winner(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -285,6 +315,163 @@ class QeFinalBestArchitectureDecisionTests(unittest.TestCase):
             reasons = decision["ineligible_candidates"][0]["ineligible_reasons"]
             self.assertIn("stage_d_evidence_status_not_available", reasons)
             self.assertIn("implementation_projection_not_allowed_for_final_best", reasons)
+
+    def test_systemc_b4_minimum_policy_does_not_require_stage_d(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            manifest, matrix, collection = write_fixture(root)
+            matrix_payload = json.loads(matrix.read_text(encoding="utf-8"))
+            for row in matrix_payload["rows"]:
+                row["stage_d_report_ref"] = None
+                row["stage_d_claim_ceiling"] = "not_applicable"
+                row["blockers"] = ["missing_stage_d_implementation_evidence"]
+            matrix.write_text(json.dumps(matrix_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            attach_freeze_manifest(
+                manifest,
+                write_freeze_manifest(root, competitive=["candidate_F3", "candidate_F2"]),
+            )
+            policy_path = write_json(
+                root / "systemc_b4_policy.json",
+                MODULE_ANY.final_policy.systemc_b4_minimum_policy(),
+            )
+
+            decision = MODULE_ANY.build_decision(
+                manifest_path=manifest,
+                claim_matrix_path=matrix,
+                backend_report_collection_path=collection,
+                policy_path=policy_path,
+            )
+
+            self.assertEqual(decision["winner"]["candidate_id"], "candidate_F3")
+            self.assertEqual(decision["claim_ceiling"], "final_best_under_systemc_b4_minimum_policy")
+            self.assertEqual(decision["winner"]["policy_id"], "qe_fpga_final_best_policy_systemc_b4_minimum_v0")
+            self.assertFalse(decision["winner"]["stage_d_required_for_final_best"])
+            self.assertTrue(decision["winner"]["stage_c_report_ref"])
+            self.assertTrue(decision["winner"]["strict_b4_report_ref"])
+            self.assertTrue(decision["winner"]["systemc_cycle_evidence_ref"])
+            self.assertTrue(decision["winner"]["stage_c_report_sha256"])
+            self.assertTrue(decision["winner"]["strict_b4_report_sha256"])
+            self.assertIn(
+                "missing_optional_stage_d_hls_or_stronger_evidence",
+                decision["winner"]["optional_precision_upgrade_risks"],
+            )
+            self.assertNotIn(
+                "missing_stage_d_implementation_evidence",
+                decision["winner"]["optional_precision_upgrade_risks"],
+            )
+            self.assertEqual(decision["dominance_closure"]["status"], "passed")
+
+    def test_unresolved_higher_ranked_competitive_candidate_blocks_lower_winner(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            manifest, matrix, collection = write_fixture(root)
+            attach_freeze_manifest(
+                manifest,
+                write_freeze_manifest(root, competitive=["candidate_F3", "candidate_F2"]),
+            )
+            matrix_payload = json.loads(matrix.read_text(encoding="utf-8"))
+            for row in matrix_payload["rows"]:
+                row["stage_d_report_ref"] = None
+                row["stage_d_claim_ceiling"] = "not_applicable"
+                if row["candidate_id"] == "candidate_F3":
+                    row["stage_c_report_ref"] = None
+                    row["blockers"] = ["missing_stage_c_qe_correctness_report"]
+                else:
+                    row["blockers"] = ["missing_stage_d_implementation_evidence"]
+            matrix.write_text(json.dumps(matrix_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            policy_path = write_json(
+                root / "systemc_b4_policy.json",
+                MODULE_ANY.final_policy.systemc_b4_minimum_policy(),
+            )
+
+            decision = MODULE_ANY.build_decision(
+                manifest_path=manifest,
+                claim_matrix_path=matrix,
+                backend_report_collection_path=collection,
+                policy_path=policy_path,
+            )
+
+            self.assertIsNone(decision["winner"])
+            self.assertEqual(decision["decision_status"], "blocked_no_eligible_candidates")
+            self.assertEqual(decision["dominance_closure"]["status"], "blocked")
+            self.assertIn(
+                "unresolved_higher_ranked_competitive_candidate:candidate_F3",
+                decision["dominance_closure"]["blocking_higher_ranked_competitive_candidates"][0]["blocker"],
+            )
+
+    def test_resolved_higher_ranked_stage_c_nonpass_does_not_block_lower_winner(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            manifest, matrix, collection = write_fixture(root)
+            attach_freeze_manifest(
+                manifest,
+                write_freeze_manifest(root, competitive=["candidate_F3", "candidate_F2"]),
+            )
+            f3_stage_c = root / "candidate_F3.stage_c.json"
+            f3_stage_c.write_text(
+                json.dumps(stage_c_payload("candidate_F3", claim=False), indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            matrix_payload = json.loads(matrix.read_text(encoding="utf-8"))
+            for row in matrix_payload["rows"]:
+                row["stage_d_report_ref"] = None
+                row["stage_d_claim_ceiling"] = "not_applicable"
+                if row["candidate_id"] == "candidate_F3":
+                    row["blockers"] = ["stage_c_qe_equivalent_scf_not_proven"]
+                else:
+                    row["blockers"] = ["missing_stage_d_implementation_evidence"]
+            matrix.write_text(json.dumps(matrix_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            policy_path = write_json(
+                root / "systemc_b4_policy.json",
+                MODULE_ANY.final_policy.systemc_b4_minimum_policy(),
+            )
+
+            decision = MODULE_ANY.build_decision(
+                manifest_path=manifest,
+                claim_matrix_path=matrix,
+                backend_report_collection_path=collection,
+                policy_path=policy_path,
+            )
+
+            self.assertEqual(decision["winner"]["candidate_id"], "candidate_F2")
+            self.assertEqual(decision["dominance_closure"]["status"], "passed")
+            resolved = decision["dominance_closure"]["resolved_higher_ranked_competitive_candidates"]
+            self.assertEqual(resolved[0]["candidate_id"], "candidate_F3")
+            self.assertIn("stage_c_qe_equivalent_scf_not_proven", resolved[0]["ineligible_reasons"])
+
+    def test_freeze_excluded_higher_ranked_candidate_does_not_block_winner(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            manifest, matrix, collection = write_fixture(root)
+            attach_freeze_manifest(
+                manifest,
+                write_freeze_manifest(root, competitive=["candidate_F2"], excluded=["candidate_F3"]),
+            )
+            matrix_payload = json.loads(matrix.read_text(encoding="utf-8"))
+            for row in matrix_payload["rows"]:
+                row["stage_d_report_ref"] = None
+                row["stage_d_claim_ceiling"] = "not_applicable"
+                if row["candidate_id"] == "candidate_F3":
+                    row["stage_c_report_ref"] = None
+                    row["blockers"] = ["missing_stage_c_qe_correctness_report"]
+                else:
+                    row["blockers"] = ["missing_stage_d_implementation_evidence"]
+            matrix.write_text(json.dumps(matrix_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            policy_path = write_json(
+                root / "systemc_b4_policy.json",
+                MODULE_ANY.final_policy.systemc_b4_minimum_policy(),
+            )
+
+            decision = MODULE_ANY.build_decision(
+                manifest_path=manifest,
+                claim_matrix_path=matrix,
+                backend_report_collection_path=collection,
+                policy_path=policy_path,
+            )
+
+            self.assertEqual(decision["winner"]["candidate_id"], "candidate_F2")
+            self.assertEqual(decision["winner"]["catalog_freeze_partition"], "competitive_evaluable")
+            self.assertEqual(decision["dominance_closure"]["status"], "passed")
 
     def test_non_strict_b4_is_not_final_best_even_with_stage_c_d(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

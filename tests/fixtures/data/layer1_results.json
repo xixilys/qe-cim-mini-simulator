@@ -1,0 +1,369 @@
+{
+  "schema_version": "dse_layer1_results_v0",
+  "fidelity": "L0",
+  "model": "analytical",
+  "generated_at_utc": "2026-05-08T05:26:58.284430+00:00",
+  "result_count": 36,
+  "results": [
+    {
+      "case_id": "si8_pbe_nc",
+      "family": "F1",
+      "fidelity": "L0",
+      "latency_s": 0.00199182802692746,
+      "throughput_gops": 291.86134151187525,
+      "power_w": 60,
+      "accuracy": 0.5,
+      "total_flops": 581337600.0
+    },
+    {
+      "case_id": "si8_pbe_nc",
+      "family": "F2",
+      "fidelity": "L0",
+      "latency_s": 0.0013152794462076662,
+      "throughput_gops": 441.9878997396072,
+      "power_w": 70,
+      "accuracy": 0.5,
+      "total_flops": 581337600.0
+    },
+    {
+      "case_id": "si8_pbe_nc",
+      "family": "F3",
+      "fidelity": "L0",
+      "latency_s": 0.0012337351483868175,
+      "throughput_gops": 471.2012953186376,
+      "power_w": 80,
+      "accuracy": 0.5,
+      "total_flops": 581337600.0
+    },
+    {
+      "case_id": "si8_pbe_nc",
+      "family": "F4",
+      "fidelity": "L0",
+      "latency_s": 0.0010983119979238662,
+      "throughput_gops": 529.3009646611342,
+      "power_w": 90,
+      "accuracy": 0.5,
+      "total_flops": 581337600.0
+    },
+    {
+      "case_id": "si8_pbe_nc",
+      "family": "F5",
+      "fidelity": "L0",
+      "latency_s": 0.0014325447567582084,
+      "throughput_gops": 405.8076351593676,
+      "power_w": 100,
+      "accuracy": 0.5,
+      "total_flops": 581337600.0
+    },
+    {
+      "case_id": "si8_pbe_nc",
+      "family": "F6",
+      "fidelity": "L0",
+      "latency_s": 0.0016050186965011549,
+      "throughput_gops": 362.19989291544164,
+      "power_w": 110,
+      "accuracy": 0.5,
+      "total_flops": 581337600.0
+    },
+    {
+      "case_id": "si8_pbe_uspp",
+      "family": "F1",
+      "fidelity": "L0",
+      "latency_s": 0.002089784485772382,
+      "throughput_gops": 278.18064683600056,
+      "power_w": 60,
+      "accuracy": 0.5,
+      "total_flops": 581337600.0
+    },
+    {
+      "case_id": "si8_pbe_uspp",
+      "family": "F2",
+      "fidelity": "L0",
+      "latency_s": 0.0013332800061537932,
+      "throughput_gops": 436.0206388131669,
+      "power_w": 70,
+      "accuracy": 0.5,
+      "total_flops": 581337600.0
+    },
+    {
+      "case_id": "si8_pbe_uspp",
+      "family": "F3",
+      "fidelity": "L0",
+      "latency_s": 0.0012716880969082082,
+      "throughput_gops": 457.1385085803485,
+      "power_w": 80,
+      "accuracy": 0.5,
+      "total_flops": 581337600.0
+    },
+    {
+      "case_id": "si8_pbe_uspp",
+      "family": "F4",
+      "fidelity": "L0",
+      "latency_s": 0.0010533365776139204,
+      "throughput_gops": 551.9010849474912,
+      "power_w": 90,
+      "accuracy": 0.5,
+      "total_flops": 581337600.0
+    },
+    {
+      "case_id": "si8_pbe_uspp",
+      "family": "F5",
+      "fidelity": "L0",
+      "latency_s": 0.0012908807884899705,
+      "throughput_gops": 450.34181714024066,
+      "power_w": 100,
+      "accuracy": 0.5,
+      "total_flops": 581337600.0
+    },
+    {
+      "case_id": "si8_pbe_uspp",
+      "family": "F6",
+      "fidelity": "L0",
+      "latency_s": 0.0015518939895111025,
+      "throughput_gops": 374.5987831186461,
+      "power_w": 110,
+      "accuracy": 0.5,
+      "total_flops": 581337600.0
+    },
+    {
+      "case_id": "si4_pbe_uspp_small",
+      "family": "F1",
+      "fidelity": "L0",
+      "latency_s": 0.00016665474222592232,
+      "throughput_gops": 331.37922907188585,
+      "power_w": 60,
+      "accuracy": 0.5,
+      "total_flops": 55225920.0
+    },
+    {
+      "case_id": "si4_pbe_uspp_small",
+      "family": "F2",
+      "fidelity": "L0",
+      "latency_s": 0.0001297488160949044,
+      "throughput_gops": 425.6371785281275,
+      "power_w": 70,
+      "accuracy": 0.5,
+      "total_flops": 55225920.0
+    },
+    {
+      "case_id": "si4_pbe_uspp_small",
+      "family": "F3",
+      "fidelity": "L0",
+      "latency_s": 0.0001264031582089142,
+      "throughput_gops": 436.90300766634925,
+      "power_w": 80,
+      "accuracy": 0.5,
+      "total_flops": 55225920.0
+    },
+    {
+      "case_id": "si4_pbe_uspp_small",
+      "family": "F4",
+      "fidelity": "L0",
+      "latency_s": 0.0001114446138449899,
+      "throughput_gops": 495.54588682782475,
+      "power_w": 90,
+      "accuracy": 0.5,
+      "total_flops": 55225920.0
+    },
+    {
+      "case_id": "si4_pbe_uspp_small",
+      "family": "F5",
+      "fidelity": "L0",
+      "latency_s": 0.00012267796525062107,
+      "throughput_gops": 450.1698400945757,
+      "power_w": 100,
+      "accuracy": 0.5,
+      "total_flops": 55225920.0
+    },
+    {
+      "case_id": "si4_pbe_uspp_small",
+      "family": "F6",
+      "fidelity": "L0",
+      "latency_s": 0.00014989833574212064,
+      "throughput_gops": 368.4225026687992,
+      "power_w": 110,
+      "accuracy": 0.5,
+      "total_flops": 55225920.0
+    },
+    {
+      "case_id": "graphene_pbe_uspp",
+      "family": "F1",
+      "fidelity": "L0",
+      "latency_s": 0.0039034932717495387,
+      "throughput_gops": 282.51617800425385,
+      "power_w": 60,
+      "accuracy": 0.5,
+      "total_flops": 1102800000.0
+    },
+    {
+      "case_id": "graphene_pbe_uspp",
+      "family": "F2",
+      "fidelity": "L0",
+      "latency_s": 0.0024848834160864823,
+      "throughput_gops": 443.8035172438121,
+      "power_w": 70,
+      "accuracy": 0.5,
+      "total_flops": 1102800000.0
+    },
+    {
+      "case_id": "graphene_pbe_uspp",
+      "family": "F3",
+      "fidelity": "L0",
+      "latency_s": 0.002600558875964987,
+      "throughput_gops": 424.0626929051107,
+      "power_w": 80,
+      "accuracy": 0.5,
+      "total_flops": 1102800000.0
+    },
+    {
+      "case_id": "graphene_pbe_uspp",
+      "family": "F4",
+      "fidelity": "L0",
+      "latency_s": 0.0022930032499172063,
+      "throughput_gops": 480.9413157350819,
+      "power_w": 90,
+      "accuracy": 0.5,
+      "total_flops": 1102800000.0
+    },
+    {
+      "case_id": "graphene_pbe_uspp",
+      "family": "F5",
+      "fidelity": "L0",
+      "latency_s": 0.0025119191857016668,
+      "throughput_gops": 439.02686291714815,
+      "power_w": 100,
+      "accuracy": 0.5,
+      "total_flops": 1102800000.0
+    },
+    {
+      "case_id": "graphene_pbe_uspp",
+      "family": "F6",
+      "fidelity": "L0",
+      "latency_s": 0.0027381668226092973,
+      "throughput_gops": 402.751209639266,
+      "power_w": 110,
+      "accuracy": 0.5,
+      "total_flops": 1102800000.0
+    },
+    {
+      "case_id": "au_slab_subspace",
+      "family": "F1",
+      "fidelity": "L0",
+      "latency_s": 0.017336788823259463,
+      "throughput_gops": 274.8655733527061,
+      "power_w": 60,
+      "accuracy": 0.5,
+      "total_flops": 4765286400.0
+    },
+    {
+      "case_id": "au_slab_subspace",
+      "family": "F2",
+      "fidelity": "L0",
+      "latency_s": 0.011523879104069693,
+      "throughput_gops": 413.5140916496707,
+      "power_w": 70,
+      "accuracy": 0.5,
+      "total_flops": 4765286400.0
+    },
+    {
+      "case_id": "au_slab_subspace",
+      "family": "F3",
+      "fidelity": "L0",
+      "latency_s": 0.00972699969160709,
+      "throughput_gops": 489.90300720495674,
+      "power_w": 80,
+      "accuracy": 0.5,
+      "total_flops": 4765286400.0
+    },
+    {
+      "case_id": "au_slab_subspace",
+      "family": "F4",
+      "fidelity": "L0",
+      "latency_s": 0.008761868014072713,
+      "throughput_gops": 543.8664896967546,
+      "power_w": 90,
+      "accuracy": 0.5,
+      "total_flops": 4765286400.0
+    },
+    {
+      "case_id": "au_slab_subspace",
+      "family": "F5",
+      "fidelity": "L0",
+      "latency_s": 0.011991690436721023,
+      "throughput_gops": 397.3823728310825,
+      "power_w": 100,
+      "accuracy": 0.5,
+      "total_flops": 4765286400.0
+    },
+    {
+      "case_id": "au_slab_subspace",
+      "family": "F6",
+      "fidelity": "L0",
+      "latency_s": 0.012971048664852596,
+      "throughput_gops": 367.3786540414736,
+      "power_w": 110,
+      "accuracy": 0.5,
+      "total_flops": 4765286400.0
+    },
+    {
+      "case_id": "sic32_subspace",
+      "family": "F1",
+      "fidelity": "L0",
+      "latency_s": 0.052786379104223964,
+      "throughput_gops": 282.63873092227584,
+      "power_w": 60,
+      "accuracy": 0.5,
+      "total_flops": 14919475200.0
+    },
+    {
+      "case_id": "sic32_subspace",
+      "family": "F2",
+      "fidelity": "L0",
+      "latency_s": 0.039012426847115055,
+      "throughput_gops": 382.42879015108707,
+      "power_w": 70,
+      "accuracy": 0.5,
+      "total_flops": 14919475200.0
+    },
+    {
+      "case_id": "sic32_subspace",
+      "family": "F3",
+      "fidelity": "L0",
+      "latency_s": 0.033394613383111886,
+      "throughput_gops": 446.7629263689869,
+      "power_w": 80,
+      "accuracy": 0.5,
+      "total_flops": 14919475200.0
+    },
+    {
+      "case_id": "sic32_subspace",
+      "family": "F4",
+      "fidelity": "L0",
+      "latency_s": 0.03266240596296772,
+      "throughput_gops": 456.7782060181218,
+      "power_w": 90,
+      "accuracy": 0.5,
+      "total_flops": 14919475200.0
+    },
+    {
+      "case_id": "sic32_subspace",
+      "family": "F5",
+      "fidelity": "L0",
+      "latency_s": 0.034251845954403524,
+      "throughput_gops": 435.5816390118357,
+      "power_w": 100,
+      "accuracy": 0.5,
+      "total_flops": 14919475200.0
+    },
+    {
+      "case_id": "sic32_subspace",
+      "family": "F6",
+      "fidelity": "L0",
+      "latency_s": 0.0401993572840924,
+      "throughput_gops": 371.13715760584813,
+      "power_w": 110,
+      "accuracy": 0.5,
+      "total_flops": 14919475200.0
+    }
+  ]
+}

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import dataclass, fields
+from pathlib import Path
 from typing import Any, Mapping
 
 
@@ -61,6 +62,8 @@ EVALUATION_RESULT_CORE_KEYS = (
     "final_public_family_winner",
 )
 
+EVALUATION_FIDELITY_LEVELS = ("L0", "L1", "L2", "L3", "L4")
+
 
 def _copy_required(payload: Mapping[str, Any], keys: tuple[str, ...]) -> dict[str, Any]:
     return {key: payload[key] for key in keys}
@@ -116,6 +119,48 @@ def _workload_defaults(payload: Mapping[str, Any]) -> dict[str, Any]:
         "dimension_m": int(payload.get("dimension_m", payload.get("m", 0)) or 0),
         "scf_iterations": int(payload.get("scf_iterations", 1) or 1),
     }
+
+
+@dataclass(frozen=True)
+class EvaluationConfig:
+    fidelity_level: str = "L0"
+    output_dir: Path | None = None
+    allow_execute: bool = False
+    dry_run: bool = False
+    timeout_s: float = 300.0
+    max_scf_iters: int = 1
+
+    def __post_init__(self) -> None:
+        if self.fidelity_level not in EVALUATION_FIDELITY_LEVELS:
+            raise ValueError(
+                "unsupported evaluation fidelity_level: " + str(self.fidelity_level)
+            )
+        if self.timeout_s <= 0:
+            raise ValueError("timeout_s must be positive")
+        if self.max_scf_iters <= 0:
+            raise ValueError("max_scf_iters must be positive")
+
+    @classmethod
+    def from_dict(cls, payload: Mapping[str, Any]) -> "EvaluationConfig":
+        output_dir = payload.get("output_dir")
+        return cls(
+            fidelity_level=str(payload.get("fidelity_level", payload.get("fidelity", "L0"))),
+            output_dir=None if output_dir in (None, "") else Path(str(output_dir)),
+            allow_execute=bool(payload.get("allow_execute", False)),
+            dry_run=bool(payload.get("dry_run", False)),
+            timeout_s=float(payload.get("timeout_s", 300.0)),
+            max_scf_iters=int(payload.get("max_scf_iters", 1)),
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "fidelity_level": self.fidelity_level,
+            "output_dir": None if self.output_dir is None else str(self.output_dir),
+            "allow_execute": self.allow_execute,
+            "dry_run": self.dry_run,
+            "timeout_s": self.timeout_s,
+            "max_scf_iters": self.max_scf_iters,
+        }
 
 
 @dataclass(frozen=True)

@@ -200,13 +200,27 @@ def _has_systemc_cycle_artifact_ref(mapping: Mapping[str, Any]) -> bool:
     return any(_has_non_empty_key_fragment(mapping, fragments) for fragments in direct_fragments)
 
 
+def _stage_d_required_for_mapping(mapping: Mapping[str, Any]) -> bool:
+    policy_id = str(mapping.get("policy_id") or "")
+    if policy_id == "qe_fpga_final_best_policy_systemc_b4_minimum_v0":
+        return False
+    policy = mapping.get("policy")
+    if isinstance(policy, Mapping):
+        if policy.get("stage_d_required_for_final_best") is False:
+            return False
+        if str(policy.get("policy_id") or "") == "qe_fpga_final_best_policy_systemc_b4_minimum_v0":
+            return False
+    return True
+
+
 def _has_same_candidate_final_best_refs(mapping: Mapping[str, Any]) -> bool:
-    required = (
+    required = [
         ("stage", "c"),
         ("b4",),
-        ("stage", "d"),
         ("systemc", "cycle"),
-    )
+    ]
+    if _stage_d_required_for_mapping(mapping):
+        required.append(("stage", "d"))
     return all(_has_non_empty_key_fragment(mapping, fragments) for fragments in required)
 
 
@@ -231,8 +245,13 @@ def _collect_json_issues(path: Path, payload: Any) -> list[str]:
                     f"{path}:{pointer}: {tier!r} row requires a SystemC cycle evidence artifact ref/hash"
                 )
             if tier == "final-best-eligible" and not _has_same_candidate_final_best_refs(mapping):
+                stage_d_clause = (
+                    "Stage D, "
+                    if _stage_d_required_for_mapping(mapping)
+                    else ""
+                )
                 issues.append(
-                    f"{path}:{pointer}: final-best-eligible row requires same-candidate Stage C, strict B4, Stage D, and SystemC cycle refs"
+                    f"{path}:{pointer}: final-best-eligible row requires same-candidate Stage C, strict B4, {stage_d_clause}and SystemC cycle refs"
                 )
     return issues
 

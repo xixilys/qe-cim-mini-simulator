@@ -81,6 +81,34 @@ class RunQeFpgaDseE2ETests(unittest.TestCase):
             ],
         }
 
+    def materialized_systemc_cycle_payload(self, candidate_id: str) -> dict[str, Any]:
+        return {
+            "schema_version": "systemc_cycle_accounted_evidence_v0",
+            "candidate_id": candidate_id,
+            "workload_id": "si4_pbe_uspp_small",
+            "evidence_tier_label": "systemc-cycle-accounted",
+            "claim_label": "systemc-cycle-accounted",
+            "template_config_hash": "sha256:template-fixture",
+            "cycle_accounting": {
+                "total_cycles": 150,
+                "per_stage_cycle_table": [
+                    {"stage_id": "cluster_a", "cycles": 120, "included_in_total": True}
+                ],
+                "per_component_cycle_table": [
+                    {"component_id": "dma", "cycles": 10}
+                ],
+            },
+            "model_support_status": {"status": "systemc_result_available"},
+            "calibration_refs": [],
+            "artifact_refs": {"systemc_candidate_result": "candidate.systemc.json"},
+            "artifact_hashes": {"systemc_candidate_result": {"sha256": "sha256:candidate"}},
+            "non_claims": [
+                "systemc_cycle_accounting_only",
+                "not_rtl_cycle_accurate",
+                "not_final_best_architecture_claim",
+            ],
+        }
+
     def write_candidate_run(self, root: Path, candidate_id: str, family: str) -> dict[str, Any]:
         frontend_dir = root / "frontend_dse"
         request_dir = frontend_dir / "backend_execution_requests"
@@ -628,6 +656,97 @@ class RunQeFpgaDseE2ETests(unittest.TestCase):
             self.assertFalse(row_by_candidate["candidate_A"]["eligible_for_final_recommendation"])
             self.assertTrue(row_by_candidate["candidate_B"]["eligible_for_final_recommendation"])
 
+    def test_systemc_b4_policy_reranked_results_treats_stage_d_as_optional(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            candidate_runs = [
+                {
+                    "candidate_id": "candidate_A",
+                    "screening_rank": 1,
+                    "systemc_payload": {"metrics": {"cycle_proxy": 1000}},
+                    "gem5_b4_payload": {
+                        "metrics": {
+                            "cycle_proxy": 100,
+                            "cycle_source": "gem5_event_timed_device_observed",
+                            "event_timed_device_activity_observed": True,
+                            "candidate_device_event_delta_ticks": 100,
+                            "host_control_mmio_read_count": 3,
+                            "host_control_mmio_write_count": 1,
+                        },
+                    },
+                }
+            ]
+            claim_matrix = {
+                "rows": [
+                    {
+                        "candidate_id": "candidate_A",
+                        "evidence_tier": "final-best-eligible",
+                        "blockers": ["missing_stage_d_implementation_evidence"],
+                        "same_candidate_evidence_only": True,
+                        "systemc_cycle_accounted_evidence_ref": "candidate_A.systemc_cycle.json",
+                        "final_observed_conclusion_ceiling": "qe_equivalent_scf_correctness_only",
+                    }
+                ]
+            }
+
+            payload = MODULE_ANY._write_reranked_results(
+                root / "reranked.json",
+                candidate_runs,
+                claim_matrix=claim_matrix,
+                policy=MODULE_ANY.final_best_policy.systemc_b4_minimum_policy(),
+            )
+
+            self.assertEqual(payload["final_recommendation"]["candidate_id"], "candidate_A")
+            self.assertEqual(
+                payload["final_recommendation"]["recommendation_scope"],
+                "same_candidate_stage_c_strict_b4_plus_systemc_cycle_accounted",
+            )
+            self.assertEqual(payload["final_recommendation"]["policy_id"], "qe_fpga_final_best_policy_systemc_b4_minimum_v0")
+            self.assertFalse(payload["final_recommendation"]["stage_d_required_for_final_best"])
+            self.assertEqual(payload["final_recommendation"]["systemc_cycle_evidence_ref"], "candidate_A.systemc_cycle.json")
+            self.assertEqual(payload["final_recommendation_gate"]["requires_no_stage_c_d_blockers"], False)
+            self.assertEqual(payload["rows"][0]["blockers"], [])
+
+    def test_top_k_closure_rows_carry_release_claim_refs(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            b4_report = root / "candidate_A.b4.json"
+            b4_report.write_text("{}\n", encoding="utf-8")
+            candidate_runs = [
+                {
+                    "candidate_id": "candidate_A",
+                    "screening_rank": 1,
+                    "stage_b0_request": root / "candidate_A.stage_b0.json",
+                    "gem5_b4_report": b4_report,
+                }
+            ]
+            claim_matrix = {
+                "rows": [
+                    {
+                        "candidate_id": "candidate_A",
+                        "evidence_tier": "final-best-eligible",
+                        "blockers": ["missing_stage_d_implementation_evidence"],
+                        "same_candidate_evidence_only": True,
+                        "stage_c_report_ref": "candidate_A.stage_c.json",
+                        "systemc_cycle_accounted_evidence_ref": "candidate_A.systemc_cycle.json",
+                        "systemc_cycle_accounted": {"report_sha256": "abc123"},
+                    }
+                ]
+            }
+
+            payload = MODULE_ANY._top_k_closure_status(
+                candidate_runs,
+                claim_matrix,
+                policy=MODULE_ANY.final_best_policy.systemc_b4_minimum_policy(),
+            )
+
+            row = payload["queue"][0]
+            self.assertEqual(row["policy_id"], "qe_fpga_final_best_policy_systemc_b4_minimum_v0")
+            self.assertFalse(row["stage_d_required_for_final_best"])
+            self.assertEqual(row["stage_c_report_ref"], "candidate_A.stage_c.json")
+            self.assertEqual(row["strict_b4_report_ref"], str(b4_report))
+            self.assertEqual(row["systemc_cycle_evidence_ref"], "candidate_A.systemc_cycle.json")
+
     def test_claim_status_matrix_writer_links_stage_c_d_and_backend_reports(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -756,6 +875,51 @@ class RunQeFpgaDseE2ETests(unittest.TestCase):
             self.assertNotIn("missing_systemc_cycle_accounted_evidence", rows["candidate_F3"]["blockers"])
             self.assertEqual(rows["candidate_F2"]["evidence_tier"], "projection-screened")
             self.assertIn("missing_systemc_cycle_accounted_evidence", rows["candidate_F2"]["blockers"])
+
+    def test_claim_status_matrix_for_runs_accepts_materialized_systemc_cycle_schema(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            runs = [self.write_candidate_run(root, "candidate_F3", "F3")]
+            systemc_cycle = root / "candidate_F3.materialized_systemc_cycle.json"
+            systemc_cycle.write_text(
+                json.dumps(self.materialized_systemc_cycle_payload("candidate_F3"), indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+
+            refs = MODULE_ANY._write_claim_ceiling_status_matrix_for_runs(
+                output_dir=root,
+                candidate_runs=runs,
+                systemc_cycle_evidence_for={"candidate_F3": systemc_cycle},
+            )
+
+            row = json.loads(refs["matrix"].read_text(encoding="utf-8"))["rows"][0]
+            self.assertTrue(row["systemc_cycle_accounted"]["valid"])
+            self.assertEqual(row["systemc_cycle_accounted"]["evidence_tier"], "systemc-cycle-accounted")
+            self.assertEqual(row["systemc_cycle_accounted"]["total_cycles"], 150)
+            self.assertNotIn("missing_systemc_cycle_accounted_evidence", row["blockers"])
+
+    def test_backend_report_collection_keeps_systemc_cycle_out_of_backend_reports(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            run = self.write_candidate_run(root, "candidate_F3", "F3")
+            cycle_path = root / "candidate_F3.materialized_systemc_cycle.json"
+            cycle_payload = self.materialized_systemc_cycle_payload("candidate_F3")
+            cycle_path.write_text(json.dumps(cycle_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            run["systemc_cycle_accounted_evidence"] = cycle_path
+            run["systemc_cycle_accounted_payload"] = cycle_payload
+
+            output = root / "backend_report_collection_v0.json"
+            payload = MODULE_ANY._write_backend_report_collection(
+                output,
+                [run],
+                generated_at_utc="2026-05-01T00:00:00Z",
+            )
+
+            self.assertEqual(payload["report_count"], 2)
+            self.assertEqual(payload["systemc_cycle_accounted_report_count"], 1)
+            self.assertTrue(all("backend_class" in report for report in payload["reports"]))
+            self.assertIn("systemc_cycle_accounted", payload["candidate_reports"]["candidate_F3"])
+            self.assertNotIn(cycle_payload, payload["reports"])
 
     def test_claim_status_matrix_for_runs_rejects_systemc_cycle_candidate_mismatch(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

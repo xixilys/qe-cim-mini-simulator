@@ -151,6 +151,9 @@ class SystemcCycleAccountedEvidenceTests(unittest.TestCase):
             self.assertFalse(payload["final_best_eligible"])
             self.assertFalse(payload["final_best_claim"])
             self.assertFalse(payload["claim_boundary"]["cycle_accuracy_claim"])
+            self.assertTrue(payload["claim_boundary"]["requires_exact_same_candidate_stage_c_strict_b4_systemc_cycle"])
+            self.assertTrue(payload["claim_boundary"]["stage_d_required_depends_on_final_best_policy"])
+            self.assertTrue(payload["claim_boundary"]["systemc_b4_minimum_treats_stage_d_as_optional_precision_upgrade"])
             self.assertIn("not_rtl_cycle_accurate", payload["non_claims"])
             self.assertIn("not_final_best_architecture_claim", payload["non_claims"])
 

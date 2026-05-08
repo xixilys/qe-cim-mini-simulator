@@ -77,6 +77,48 @@ class FinalBestPolicyTests(unittest.TestCase):
         with self.assertRaisesRegex(MODULE_ANY.PolicyError, "final-best-eligible"):
             MODULE_ANY.validate_policy(policy)
 
+    def test_systemc_b4_minimum_policy_treats_stage_d_as_optional_upgrade(self) -> None:
+        policy = MODULE_ANY.systemc_b4_minimum_policy()
+        ok, reasons = MODULE_ANY.stage_d_satisfies_policy(None, policy)
+
+        self.assertTrue(ok)
+        self.assertEqual(reasons, [])
+        self.assertFalse(policy["stage_d_required_for_final_best"])
+        self.assertIsNone(policy["minimum_stage_d_tier"])
+        self.assertEqual(policy["policy_id"], MODULE_ANY.SYSTEMC_B4_MINIMUM_POLICY_ID)
+        self.assertIn(
+            "no_final_best_without_same_candidate_stage_c_strict_b4_systemc_cycle_catalog_freeze_and_dominance_evidence",
+            policy["non_claims"],
+        )
+        self.assertEqual(
+            MODULE_ANY.filter_policy_blockers(
+                [
+                    "missing_stage_c_qe_correctness_report",
+                    "missing_stage_d_implementation_evidence",
+                    "strict_b4_evidence_missing",
+                ],
+                policy,
+            ),
+            ["missing_stage_c_qe_correctness_report", "strict_b4_evidence_missing"],
+        )
+        self.assertEqual(
+            MODULE_ANY.optional_precision_upgrade_risks(None, policy),
+            ["missing_optional_stage_d_hls_or_stronger_evidence"],
+        )
+
+    def test_systemc_b4_minimum_policy_file_round_trip(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "policy.json"
+            MODULE_ANY.write_policy(path, MODULE_ANY.systemc_b4_minimum_policy())
+
+            loaded = MODULE_ANY.load_policy(path)
+
+            self.assertFalse(MODULE_ANY.stage_d_required_for_final_best(loaded))
+            self.assertEqual(
+                MODULE_ANY.claim_label_for_policy({"candidate_id": "cand-a"}, loaded),
+                "final_best_under_systemc_b4_minimum_policy::cand-a",
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

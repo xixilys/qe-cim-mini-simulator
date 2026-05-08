@@ -123,6 +123,7 @@ def build_manifest(e2e_manifest_path: Path, *, output_ref: Path | None = None) -
     claim_matrix_path = _resolve(e2e_manifest.get("claim_ceiling_status_matrix"), base)
     claim_matrix = load_json(claim_matrix_path) if claim_matrix_path is not None and claim_matrix_path.exists() else None
     rows_by_candidate = _rows_by_candidate(claim_matrix)
+    catalog_freeze_manifest = _resolve(e2e_manifest.get("catalog_freeze_manifest"), base)
     candidates: list[dict[str, Any]] = []
     for index, run in enumerate(runs):
         if not isinstance(run, Mapping):
@@ -131,6 +132,14 @@ def build_manifest(e2e_manifest_path: Path, *, output_ref: Path | None = None) -
         context = _request_context(request_path)
         candidate_id = str(run.get("candidate_id") or context.get("candidate_id") or (request_path.stem if request_path else f"candidate_{index}"))
         row = rows_by_candidate.get(candidate_id, {})
+        level1_search = _mapping(run.get("level1_search"))
+        catalog_entry_id = (
+            row.get("catalog_entry_id")
+            or row.get("microarchitecture_id")
+            or level1_search.get("catalog_entry_id")
+            or level1_search.get("microarchitecture_id")
+            or candidate_id
+        )
         systemc_report = _resolve(run.get("systemc_backend_report"), base)
         systemc_cycle_report = _resolve(
             run.get("systemc_cycle_accounted_evidence")
@@ -145,6 +154,8 @@ def build_manifest(e2e_manifest_path: Path, *, output_ref: Path | None = None) -
         candidates.append(
             {
                 "candidate_id": candidate_id,
+                "catalog_entry_id": str(catalog_entry_id) if catalog_entry_id is not None else None,
+                "catalog_freeze_partition": row.get("catalog_freeze_partition"),
                 "family": context.get("family"),
                 "workload_id": context.get("workload_id"),
                 "case_id": context.get("case_id"),
@@ -169,6 +180,7 @@ def build_manifest(e2e_manifest_path: Path, *, output_ref: Path | None = None) -
                 "stage_c_report": str(stage_c_report) if stage_c_report is not None else row.get("stage_c_report_ref"),
                 "stage_d_report": str(stage_d_report) if stage_d_report is not None else row.get("stage_d_report_ref"),
                 "artifact_refs": {
+                    "catalog_freeze_manifest": _artifact(catalog_freeze_manifest),
                     "stage_b0_request": _artifact(request_path),
                     "systemc_backend_report": _artifact(systemc_report),
                     "systemc_cycle_accounted_evidence": _artifact(systemc_cycle_report),
@@ -207,6 +219,7 @@ def build_manifest(e2e_manifest_path: Path, *, output_ref: Path | None = None) -
         "candidate_count": len(candidates),
         "candidates": candidates,
         "claim_ceiling_status_matrix": str(claim_matrix_path) if claim_matrix_path is not None else None,
+        "catalog_freeze_manifest": str(catalog_freeze_manifest) if catalog_freeze_manifest is not None else None,
         "top_k_closure": dict(top_k_closure),
         "evidence_tier_counts": _tier_counts(candidates),
         "non_claims": [

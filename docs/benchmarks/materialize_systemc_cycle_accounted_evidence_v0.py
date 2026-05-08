@@ -531,7 +531,9 @@ def materialize_systemc_cycle_evidence(
         "claim_ceiling": "systemc_cycle_accounted_not_final_best",
         "claim_boundary": {
             "may_promote_to_final_best_by_itself": False,
-            "requires_exact_same_candidate_stage_c_strict_b4_stage_d": True,
+            "requires_exact_same_candidate_stage_c_strict_b4_systemc_cycle": True,
+            "stage_d_required_depends_on_final_best_policy": True,
+            "systemc_b4_minimum_treats_stage_d_as_optional_precision_upgrade": True,
             "cycle_accuracy_claim": False,
             "rtl_or_physical_timing_claim": False,
             "board_or_asic_measurement_claim": False,

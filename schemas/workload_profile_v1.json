@@ -1,0 +1,297 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "WorkloadProfile",
+  "description": "Step 1 output / Step 2 input - Abstract workload characterization",
+  "version": "1.0.0",
+  
+  "type": "object",
+  "required": ["schema_version", "workload_id", "compute_graph", "execution_profile", "memory_profile", "data_movement", "provenance"],
+  
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "workload_profile_v1",
+      "description": "Schema version for compatibility checking"
+    },
+    
+    "workload_id": {
+      "type": "string",
+      "pattern": "^[a-zA-Z0-9_-]+$",
+      "description": "Unique workload identifier"
+    },
+    
+    "source": {
+      "type": "object",
+      "required": ["software", "version"],
+      "properties": {
+        "software": {"type": "string", "description": "Source software name (e.g., Quantum ESPRESSO)"},
+        "version": {"type": "string", "description": "Software version"},
+        "case": {"type": "string", "description": "Case/study name"},
+        "trace_date": {"type": "string", "format": "date", "description": "Trace generation date (ISO-8601)"}
+      }
+    },
+    
+    "compute_graph": {
+      "type": "object",
+      "required": ["nodes", "edges"],
+      "properties": {
+        "nodes": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["id", "type", "dominance"],
+            "properties": {
+              "id": {
+                "type": "string",
+                "description": "Kernel identifier (e.g., h_psi, cdiaghg)"
+              },
+              "type": {
+                "type": "string",
+                "enum": ["GEMM", "EIGEN", "VECTOR", "REDUCTION", "FFT", "MEMORY", "CONTROL", "OTHER"],
+                "description": "Computation type"
+              },
+              "dominance": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "Workload share [0,1]"
+              },
+              "flops_per_call": {
+                "type": "number",
+                "minimum": 0,
+                "description": "FLOPs per kernel invocation"
+              },
+              "call_count": {
+                "type": "integer",
+                "minimum": 1,
+                "description": "Number of invocations per iteration"
+              },
+              "precision": {
+                "type": "string",
+                "enum": ["FP16", "FP32", "FP64", "INT8", "INT16", "INT32", "MIXED", "OTHER"],
+                "description": "Numerical precision"
+              },
+              "dimensions": {
+                "type": "object",
+                "description": "Symbolic dimensions (e.g., M: nbnd, N: npw)",
+                "additionalProperties": {"type": "string"}
+              },
+              "typical_sizes": {
+                "type": "object",
+                "description": "Typical dimension ranges",
+                "additionalProperties": {
+                  "type": "array",
+                  "items": {"type": "integer"},
+                  "minItems": 2,
+                  "maxItems": 2
+                }
+              },
+              "arithmetic_intensity": {
+                "type": "number",
+                "minimum": 0,
+                "description": "FLOPs per byte moved"
+              },
+              "memory_access_pattern": {
+                "type": "string",
+                "enum": ["sequential", "strided", "random", "streaming", "streaming_with_reuse", "reuse", "gather", "scatter"],
+                "description": "Memory access pattern"
+              }
+            }
+          }
+        },
+        "edges": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["from", "to"],
+            "properties": {
+              "from": {"type": "string", "description": "Source node ID"},
+              "to": {"type": "string", "description": "Destination node ID"},
+              "data_type": {"type": "string", "description": "Data type being transferred"},
+              "volume_mb": {"type": "number", "minimum": 0, "description": "Data volume in MB"},
+              "pattern": {
+                "type": "string",
+                "enum": ["producer_consumer", "reduction", "broadcast", "gather", "scatter"],
+                "description": "Data flow pattern"
+              },
+              "frequency": {
+                "type": "string",
+                "enum": ["per_iter", "per_call", "once"],
+                "description": "Transfer frequency"
+              }
+            }
+          }
+        }
+      }
+    },
+    
+    "execution_profile": {
+      "type": "object",
+      "required": ["total_iterations"],
+      "properties": {
+        "total_iterations": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Typical iteration count"
+        },
+        "dominant_iteration": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Iteration with highest cost"
+        },
+        "stability": {
+          "type": "string",
+          "enum": ["stable", "oscillating", "diverging", "converging"],
+          "description": "Convergence stability"
+        },
+        "convergence_rate": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Convergence rate (iterations per order of magnitude)"
+        },
+        "dominant_solver": {
+          "type": "string",
+          "description": "Primary solver algorithm (e.g., Davidson, CG, LOBPCG)"
+        },
+        "solver_fallbacks": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "Fallback solver algorithms"
+        },
+        "parallelism": {
+          "type": "object",
+          "properties": {
+            "kpoints": {"type": "integer", "minimum": 1},
+            "bands": {"type": "string"},
+            "gvectors": {"type": "string"}
+          }
+        }
+      }
+    },
+    
+    "memory_profile": {
+      "type": "object",
+      "required": ["working_set_mb"],
+      "properties": {
+        "working_set_mb": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Total working set size in MB"
+        },
+        "peak_mb": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Peak memory usage in MB"
+        },
+        "resident_set_mb": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Resident memory size in MB"
+        },
+        "bandwidth_gbps": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Required memory bandwidth in GB/s"
+        },
+        "memory_access_pattern": {
+          "type": "string",
+          "enum": ["streaming", "streaming_with_reuse", "random", "cache_friendly", "reuse"],
+          "description": "Overall memory access pattern"
+        },
+        "reuse_distance": {
+          "type": "string",
+          "enum": ["short", "medium", "long"],
+          "description": "Data reuse distance"
+        },
+        "memory_hierarchy_usage": {
+          "type": "object",
+          "properties": {
+            "l1_hit_rate": {"type": "number", "minimum": 0, "maximum": 1},
+            "l2_hit_rate": {"type": "number", "minimum": 0, "maximum": 1},
+            "l3_hit_rate": {"type": "number", "minimum": 0, "maximum": 1}
+          }
+        }
+      }
+    },
+    
+    "data_movement": {
+      "type": "object",
+      "properties": {
+        "host_to_device_mb_per_iter": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Host to device transfer per iteration (MB)"
+        },
+        "device_to_host_mb_per_iter": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Device to host transfer per iteration (MB)"
+        },
+        "device_internal_mb_per_iter": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Internal device data movement per iteration (MB)"
+        },
+        "dominant_traffic": {
+          "type": "string",
+          "description": "Primary data movement pattern"
+        },
+        "bandwidth_requirement_gbps": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Required bandwidth in GB/s"
+        }
+      }
+    },
+    
+    "provenance": {
+      "type": "object",
+      "required": ["input_hash", "generated_at", "tool_version"],
+      "properties": {
+        "input_hash": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$",
+          "description": "SHA-256 hash of input data"
+        },
+        "generated_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Generation timestamp (ISO-8601)"
+        },
+        "tool_version": {
+          "type": "string",
+          "description": "Tool version that generated this artifact"
+        },
+        "trace_files": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "Source trace file paths"
+        }
+      }
+    }
+  },
+  
+  "allOf": [
+    {
+      "description": "Dominance sum must be <= 1.0",
+      "if": {"required": ["compute_graph"]},
+      "then": {
+        "properties": {
+          "compute_graph": {
+            "properties": {
+              "nodes": {
+                "type": "array",
+                "items": {
+                  "properties": {
+                    "dominance": {"type": "number"}
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

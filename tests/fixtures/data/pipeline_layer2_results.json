@@ -1,0 +1,15 @@
+{
+  "schema_version": "dse_layer2_results_v0",
+  "fidelity": "L2",
+  "results": [
+    {
+      "case_id": "si4_pbe_uspp_small",
+      "family": "F4",
+      "latency_s": 0.00011626509473684211,
+      "throughput_gops": 475.0,
+      "power_w": 63.0,
+      "accuracy": 0.85,
+      "systemc_cycles": 116265
+    }
+  ]
+}

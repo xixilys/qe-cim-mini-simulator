@@ -30,11 +30,28 @@ cmake ..
 make -j4
 ```
 
-### Build with Real SystemC
+### Build with Real SystemC (Linux)
+Use one of the common Linux SystemC layouts below.
+
+#### Option 1: Explicit SystemC prefix
 ```bash
 cd model/qe_band_solver_model
-mkdir -p build && cd build
-cmake -DQE_BAND_SOLVER_USE_SYSTEMC=ON -DSYSTEMC_HOME=/opt/homebrew ..
+mkdir -p build-systemc && cd build-systemc
+cmake -DQE_BAND_SOLVER_USE_SYSTEMC=ON -DSYSTEMC_HOME=/usr/local/systemc-2.3.3 ..
+make -j4
+```
+
+If your installation lives elsewhere, try:
+- `-DSYSTEMC_HOME=/opt/systemc`
+- `-DSYSTEMC_HOME=/usr/include/systemc` (only if headers and libs are laid out compatibly)
+
+#### Option 2: pkg-config
+```bash
+cd model/qe_band_solver_model
+mkdir -p build-systemc && cd build-systemc
+cmake -DQE_BAND_SOLVER_USE_SYSTEMC=ON \
+  -DCMAKE_CXX_FLAGS="$(pkg-config --cflags systemc)" \
+  -DCMAKE_EXE_LINKER_FLAGS="$(pkg-config --libs systemc)" ..
 make -j4
 ```
 

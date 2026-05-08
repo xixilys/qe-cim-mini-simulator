@@ -1,0 +1,142 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "EvaluationConfig",
+  "description": "Step 4 output / Step 5 input - Evaluation configuration with fidelity level",
+  "version": "1.0.0",
+  
+  "type": "object",
+  "required": ["schema_version", "config_id", "design_point_ref", "fidelity_level", "fidelity_config", "promotion_policy", "provenance"],
+  
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "evaluation_config_v1"
+    },
+    
+    "config_id": {
+      "type": "string",
+      "pattern": "^[a-zA-Z0-9_-]+$"
+    },
+    
+    "design_point_ref": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$",
+      "description": "SHA-256 hash of input DesignPoint"
+    },
+    
+    "fidelity_level": {
+      "type": "string",
+      "enum": ["L0", "L1", "L2", "L3", "L4"],
+      "description": "Evaluation fidelity level"
+    },
+    
+    "fidelity_config": {
+      "type": "object",
+      "required": ["L0", "L1", "L2", "L3", "L4"],
+      "properties": {
+        "L0": {
+          "type": "object",
+          "required": ["model", "accuracy_target", "max_cost_seconds"],
+          "properties": {
+            "model": {"type": "string", "enum": ["analytical", "roofline", "quick_estimate"]},
+            "accuracy_target": {"type": "number", "minimum": 0, "maximum": 1},
+            "max_cost_seconds": {"type": "number", "minimum": 0}
+          }
+        },
+        "L1": {
+          "type": "object",
+          "required": ["model", "accuracy_target", "max_cost_seconds"],
+          "properties": {
+            "model": {"type": "string", "enum": ["python_tlm", "fast_proxy", "statistical"]},
+            "accuracy_target": {"type": "number", "minimum": 0, "maximum": 1},
+            "max_cost_seconds": {"type": "number", "minimum": 0}
+          }
+        },
+        "L2": {
+          "type": "object",
+          "required": ["model", "accuracy_target", "max_cost_seconds"],
+          "properties": {
+            "model": {"type": "string", "enum": ["systemc_tlm", "timed_functional", "event_driven"]},
+            "accuracy_target": {"type": "number", "minimum": 0, "maximum": 1},
+            "max_cost_seconds": {"type": "number", "minimum": 0}
+          }
+        },
+        "L3": {
+          "type": "object",
+          "required": ["model", "accuracy_target", "max_cost_seconds"],
+          "properties": {
+            "model": {"type": "string", "enum": ["cycle_accurate", "rtl_simulation", "gate_level"]},
+            "accuracy_target": {"type": "number", "minimum": 0, "maximum": 1},
+            "max_cost_seconds": {"type": "number", "minimum": 0}
+          }
+        },
+        "L4": {
+          "type": "object",
+          "required": ["model", "accuracy_target", "max_cost_seconds"],
+          "properties": {
+            "model": {"type": "string", "enum": ["rtl_synthesis", "fpga_prototype", "silicon"]},
+            "accuracy_target": {"type": "number", "minimum": 0, "maximum": 1},
+            "max_cost_seconds": {"type": "number", "minimum": 0}
+          }
+        }
+      }
+    },
+    
+    "promotion_policy": {
+      "type": "object",
+      "required": ["threshold_for_promotion", "max_evaluations_per_level", "early_termination"],
+      "properties": {
+        "threshold_for_promotion": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Minimum score to promote to next fidelity level"
+        },
+        "max_evaluations_per_level": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Maximum evaluations at this fidelity level"
+        },
+        "early_termination": {
+          "type": "boolean",
+          "description": "Allow early termination if results are conclusive"
+        },
+        "min_improvement_for_continuation": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Minimum improvement required to continue exploration"
+        }
+      }
+    },
+    
+    "provenance": {
+      "type": "object",
+      "required": ["input_hash", "generated_at", "tool_version"],
+      "properties": {
+        "input_hash": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "generated_at": {"type": "string", "format": "date-time"},
+        "tool_version": {"type": "string"}
+      }
+    }
+  },
+  
+  "allOf": [
+    {
+      "description": "Cost targets must increase monotonically with fidelity",
+      "if": {"required": ["fidelity_config"]},
+      "then": {
+        "properties": {
+          "fidelity_config": {
+            "properties": {
+              "L0": {"properties": {"max_cost_seconds": {"type": "number"}}},
+              "L1": {"properties": {"max_cost_seconds": {"type": "number"}}},
+              "L2": {"properties": {"max_cost_seconds": {"type": "number"}}},
+              "L3": {"properties": {"max_cost_seconds": {"type": "number"}}},
+              "L4": {"properties": {"max_cost_seconds": {"type": "number"}}}
+            }
+          }
+        }
+      }
+    }
+  ]
+}

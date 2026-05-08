@@ -120,6 +120,24 @@ class QeDseReleaseClaimBoundaryCheckerTests(unittest.TestCase):
                 MODULE_ANY.validate_paths([bad_path])
             MODULE_ANY.validate_paths([good_path])
 
+    def test_systemc_b4_minimum_final_best_does_not_require_stage_d_ref(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = self.write_json(
+                Path(tmpdir) / "systemc_b4.json",
+                {
+                    "dse_evidence_tier": "final-best-eligible",
+                    "policy_id": "qe_fpga_final_best_policy_systemc_b4_minimum_v0",
+                    "candidate_id": "cand-a",
+                    "stage_c_report_ref": "stage_c/cand-a.json",
+                    "strict_b4_report_ref": "b4/cand-a.json",
+                    "systemc_cycle_evidence_ref": "candidate_runs/cand-a/systemc_cycle_evidence.json",
+                    "systemc_cycle_evidence_hash": "sha256:def",
+                    "optional_precision_upgrade_risks": ["missing_optional_stage_d_hls_or_stronger_evidence"],
+                },
+            )
+
+            MODULE_ANY.validate_paths([path])
+
     def test_rejects_lower_tier_json_winner_flag(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             path = self.write_json(
