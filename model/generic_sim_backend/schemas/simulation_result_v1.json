@@ -1,0 +1,68 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://dse-framework.org/schemas/simulation_result_v1.json",
+  "title": "Generic Simulation Result",
+  "description": "Result schema for generic SystemC/gem5 simulation backend",
+  "type": "object",
+  "required": ["schema_version", "run_id", "status", "metrics"],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "gsim.result.v1"
+    },
+    "run_id": {"type": "string"},
+    "status": {
+      "type": "string",
+      "enum": ["passed", "failed", "timeout", "error"]
+    },
+    "error_message": {"type": "string"},
+    "metrics": {
+      "type": "object",
+      "required": ["latency_ms"],
+      "properties": {
+        "latency_ms": {"type": "number"},
+        "host_time_ms": {"type": "number"},
+        "device_time_ms": {"type": "number"},
+        "dma_time_ms": {"type": "number"},
+        "throughput_gops": {"type": "number"},
+        "power_w": {"type": "number"},
+        "energy_j": {"type": "number"},
+        "area_mm2": {"type": "number"},
+        "total_data_movement_mb": {"type": "number"}
+      }
+    },
+    "resource_utilization": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "compute_percent": {"type": "number"},
+          "memory_percent": {"type": "number"},
+          "bandwidth_percent": {"type": "number"}
+        }
+      }
+    },
+    "events": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["node_id", "device", "start_ns", "end_ns"],
+        "properties": {
+          "node_id": {"type": "string"},
+          "device": {"type": "string"},
+          "start_ns": {"type": "number"},
+          "end_ns": {"type": "number"},
+          "op_type": {"type": "string"}
+        }
+      }
+    },
+    "uncertainty": {
+      "type": "object",
+      "properties": {
+        "fidelity_level": {"type": "string", "enum": ["L1", "L2", "L3", "L4"]},
+        "confidence_level": {"type": "number"},
+        "mape_percent": {"type": "number"}
+      }
+    }
+  }
+}

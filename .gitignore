@@ -37,6 +37,7 @@ gem5_src/
 gem5_integration/gem5/
 gem5_integration/m5out*/
 gem5_integration/systemc_model/build/
+model/generic_sim_backend/build/
 gem5_integration/**/__pycache__/
 gem5_integration/**/*.pyc
 gem5_integration/**/*.o

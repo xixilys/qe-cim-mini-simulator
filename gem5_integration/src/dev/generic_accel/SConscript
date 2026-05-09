@@ -1,0 +1,6 @@
+Import('*')
+
+SimObject('GenericAccel.py')
+Source('generic_accel.cc')
+
+DebugFlag('GenericAccel')

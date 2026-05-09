@@ -72,7 +72,8 @@ class DataMovement:
     
     @property
     def transfer_time_ms(self) -> float:
-        return (self.size_bytes * 8.0 / max(self.bandwidth_gbps, 1.0)) / 1000.0 + self.latency_ms
+        transfer_ms = self.size_bytes * 8.0 / (self.bandwidth_gbps * 1e9) * 1000.0
+        return transfer_ms + self.latency_ms
     
     def to_dict(self) -> Dict[str, Any]:
         return {

@@ -272,9 +272,11 @@ def create_dft_scf_graph(graph_id: str = "dft_scf") -> ComputeGraph:
         attributes={"description": "Update wavefunctions from eigenvectors"},
     ))
     
-    # Edges
-    graph.add_edge(DataEdge("h_psi", "build_H_sub", "h_psi_out"))
-    graph.add_edge(DataEdge("build_H_sub", "diagonalize", "H_sub"))
-    graph.add_edge(DataEdge("diagonalize", "refresh", "eigenvectors"))
+    graph.add_edge(DataEdge("h_psi", "build_H_sub", "h_psi_out",
+                           TensorSpec(shape=(npw, nkb), dtype="FP64")))
+    graph.add_edge(DataEdge("build_H_sub", "diagonalize", "H_sub",
+                           TensorSpec(shape=(nkb, nkb), dtype="FP64")))
+    graph.add_edge(DataEdge("diagonalize", "refresh", "eigenvectors",
+                           TensorSpec(shape=(nkb, nkb), dtype="FP64")))
     
     return graph

@@ -23,6 +23,7 @@ import itertools
 from dse_v2.core.architecture.accelerator import SystemArchitecture, Accelerator
 from dse_v2.core.ir.compute_graph import ComputeGraph
 from dse_v2.core.ir.task_graph import TaskGraph, map_compute_to_tasks
+from dse_v2.dse.analytical_evaluator import EnhancedAnalyticalEvaluator
 
 
 @dataclass
@@ -215,75 +216,15 @@ class Evaluator:
 class AnalyticalEvaluator(Evaluator):
     """Fast analytical evaluator using roofline model."""
     
+    def __init__(self):
+        self._enhanced = EnhancedAnalyticalEvaluator()
+    
     def evaluate(
         self,
         design_point: DesignPoint,
         compute_graph: ComputeGraph,
     ) -> EvaluationResult:
-        # Map compute graph to task graph
-        accel_bandwidths = {}
-        for accel1 in design_point.system_architecture.accelerators:
-            for accel2 in design_point.system_architecture.accelerators:
-                if accel1 != accel2:
-                    # Use minimum of peer link bandwidths
-                    bw = 64.0  # Default PCIe bandwidth
-                    for link in accel1.communication.peer_links:
-                        if link.target_accel_id == accel2.accel_id:
-                            bw = link.bandwidth_gbps
-                    accel_bandwidths[(accel1.accel_id, accel2.accel_id)] = bw
-        
-        task_graph = map_compute_to_tasks(compute_graph, design_point.task_mapping, accel_bandwidths)
-        
-        # Estimate latency for each task
-        total_latency_ms = 0.0
-        total_flops = 0.0
-        total_power_w = 0.0
-        total_data_movement_mb = 0.0
-        
-        for task_id, task in task_graph.tasks.items():
-            if not task.placement:
-                continue
-            
-            accel_id = task.placement.accel_id
-            if accel_id == "cpu":
-                # CPU execution
-                compute_latency_ms = task.required_compute_flops / 100e9 * 1000  # Assume 100 GFLOPS CPU
-                power_w = 100.0
-            else:
-                accel = design_point.system_architecture.get_accelerator(accel_id)
-                if accel:
-                    peak_flops = accel.compute.get_peak_flops("FP64")
-                    efficiency = accel.compute.get_op_efficiency("gemm")  # Default
-                    compute_latency_ms = task.required_compute_flops / max(peak_flops * efficiency, 1.0) * 1000
-                    power_w = accel.power.static_power_w
-                else:
-                    compute_latency_ms = 0.0
-                    power_w = 0.0
-            
-            # Data movement latency
-            movement_latency_ms = sum(mv.transfer_time_ms for mv in task.input_movements)
-            total_data_movement_mb += sum(mv.size_bytes for mv in task.input_movements) / (1024.0 * 1024.0)
-            
-            task.schedule.start_time_ms = total_latency_ms
-            task.schedule.end_time_ms = total_latency_ms + compute_latency_ms + movement_latency_ms
-            
-            total_latency_ms += compute_latency_ms + movement_latency_ms
-            total_flops += task.required_compute_flops
-            total_power_w += power_w
-        
-        # Calculate metrics
-        throughput_gops = total_flops / max(total_latency_ms, 1.0) / 1e6
-        energy_j = total_power_w * total_latency_ms / 1000.0
-        
-        return EvaluationResult(
-            design_point_id=design_point.design_point_id,
-            latency_ms=total_latency_ms,
-            throughput_gops=throughput_gops,
-            power_w=total_power_w,
-            energy_j=energy_j,
-            total_data_movement_mb=total_data_movement_mb,
-            feasible=True,
-        )
+        return self._enhanced.evaluate(design_point, compute_graph)
 
 
 class DSEOrchestrator:
@@ -318,41 +259,66 @@ class DSEOrchestrator:
         
         return pareto_results
     
-    def _find_pareto_frontier(self, results: List[EvaluationResult]) -> List[EvaluationResult]:
+    def _find_pareto_frontier(self, results: List[Any]) -> List[Any]:
         """Find Pareto-optimal design points."""
         pareto = []
         for r1 in results:
-            if not r1.feasible:
+            r1_feasible = r1.get('feasible', True) if isinstance(r1, dict) else r1.feasible
+            if not r1_feasible:
                 continue
             dominated = False
             for r2 in results:
-                if r1 == r2 or not r2.feasible:
+                r2_feasible = r2.get('feasible', True) if isinstance(r2, dict) else r2.feasible
+                if r1 == r2 or not r2_feasible:
                     continue
-                # Check if r2 dominates r1 (better in all objectives)
-                if (r2.latency_ms <= r1.latency_ms and
-                    r2.energy_j <= r1.energy_j and
-                    r2.total_data_movement_mb <= r1.total_data_movement_mb and
-                    (r2.latency_ms < r1.latency_ms or
-                     r2.energy_j < r1.energy_j or
-                     r2.total_data_movement_mb < r1.total_data_movement_mb)):
-                    dominated = True
-                    break
+                if isinstance(r1, dict):
+                    if (r2['latency_ms'] <= r1['latency_ms'] and
+                        r2['energy_j'] <= r1['energy_j'] and
+                        r2['total_data_movement_mb'] <= r1['total_data_movement_mb'] and
+                        (r2['latency_ms'] < r1['latency_ms'] or
+                         r2['energy_j'] < r1['energy_j'] or
+                         r2['total_data_movement_mb'] < r1['total_data_movement_mb'])):
+                        dominated = True
+                        break
+                else:
+                    if (r2.latency_ms <= r1.latency_ms and
+                        r2.energy_j <= r1.energy_j and
+                        r2.total_data_movement_mb <= r1.total_data_movement_mb and
+                        (r2.latency_ms < r1.latency_ms or
+                         r2.energy_j < r1.energy_j or
+                         r2.total_data_movement_mb < r1.total_data_movement_mb)):
+                        dominated = True
+                        break
             if not dominated:
                 pareto.append(r1)
         
         return pareto
     
-    def get_best_design(self, objective: str = "latency") -> Optional[EvaluationResult]:
+    def get_best_design(self, objective: str = "latency") -> Optional[Any]:
         """Get the best design point for a given objective."""
-        feasible_results = [r for r in self.results if r.feasible]
+        feasible_results = []
+        for r in self.results:
+            if isinstance(r, dict):
+                if r.get('feasible', True):
+                    feasible_results.append(r)
+            else:
+                if r.feasible:
+                    feasible_results.append(r)
+        
         if not feasible_results:
             return None
         
         if objective == "latency":
+            if isinstance(feasible_results[0], dict):
+                return min(feasible_results, key=lambda r: r['latency_ms'])
             return min(feasible_results, key=lambda r: r.latency_ms)
         elif objective == "energy":
+            if isinstance(feasible_results[0], dict):
+                return min(feasible_results, key=lambda r: r['energy_j'])
             return min(feasible_results, key=lambda r: r.energy_j)
         elif objective == "throughput":
+            if isinstance(feasible_results[0], dict):
+                return max(feasible_results, key=lambda r: r['throughput_gops'])
             return max(feasible_results, key=lambda r: r.throughput_gops)
         else:
             return feasible_results[0]
