@@ -2,7 +2,13 @@
 
 This directory contains a generic accelerator device model for gem5 that replaces the QE-specific FPGA device.
 
-**Status: MMIO Timed Stub** - The current implementation provides basic MMIO register access and a fixed-timing command completion model. DMA, descriptor parsing, TLM-2.0 bridge, and SystemC integration are planned but not yet implemented.
+**Status: MMIO Timed Stub / L4 Blocked Prototype** - The current
+implementation provides basic MMIO register access and a fixed-timing command
+completion model. DMA descriptor ingestion, request payload parsing, TLM-2.0
+bridge invocation, SystemC result JSON writeback, and guest-visible completion
+evidence are not yet verified. Any full-flow DSE run through this device must
+emit a blocked/prototype verdict and must not claim L4 complete until descriptor
+and completion evidence is present in `gem5.log`.
 
 ## Architecture
 
@@ -82,3 +88,17 @@ accel.dma_buffer_size = '16MB'
 5. **Interrupt Handling**: Proper interrupt/completion notification
 6. **gem5 Stats Integration**: Connect to gem5 statistics system
 7. **Dynamic Timing Model**: Replace fixed 1-GFLOP stub with actual workload-based estimation
+
+## Required Evidence Before L4 Claims
+
+A run may claim gem5+SystemC closure only when the artifact set contains:
+
+- `gem5.log` lines proving `descriptor_read`, `systemc_submit`, and
+  `completion_writeback`.
+- A GSIM command descriptor with verified request/result guest addresses.
+- A SystemC request/result pair produced from that descriptor path.
+- A completion descriptor visible to guest software.
+
+Without those artifacts, use the blocked/prototype verdict path in
+`dse_v2.backends.gem5_systemc_adapter`; fixed-timing MMIO smoke completion is a
+bring-up diagnostic only.

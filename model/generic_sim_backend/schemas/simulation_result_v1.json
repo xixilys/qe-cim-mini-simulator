@@ -13,7 +13,7 @@
     "run_id": {"type": "string"},
     "status": {
       "type": "string",
-      "enum": ["passed", "failed", "timeout", "error"]
+      "enum": ["passed", "failed", "timeout", "error", "blocked"]
     },
     "error_message": {"type": "string"},
     "metrics": {

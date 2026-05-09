@@ -83,6 +83,33 @@ class GenericSystemCBackend:
         timeout: int = 300,
     ) -> Dict[str, Any]:
         """Run the simulator and return raw artifacts for evidence capture."""
+        if self.mode == "gem5_systemc_blocked":
+            from dse_v2.backends.gem5_systemc_adapter import Gem5SystemCClosureAdapter
+
+            workspace = Path(output_dir) if output_dir else self.workspace
+            adapter = Gem5SystemCClosureAdapter(self)
+            verdict = adapter.emit_blocked_verdict(
+                design_point=design_point,
+                compute_graph=compute_graph,
+                output_dir=workspace,
+            )
+            request_path = workspace / "simulation_request.json"
+            result_path = workspace / "simulation_result.json"
+            result = json.loads(result_path.read_text(encoding="utf-8"))
+            return {
+                "run_id": design_point.design_point_id,
+                "returncode": 2,
+                "stdout": "",
+                "stderr": "gem5+SystemC path blocked/prototype; see verdict.json and gem5.log",
+                "request": json.loads(request_path.read_text(encoding="utf-8")),
+                "result": result,
+                "request_path": request_path,
+                "result_path": result_path,
+                "trace_path": None,
+                "cmd": [],
+                "verdict": verdict,
+            }
+
         if not self.executable_path.exists():
             return {
                 "run_id": design_point.design_point_id,
