@@ -43,6 +43,9 @@ REQUIRED_EVIDENCE_FILES = [
     "data_movement_summary.csv",
     "systemc_stdout.log",
     "systemc_stderr.log",
+    "final_report.json",
+    "final_report.md",
+    "claim_validation.json",
 ]
 
 
@@ -411,6 +414,10 @@ def write_full_flow_evidence(
         _write_text(run_dir / "gem5.log", gem5_log)
     _write_json(run_dir / "verdict.json", verdict)
 
+    from dse_v2.reporting.final_report import generate_final_report_artifacts
+
+    report_artifacts = generate_final_report_artifacts(run_dir)
+
     manifest = {
         "schema_version": "dse.manifest.v1",
         "run_id": run_id,
@@ -430,6 +437,7 @@ def write_full_flow_evidence(
         "trusted_for_final_ranking": trusted_for_final,
         "required_evidence_files": REQUIRED_EVIDENCE_FILES,
         "optional_evidence_files": ["simulation_result.raw.json", "gem5_systemc_blockers.json", "gem5.log"],
+        "report_artifacts": report_artifacts,
     }
     _write_json(run_dir / "manifest.json", manifest)
 
@@ -457,4 +465,5 @@ def write_full_flow_evidence(
         "trusted_for_final_ranking": trusted_for_final,
         "missing_required_phases": missing_phases,
         "verdict": verdict,
+        "report_artifacts": report_artifacts,
     }
