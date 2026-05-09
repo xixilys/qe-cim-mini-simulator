@@ -17,12 +17,12 @@
 
 ## P2. Architecture Catalog and DesignPoint Completeness
 
-- [ ] P2.1 Define the architecture catalog schema: `ArchitectureFamily`, `ArchitectureParameter`, `ComponentType`, `ComponentInstance`, `ArchitectureInstance`, `ConstraintSet`, and `SimulationBinding`.
-- [ ] P2.2 Define architecture family extension rules so new Host/FPGA/Chip/CIM/GPU/ASIC/custom families can be added without modifying core DSE orchestration.
-- [ ] P2.3 Define the minimum DesignPoint payload: workload id, architecture instance, component parameters, memory hierarchy, interconnect topology, mapping, data placement, scheduling policy, precision policy, fallback policy, simulation config, and output config.
-- [ ] P2.4 Seed the initial architecture family list: CPU-only baseline, Host+FPGA minimal, Host+FPGA+CIM, diag-heavy, streaming-heavy, memory-rich, low-power, balanced, debug, and future custom.
-- [ ] P2.5 Define architecture status labels and eligibility: implemented, unverified, prototype, stub, planned, unsupported, candidate-only, and trusted-final-eligible.
-- [ ] P2.6 Define architecture validation checks for duplicate ids, missing simulation binding, unsupported operators, invalid units, memory/bandwidth/power/area violations, and absent communication routes.
+- [x] P2.1 Define the architecture catalog schema: `ArchitectureFamily`, `ArchitectureParameter`, `ComponentType`, `ComponentInstance`, `ArchitectureInstance`, `ConstraintSet`, and `SimulationBinding`.
+- [x] P2.2 Define architecture family extension rules so new Host/FPGA/Chip/CIM/GPU/ASIC/custom families can be added without modifying core DSE orchestration.
+- [x] P2.3 Define the minimum DesignPoint payload: workload id, architecture instance, component parameters, memory hierarchy, interconnect topology, mapping, data placement, scheduling policy, precision policy, fallback policy, simulation config, and output config.
+- [x] P2.4 Seed the initial architecture family list: CPU-only baseline, Host+FPGA minimal, Host+FPGA+CIM, diag-heavy, streaming-heavy, memory-rich, low-power, balanced, debug, and future custom.
+- [x] P2.5 Define architecture status labels and eligibility: implemented, unverified, prototype, stub, planned, unsupported, candidate-only, and trusted-final-eligible.
+- [x] P2.6 Define architecture validation checks for duplicate ids, missing simulation binding, unsupported operators, invalid units, memory/bandwidth/power/area violations, and absent communication routes.
 
 ## P3. Mapping Search Algorithm
 

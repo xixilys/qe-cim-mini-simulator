@@ -271,7 +271,7 @@ class ArchitectureInstance:
         return (source, target) in direct or (target, source) in direct
 
     def trusted_final_eligible(self, bindings: Mapping[str, SimulationBinding]) -> bool:
-        if self.status == ArchitectureStatus.CANDIDATE_ONLY or self.legacy_reference:
+        if self.legacy_reference or self.status not in {ArchitectureStatus.IMPLEMENTED, ArchitectureStatus.TRUSTED_FINAL_ELIGIBLE}:
             return False
         return any(
             binding_id in bindings and bindings[binding_id].is_trusted_eligible()

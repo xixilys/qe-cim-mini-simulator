@@ -147,6 +147,18 @@ The architecture catalog SHALL separate reusable architecture families from conc
 - **WHEN** an architecture instance lacks executable SystemC or gem5+SystemC binding metadata
 - **THEN** the instance remains available for screening but is marked candidate-only for final reporting
 
+#### Scenario: Initial catalog includes multiple extensible families
+- **WHEN** the seed architecture catalog is loaded
+- **THEN** it includes at least ten architecture families covering CPU-only baseline, Host+FPGA minimal, Host+FPGA+CIM, diag-heavy, streaming-heavy, memory-rich, low-power, balanced, debug, future-custom, and legacy reference classes
+
+#### Scenario: Legacy four-cluster template is reference-only
+- **WHEN** the historical four-cluster architecture appears in the catalog
+- **THEN** it is labeled candidate-only or legacy/reference and is not the default or only architecture candidate
+
+#### Scenario: Catalog validation gates trusted eligibility
+- **WHEN** an architecture instance is marked trusted-final-eligible
+- **THEN** validation checks duplicate ids, status labels, binding backend consistency, required operators, required communication routes, memory/power/area limits, and executable SystemC/gem5+SystemC binding coverage
+
 ### Requirement: Mapping search artifacts are persisted
 The mapping optimizer SHALL persist the legality matrix, seed mappings, candidate mappings, search-state snapshots, promotion decisions, simulation samples, rejection reasons, and selected mapping record. These artifacts SHALL be linked from the run manifest.
 

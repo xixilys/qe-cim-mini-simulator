@@ -173,6 +173,8 @@ Requirement:
 
 ### 4.2 Architecture catalog
 
+Implementation note: the concrete P2 catalog schema, seed families, validation checks, status labels, simulation binding gates, and minimum DesignPoint payload are implemented in `dse_v2/architecture/catalog.py` and documented in `docs/architecture/generic_dse_architecture_catalog_p2.md`.
+
 ```yaml
 ArchitectureCatalog:
   version: string
