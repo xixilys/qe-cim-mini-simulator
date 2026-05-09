@@ -1,52 +1,108 @@
 #!/usr/bin/env python3
-"""Final report generation and claim validation for generic DSE evidence runs.
+"""Final report and claim-validation utilities for generic DSE evidence runs.
 
-The report layer is intentionally conservative: it can summarize a trusted
-SystemC/gem5+SystemC evidence run, but it does not convert a single pilot into
-an architecture winner or Pareto conclusion. Comparative claims must be created
-by a higher-level search run that has comparable evidence for every trusted
-candidate.
+The reporting layer is intentionally conservative: SystemC/gem5+SystemC
+simulation evidence may enter trusted sections, while predicted-only,
+analytical/TLM, unavailable, or blocked claims remain visible but cannot become
+trusted winners.
 """
 
 from __future__ import annotations
 
-import argparse
 import csv
+import hashlib
 import json
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
-REPORT_SCHEMA_VERSION = "dse.final_report.v1"
-CLAIM_VALIDATION_SCHEMA_VERSION = "dse.claim_validation.v1"
-
 TRUSTED_BACKENDS = {"systemc", "gem5_systemc"}
-UNTRUSTED_FIDELITIES = {"l1", "l2", "analytical", "tlm", "surrogate", "predicted"}
-WINNER_CLAIM_TYPES = {"best_architecture", "selected_recommendation", "pareto_frontier"}
+PREDICTED_FIDELITIES = {"l1", "l2", "analytical", "tlm", "surrogate", "predicted"}
 
-REPORT_ARTIFACTS = [
-    "final_report.json",
-    "final_report.md",
-    "claim_validation.json",
-]
+CLAIM_REQUIREMENTS: Dict[str, Dict[str, Any]] = {
+    "best_architecture": {
+        "description": "A final architecture winner/recommendation.",
+        "trusted_backends": sorted(TRUSTED_BACKENDS),
+        "required_evidence": [
+            "verdict.json",
+            "simulation_result.json",
+            "architecture.json",
+            "mapping.json",
+            "phase_breakdown.csv",
+        ],
+        "notes": [
+            "Must be backed by SystemC or gem5+SystemC evidence.",
+            "Predicted-only, blocked, prototype-only, or analytical/TLM claims cannot be winners.",
+            "A single pilot may prove feasibility but should not overclaim a cross-candidate best architecture.",
+        ],
+    },
+    "mapping_comparison": {
+        "description": "A comparison between mappings or architecture/mapping pairs.",
+        "trusted_backends": sorted(TRUSTED_BACKENDS),
+        "required_evidence": ["simulation_result.json", "mapping.json", "phase_breakdown.csv"],
+        "notes": ["Every compared entry must resolve to trusted evidence."],
+    },
+    "bottleneck": {
+        "description": "A timing/resource bottleneck diagnosis.",
+        "trusted_backends": sorted(TRUSTED_BACKENDS),
+        "required_evidence": ["simulation_result.json", "phase_breakdown.csv", "resource_summary.csv"],
+        "notes": ["Phase/resource tables must be cited for trusted bottleneck claims."],
+    },
+    "feasibility": {
+        "description": "A feasibility statement for a specific design point/run.",
+        "trusted_backends": sorted(TRUSTED_BACKENDS),
+        "required_evidence": ["verdict.json", "simulation_result.json"],
+        "notes": ["Feasibility is scoped to the cited design/run, not a global DSE winner."],
+    },
+    "pareto_frontier": {
+        "description": "A trusted Pareto-frontier claim.",
+        "trusted_backends": sorted(TRUSTED_BACKENDS),
+        "required_evidence": ["verdict.json", "simulation_result.json", "claim_validation.json"],
+        "notes": ["Every Pareto member must be SystemC/gem5+SystemC-backed."],
+    },
+    "convergence": {
+        "description": "A search convergence/budget claim.",
+        "trusted_backends": sorted(TRUSTED_BACKENDS),
+        "required_evidence": ["verdict.json", "simulation_result.json"],
+        "notes": ["Budget exhaustion must be explicit when convergence is not proven."],
+    },
+    "debug_replay": {
+        "description": "Replay/debug reproducibility claim.",
+        "trusted_backends": sorted(TRUSTED_BACKENDS),
+        "required_evidence": ["manifest.json", "artifact_manifest.json"],
+        "notes": ["Replay commands and artifact locations must resolve."],
+    },
+    "numerical_correctness": {
+        "description": "Numerical equivalence/correctness claim.",
+        "trusted_backends": sorted(TRUSTED_BACKENDS),
+        "required_evidence": ["verdict.json"],
+        "notes": ["Timing-level shell evidence is insufficient unless explicit numerical checks are cited."],
+    },
+    "unsupported_stub_limitation": {
+        "description": "A limitation/blocker/prototype boundary statement.",
+        "trusted_backends": sorted(TRUSTED_BACKENDS),
+        "required_evidence": ["verdict.json"],
+        "notes": ["Blocked/prototype claims are reportable limitations, never trusted winners."],
+    },
+}
 
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 
-def _load_json(path: Path, default: Optional[Mapping[str, Any]] = None) -> Dict[str, Any]:
+def _load_json(path: Path) -> Dict[str, Any]:
     if not path.exists():
-        return dict(default or {})
+        return {}
     with open(path, "r", encoding="utf-8") as f:
-        loaded = json.load(f)
-    return loaded if isinstance(loaded, dict) else dict(default or {})
+        data = json.load(f)
+    return data if isinstance(data, dict) else {}
 
 
-def _write_json(path: Path, payload: Mapping[str, Any]) -> None:
+def _write_json(path: Path, data: Mapping[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
-        json.dump(payload, f, indent=2, sort_keys=True)
+        json.dump(data, f, indent=2, sort_keys=True)
         f.write("\n")
 
 
@@ -56,162 +112,75 @@ def _write_text(path: Path, text: str) -> None:
         f.write(text)
 
 
-def _read_phase_rows(path: Path) -> List[Dict[str, Any]]:
-    if not path.exists():
-        return []
-    with open(path, "r", newline="", encoding="utf-8") as f:
-        return [dict(row) for row in csv.DictReader(f)]
+def _sha256(path: Path) -> str:
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            h.update(chunk)
+    return h.hexdigest()
 
 
-def _float_or_none(value: Any) -> Optional[float]:
-    try:
-        if value == "" or value is None:
-            return None
-        return float(value)
-    except (TypeError, ValueError):
-        return None
+def build_evidence_index(run_dir: Path, artifact_paths: Optional[Iterable[str]] = None) -> Dict[str, Dict[str, Any]]:
+    """Return an evidence index keyed by relative artifact path."""
+    run_dir = Path(run_dir)
+    if artifact_paths is None:
+        paths: List[str] = []
+        artifact_manifest = _load_json(run_dir / "artifact_manifest.json")
+        for entry in artifact_manifest.get("artifacts", []) or []:
+            rel = entry.get("path")
+            if rel:
+                paths.append(str(rel))
+        if not paths:
+            paths = [
+                "manifest.json",
+                "artifact_manifest.json",
+                "verdict.json",
+                "design_point.json",
+                "architecture.json",
+                "mapping.json",
+                "workload_graph.json",
+                "simulation_request.json",
+                "simulation_result.json",
+                "phase_breakdown.csv",
+                "resource_summary.csv",
+                "data_movement_summary.csv",
+                "systemc_stdout.log",
+                "systemc_stderr.log",
+                "gem5_systemc_blockers.json",
+            ]
+    else:
+        paths = [str(path) for path in artifact_paths]
 
-
-def _phase_bottleneck(phase_rows: Sequence[Mapping[str, Any]]) -> Optional[Dict[str, Any]]:
-    available: List[Tuple[float, Mapping[str, Any]]] = []
-    for row in phase_rows:
-        if row.get("status") != "available":
-            continue
-        latency = _float_or_none(row.get("latency_ms"))
-        if latency is not None:
-            available.append((latency, row))
-    if not available:
-        return None
-    latency, row = max(available, key=lambda item: item[0])
-    return {
-        "phase": row.get("phase"),
-        "device": row.get("device"),
-        "latency_ms": latency,
-        "evidence_ids": ["phase_breakdown.csv", "simulation_result.json"],
-    }
-
-
-def _artifact_index(run_dir: Path, required_files: Iterable[str]) -> List[Dict[str, Any]]:
-    manifest = _load_json(run_dir / "artifact_manifest.json")
-    indexed: Dict[str, Dict[str, Any]] = {}
-    for entry in manifest.get("artifacts", []) or []:
-        if isinstance(entry, dict) and entry.get("path"):
-            indexed[str(entry["path"])] = dict(entry)
-
-    paths = sorted(set(required_files) | set(indexed))
-    entries: List[Dict[str, Any]] = []
-    required_set = set(required_files)
-    report_artifact_set = set(REPORT_ARTIFACTS)
-    for rel in paths:
-        entry = dict(indexed.get(rel, {}))
+    index: Dict[str, Dict[str, Any]] = {}
+    for rel in sorted(set(paths)):
         path = run_dir / rel
-        entry.setdefault("path", rel)
-        entry.setdefault("required", rel in required_set)
-        if rel in report_artifact_set:
-            entry["exists"] = True
-            entry.pop("unavailable_reason", None)
-            entry["self_referential_report_artifact"] = True
-            entries.append(entry)
-            continue
-        entry["exists"] = path.exists()
-        if not path.exists():
-            entry.setdefault("unavailable_reason", "not generated for this run")
-        else:
-            entry.pop("unavailable_reason", None)
-            if path.is_file():
-                entry.setdefault("size_bytes", path.stat().st_size)
-        entries.append(entry)
-    return entries
-
-
-def _trusted_candidate_from_run(
-    *,
-    run_id: str,
-    backend: str,
-    verdict: Mapping[str, Any],
-    architecture: Mapping[str, Any],
-    mapping: Mapping[str, Any],
-    simulation_result: Mapping[str, Any],
-    bottleneck: Optional[Mapping[str, Any]],
-) -> Optional[Dict[str, Any]]:
-    if not verdict.get("trusted_for_final_ranking", False):
-        return None
-    metrics = simulation_result.get("metrics", {}) if isinstance(simulation_result.get("metrics"), dict) else {}
-    return {
-        "rank": 1,
-        "run_id": run_id,
-        "backend": backend,
-        "architecture_id": architecture.get("architecture_id"),
-        "architecture_family": architecture.get("architecture_family"),
-        "mapping_id": mapping.get("mapping_id"),
-        "trusted_scope": "single-run feasibility evidence; not a comparative architecture-winner claim",
-        "metrics": {
-            "latency_ms": metrics.get("latency_ms"),
-            "throughput_gops": metrics.get("throughput_gops"),
-            "power_w": metrics.get("power_w"),
-            "energy_j": metrics.get("energy_j"),
-        },
-        "bottleneck_phase": bottleneck,
-        "evidence_ids": ["verdict.json", "simulation_result.json", "phase_breakdown.csv"],
-    }
-
-
-def _build_claims(
-    *,
-    run_id: str,
-    backend: str,
-    verdict: Mapping[str, Any],
-    bottleneck: Optional[Mapping[str, Any]],
-) -> List[Dict[str, Any]]:
-    claims: List[Dict[str, Any]] = []
-    trusted = bool(verdict.get("trusted_for_final_ranking", False))
-    if trusted:
-        claims.append({
-            "claim_id": f"{run_id}:feasibility",
-            "claim_type": "feasibility",
-            "text": "This design point has standalone SystemC timing-level evidence for the required QE SCF shell phases.",
-            "backend": backend,
-            "source_fidelity": "L3" if backend == "systemc" else "L4",
-            "trusted": True,
-            "predicted_only": False,
-            "blocked": False,
-            "evidence_ids": ["verdict.json", "simulation_result.json", "phase_breakdown.csv", "resource_summary.csv"],
-            "limitations": [
-                "Feasibility applies to this design point only; it is not a final best-architecture claim.",
-            ],
-        })
-        if bottleneck:
-            claims.append({
-                "claim_id": f"{run_id}:dominant_phase",
-                "claim_type": "bottleneck_diagnosis",
-                "text": f"The longest emitted phase in this run is {bottleneck.get('phase')}.",
-                "backend": backend,
-                "source_fidelity": "L3" if backend == "systemc" else "L4",
-                "trusted": True,
-                "predicted_only": False,
-                "blocked": False,
-                "evidence_ids": list(bottleneck.get("evidence_ids", [])),
-                "limitations": [
-                    "This is a per-run timing observation, not a cross-architecture bottleneck conclusion.",
-                ],
+        entry: Dict[str, Any] = {
+            "path": rel,
+            "exists": path.exists(),
+        }
+        if path.exists() and path.is_file():
+            entry.update({
+                "size_bytes": path.stat().st_size,
+                "sha256": _sha256(path),
             })
+        else:
+            entry["unavailable_reason"] = "artifact not present in run directory"
+        index[rel] = entry
+    return index
 
-    for blocker in verdict.get("gem5_systemc_blockers", []) or []:
-        if not isinstance(blocker, dict):
-            continue
-        claims.append({
-            "claim_id": f"{run_id}:{blocker.get('id', 'gem5_systemc_blocked')}",
-            "claim_type": "unsupported_stub_limitation",
-            "text": blocker.get("detail", "gem5+SystemC path is blocked for this run."),
-            "backend": "gem5_systemc",
-            "source_fidelity": "L4",
-            "trusted": False,
-            "predicted_only": False,
-            "blocked": True,
-            "evidence_ids": ["verdict.json", "gem5_systemc_blockers.json"],
-            "limitations": ["Blocked claims are documented for audit and cannot enter trusted ranking."],
+
+def evidence_requirement_table() -> List[Dict[str, Any]]:
+    """Machine-readable claim classes and evidence requirements."""
+    rows: List[Dict[str, Any]] = []
+    for claim_type, requirement in CLAIM_REQUIREMENTS.items():
+        rows.append({
+            "claim_type": claim_type,
+            "description": requirement["description"],
+            "trusted_backends": requirement["trusted_backends"],
+            "required_evidence": requirement["required_evidence"],
+            "notes": requirement["notes"],
         })
-    return claims
+    return rows
 
 
 def _claim_backend(claim: Mapping[str, Any]) -> str:
@@ -219,84 +188,236 @@ def _claim_backend(claim: Mapping[str, Any]) -> str:
 
 
 def _claim_fidelity(claim: Mapping[str, Any]) -> str:
-    return str(claim.get("source_fidelity", claim.get("fidelity", ""))).lower()
+    return str(claim.get("fidelity", claim.get("source_fidelity", ""))).lower()
 
 
-def validate_report_claims(report: Mapping[str, Any], run_dir: Path) -> Dict[str, Any]:
-    """Validate claim/evidence consistency for a final report payload."""
-    errors: List[str] = []
-    warnings: List[str] = []
-    claims = report.get("claims", []) or []
-    if not isinstance(claims, list):
-        errors.append("claims must be a list")
-        claims = []
+def _claim_evidence_ids(claim: Mapping[str, Any]) -> List[str]:
+    evidence_ids = claim.get("evidence_ids", [])
+    if isinstance(evidence_ids, str):
+        return [evidence_ids]
+    if isinstance(evidence_ids, Sequence):
+        return [str(item) for item in evidence_ids]
+    return []
 
-    trusted_claim_count = 0
-    for idx, claim in enumerate(claims):
-        if not isinstance(claim, dict):
-            errors.append(f"claim[{idx}] is not an object")
-            continue
-        claim_id = str(claim.get("claim_id", f"claim[{idx}]"))
-        trusted = bool(claim.get("trusted", False))
-        predicted_only = bool(claim.get("predicted_only", False))
-        blocked = bool(claim.get("blocked", False))
-        claim_type = str(claim.get("claim_type", ""))
-        evidence_ids = claim.get("evidence_ids", []) or []
 
-        if trusted:
-            trusted_claim_count += 1
-            if predicted_only:
-                errors.append(f"{claim_id}: trusted claim cannot be predicted_only")
-            if blocked:
-                errors.append(f"{claim_id}: trusted claim cannot be blocked")
-            if _claim_backend(claim) not in TRUSTED_BACKENDS:
-                errors.append(f"{claim_id}: trusted claim backend must be SystemC or gem5+SystemC")
-            if _claim_fidelity(claim) in UNTRUSTED_FIDELITIES:
-                errors.append(f"{claim_id}: trusted claim cannot use low-fidelity source")
-            if not evidence_ids:
-                errors.append(f"{claim_id}: trusted claim must list evidence_ids")
+def _verdict_allows_trust(verdict: Mapping[str, Any]) -> bool:
+    return bool(verdict.get("trusted_for_final_ranking", False))
 
-        if predicted_only and claim_type in WINNER_CLAIM_TYPES:
-            errors.append(f"{claim_id}: predicted-only candidate cannot be a winner/Pareto claim")
 
-        if not isinstance(evidence_ids, list):
-            errors.append(f"{claim_id}: evidence_ids must be a list")
-            continue
-        for evidence_id in evidence_ids:
-            rel = Path(str(evidence_id))
-            if rel.is_absolute() or ".." in rel.parts:
-                errors.append(f"{claim_id}: evidence id must be a run-local relative path: {evidence_id}")
-                continue
-            if not (run_dir / rel).exists():
-                errors.append(f"{claim_id}: evidence id does not resolve to a file: {evidence_id}")
+def validate_claim(
+    claim: Mapping[str, Any],
+    *,
+    verdict: Mapping[str, Any],
+    evidence_index: Mapping[str, Mapping[str, Any]],
+) -> Dict[str, Any]:
+    """Validate a single final-report claim against evidence and status rules."""
+    claim_type = str(claim.get("claim_type", "unknown"))
+    backend = _claim_backend(claim)
+    fidelity = _claim_fidelity(claim)
+    evidence_ids = _claim_evidence_ids(claim)
+    requirement = CLAIM_REQUIREMENTS.get(claim_type, {})
+    required_evidence = [str(x) for x in requirement.get("required_evidence", [])]
 
-    selected = report.get("selected_recommendation", {}) or {}
-    if isinstance(selected, dict) and selected.get("status") == "selected":
-        evidence_ids = selected.get("evidence_ids", []) or []
-        if selected.get("predicted_only"):
-            errors.append("selected_recommendation: predicted-only candidate cannot be selected")
-        if selected.get("backend") not in TRUSTED_BACKENDS:
-            errors.append("selected_recommendation: backend must be SystemC or gem5+SystemC")
-        if not evidence_ids:
-            errors.append("selected_recommendation: selected design requires evidence_ids")
-        for evidence_id in evidence_ids:
-            if not (run_dir / str(evidence_id)).exists():
-                errors.append(f"selected_recommendation: evidence id does not resolve: {evidence_id}")
-    else:
-        warnings.append("No comparative selected recommendation emitted; report is single-run evidence only.")
+    missing_evidence = [
+        evidence_id
+        for evidence_id in evidence_ids
+        if not evidence_index.get(evidence_id, {}).get("exists", False)
+    ]
+    missing_required = [
+        evidence_id
+        for evidence_id in required_evidence
+        if evidence_id not in evidence_ids or not evidence_index.get(evidence_id, {}).get("exists", False)
+    ]
+
+    reasons: List[str] = []
+    status = str(claim.get("status", claim.get("lifecycle_state", ""))).lower()
+    if status in {"blocked", "unsupported", "stub", "prototype-unverified"}:
+        reasons.append(f"claim status is {status}")
+    if bool(claim.get("predicted_only", False)):
+        reasons.append("claim is predicted_only")
+    if fidelity in PREDICTED_FIDELITIES:
+        reasons.append(f"source fidelity {fidelity} is not final-ranking evidence")
+    if backend not in TRUSTED_BACKENDS:
+        reasons.append(f"backend {backend or '<missing>'} is not trusted for final ranking")
+    if not evidence_ids:
+        reasons.append("claim has no evidence_ids")
+    if missing_evidence:
+        reasons.append(f"unresolved evidence ids: {', '.join(missing_evidence)}")
+    if missing_required:
+        reasons.append(f"required evidence ids absent or unresolved: {', '.join(missing_required)}")
+    if not _verdict_allows_trust(verdict) and claim_type != "unsupported_stub_limitation":
+        reasons.append("run verdict is not trusted_for_final_ranking")
+
+    trusted = not reasons and claim_type != "unsupported_stub_limitation"
+    validation_status = "trusted" if trusted else "untrusted"
+    if bool(claim.get("predicted_only", False)) or fidelity in PREDICTED_FIDELITIES:
+        validation_status = "predicted_only"
+    elif status in {"blocked", "unsupported", "stub", "prototype-unverified"} or claim_type == "unsupported_stub_limitation":
+        validation_status = "blocked_or_limitation"
 
     return {
-        "schema_version": CLAIM_VALIDATION_SCHEMA_VERSION,
-        "generated_at": _now_iso(),
-        "passed": not errors,
-        "trusted_claim_count": trusted_claim_count,
-        "errors": errors,
-        "warnings": warnings,
+        "claim_id": str(claim.get("claim_id", claim_type)),
+        "claim_type": claim_type,
+        "backend": backend,
+        "source_fidelity": fidelity,
+        "trusted": trusted,
+        "validation_status": validation_status,
+        "evidence_ids": evidence_ids,
+        "missing_evidence": missing_evidence,
+        "reasons": reasons,
     }
 
 
-def build_final_report(run_dir: Path) -> Dict[str, Any]:
-    """Build a final report payload from an existing evidence run directory."""
+def validate_claims(
+    claims: Iterable[Mapping[str, Any]],
+    *,
+    verdict: Mapping[str, Any],
+    evidence_index: Mapping[str, Mapping[str, Any]],
+) -> Dict[str, Any]:
+    validations = [validate_claim(claim, verdict=verdict, evidence_index=evidence_index) for claim in claims]
+    trusted_claim_ids = [item["claim_id"] for item in validations if item["trusted"]]
+    blocked_or_predicted = [
+        item["claim_id"]
+        for item in validations
+        if item["validation_status"] in {"blocked_or_limitation", "predicted_only"}
+    ]
+    return {
+        "schema_version": "dse.claim_validation.v1",
+        "generated_at": _now_iso(),
+        "trusted_claim_ids": trusted_claim_ids,
+        "blocked_or_predicted_claim_ids": blocked_or_predicted,
+        "validations": validations,
+        "passed": all(
+            item["trusted"] or item["validation_status"] in {"blocked_or_limitation", "predicted_only"}
+            for item in validations
+        ),
+    }
+
+
+def _read_csv_rows(path: Path, limit: int = 1000) -> List[Dict[str, str]]:
+    if not path.exists():
+        return []
+    with open(path, newline="", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        rows: List[Dict[str, str]] = []
+        for idx, row in enumerate(reader):
+            if idx >= limit:
+                break
+            rows.append(dict(row))
+        return rows
+
+
+def _default_claims(
+    *,
+    verdict: Mapping[str, Any],
+    simulation_result: Mapping[str, Any],
+) -> List[Dict[str, Any]]:
+    backend = str(verdict.get("backend", simulation_result.get("backend", "systemc")))
+    fidelity = "L4" if backend == "gem5_systemc" else "L3"
+    trusted = bool(verdict.get("trusted_for_final_ranking", False))
+    run_id = str(verdict.get("run_id", simulation_result.get("run_id", "unknown")))
+
+    claims: List[Dict[str, Any]] = [
+        {
+            "claim_id": "feasibility_current_design",
+            "claim_type": "feasibility",
+            "statement": "The cited design point completed the timing-level QE SCF shell run." if trusted else "The cited design point is not trusted for final ranking.",
+            "backend": backend,
+            "source_fidelity": fidelity,
+            "predicted_only": False,
+            "status": "simulated" if trusted else "blocked",
+            "design_point_id": run_id,
+            "evidence_ids": ["verdict.json", "simulation_result.json", "phase_breakdown.csv"],
+        }
+    ]
+
+    if simulation_result.get("phase_results"):
+        claims.append({
+            "claim_id": "phase_timing_breakdown",
+            "claim_type": "bottleneck",
+            "statement": "Phase timing/resource bottleneck analysis is available for the cited run.",
+            "backend": backend,
+            "source_fidelity": fidelity,
+            "predicted_only": False,
+            "status": "simulated" if trusted else "blocked",
+            "design_point_id": run_id,
+            "evidence_ids": ["simulation_result.json", "phase_breakdown.csv", "resource_summary.csv"],
+        })
+
+    if verdict.get("gem5_systemc_blockers"):
+        claims.append({
+            "claim_id": "gem5_systemc_l4_blocked",
+            "claim_type": "unsupported_stub_limitation",
+            "statement": "gem5+SystemC full QE SCF shell binding is blocked/prototype for this run.",
+            "backend": "gem5_systemc",
+            "source_fidelity": "L4",
+            "predicted_only": False,
+            "status": "blocked",
+            "design_point_id": run_id,
+            "evidence_ids": ["verdict.json", "gem5_systemc_blockers.json"],
+        })
+
+    return claims
+
+
+def _candidate_from_run(
+    *,
+    design_point: Mapping[str, Any],
+    architecture: Mapping[str, Any],
+    mapping: Mapping[str, Any],
+    simulation_result: Mapping[str, Any],
+    validation: Mapping[str, Any],
+) -> Dict[str, Any]:
+    metrics = simulation_result.get("metrics", {}) if isinstance(simulation_result.get("metrics", {}), Mapping) else {}
+    return {
+        "design_point_id": str(design_point.get("design_point_id", simulation_result.get("run_id", "unknown"))),
+        "architecture_id": architecture.get("architecture_id", design_point.get("system_architecture", {}).get("system_id")),
+        "mapping_id": mapping.get("mapping_id"),
+        "backend": simulation_result.get("backend"),
+        "status": simulation_result.get("status"),
+        "metrics": {
+            "latency_ms": metrics.get("latency_ms"),
+            "throughput_gops": metrics.get("throughput_gops"),
+            "power_w": metrics.get("power_w"),
+            "energy_j": metrics.get("energy_j"),
+            "total_data_movement_mb": metrics.get("total_data_movement_mb"),
+            "dma_time_ms": metrics.get("dma_time_ms"),
+        },
+        "validation": validation,
+        "evidence_ids": ["verdict.json", "simulation_result.json", "architecture.json", "mapping.json", "phase_breakdown.csv"],
+    }
+
+
+def _phase_summary(run_dir: Path) -> Dict[str, Any]:
+    rows = _read_csv_rows(run_dir / "phase_breakdown.csv")
+    available = [row for row in rows if row.get("status") == "available"]
+    slowest = sorted(
+        available,
+        key=lambda row: float(row.get("latency_ms") or 0.0),
+        reverse=True,
+    )[:5]
+    return {
+        "available_phase_count": len(available),
+        "missing_phase_count": len(rows) - len(available),
+        "slowest_phases": [
+            {
+                "phase": row.get("phase"),
+                "device": row.get("device"),
+                "latency_ms": float(row.get("latency_ms") or 0.0),
+                "evidence_id": "phase_breakdown.csv",
+            }
+            for row in slowest
+        ],
+    }
+
+
+def generate_final_report(
+    run_dir: Path,
+    *,
+    claims: Optional[Iterable[Mapping[str, Any]]] = None,
+    artifact_paths: Optional[Iterable[str]] = None,
+) -> Tuple[Dict[str, Any], Dict[str, Any], Dict[str, Any]]:
+    """Build final report, claim validation, and evidence requirements payloads."""
     run_dir = Path(run_dir)
     manifest = _load_json(run_dir / "manifest.json")
     verdict = _load_json(run_dir / "verdict.json")
@@ -305,208 +426,204 @@ def build_final_report(run_dir: Path) -> Dict[str, Any]:
     mapping = _load_json(run_dir / "mapping.json")
     workload_graph = _load_json(run_dir / "workload_graph.json")
     simulation_result = _load_json(run_dir / "simulation_result.json")
-    phase_rows = _read_phase_rows(run_dir / "phase_breakdown.csv")
+    blockers = _load_json(run_dir / "gem5_systemc_blockers.json")
+    evidence_index = build_evidence_index(run_dir, artifact_paths=artifact_paths)
 
-    run_id = str(verdict.get("run_id") or manifest.get("run_id") or design_point.get("design_point_id") or run_dir.name)
-    backend = str(verdict.get("backend") or manifest.get("backend") or simulation_result.get("backend") or "unknown")
-    bottleneck = _phase_bottleneck(phase_rows)
-    trusted_candidate = _trusted_candidate_from_run(
-        run_id=run_id,
-        backend=backend,
-        verdict=verdict,
+    claim_list = list(claims) if claims is not None else _default_claims(verdict=verdict, simulation_result=simulation_result)
+    claim_validation = validate_claims(claim_list, verdict=verdict, evidence_index=evidence_index)
+    validation_by_id = {item["claim_id"]: item for item in claim_validation["validations"]}
+
+    trusted_validation = validation_by_id.get("feasibility_current_design", {})
+    candidate = _candidate_from_run(
+        design_point=design_point,
         architecture=architecture,
         mapping=mapping,
         simulation_result=simulation_result,
-        bottleneck=bottleneck,
+        validation=trusted_validation,
     )
 
-    required_files = manifest.get("required_evidence_files") or [
-        "manifest.json",
-        "artifact_manifest.json",
-        "verdict.json",
-        "design_point.json",
-        "architecture.json",
-        "mapping.json",
-        "workload_graph.json",
-        "simulation_request.json",
-        "simulation_result.json",
-        "phase_breakdown.csv",
-        "resource_summary.csv",
-        "data_movement_summary.csv",
-        "systemc_stdout.log",
-        "systemc_stderr.log",
+    trusted_ranking = [candidate] if trusted_validation.get("trusted") else []
+    predicted_only_candidates = [
+        {"claim": dict(claim), "validation": validation_by_id.get(str(claim.get("claim_id", claim.get("claim_type", "unknown"))), {})}
+        for claim in claim_list
+        if bool(claim.get("predicted_only", False)) or _claim_fidelity(claim) in PREDICTED_FIDELITIES
     ]
-    required_files = list(dict.fromkeys([str(path) for path in required_files] + REPORT_ARTIFACTS))
+    blocked_or_prototype = [
+        {"claim": dict(claim), "validation": validation_by_id.get(str(claim.get("claim_id", claim.get("claim_type", "unknown"))), {})}
+        for claim in claim_list
+        if str(claim.get("status", claim.get("lifecycle_state", ""))).lower() in {"blocked", "unsupported", "stub", "prototype-unverified"}
+        or str(claim.get("claim_type")) == "unsupported_stub_limitation"
+    ]
 
-    report: Dict[str, Any] = {
-        "schema_version": REPORT_SCHEMA_VERSION,
+    selected_recommendation: Dict[str, Any]
+    if trusted_ranking:
+        selected_recommendation = {
+            "selection_status": "trusted_feasibility_candidate_not_cross_candidate_winner",
+            "trusted_winner": False,
+            "design_point_id": candidate["design_point_id"],
+            "rationale": (
+                "This run is SystemC/gem5+SystemC-backed and feasible for the cited design point. "
+                "It is not promoted to a global best-architecture winner without comparable trusted candidates."
+            ),
+            "evidence_ids": candidate["evidence_ids"],
+        }
+    else:
+        selected_recommendation = {
+            "selection_status": "no_trusted_recommendation",
+            "trusted_winner": False,
+            "rationale": "No candidate passed trusted claim validation; predicted-only or blocked entries are excluded from trusted winners.",
+            "evidence_ids": ["verdict.json", "claim_validation.json"],
+        }
+
+    limitations = list(verdict.get("evidence_gaps", []) or [])
+    if blockers.get("blockers"):
+        limitations.append("gem5+SystemC L4 binding remains blocked/prototype for this run.")
+    if not trusted_ranking:
+        limitations.append("No trusted final ranking is available from the cited evidence.")
+    limitations.append("Timing-level QE SCF shell evidence does not by itself prove numerical QE correctness or board/ASIC results.")
+
+    report = {
+        "schema_version": "dse.final_report.v1",
         "generated_at": _now_iso(),
         "run_metadata": {
-            "run_id": run_id,
-            "run_dir": str(run_dir),
-            "backend": backend,
-            "evidence_mode": verdict.get("evidence_mode") or manifest.get("evidence_mode"),
+            "run_id": manifest.get("run_id", verdict.get("run_id", simulation_result.get("run_id"))),
+            "backend": manifest.get("backend", verdict.get("backend", simulation_result.get("backend"))),
+            "evidence_mode": manifest.get("evidence_mode", verdict.get("evidence_mode")),
             "trusted_for_final_ranking": bool(verdict.get("trusted_for_final_ranking", False)),
-            "cli_command": manifest.get("cli_command", []),
-            "simulator_command": manifest.get("simulator_command", []),
+            "manifest": "manifest.json",
+            "verdict": "verdict.json",
         },
         "workload": {
-            "workload_id": manifest.get("workload", "unknown"),
+            "workload_id": manifest.get("workload", workload_graph.get("graph_id")),
             "graph_id": workload_graph.get("graph_id"),
-            "node_count": len(workload_graph.get("nodes", {}) or {}),
-            "edge_count": len(workload_graph.get("edges", []) or []),
-            "required_qe_scf_phases": verdict.get("required_qe_scf_phases", []),
-            "missing_required_phases": verdict.get("missing_required_phases", []),
+            "required_qe_scf_phases": simulation_result.get("required_qe_scf_phases", []),
+            "phase_summary": _phase_summary(run_dir),
         },
         "architecture_catalog_scope": {
             "architecture_id": architecture.get("architecture_id"),
             "architecture_family": architecture.get("architecture_family"),
-            "architecture_status": architecture.get("status"),
+            "status": architecture.get("status"),
             "trusted_final_eligible": architecture.get("trusted_final_eligible", False),
-            "scope_note": architecture.get("architecture_scope"),
+            "scope": architecture.get("architecture_scope"),
         },
         "search_configuration": {
-            "mapping_id": mapping.get("mapping_id"),
             "mapping_policy": mapping.get("mapping_policy"),
             "search_status": mapping.get("search_status"),
-            "convergence_status": "not_applicable_single_seeded_candidate",
-            "budget_status": "not_applicable_single_seeded_candidate",
+            "scheduling_policy": design_point.get("scheduling_policy"),
+            "config": design_point.get("config", {}),
         },
-        "trusted_ranking": [trusted_candidate] if trusted_candidate else [],
-        "predicted_only_candidates": [
-            {
-                "candidate_id": f"{run_id}:mapping_search_placeholder",
-                "status": "predicted_only_not_selected",
-                "reason": "Architecture catalog expansion and mapping feedback search are not completed by this single evidence run.",
-                "evidence_ids": [],
-            }
-        ],
-        "selected_recommendation": {
-            "status": "not_selected",
-            "reason": "This report summarizes one evidence run; it does not compare multiple trusted candidates, so no best architecture or Pareto winner is claimed.",
-            "predicted_only": False,
-            "evidence_ids": [],
-        },
+        "trusted_ranking": trusted_ranking,
+        "predicted_only_candidates": predicted_only_candidates,
+        "blocked_or_prototype": blocked_or_prototype,
         "pareto_alternatives": [],
-        "claims": _build_claims(run_id=run_id, backend=backend, verdict=verdict, bottleneck=bottleneck),
-        "evidence_index": _artifact_index(run_dir, required_files),
-        "limitations": list(verdict.get("evidence_gaps", []) or []) + [
-            "Single-run reports cannot establish architecture-family superiority, Pareto optimality, or final DSE winner status.",
-            "Numerical QE correctness and board/ASIC implementation claims are outside this timing-level evidence report.",
-        ],
+        "selected_recommendation": selected_recommendation,
+        "claims": claim_list,
+        "claim_validation": claim_validation,
+        "evidence_requirements": evidence_requirement_table(),
+        "evidence_index": evidence_index,
+        "limitations": limitations,
         "replay_instructions": {
             "python_replay_command": manifest.get("replay_metadata", {}).get("python_replay_command", manifest.get("cli_command", [])),
             "simulator_replay_command": manifest.get("replay_metadata", {}).get("simulator_replay_command", manifest.get("simulator_command", [])),
-            "simulation_request": "simulation_request.json",
-            "simulation_result": "simulation_result.json",
+            "run_directory": str(run_dir),
+            "required_artifact_index": "artifact_manifest.json",
         },
     }
-    report["validation"] = validate_report_claims(report, run_dir)
-    return report
+
+    requirements_payload = {
+        "schema_version": "dse.evidence_requirements.v1",
+        "generated_at": _now_iso(),
+        "requirements": evidence_requirement_table(),
+        "trusted_backend_policy": sorted(TRUSTED_BACKENDS),
+        "predicted_fidelity_policy": sorted(PREDICTED_FIDELITIES),
+    }
+    return report, claim_validation, requirements_payload
 
 
 def render_markdown_report(report: Mapping[str, Any]) -> str:
-    metadata = report.get("run_metadata", {}) or {}
-    workload = report.get("workload", {}) or {}
-    architecture = report.get("architecture_catalog_scope", {}) or {}
-    search = report.get("search_configuration", {}) or {}
-    selected = report.get("selected_recommendation", {}) or {}
-    validation = report.get("validation", {}) or {}
-
+    """Render a concise audit-friendly Markdown report."""
+    run = report.get("run_metadata", {})
+    selected = report.get("selected_recommendation", {})
     lines = [
-        f"# Generic DSE Final Report — {metadata.get('run_id', 'unknown')}",
+        "# Generic DSE Final Report",
         "",
         "## Executive Summary",
-        f"- Backend: `{metadata.get('backend', 'unknown')}`",
-        f"- Trusted for final ranking: `{metadata.get('trusted_for_final_ranking', False)}`",
-        f"- Workload graph: `{workload.get('graph_id', 'unknown')}` with {workload.get('node_count', 0)} nodes and {workload.get('edge_count', 0)} edges",
-        f"- Missing required QE SCF phases: {workload.get('missing_required_phases', [])}",
-        f"- Validation passed: `{validation.get('passed', False)}`",
-        "",
-        "## Architecture and Mapping Scope",
-        f"- Architecture: `{architecture.get('architecture_id', 'unknown')}` ({architecture.get('architecture_family', 'unknown')})",
-        f"- Architecture status: `{architecture.get('architecture_status', 'unknown')}`",
-        f"- Mapping: `{search.get('mapping_id', 'unknown')}` via `{search.get('mapping_policy', 'unknown')}`",
-        f"- Search/convergence: `{search.get('convergence_status', 'unknown')}`",
+        f"- Run id: `{run.get('run_id')}`",
+        f"- Backend: `{run.get('backend')}`",
+        f"- Trusted for final ranking: `{run.get('trusted_for_final_ranking')}`",
+        f"- Recommendation status: `{selected.get('selection_status')}`",
+        f"- Trusted winner: `{selected.get('trusted_winner')}`",
         "",
         "## Trusted Ranking",
     ]
-    ranking = report.get("trusted_ranking", []) or []
-    if ranking:
-        for item in ranking:
-            metrics = item.get("metrics", {}) or {}
-            lines.extend([
-                f"- Rank {item.get('rank')}: `{item.get('architecture_id')}` / `{item.get('mapping_id')}`",
-                f"  - Scope: {item.get('trusted_scope')}",
-                f"  - Latency ms: `{metrics.get('latency_ms')}`; power W: `{metrics.get('power_w')}`; energy J: `{metrics.get('energy_j')}`",
-                f"  - Evidence: {', '.join(item.get('evidence_ids', []))}",
-            ])
+    trusted = report.get("trusted_ranking", []) or []
+    if trusted:
+        for idx, candidate in enumerate(trusted, start=1):
+            metrics = candidate.get("metrics", {})
+            lines.append(
+                f"{idx}. `{candidate.get('design_point_id')}` — latency `{metrics.get('latency_ms')}` ms, "
+                f"energy `{metrics.get('energy_j')}` J, evidence `{', '.join(candidate.get('evidence_ids', []))}`"
+            )
     else:
-        lines.append("- No trusted ranking entries were emitted.")
+        lines.append("- No trusted ranking entries; predicted-only and blocked candidates are excluded from winners.")
 
-    lines.extend([
-        "",
-        "## Selected Recommendation",
-        f"- Status: `{selected.get('status', 'unknown')}`",
-        f"- Reason: {selected.get('reason', '')}",
-        "",
-        "## Claims",
-    ])
-    for claim in report.get("claims", []) or []:
-        lines.extend([
-            f"- `{claim.get('claim_id')}` ({claim.get('claim_type')})",
-            f"  - Trusted: `{claim.get('trusted', False)}`; blocked: `{claim.get('blocked', False)}`; predicted-only: `{claim.get('predicted_only', False)}`",
-            f"  - Evidence: {', '.join(claim.get('evidence_ids', []))}",
-            f"  - Text: {claim.get('text', '')}",
-        ])
+    lines.extend(["", "## Predicted-only / Blocked", ""])
+    blocked = report.get("blocked_or_prototype", []) or []
+    predicted = report.get("predicted_only_candidates", []) or []
+    if not blocked and not predicted:
+        lines.append("- None recorded.")
+    for item in predicted:
+        claim = item.get("claim", {})
+        lines.append(f"- Predicted-only: `{claim.get('claim_id', claim.get('claim_type'))}`")
+    for item in blocked:
+        claim = item.get("claim", {})
+        lines.append(f"- Blocked/prototype: `{claim.get('claim_id', claim.get('claim_type'))}` — {claim.get('statement', '')}")
 
-    lines.extend([
-        "",
-        "## Limitations",
-    ])
+    lines.extend(["", "## Claim Validation", ""])
+    for validation in report.get("claim_validation", {}).get("validations", []) or []:
+        reason = "; ".join(validation.get("reasons", [])) or "ok"
+        lines.append(
+            f"- `{validation.get('claim_id')}`: `{validation.get('validation_status')}`, "
+            f"trusted=`{validation.get('trusted')}` ({reason})"
+        )
+
+    lines.extend(["", "## Limitations", ""])
     for limitation in report.get("limitations", []) or []:
         lines.append(f"- {limitation}")
 
+    replay = report.get("replay_instructions", {})
     lines.extend([
         "",
         "## Replay Instructions",
-        "```json",
-        json.dumps(report.get("replay_instructions", {}), indent=2, sort_keys=True),
-        "```",
+        f"- Python command: `{replay.get('python_replay_command')}`",
+        f"- Simulator command: `{replay.get('simulator_replay_command')}`",
+        f"- Run directory: `{replay.get('run_directory')}`",
+        f"- Artifact index: `{replay.get('required_artifact_index')}`",
         "",
     ])
     return "\n".join(lines)
 
 
-def generate_final_report_artifacts(run_dir: Path) -> Dict[str, Any]:
-    """Write final_report.json, final_report.md, and claim_validation.json."""
+def write_final_report_artifacts(
+    run_dir: Path,
+    *,
+    claims: Optional[Iterable[Mapping[str, Any]]] = None,
+    artifact_paths: Optional[Iterable[str]] = None,
+) -> Dict[str, str]:
+    """Generate final_report.json/md plus evidence requirement and claim validation artifacts."""
     run_dir = Path(run_dir)
-    report = build_final_report(run_dir)
-    validation = report["validation"]
+    report, claim_validation, requirements = generate_final_report(
+        run_dir,
+        claims=claims,
+        artifact_paths=artifact_paths,
+    )
+    _write_json(run_dir / "evidence_requirements.json", requirements)
+    _write_json(run_dir / "claim_validation.json", claim_validation)
     _write_json(run_dir / "final_report.json", report)
-    _write_json(run_dir / "claim_validation.json", validation)
     _write_text(run_dir / "final_report.md", render_markdown_report(report))
     return {
-        "report_path": str(run_dir / "final_report.json"),
-        "markdown_path": str(run_dir / "final_report.md"),
-        "validation_path": str(run_dir / "claim_validation.json"),
-        "validation_passed": validation.get("passed", False),
-        "trusted_claim_count": validation.get("trusted_claim_count", 0),
+        "evidence_requirements": "evidence_requirements.json",
+        "claim_validation": "claim_validation.json",
+        "final_report_json": "final_report.json",
+        "final_report_markdown": "final_report.md",
     }
-
-
-def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Generate a final report for a generic DSE evidence run directory.")
-    parser.add_argument("run_dir", type=Path)
-    return parser.parse_args(argv)
-
-
-def main(argv: Optional[Sequence[str]] = None) -> int:
-    args = parse_args(argv)
-    result = generate_final_report_artifacts(args.run_dir)
-    print(json.dumps(result, indent=2, sort_keys=True))
-    return 0 if result["validation_passed"] else 1
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())

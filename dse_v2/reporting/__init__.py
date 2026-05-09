@@ -1,19 +1,23 @@
-"""Reporting helpers for generic DSE evidence artifacts."""
+"""Reporting and claim-validation utilities for generic DSE runs."""
+
+from dse_v2.reporting.final_report import (
+    CLAIM_REQUIREMENTS,
+    build_evidence_index,
+    evidence_requirement_table,
+    generate_final_report,
+    render_markdown_report,
+    validate_claim,
+    validate_claims,
+    write_final_report_artifacts,
+)
 
 __all__ = [
-    "CLAIM_VALIDATION_SCHEMA_VERSION",
-    "REPORT_ARTIFACTS",
-    "REPORT_SCHEMA_VERSION",
-    "build_final_report",
-    "generate_final_report_artifacts",
+    "CLAIM_REQUIREMENTS",
+    "build_evidence_index",
+    "evidence_requirement_table",
+    "generate_final_report",
     "render_markdown_report",
-    "validate_report_claims",
+    "validate_claim",
+    "validate_claims",
+    "write_final_report_artifacts",
 ]
-
-
-def __getattr__(name):
-    if name in __all__:
-        from . import final_report as _final_report
-
-        return getattr(_final_report, name)
-    raise AttributeError(name)

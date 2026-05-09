@@ -32,6 +32,10 @@ REQUIRED_EVIDENCE_FILES = [
     "manifest.json",
     "artifact_manifest.json",
     "verdict.json",
+    "evidence_requirements.json",
+    "claim_validation.json",
+    "final_report.json",
+    "final_report.md",
     "design_point.json",
     "architecture.json",
     "mapping.json",
@@ -452,6 +456,15 @@ def write_full_flow_evidence(
     artifact_paths = list(REQUIRED_EVIDENCE_FILES) + ["simulation_result.raw.json", "gem5_systemc_blockers.json"]
     if gem5_log is not None:
         artifact_paths.append("gem5.log")
+
+    # P5 final reporting is generated from the evidence bundle before the
+    # artifact manifest is sealed.  The report validates claims against concrete
+    # files already written above, while the final artifact manifest below then
+    # records the report artifacts themselves for audit/replay discovery.
+    from dse_v2.reporting.final_report import write_final_report_artifacts
+
+    write_final_report_artifacts(run_dir, artifact_paths=artifact_paths)
+
     artifact_entries = _artifact_entries(run_dir, artifact_paths)
     for entry in artifact_entries:
         if entry["path"] == "artifact_manifest.json":
