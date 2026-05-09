@@ -75,6 +75,16 @@ python3 scripts/setup/define_design_space.py
 python3 scripts/dse/run_bayesian_dse.py --workload si8_pbe_uspp --iterations 50
 ```
 
+### 5. 运行 Generic DSE QE SCF shell full-flow pilot
+
+```bash
+cmake -S ../model/generic_sim_backend -B ../model/generic_sim_backend/build
+cmake --build ../model/generic_sim_backend/build -j4
+python3 scripts/dse/run_full_flow_pilot.py --workload qe_scf_shell --backend systemc --out ../runs/dse/qe_scf_shell_systemc
+```
+
+该 pilot 会生成 `manifest.json`、`verdict.json`、SystemC timing evidence、`final_report.json`、`final_report.md` 和 `claim_validation.json`。报告规则见 `docs/GENERIC_DSE_FULL_FLOW_REPORTING.md`；单个 pilot 只能作为可行性/phase timing evidence，不能升级为最终 best-architecture 或 Pareto claim。
+
 ## 开发路线图
 
 ### Week 1: Workload 扩展

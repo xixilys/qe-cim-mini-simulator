@@ -100,11 +100,19 @@ def _artifact_index(run_dir: Path, required_files: Iterable[str]) -> List[Dict[s
 
     paths = sorted(set(required_files) | set(indexed))
     entries: List[Dict[str, Any]] = []
+    required_set = set(required_files)
+    report_artifact_set = set(REPORT_ARTIFACTS)
     for rel in paths:
         entry = dict(indexed.get(rel, {}))
         path = run_dir / rel
         entry.setdefault("path", rel)
-        entry.setdefault("required", rel in set(required_files))
+        entry.setdefault("required", rel in required_set)
+        if rel in report_artifact_set:
+            entry["exists"] = True
+            entry.pop("unavailable_reason", None)
+            entry["self_referential_report_artifact"] = True
+            entries.append(entry)
+            continue
         entry["exists"] = path.exists()
         if not path.exists():
             entry.setdefault("unavailable_reason", "not generated for this run")
