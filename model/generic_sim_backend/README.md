@@ -72,6 +72,26 @@ result = backend.evaluate(design_point, compute_graph)
 - L3: Standalone SystemC (this backend)
 - L4: gem5 + SystemC co-simulation
 
+## gem5 + SystemC Closure Boundary
+
+The L4 path is claim-gated. A trusted L4 result requires evidence that gem5
+software wrote a GSIM command descriptor, GenericAccel ingested the descriptor
+and request payload, the SystemC timing backend was invoked from that path, and
+completion/result data was written back to guest-visible memory. Until those
+items appear in `gem5.log` plus descriptor/completion artifacts, the backend
+must emit a `blocked` / `blocked_prototype` verdict rather than a passed result.
+
+Use `dse_v2.backends.gem5_systemc_adapter.Gem5SystemCClosureAdapter` or
+`GenericSystemCBackend(mode="gem5_systemc_blocked")` to generate the blocked
+verdict artifacts:
+
+- `simulation_request.json`
+- `simulation_result.json` with `status: "blocked"`
+- `gem5_command_descriptor.json`
+- `gem5_completion_descriptor.json`
+- `gem5.log`
+- `verdict.json`
+
 ## Supported Operations
 
 - gemm

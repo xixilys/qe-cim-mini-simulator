@@ -17,7 +17,7 @@
     },
     "mode": {
       "type": "string",
-      "enum": ["standalone_systemc", "gem5_cosim", "analytical"],
+      "enum": ["standalone_systemc", "gem5_cosim", "gem5_systemc_blocked", "analytical"],
       "description": "Simulation execution mode"
     },
     "workload": {
