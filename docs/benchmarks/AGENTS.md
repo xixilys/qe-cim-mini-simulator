@@ -24,6 +24,7 @@ DSE (Design Space Exploration) framework, workload analysis scripts, baseline ac
 Start with the DSE framework manual:
 
 - `qe_dse_framework_user_manual_v0.md` - Complete user manual for DSE inputs, commands, outputs, validation, artifact reading order, and claim boundaries
+- `generic_dse_simulation_system_handbook_v1.md` - New primary handbook for the generic DSE + SystemC/gem5+SystemC simulation evidence loop. It frames QE as a reference adapter / legacy lane and uses Step1/Step2/Step3, feedback, final report, and claim validation as the main workflow.
 - `qe_unified_dse_framework_v0.md` - Unified DSE v0 architecture and implementation plan. This is an additive Stage-A evidence-only, adjudicator-ready wrapper plan, not a replacement for the canonical sweep runner or adjudicator.
 
 ```bash
@@ -120,6 +121,7 @@ python3 docs/benchmarks/check_qe_ic_component_graph_v1.py
 
 ### Runbooks
 - `qe_cpu_gpu_baseline_acquisition_runbook_v0.md` - Baseline acquisition procedures
+- `generic_dse_simulation_system_handbook_v1.md` - Generic DSE + simulation evidence loop handbook and primary broad-workload DSE reading entry
 - `qe_dse_framework_user_manual_v0.md` - DSE framework user manual and evidence/claim-boundary guide
 - `qe_unified_dse_framework_v0.md` - Unified DSE v0 architecture/plan for an additive stdlib package and thin CLI wrapper
 - `qe_next_stage_release_delivery_spec_v0.md` - Release delivery specification
