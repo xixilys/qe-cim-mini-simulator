@@ -19,7 +19,7 @@
 - `docs/architecture/qe_system_optimized_delta_20260413.md`
 - `docs/benchmarks/qe_fpga_workload_group_and_correctness_contract_v0.md`
 - `docs/benchmarks/qe_cpu_gpu_fpga_fairness_and_power_contract_v0.md`
-- `docs/benchmarks/run_systemc_architecture_family_dse_sweep.py`
+- `tools/benchmarks/run_systemc_architecture_family_dse_sweep.py`
 
 ## 1. 冻结后的最小 case set
 

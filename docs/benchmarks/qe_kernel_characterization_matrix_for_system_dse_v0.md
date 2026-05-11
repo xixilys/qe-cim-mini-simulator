@@ -31,13 +31,13 @@
   - `docs/overview/qe_subspace_sampling.md`
 - 算子级 / 数据流级分析：
   - `docs/benchmarks/si8_scf_operator_load_experiment_plan.md`
-  - `docs/benchmarks/analyze_qe_scf_operator_load.py`
+  - `tools/benchmarks/analyze_qe_scf_operator_load.py`
 - 计算模式与硬件亲和性分析：
   - `docs/benchmarks/qe_step1_computational_pattern_analysis_report.md`
   - `docs/benchmarks/qe_multi_case_analysis_report.md`
 - kernel mapping 层 DSE：
   - `docs/benchmarks/qe_step2_kernel_mapping_dse_report.md`
-  - `docs/benchmarks/qe_kernel_mapping_dse_step2.py`
+  - `tools/benchmarks/qe_kernel_mapping_dse_step2.py`
 - 系统级 DSE 主线与开放轴：
   - `docs/benchmarks/qe_ic_system_level_dse_axes_v0.md`
   - `docs/benchmarks/qe_next_stage_dse_strategy_v0.md`

@@ -267,7 +267,7 @@
 先用已有 analytical model + local scripts 填 `CPU only` 列：
 
 - `docs/benchmarks/qe_shell_stage_analytical_bounds_model_v0.md`
-- `docs/benchmarks/run_cpu_baseline.py`
+- `tools/benchmarks/run_cpu_baseline.py`
 
 这里的作用不是直接给出最终 shell time，而是冻结：
 

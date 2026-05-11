@@ -194,7 +194,7 @@ export QE_SUBSPACE_MIN_N=32
 
 之后再用：
 
-- [`summarize_qe_subspace_trace.py`](/Volumes/remote/phd/year_2/project/dft加速/docs/benchmarks/summarize_qe_subspace_trace.py)
+- [`summarize_qe_subspace_trace.py`](/Volumes/remote/phd/year_2/project/dft加速/tools/benchmarks/summarize_qe_subspace_trace.py)
 
 对 CSV 做初步汇总。
 

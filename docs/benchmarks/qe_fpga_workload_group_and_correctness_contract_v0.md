@@ -114,8 +114,8 @@ phase-1 的最终 thesis 不能只靠：
 
 并通过已有 helper 路径归一化和比较：
 
-- `docs/benchmarks/normalize_qe_gold_baseline.py`
-- `docs/benchmarks/compare_qe_gold_correctness.py`
+- `tools/benchmarks/normalize_qe_gold_baseline.py`
+- `tools/benchmarks/compare_qe_gold_correctness.py`
 
 ## 4.2 v0 required fields
 
@@ -338,7 +338,7 @@ phase-1 的最终 thesis 不能只靠：
 对于进入 decisive lane 的实际 artifact 目录，推荐在每次新增 GPU / board row 后运行：
 
 ```bash
-python3 docs/benchmarks/assess_qe_phase1_evidence_closure.py \
+python3 tools/benchmarks/assess_qe_phase1_evidence_closure.py \
   --gpu-baseline-dir <gpu_dir_1> \
   --gpu-baseline-dir <gpu_dir_2> \
   --board-dir <board_dir_1>
@@ -347,7 +347,7 @@ python3 docs/benchmarks/assess_qe_phase1_evidence_closure.py \
 如果需要同时产出人可读摘要，再使用：
 
 ```bash
-python3 docs/benchmarks/run_qe_phase1_closure_pipeline.py \
+python3 tools/benchmarks/run_qe_phase1_closure_pipeline.py \
   --gpu-baseline-dir <gpu_dir_1> \
   --gpu-baseline-dir <gpu_dir_2> \
   --board-dir <board_dir_1> \
@@ -357,7 +357,7 @@ python3 docs/benchmarks/run_qe_phase1_closure_pipeline.py \
 若后续只想把已有 closure JSON 重新渲染成 Markdown，也可直接运行：
 
 ```bash
-python3 docs/benchmarks/render_qe_phase1_evidence_closure_md.py \
+python3 tools/benchmarks/render_qe_phase1_evidence_closure_md.py \
   --input <report_prefix>.json \
   --output <report_prefix>.md
 ```

@@ -51,7 +51,7 @@
 #### Phase 2.2.2: Template Projection Script ✅
 
 **Deliverables**:
-- `docs/benchmarks/template_to_systemc_config.py` (195 lines)
+- `tools/benchmarks/template_to_systemc_config.py` (195 lines)
 - `docs/overview/phase2_2_completion_report.md` (完成报告)
 
 **Testing Results**:
@@ -108,7 +108,7 @@
 **Source Code**:
 - `model/qe_band_solver_model/include/architecture_config.hpp`
 - `model/qe_band_solver_model/src/architecture_config.cpp`
-- `docs/benchmarks/template_to_systemc_config.py`
+- `tools/benchmarks/template_to_systemc_config.py`
 
 **Documentation**:
 - `docs/overview/phase2_1_systemc_analysis.md`

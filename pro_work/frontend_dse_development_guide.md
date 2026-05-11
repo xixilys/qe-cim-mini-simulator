@@ -25,7 +25,7 @@
 - 搜索结果容易看起来像“真实性能结论”，但还没有和 SystemC/gem5/implementation evidence 形成严格闭环。
 - BO 结果和 `unified_dse` 的 claim ceiling / adjudicator 体系尚未合并。
 
-第二条是 `docs/benchmarks/unified_dse/`：它偏向 evidence-only pipeline 和 stage gate。它的优势是：
+第二条是 `tools/benchmarks/unified_dse/`：它偏向 evidence-only pipeline 和 stage gate。它的优势是：
 
 - 有明确的 design point identity：`family / diag_policy / offload_scope / resident_policy / partition_strategy`。
 - 有 `stage_a_contracts.py`，能生成 backend-neutral schema、SystemC feedback contract、gem5 handoff contract、QE anchor refs。

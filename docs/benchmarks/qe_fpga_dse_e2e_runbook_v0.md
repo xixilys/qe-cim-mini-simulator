@@ -7,7 +7,7 @@ correctness claim.
 ## Command
 
 ```bash
-python3 docs/benchmarks/run_qe_fpga_dse_e2e_v0.py \
+python3 tools/benchmarks/run_qe_fpga_dse_e2e_v0.py \
   --output-dir tmp/qe_fpga_dse_e2e_v0 \
   --top-k 3 \
   --b4-top-n 1 \
@@ -19,7 +19,7 @@ To attach externally materialized Stage C/D evidence without executing QE,
 HLS, RTL, board, or ASIC tools inside the DSE runner:
 
 ```bash
-python3 docs/benchmarks/run_qe_fpga_dse_e2e_v0.py \
+python3 tools/benchmarks/run_qe_fpga_dse_e2e_v0.py \
   --output-dir tmp/qe_fpga_dse_e2e_stage_cd_v0 \
   --preferred-family F2 \
   --max-design-points 8 \
@@ -36,7 +36,7 @@ The Stage C/D artifacts must already exist. Stage C can be materialized from a
 `qe_gold_gate_summary_v0.json`:
 
 ```bash
-python3 docs/benchmarks/materialize_qe_stage_c_correctness_v0.py \
+python3 tools/benchmarks/materialize_qe_stage_c_correctness_v0.py \
   --gold-summary tmp/qe_gold_gate_summary_v0.json \
   --output-dir tmp/stage_c
 ```
@@ -46,7 +46,7 @@ or placeholder inputs intentionally downgrade to `implementation_projection` /
 `partial`:
 
 ```bash
-python3 docs/benchmarks/materialize_qe_stage_d_implementation_evidence_v0.py \
+python3 tools/benchmarks/materialize_qe_stage_d_implementation_evidence_v0.py \
   --candidate-id <candidate> \
   --output tmp/stage_d/<candidate>.implementation_evidence.json \
   --implementation-target-class fpga \
@@ -59,7 +59,7 @@ python3 docs/benchmarks/materialize_qe_stage_d_implementation_evidence_v0.py \
 For the real-gem5/B4 hard gate with repo-relative CLI paths:
 
 ```bash
-python3 docs/benchmarks/run_qe_fpga_dse_e2e_v0.py \
+python3 tools/benchmarks/run_qe_fpga_dse_e2e_v0.py \
   --output-dir tmp/qe_fpga_dse_e2e_real_b4_relpath_verify \
   --preferred-family F2 \
   --max-design-points 8 \
@@ -216,7 +216,7 @@ cycle accuracy.
 Fresh strict-event Top-K/B4 proof command:
 
 ```bash
-python3 docs/benchmarks/run_qe_fpga_dse_e2e_v0.py \
+python3 tools/benchmarks/run_qe_fpga_dse_e2e_v0.py \
   --output-dir tmp/qe_fpga_dse_event_tick_closed_loop_probe \
   --max-design-points 4 \
   --shortlist-size 2 \
@@ -250,7 +250,7 @@ The E2E runner can now emit a separate final-best decision artifact instead of
 renaming the bounded proxy rerank as a winner:
 
 ```bash
-python3 docs/benchmarks/run_qe_fpga_dse_e2e_v0.py \
+python3 tools/benchmarks/run_qe_fpga_dse_e2e_v0.py \
   --output-dir tmp/qe_fpga_final_best_probe \
   --max-design-points 4 \
   --shortlist-size 2 \
@@ -285,16 +285,16 @@ state, not a failure of the final-best gate.
 Helper entry points for producer lanes:
 
 ```bash
-python3 docs/benchmarks/build_qe_candidate_evidence_manifest_v0.py \
+python3 tools/benchmarks/build_qe_candidate_evidence_manifest_v0.py \
   --e2e-manifest tmp/qe_fpga_final_best_probe/qe_fpga_dse_e2e_manifest_v0.json \
   --output tmp/qe_fpga_final_best_probe/qe_candidate_evidence_manifest_v0.json
 
-python3 docs/benchmarks/run_qe_stage_c_correctness_for_candidates_v0.py \
+python3 tools/benchmarks/run_qe_stage_c_correctness_for_candidates_v0.py \
   --candidate-manifest tmp/qe_fpga_final_best_probe/qe_candidate_evidence_manifest_v0.json \
   --output-dir tmp/stage_c_candidates \
   --gold-summary tmp/qe_gold_gate_summary_v0.json
 
-python3 docs/benchmarks/stage_d_adapters/hls_synthesis_adapter_v0.py \
+python3 tools/benchmarks/stage_d_adapters/hls_synthesis_adapter_v0.py \
   --candidate-evidence-map tmp/hls_candidate_evidence_map.json \
   --output-dir tmp/stage_d_hls \
   --qe-correctness-report-for '<candidate_id>=tmp/stage_c_candidates/stage_c_reports/<candidate>.qe_dse_qe_equivalent_correctness_report_v0.json'

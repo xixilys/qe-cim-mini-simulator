@@ -10,7 +10,8 @@ This repository currently contains:
 - `model/`: model index plus two separate model stacks
 - `model/ozaki_subspace_model/`: standalone Ozaki/CRT GEMM and iterative subspace evaluator stack
 - `model/qe_band_solver_model/`: a timed-functional `c_bands` episode subsystem demo
-- `docs/`: design notes, benchmark helpers, and minimal QE inputs
+- `docs/`: design notes, benchmark contracts/artifacts, and minimal QE inputs
+- `tools/`: runnable benchmark, DSE, and architecture-analysis helper scripts
 
 It intentionally excludes:
 

@@ -76,7 +76,7 @@ cd /Volumes/remote/phd/year_2/project/dft加速
 ### 2. 自定义 DSE 扫描
 
 ```bash
-python3 docs/benchmarks/run_systemc_architecture_family_dse_sweep.py \
+python3 tools/benchmarks/run_systemc_architecture_family_dse_sweep.py \
   --workloads si8_pbe_uspp graphene_pbe_uspp \
   --families F1 F2 F3 \
   --max-design-points 50 \
@@ -89,7 +89,7 @@ python3 docs/benchmarks/run_systemc_architecture_family_dse_sweep.py \
 cmake -S model/qe_band_solver_model -B model/qe_band_solver_model/build
 cmake --build model/qe_band_solver_model/build -j
 
-python3 docs/benchmarks/run_systemc_architecture_family_dse_sweep.py \
+python3 tools/benchmarks/run_systemc_architecture_family_dse_sweep.py \
   --workloads si8_pbe_nc \
   --families F2 \
   --execute-model \
@@ -102,7 +102,7 @@ python3 docs/benchmarks/run_systemc_architecture_family_dse_sweep.py \
 ### 迭代 1: 快速探索 (Stub 模式)
 
 ```bash
-python3 docs/benchmarks/run_systemc_architecture_family_dse_sweep.py \
+python3 tools/benchmarks/run_systemc_architecture_family_dse_sweep.py \
   --workloads si4_pbe_uspp_small \
   --families F1 F2 F3 \
   --max-design-points 100 \
@@ -114,7 +114,7 @@ python3 docs/benchmarks/run_systemc_architecture_family_dse_sweep.py \
 ### 迭代 2: 精确验证 (Simulator 模式)
 
 ```bash
-python3 docs/benchmarks/run_systemc_architecture_family_dse_sweep.py \
+python3 tools/benchmarks/run_systemc_architecture_family_dse_sweep.py \
   --workloads si8_pbe_nc si8_pbe_uspp \
   --families F2 \
   --execute-model \
@@ -128,7 +128,7 @@ python3 docs/benchmarks/run_systemc_architecture_family_dse_sweep.py \
 ### 迭代 3: 泛化测试
 
 ```bash
-python3 docs/benchmarks/run_systemc_architecture_family_dse_sweep.py \
+python3 tools/benchmarks/run_systemc_architecture_family_dse_sweep.py \
   --workloads graphene_pbe_paw au_slab_subspace sic32_subspace \
   --families F2 \
   --execute-model \
@@ -140,7 +140,7 @@ python3 docs/benchmarks/run_systemc_architecture_family_dse_sweep.py \
 ### 迭代 4: 生成决策报告
 
 ```bash
-python3 docs/benchmarks/run_qe_phase1_closure_pipeline.py \
+python3 tools/benchmarks/run_qe_phase1_closure_pipeline.py \
   --baseline-root results/gold_baselines \
   --board-root results/iter2_accurate \
   --output-dir results/closure
@@ -195,7 +195,7 @@ cat results/closure/qe_phase1_evidence_closure_report.md
 ### 验证配置
 
 ```bash
-python3 docs/benchmarks/check_qe_ic_component_graph_v1.py \
+python3 tools/benchmarks/check_qe_ic_component_graph_v1.py \
   --component-catalog docs/architecture/qe_ic_component_catalog_system_level_v1.json \
   --graph-seed my_custom_graph.json \
   --print-projection
@@ -208,10 +208,10 @@ python3 docs/benchmarks/check_qe_ic_component_graph_v1.py \
 - `docs/architecture/qe_ic_graph_seed_system_level_v1.json` - Graph 模板
 
 ### 工具脚本
-- `docs/benchmarks/run_systemc_architecture_family_dse_sweep.py` - DSE 主引擎
-- `docs/benchmarks/check_qe_ic_component_graph_v1.py` - Graph 验证器
-- `docs/benchmarks/qe_ic_graph_projection_utils.py` - 投影工具
-- `docs/benchmarks/run_qe_phase1_closure_pipeline.py` - Closure 分析
+- `tools/benchmarks/run_systemc_architecture_family_dse_sweep.py` - DSE 主引擎
+- `tools/benchmarks/check_qe_ic_component_graph_v1.py` - Graph 验证器
+- `tools/benchmarks/qe_ic_graph_projection_utils.py` - 投影工具
+- `tools/benchmarks/run_qe_phase1_closure_pipeline.py` - Closure 分析
 
 ### 文档
 - `docs/architecture/qe_ic_component_graph_input_template_v1.md` - Component/Graph 规范

@@ -2,10 +2,10 @@
 
 ## Purpose
 
-Project-level design documentation, benchmark workflows, and validation artifacts for the DFT acceleration system. This directory contains:
+Project-level design documentation, benchmark runbooks, and validation artifacts for the DFT acceleration system. Runnable Python tools live under `tools/`. This directory contains:
 
 - **Architecture specifications**: System design, module interfaces, transaction semantics
-- **Benchmark infrastructure**: DSE framework, workload analysis, baseline acquisition
+- **Benchmark documentation**: DSE contracts, workload analysis reports, baseline runbooks, schemas, and evidence artifacts
 - **CIM design**: Macro block structure, timing models, resident context management
 - **Control specifications**: ISA, control word formats, descriptor templates
 - **Survey materials**: Industry analysis, tool references, software evolution
@@ -15,7 +15,7 @@ Project-level design documentation, benchmark workflows, and validation artifact
 ```
 docs/
 ├── architecture/        # System architecture and module specifications
-├── benchmarks/          # DSE framework, workload analysis, baseline scripts
+├── benchmarks/          # DSE contracts, runbooks, schemas, and evidence artifacts
 ├── cim/                 # CIM macro design and timing models
 ├── control/             # Control ISA and descriptor specifications
 ├── overview/            # Project timeline, handoff notes, sampling guides
@@ -41,7 +41,7 @@ Start with these canonical documents:
 4. `model/qe_band_solver_model/README.md` - Runnable model entry point
 
 ### For Benchmarking
-1. `benchmarks/run_systemc_architecture_family_dse_sweep.py` - DSE sweep entry point
+1. `tools/benchmarks/run_systemc_architecture_family_dse_sweep.py` - DSE sweep entry point
 2. `benchmarks/qe_cpu_gpu_baseline_acquisition_runbook_v0.md` - Baseline acquisition guide
 3. `benchmarks/qe_fpga_workload_group_and_correctness_contract_v0.md` - Workload contracts
 4. `overview/qe_subspace_sampling.md` - QE sampling methodology
@@ -61,14 +61,14 @@ System architecture specifications, module interfaces, and design contracts.
 **See:** `docs/architecture/AGENTS.md` for detailed guidance
 
 ### benchmarks/
-DSE framework, workload analysis scripts, baseline acquisition tools, and validation infrastructure.
+DSE contracts, workload-analysis reports, baseline runbooks, schemas, and validation artifacts. Runnable Python tools are in `tools/benchmarks/`.
 
 **Key files:**
-- `run_systemc_architecture_family_dse_sweep.py` - DSE sweep orchestrator
+- `tools/benchmarks/run_systemc_architecture_family_dse_sweep.py` - DSE sweep orchestrator
 - `qe_cpu_gpu_baseline_acquisition_runbook_v0.md` - Baseline acquisition guide
 - `qe_fpga_workload_group_and_correctness_contract_v0.md` - Workload contracts
 - `qe_cpu_gpu_fpga_fairness_and_power_contract_v0.md` - Fairness contract
-- `assess_qe_phase1_evidence_closure.py` - Evidence closure assessment
+- `tools/benchmarks/assess_qe_phase1_evidence_closure.py` - Evidence closure assessment
 
 **See:** `docs/benchmarks/AGENTS.md` for detailed guidance
 
@@ -134,21 +134,21 @@ Industry surveys, tool references, and software evolution analysis.
 
 ### Benchmark Workflow
 1. Extract QE traces using `overview/qe_subspace_sampling.md`
-2. Run DSE sweep: `benchmarks/run_systemc_architecture_family_dse_sweep.py`
-3. Assess evidence closure: `benchmarks/assess_qe_phase1_evidence_closure.py`
-4. Generate reports: `benchmarks/render_qe_phase1_evidence_closure_md.py`
+2. Run DSE sweep: `tools/benchmarks/run_systemc_architecture_family_dse_sweep.py`
+3. Assess evidence closure: `tools/benchmarks/assess_qe_phase1_evidence_closure.py`
+4. Generate reports: `tools/benchmarks/render_qe_phase1_evidence_closure_md.py`
 
 ### Baseline Acquisition Workflow
 1. Follow `benchmarks/qe_cpu_gpu_baseline_acquisition_runbook_v0.md`
-2. Initialize artifact bundle: `benchmarks/init_qe_phase1_artifact_bundle.py`
-3. Assess readiness: `benchmarks/assess_qe_cpu_gpu_baseline_readiness.py`
-4. Validate contracts: `benchmarks/check_qe_phase1_artifact_contracts.py`
+2. Initialize artifact bundle: `tools/benchmarks/init_qe_phase1_artifact_bundle.py`
+3. Assess readiness: `tools/benchmarks/assess_qe_cpu_gpu_baseline_readiness.py`
+4. Validate contracts: `tools/benchmarks/check_qe_phase1_artifact_contracts.py`
 
 ### Architecture Exploration Workflow
 1. Define component catalog: `architecture/qe_ic_component_catalog_system_level_v1.json`
 2. Define graph topology: `architecture/qe_ic_graph_seed_system_level_v1.json`
-3. Run projection: `benchmarks/qe_ic_graph_projection_utils.py`
-4. Execute DSE sweep: `benchmarks/run_systemc_architecture_family_dse_sweep.py`
+3. Run projection: `tools/benchmarks/qe_ic_graph_projection_utils.py`
+4. Execute DSE sweep: `tools/benchmarks/run_systemc_architecture_family_dse_sweep.py`
 
 ## Critical Rules
 
@@ -177,8 +177,8 @@ Industry surveys, tool references, and software evolution analysis.
 - Algorithm validation in `model/ozaki_subspace_model/` → architecture assumptions
 - DSE framework invokes SystemC model for performance estimation
 
-### With Benchmark Scripts
-- Python scripts in `benchmarks/` consume architecture specs
+### With Benchmark Tools
+- Python tools in `tools/benchmarks/` consume architecture specs
 - DSE sweep generates results validated against contracts
 - Baseline acquisition follows runbook procedures
 
@@ -192,35 +192,35 @@ Industry surveys, tool references, and software evolution analysis.
 ### Contract Validation
 ```bash
 # Validate phase-1 artifact contracts
-python3 docs/benchmarks/check_qe_phase1_artifact_contracts.py
+python3 tools/benchmarks/check_qe_phase1_artifact_contracts.py
 
 # Validate component/graph v1 contracts
-python3 docs/benchmarks/check_qe_ic_component_graph_v1.py
+python3 tools/benchmarks/check_qe_ic_component_graph_v1.py
 
 # Run contract regression tests
-python3 docs/benchmarks/test_qe_phase1_artifact_contracts.py
+python3 tools/benchmarks/test_qe_phase1_artifact_contracts.py
 ```
 
 ### Evidence Closure Assessment
 ```bash
 # Assess phase-1 evidence closure
-python3 docs/benchmarks/assess_qe_phase1_evidence_closure.py
+python3 tools/benchmarks/assess_qe_phase1_evidence_closure.py
 
 # Generate closure report
-python3 docs/benchmarks/run_qe_phase1_closure_pipeline.py
+python3 tools/benchmarks/run_qe_phase1_closure_pipeline.py
 ```
 
 ### Baseline Readiness
 ```bash
 # Assess CPU+GPU baseline readiness
-python3 docs/benchmarks/assess_qe_cpu_gpu_baseline_readiness.py
+python3 tools/benchmarks/assess_qe_cpu_gpu_baseline_readiness.py
 ```
 
 ## Documentation Style
 
 - **Markdown**: Use standard markdown with code blocks
 - **JSON**: Machine-readable templates and schemas
-- **Python**: Validation scripts and DSE framework
+- **Python**: Validation scripts and DSE framework live under `tools/`; docs reference their commands
 - **Diagrams**: ASCII art or external tools (not embedded images)
 
 ## Next Steps

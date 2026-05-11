@@ -109,7 +109,7 @@
 - `docs/benchmarks/systemc_architecture_family_dse_result_schema_v0.json`
 - `docs/benchmarks/qe_fast_layer_proxy_assumption_set_v0.json`
 - `docs/benchmarks/qe_step2_kernel_mapping_dse_report.md`
-- `docs/benchmarks/qe_kernel_mapping_dse_step2.py`
+- `tools/benchmarks/qe_kernel_mapping_dse_step2.py`
 
 ### 4.3 当前 Step-3 artifact
 
@@ -200,7 +200,7 @@ cmake --build model/qe_band_solver_model/build -j4
 #### Run next-stage phase
 
 ```bash
-python3 docs/benchmarks/run_qe_next_stage_dse_phase.py \
+python3 tools/benchmarks/run_qe_next_stage_dse_phase.py \
   --output-dir tmp/qe_next_stage_release \
   --execute-model
 ```
@@ -233,14 +233,14 @@ python3 docs/benchmarks/run_qe_next_stage_dse_phase.py \
 #### Release bundle validator
 
 ```bash
-python3 docs/benchmarks/check_qe_next_stage_release_bundle.py \
+python3 tools/benchmarks/check_qe_next_stage_release_bundle.py \
   --summary tmp/qe_next_stage_release/qe_next_stage_dse_phase_summary.json
 ```
 
 #### Strategy / contract alignment validator
 
 ```bash
-python3 docs/benchmarks/check_qe_next_stage_dse_simulator_contracts.py
+python3 tools/benchmarks/check_qe_next_stage_dse_simulator_contracts.py
 ```
 
 ### 7.2 当前状态

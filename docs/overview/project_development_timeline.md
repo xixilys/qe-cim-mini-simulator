@@ -481,8 +481,8 @@ project -> small transform -> back-project
 ### 13.4 这一阶段的代表文档
 
 - [`docs/benchmarks/qe_system_workload_revalidation_report_20260321.md`](/Volumes/remote/phd/year_2/project/dft加速/docs/benchmarks/qe_system_workload_revalidation_report_20260321.md)
-- [`docs/benchmarks/run_qe_workload_matrix.py`](/Volumes/remote/phd/year_2/project/dft加速/docs/benchmarks/run_qe_workload_matrix.py)
-- [`docs/benchmarks/analyze_qe_workload_revalidation.py`](/Volumes/remote/phd/year_2/project/dft加速/docs/benchmarks/analyze_qe_workload_revalidation.py)
+- [`tools/benchmarks/run_qe_workload_matrix.py`](/Volumes/remote/phd/year_2/project/dft加速/tools/benchmarks/run_qe_workload_matrix.py)
+- [`tools/benchmarks/analyze_qe_workload_revalidation.py`](/Volumes/remote/phd/year_2/project/dft加速/tools/benchmarks/analyze_qe_workload_revalidation.py)
 
 ## 14. 2026-03-22 ~ 2026-03-23：行业对照把主流路线与我们的差异化位置讲清楚
 
@@ -803,9 +803,9 @@ HostSCF(mock)
 
 1. [`docs/benchmarks/qe_system_workload_revalidation_report_20260321.md`](/Volumes/remote/phd/year_2/project/dft加速/docs/benchmarks/qe_system_workload_revalidation_report_20260321.md)
    用新一轮真实 `QE` rerun 复核系统级 workload，并把系统对象更明确地钉到 `electrons -> c_bands`。
-2. [`docs/benchmarks/run_qe_workload_matrix.py`](/Volumes/remote/phd/year_2/project/dft加速/docs/benchmarks/run_qe_workload_matrix.py)
+2. [`tools/benchmarks/run_qe_workload_matrix.py`](/Volumes/remote/phd/year_2/project/dft加速/tools/benchmarks/run_qe_workload_matrix.py)
    批量重跑小体系 `QE` workload 的自动化脚本。
-3. [`docs/benchmarks/analyze_qe_workload_revalidation.py`](/Volumes/remote/phd/year_2/project/dft加速/docs/benchmarks/analyze_qe_workload_revalidation.py)
+3. [`tools/benchmarks/analyze_qe_workload_revalidation.py`](/Volumes/remote/phd/year_2/project/dft加速/tools/benchmarks/analyze_qe_workload_revalidation.py)
    汇总本轮 rerun 结果并生成系统级判断的分析脚本。
 
 ### 2026-03-22 ~ 2026-03-23

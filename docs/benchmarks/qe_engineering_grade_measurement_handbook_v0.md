@@ -29,10 +29,10 @@
 - `docs/benchmarks/qe_cpu_gpu_baseline_acquisition_runbook_v0.md`
 - `docs/benchmarks/qe_cpu_gpu_fpga_fairness_and_power_contract_v0.md`
 - `docs/benchmarks/qe_simulator_board_observability_contract_v0.md`
-- `docs/benchmarks/check_qe_phase1_artifact_contracts.py`
-- `docs/benchmarks/init_qe_phase1_artifact_bundle.py`
-- `docs/benchmarks/assess_qe_cpu_gpu_baseline_readiness.py`
-- `docs/benchmarks/assess_qe_phase1_evidence_closure.py`
+- `tools/benchmarks/check_qe_phase1_artifact_contracts.py`
+- `tools/benchmarks/init_qe_phase1_artifact_bundle.py`
+- `tools/benchmarks/assess_qe_cpu_gpu_baseline_readiness.py`
+- `tools/benchmarks/assess_qe_phase1_evidence_closure.py`
 - 若你还需要理解当前 proxy 指标是**怎么从模型输出一路算出来的**，请同时阅读：
   - `docs/benchmarks/qe_proxy_estimation_flow_and_worked_example_v0.md`
 - 若你需要一页可以直接放进 PPT/周报的摘要，请同时阅读：
@@ -384,7 +384,7 @@
 #### GPU baseline
 
 ```bash
-python3 docs/benchmarks/init_qe_phase1_artifact_bundle.py \
+python3 tools/benchmarks/init_qe_phase1_artifact_bundle.py \
   baseline \
   --out-dir "$GPU_RUN_DIR" \
   --workload-id si4_pbe_uspp_small \
@@ -395,7 +395,7 @@ python3 docs/benchmarks/init_qe_phase1_artifact_bundle.py \
 #### FPGA board
 
 ```bash
-python3 docs/benchmarks/init_qe_phase1_artifact_bundle.py \
+python3 tools/benchmarks/init_qe_phase1_artifact_bundle.py \
   board \
   --out-dir "$BOARD_RUN_DIR" \
   --workload-id si4_pbe_uspp_small \
@@ -420,14 +420,14 @@ python3 docs/benchmarks/init_qe_phase1_artifact_bundle.py \
 ### Step 3：先做结构检查
 
 ```bash
-python3 docs/benchmarks/check_qe_phase1_artifact_contracts.py \
+python3 tools/benchmarks/check_qe_phase1_artifact_contracts.py \
   --board-dir "$BOARD_RUN_DIR"
 ```
 
 ### Step 4：做 GPU readiness 判断
 
 ```bash
-python3 docs/benchmarks/assess_qe_cpu_gpu_baseline_readiness.py \
+python3 tools/benchmarks/assess_qe_cpu_gpu_baseline_readiness.py \
   --baseline-dir "$GPU_RUN_DIR"
 ```
 
@@ -441,7 +441,7 @@ python3 docs/benchmarks/assess_qe_cpu_gpu_baseline_readiness.py \
 ### Step 5：做 phase-1 closure 判断
 
 ```bash
-python3 docs/benchmarks/run_qe_phase1_closure_pipeline.py \
+python3 tools/benchmarks/run_qe_phase1_closure_pipeline.py \
   --gpu-baseline-dir "$GPU_RUN_DIR" \
   --board-dir "$BOARD_RUN_DIR" \
   --output-prefix "$OUT_DIR/closure_report"

@@ -24,8 +24,8 @@
 ### 2.1 trace-backed case 摘要
 
 ```bash
-python3 docs/benchmarks/summarize_qe_subspace_trace.py docs/benchmarks/results/qe_si_medium_trace.csv
-python3 docs/benchmarks/summarize_qe_subspace_trace.py docs/benchmarks/results/qe_graphene_trace.csv
+python3 tools/benchmarks/summarize_qe_subspace_trace.py docs/benchmarks/results/qe_si_medium_trace.csv
+python3 tools/benchmarks/summarize_qe_subspace_trace.py docs/benchmarks/results/qe_graphene_trace.csv
 ```
 
 ### 2.2 shell-contract runnable model
@@ -37,7 +37,7 @@ python3 docs/benchmarks/summarize_qe_subspace_trace.py docs/benchmarks/results/q
 ### 2.3 CPU micro-benchmark 实际执行
 
 ```bash
-/usr/bin/python3 docs/benchmarks/run_cpu_baseline.py --threads 1 --output docs/benchmarks/results/qe_cpu_baseline_threads1_20260402.json
+/usr/bin/python3 tools/benchmarks/run_cpu_baseline.py --threads 1 --output docs/benchmarks/results/qe_cpu_baseline_threads1_20260402.json
 ```
 
 结果：成功。这里刻意没有继续使用默认 `python3`，因为默认解释器缺少 `numpy/scipy/pyscf`；最终采用的是已经验证带依赖的 `/usr/bin/python3`。
@@ -70,8 +70,8 @@ python3 docs/benchmarks/summarize_qe_subspace_trace.py docs/benchmarks/results/q
 
 - 新建了真实可跑输入：`docs/qe_inputs/si4_pbe_uspp_small.in`
 - 将它接入了工作负载脚本：
-  - `docs/benchmarks/run_qe_workload_matrix.py`
-  - `docs/benchmarks/analyze_qe_workload_revalidation.py`
+  - `tools/benchmarks/run_qe_workload_matrix.py`
+  - `tools/benchmarks/analyze_qe_workload_revalidation.py`
 - 实际跑通了这个 case，并生成了 trace / stdout / metadata
 
 这个 workload 当前的 measured descriptor 是：
@@ -155,7 +155,7 @@ run-level 输出还确认：
 抽取命令：
 
 ```bash
-python3 docs/benchmarks/extract_qe_shell_cpu_baseline.py \
+python3 tools/benchmarks/extract_qe_shell_cpu_baseline.py \
   --cases si4_pbe_uspp_small si8_pbe_uspp graphene_pbe_uspp au_slab_subspace sic32_subspace \
   --output docs/benchmarks/results/qe_cpu_shell_aggregate_extract_20260402.json
 ```
@@ -279,7 +279,7 @@ python3 docs/benchmarks/extract_qe_shell_cpu_baseline.py \
 推荐继续使用已验证环境：
 
 ```bash
-/usr/bin/python3 docs/benchmarks/run_cpu_baseline.py --threads 1 --output <cpu-baseline.json>
+/usr/bin/python3 tools/benchmarks/run_cpu_baseline.py --threads 1 --output <cpu-baseline.json>
 ```
 
 目标：

@@ -25,7 +25,7 @@
 ### 3.1 Correctness lane
 - `/Volumes/remote/phd/year_2/project/dft加速/docs/benchmarks/qe_gold_correctness_contract_v0.md`
 - `/Volumes/remote/phd/year_2/project/dft加速/docs/benchmarks/qe_gold_numerical_tolerance_schema_v0.json`
-- `/Volumes/remote/phd/year_2/project/dft加速/docs/benchmarks/compare_qe_gold_correctness.py`
+- `/Volumes/remote/phd/year_2/project/dft加速/tools/benchmarks/compare_qe_gold_correctness.py`
 
 这些文件已经足以固定：
 - QE gold correctness gate 的必需字段
@@ -44,7 +44,7 @@
 
 ### 3.3 Sweep lane
 - `/Volumes/remote/phd/year_2/project/dft加速/docs/benchmarks/systemc_architecture_family_dse_result_schema_v0.json`
-- `/Volumes/remote/phd/year_2/project/dft加速/docs/benchmarks/run_systemc_architecture_family_dse_sweep.py`
+- `/Volumes/remote/phd/year_2/project/dft加速/tools/benchmarks/run_systemc_architecture_family_dse_sweep.py`
 
 这些文件已经足以固定：
 - projection/ranking 输出的 machine-readable schema

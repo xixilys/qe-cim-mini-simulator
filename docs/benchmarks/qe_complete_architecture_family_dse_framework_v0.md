@@ -19,13 +19,13 @@ The framework is grounded in these repository anchors.
 
 | Anchor | Local file or hook | Role in this framework |
 | --- | --- | --- |
-| Current architecture-family runner | `docs/benchmarks/run_systemc_architecture_family_dse_sweep.py` | Produces `F1`, `F2`, and `F3` sweep rows plus template-driven scaffold rows, `family_summary`, projection flags, graph evidence, gold gate artifacts, and CSV or JSON bundles. |
+| Current architecture-family runner | `tools/benchmarks/run_systemc_architecture_family_dse_sweep.py` | Produces `F1`, `F2`, and `F3` sweep rows plus template-driven scaffold rows, `family_summary`, projection flags, graph evidence, gold gate artifacts, and CSV or JSON bundles. |
 | Result schema | `docs/benchmarks/systemc_architecture_family_dse_result_schema_v0.json` | Defines the current bundle shape consumed by phase, release, and adjudicator layers. |
-| Template loader | `docs/benchmarks/architecture_template_loader.py` | Loads and validates architecture templates against `docs/architecture/architecture_template_schema_v1.json`. |
-| Candidate generator | `docs/benchmarks/architecture_candidate_generator.py` | Produces grid, random, and Latin-hypercube candidate variants from templates. |
-| Template projector | `docs/benchmarks/template_to_systemc_config.py` | Projects architecture templates to SystemC configuration JSON. |
+| Template loader | `tools/benchmarks/architecture_template_loader.py` | Loads and validates architecture templates against `docs/architecture/architecture_template_schema_v1.json`. |
+| Candidate generator | `tools/benchmarks/architecture_candidate_generator.py` | Produces grid, random, and Latin-hypercube candidate variants from templates. |
+| Template projector | `tools/benchmarks/template_to_systemc_config.py` | Projects architecture templates to SystemC configuration JSON. |
 | Runtime config hook | `model/qe_band_solver_model/sc_main.cpp`, `QEBS_ARCH_CONFIG` | Lets the runnable model load an external architecture config JSON. The same entry also accepts `QEBS_*` workload, family, policy, and graph-frontdoor fields. |
-| Graph projection helper | `docs/benchmarks/qe_ic_graph_projection_utils.py` | Exports graph/component specs into design-point keys, shared join keys, and `SystemRunConfig` graph-frontdoor patches. |
+| Graph projection helper | `tools/benchmarks/qe_ic_graph_projection_utils.py` | Exports graph/component specs into design-point keys, shared join keys, and `SystemRunConfig` graph-frontdoor patches. |
 | Graph projection contract | `docs/architecture/qe_ic_component_graph_projection_v1.md` | Freezes the intended mapping from `component_catalog + graph_spec` to design point, join keys, and runtime frontdoor fields. |
 | Component catalog and graph seed | `docs/architecture/qe_ic_component_catalog_system_level_v1.json`, `docs/architecture/qe_ic_graph_seed_system_level_v1.json` | Canonical system-level component library and balanced F2 seed. |
 | Fidelity ladder | `docs/benchmarks/qe_dse_fidelity_ladder_and_execution_loop_v0.md` | Defines the low-cost, fast-layer, accurate-layer, generalization, and release or authority layers. |
@@ -33,7 +33,7 @@ The framework is grounded in these repository anchors.
 | Calibration contract | `docs/benchmarks/qe_ic_simulator_calibration_contract_v0.md` | Defines descriptor fields, calibration ownership, join-key export rules, and fast versus numerically grounded lanes. |
 | Correctness and fairness contracts | `docs/benchmarks/qe_fpga_workload_group_and_correctness_contract_v0.md`, `docs/benchmarks/qe_cpu_gpu_fpga_fairness_and_power_contract_v0.md` | Keep workload, tolerance, timing, power, rewrite, and GPU baseline comparisons comparable. |
 | Adjudicator contract | `docs/benchmarks/qe_ic_adjudicator_authority_contract_v0.md` | Keeps DSE, GPU annex, projection, phase closure, and stage recommendation surfaces as evidence only. |
-| QE workload evidence | `docs/overview/qe_subspace_sampling.md`, `docs/benchmarks/summarize_qe_subspace_trace.py`, `docs/benchmarks/qe_kernel_characterization_matrix_for_system_dse_v0.md`, `docs/benchmarks/qe_partition_and_interface_for_system_dse_v0.md`, `docs/benchmarks/qe_dse_parameter_stack_for_system_dse_v0.md` | Provides trace, signature, partition, and parameter evidence for the workload IR. |
+| QE workload evidence | `docs/overview/qe_subspace_sampling.md`, `tools/benchmarks/summarize_qe_subspace_trace.py`, `docs/benchmarks/qe_kernel_characterization_matrix_for_system_dse_v0.md`, `docs/benchmarks/qe_partition_and_interface_for_system_dse_v0.md`, `docs/benchmarks/qe_dse_parameter_stack_for_system_dse_v0.md` | Provides trace, signature, partition, and parameter evidence for the workload IR. |
 
 The requested `dse_v2` Bayesian-optimization proof of concept is treated as a future candidate-proposal layer named `dse_v2_bo_poc`. It may consume DSE result bundles and propose new candidate points, but it does not replace the runner, contracts, promotion gates, accurate layer, or adjudicator. No current Stage A report may treat a Bayesian proposal as a claim-bearing result unless it is projected back through the same schema, evaluated through the same fidelity ladder, and admitted by the same authority rules.
 
@@ -263,7 +263,7 @@ The bounded Stage-A template flow is:
 A reproducible bounded smoke command is:
 
 ```bash
-python3 docs/benchmarks/run_systemc_architecture_family_dse_sweep.py \
+python3 tools/benchmarks/run_systemc_architecture_family_dse_sweep.py \
   --template-driven \
   --architecture-template-dir docs/architecture/architecture_templates \
   --architecture-template-ids \
@@ -363,7 +363,7 @@ This work package owns only the workflow document and companion design-space cat
 Future implementation work may add adapters, validators, or `dse_v2_bo_poc` code, but those changes must be separate work packages with their own validation and authority review.
 
 2026-05-01 Lane-E update: this document, the pro_work closure review, and
-`docs/benchmarks/check_qe_dse_release_claim_boundaries_v0.py` form the
+`tools/benchmarks/check_qe_dse_release_claim_boundaries_v0.py` form the
 docs/release validator surface for evidence-plane v1. That validator is allowed
 to check Markdown/JSON release reports for exact tier labels, SystemC artifact
 refs for higher tiers, same-candidate Stage C / strict B4 / policy-required

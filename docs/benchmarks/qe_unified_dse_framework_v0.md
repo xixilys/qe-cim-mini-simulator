@@ -4,7 +4,7 @@
 
 本文档定义一个 bounded v0 的 Unified DSE Framework 架构和实施计划。它面向后续 implementation agents，说明如何把当前 `QE` architecture-family DSE、design-space spec、SystemC timed-functional proxy、adjudicator intake 和结果分析组织成一套可导入的 Python 标准库包与薄 CLI。
 
-v0 的核心目标是整理和固定证据流，而不是升级当前证据等级。当前 canonical Stage-A 路径仍然是 `docs/benchmarks/run_systemc_architecture_family_dse_sweep.py` 生成 DSE evidence，再由 adjudicator 合同约束 public claim。Unified DSE v0 只能产生 Stage-A evidence-only、adjudicator-ready 的中间产物，不能作为 public decision authority。
+v0 的核心目标是整理和固定证据流，而不是升级当前证据等级。当前 canonical Stage-A 路径仍然是 `tools/benchmarks/run_systemc_architecture_family_dse_sweep.py` 生成 DSE evidence，再由 adjudicator 合同约束 public claim。Unified DSE v0 只能产生 Stage-A evidence-only、adjudicator-ready 的中间产物，不能作为 public decision authority。
 
 本文件继承以下现有边界：
 
@@ -13,7 +13,7 @@ v0 的核心目标是整理和固定证据流，而不是升级当前证据等�
 - `docs/benchmarks/qe_architecture_family_design_space_spec_v0.json` 是 v0 design-space 的机器可读意图来源。
 - `docs/benchmarks/qe_architecture_family_design_space_schema_v0.json` 是 design-space spec 的结构约束。
 - `docs/benchmarks/qe_ic_adjudicator_authority_contract_v0.md` 冻结 adjudicator 是唯一 public decision authority。
-- `docs/benchmarks/run_systemc_architecture_family_dse_sweep.py` 仍是当前 Stage-A family sweep 的 canonical runner。
+- `tools/benchmarks/run_systemc_architecture_family_dse_sweep.py` 仍是当前 Stage-A family sweep 的 canonical runner。
 
 因此，Unified DSE Framework v0 的 claim boundary 如下：
 
@@ -55,13 +55,13 @@ and `docs/architecture/systemc_system_level_dse_advisor_report_template_v0_20260
 v0 实施形态建议为一个标准库 Python package：
 
 ```text
-docs/benchmarks/unified_dse/
+tools/benchmarks/unified_dse/
 ```
 
 再配一个薄 CLI：
 
 ```text
-docs/benchmarks/run_unified_dse_v0.py
+tools/benchmarks/run_unified_dse_v0.py
 ```
 
 CLI 只负责参数解析、调用 package、写出 artifacts 和返回退出码。核心逻辑必须放在 package 内，便于单元测试和后续 adjudicator/phase runner 复用。
@@ -133,7 +133,7 @@ v0 搜索策略应从简单、可复现的策略开始：
 - 默认不执行 SystemC，只生成 planned execution records。
 - 只有 CLI 参数或配置显式允许时，才可以调用 SystemC 路径。
 - 所有 SystemC evidence 都必须标注为 timed-functional/proxy，不得标注为 board-measured。
-- 对当前 runner 的调用应优先复用 `docs/benchmarks/run_systemc_architecture_family_dse_sweep.py`，而不是复制一套 authority surface。
+- 对当前 runner 的调用应优先复用 `tools/benchmarks/run_systemc_architecture_family_dse_sweep.py`，而不是复制一套 authority surface。
 - 如果只生成 config sidecar，则结果必须是 projection/scaffold，不是 executor-backed evidence。
 
 ### 2.6 `implementation_backend`
@@ -195,18 +195,18 @@ production_ready
 
 | Module | Proposed files | Existing repo anchors | v0 artifact role |
 | --- | --- | --- | --- |
-| `workload_frontend` | `docs/benchmarks/unified_dse/workload_frontend.py` | `docs/overview/qe_subspace_sampling.md`, `docs/benchmarks/summarize_qe_subspace_trace.py`, `docs/benchmarks/qe_kernel_characterization_matrix_for_system_dse_v0.md` | Normalize workload descriptor and missing-field evidence. |
-| `architecture_space` | `docs/benchmarks/unified_dse/architecture_space.py` | `docs/benchmarks/qe_architecture_family_design_space_spec_v0.json`, `docs/benchmarks/qe_architecture_family_design_space_schema_v0.json`, `docs/benchmarks/qe_complete_architecture_family_dse_framework_v0.md` | Load candidates, preserve identity, mark projection/scaffold support. |
-| `fast_model` | `docs/benchmarks/unified_dse/fast_model.py` | `docs/benchmarks/qe_dse_fidelity_ladder_and_execution_loop_v0.md`, `docs/benchmarks/qe_fast_layer_proxy_assumption_set_v0.json` | Produce explainable proxy estimates with source kind and assumptions. |
-| `search_engine` | `docs/benchmarks/unified_dse/search_engine.py` | `docs/benchmarks/qe_next_stage_dse_strategy_v0.md`, `docs/benchmarks/run_systemc_architecture_family_dse_sweep.py` | Deterministic traversal, pruning, tie-band shortlist, optional `dse_v2` proposals. |
-| `systemc_backend` | `docs/benchmarks/unified_dse/systemc_backend.py` | `docs/benchmarks/run_systemc_architecture_family_dse_sweep.py`, `model/qe_band_solver_model/README.md` | Generate SystemC execution plans and opt-in timed-functional/proxy runs. |
-| `implementation_backend` | `docs/benchmarks/unified_dse/implementation_backend.py` | `docs/benchmarks/qe_simulator_board_observability_contract_v0.md`, `docs/benchmarks/qe_cpu_gpu_fpga_fairness_and_power_contract_v0.md` | Expose only `stub`、`reserved`、`projection_only` statuses in v0. |
-| `calibration_engine` | `docs/benchmarks/unified_dse/calibration_engine.py` | `docs/benchmarks/qe_ic_simulator_calibration_contract_v0.md`, `docs/benchmarks/compare_qe_gold_correctness.py`, `docs/benchmarks/normalize_qe_gold_baseline.py` | Attach calibration status and uncertainty without upgrading claim authority. |
-| `result_analysis` | `docs/benchmarks/unified_dse/result_analysis.py` | `docs/benchmarks/systemc_architecture_family_dse_result_schema_v0.json`, `docs/benchmarks/qe_ic_adjudicator_authority_contract_v0.md` | Emit Stage-A evidence bundle and adjudicator-ready intake sidecar. |
-| CLI | `docs/benchmarks/run_unified_dse_v0.py` | Existing benchmark `run_*.py` pattern | Thin entry point for dry-run, proposal-only, and explicit opt-in SystemC execution. |
-| Tests | `docs/benchmarks/test_unified_dse_*.py` | Existing benchmark `test_*.py` pattern | Unit and contract tests for each module and CLI mode. |
+| `workload_frontend` | `tools/benchmarks/unified_dse/workload_frontend.py` | `docs/overview/qe_subspace_sampling.md`, `tools/benchmarks/summarize_qe_subspace_trace.py`, `docs/benchmarks/qe_kernel_characterization_matrix_for_system_dse_v0.md` | Normalize workload descriptor and missing-field evidence. |
+| `architecture_space` | `tools/benchmarks/unified_dse/architecture_space.py` | `docs/benchmarks/qe_architecture_family_design_space_spec_v0.json`, `docs/benchmarks/qe_architecture_family_design_space_schema_v0.json`, `docs/benchmarks/qe_complete_architecture_family_dse_framework_v0.md` | Load candidates, preserve identity, mark projection/scaffold support. |
+| `fast_model` | `tools/benchmarks/unified_dse/fast_model.py` | `docs/benchmarks/qe_dse_fidelity_ladder_and_execution_loop_v0.md`, `docs/benchmarks/qe_fast_layer_proxy_assumption_set_v0.json` | Produce explainable proxy estimates with source kind and assumptions. |
+| `search_engine` | `tools/benchmarks/unified_dse/search_engine.py` | `docs/benchmarks/qe_next_stage_dse_strategy_v0.md`, `tools/benchmarks/run_systemc_architecture_family_dse_sweep.py` | Deterministic traversal, pruning, tie-band shortlist, optional `dse_v2` proposals. |
+| `systemc_backend` | `tools/benchmarks/unified_dse/systemc_backend.py` | `tools/benchmarks/run_systemc_architecture_family_dse_sweep.py`, `model/qe_band_solver_model/README.md` | Generate SystemC execution plans and opt-in timed-functional/proxy runs. |
+| `implementation_backend` | `tools/benchmarks/unified_dse/implementation_backend.py` | `docs/benchmarks/qe_simulator_board_observability_contract_v0.md`, `docs/benchmarks/qe_cpu_gpu_fpga_fairness_and_power_contract_v0.md` | Expose only `stub`、`reserved`、`projection_only` statuses in v0. |
+| `calibration_engine` | `tools/benchmarks/unified_dse/calibration_engine.py` | `docs/benchmarks/qe_ic_simulator_calibration_contract_v0.md`, `tools/benchmarks/compare_qe_gold_correctness.py`, `tools/benchmarks/normalize_qe_gold_baseline.py` | Attach calibration status and uncertainty without upgrading claim authority. |
+| `result_analysis` | `tools/benchmarks/unified_dse/result_analysis.py` | `docs/benchmarks/systemc_architecture_family_dse_result_schema_v0.json`, `docs/benchmarks/qe_ic_adjudicator_authority_contract_v0.md` | Emit Stage-A evidence bundle and adjudicator-ready intake sidecar. |
+| CLI | `tools/benchmarks/run_unified_dse_v0.py` | Existing benchmark `run_*.py` pattern | Thin entry point for dry-run, proposal-only, and explicit opt-in SystemC execution. |
+| Tests | `tools/benchmarks/test_unified_dse_*.py` | Existing benchmark `test_*.py` pattern | Unit and contract tests for each module and CLI mode. |
 
-The proposed package is additive. It must not rename existing files, must not modify the canonical runner by default, and must not require existing users to switch away from `docs/benchmarks/run_systemc_architecture_family_dse_sweep.py`.
+The proposed package is additive. It must not rename existing files, must not modify the canonical runner by default, and must not require existing users to switch away from `tools/benchmarks/run_systemc_architecture_family_dse_sweep.py`.
 
 ## 4. Runtime/evidence flow
 
@@ -303,10 +303,10 @@ Goal: create an importable package with no external dependencies beyond Python s
 
 Files:
 
-- `docs/benchmarks/unified_dse/__init__.py`
-- `docs/benchmarks/unified_dse/types.py`
-- `docs/benchmarks/unified_dse/io_utils.py`
-- `docs/benchmarks/test_unified_dse_types.py`
+- `tools/benchmarks/unified_dse/__init__.py`
+- `tools/benchmarks/unified_dse/types.py`
+- `tools/benchmarks/unified_dse/io_utils.py`
+- `tools/benchmarks/test_unified_dse_types.py`
 
 Implementation notes:
 
@@ -327,10 +327,10 @@ Goal: load workload and architecture inputs into normalized records.
 
 Files:
 
-- `docs/benchmarks/unified_dse/workload_frontend.py`
-- `docs/benchmarks/unified_dse/architecture_space.py`
-- `docs/benchmarks/test_unified_dse_workload_frontend.py`
-- `docs/benchmarks/test_unified_dse_architecture_space.py`
+- `tools/benchmarks/unified_dse/workload_frontend.py`
+- `tools/benchmarks/unified_dse/architecture_space.py`
+- `tools/benchmarks/test_unified_dse_workload_frontend.py`
+- `tools/benchmarks/test_unified_dse_architecture_space.py`
 
 Implementation notes:
 
@@ -351,10 +351,10 @@ Goal: produce deterministic Stage-A proposals and proxy estimates.
 
 Files:
 
-- `docs/benchmarks/unified_dse/search_engine.py`
-- `docs/benchmarks/unified_dse/fast_model.py`
-- `docs/benchmarks/test_unified_dse_search_engine.py`
-- `docs/benchmarks/test_unified_dse_fast_model.py`
+- `tools/benchmarks/unified_dse/search_engine.py`
+- `tools/benchmarks/unified_dse/fast_model.py`
+- `tools/benchmarks/test_unified_dse_search_engine.py`
+- `tools/benchmarks/test_unified_dse_fast_model.py`
 
 Implementation notes:
 
@@ -375,10 +375,10 @@ Goal: implement SystemC opt-in boundary and implementation backend stubs.
 
 Files:
 
-- `docs/benchmarks/unified_dse/systemc_backend.py`
-- `docs/benchmarks/unified_dse/implementation_backend.py`
-- `docs/benchmarks/test_unified_dse_systemc_backend.py`
-- `docs/benchmarks/test_unified_dse_implementation_backend.py`
+- `tools/benchmarks/unified_dse/systemc_backend.py`
+- `tools/benchmarks/unified_dse/implementation_backend.py`
+- `tools/benchmarks/test_unified_dse_systemc_backend.py`
+- `tools/benchmarks/test_unified_dse_implementation_backend.py`
 
 Implementation notes:
 
@@ -400,10 +400,10 @@ Goal: attach calibration metadata and emit adjudicator-ready evidence.
 
 Files:
 
-- `docs/benchmarks/unified_dse/calibration_engine.py`
-- `docs/benchmarks/unified_dse/result_analysis.py`
-- `docs/benchmarks/test_unified_dse_calibration_engine.py`
-- `docs/benchmarks/test_unified_dse_result_analysis.py`
+- `tools/benchmarks/unified_dse/calibration_engine.py`
+- `tools/benchmarks/unified_dse/result_analysis.py`
+- `tools/benchmarks/test_unified_dse_calibration_engine.py`
+- `tools/benchmarks/test_unified_dse_result_analysis.py`
 
 Implementation notes:
 
@@ -425,8 +425,8 @@ Goal: expose a thin runnable entry point and cover the expected modes.
 
 Files:
 
-- `docs/benchmarks/run_unified_dse_v0.py`
-- `docs/benchmarks/test_run_unified_dse_v0.py`
+- `tools/benchmarks/run_unified_dse_v0.py`
+- `tools/benchmarks/test_run_unified_dse_v0.py`
 
 Implementation notes:
 
@@ -449,7 +449,7 @@ Minimum test groups:
 
 | Test group | Required checks |
 | --- | --- |
-| Import tests | `docs/benchmarks/unified_dse` imports without side effects. |
+| Import tests | `tools/benchmarks/unified_dse` imports without side effects. |
 | Status tests | Allowed statuses pass; forbidden backend completion states fail. |
 | Workload tests | Missing optional fields become `missing_fields`; required identity drift is reported. |
 | Architecture tests | `candidate_family` and `runtime_projection_family` remain distinct. |
@@ -462,8 +462,8 @@ Minimum test groups:
 
 Acceptance criteria for v0 implementation:
 
-1. All proposed modules exist under `docs/benchmarks/unified_dse/` and use the exact module names in this document.
-2. `docs/benchmarks/run_unified_dse_v0.py` can run in dry-run mode on a small fixture without invoking SystemC.
+1. All proposed modules exist under `tools/benchmarks/unified_dse/` and use the exact module names in this document.
+2. `tools/benchmarks/run_unified_dse_v0.py` can run in dry-run mode on a small fixture without invoking SystemC.
 3. Output manifest states `claim_boundary: Stage-A evidence-only` or equivalent wording.
 4. SystemC execution is opt-in and records timed-functional/proxy provenance.
 5. `implementation_backend` cannot report real HLS、RTL、OpenROAD or board completion.
@@ -474,7 +474,7 @@ Acceptance criteria for v0 implementation:
 Suggested command shape after implementation:
 
 ```bash
-python3 docs/benchmarks/run_unified_dse_v0.py \
+python3 tools/benchmarks/run_unified_dse_v0.py \
   --design-space-spec docs/benchmarks/qe_architecture_family_design_space_spec_v0.json \
   --workload docs/benchmarks/testdata/unified_dse/minimal_workload.json \
   --dry-run \
@@ -485,7 +485,7 @@ python3 docs/benchmarks/run_unified_dse_v0.py \
 For SystemC opt-in only:
 
 ```bash
-python3 docs/benchmarks/run_unified_dse_v0.py \
+python3 tools/benchmarks/run_unified_dse_v0.py \
   --design-space-spec docs/benchmarks/qe_architecture_family_design_space_spec_v0.json \
   --workload docs/benchmarks/testdata/unified_dse/minimal_workload.json \
   --execute-systemc \
@@ -500,7 +500,7 @@ The implemented CLI can optionally emit Stage B0 handoff descriptors without run
 SystemC or gem5:
 
 ```bash
-python3 docs/benchmarks/run_unified_dse_v0.py \
+python3 tools/benchmarks/run_unified_dse_v0.py \
   --design-space-spec docs/benchmarks/qe_architecture_family_design_space_spec_v0.json \
   --workload docs/benchmarks/testdata/unified_dse/minimal_workload.json \
   --output-dir tmp/unified_dse_stage_b0_descriptors \
@@ -525,7 +525,7 @@ The next claim-safe step after descriptor generation is artifact ingest. The CLI
 can read a SystemC feedback JSON and merge metrics back into DSE rows:
 
 ```bash
-python3 docs/benchmarks/run_unified_dse_v0.py \
+python3 tools/benchmarks/run_unified_dse_v0.py \
   --design-space-spec docs/benchmarks/qe_architecture_family_design_space_spec_v0.json \
   --workload docs/benchmarks/testdata/unified_dse/minimal_workload.json \
   --systemc-feedback tmp/systemc_feedback.json \
@@ -542,7 +542,7 @@ only and `final_public_family_winner` remains `null`.
 For a complete staged status surface, use:
 
 ```bash
-python3 docs/benchmarks/run_unified_dse_v0.py \
+python3 tools/benchmarks/run_unified_dse_v0.py \
   --design-space-spec docs/benchmarks/qe_architecture_family_design_space_spec_v0.json \
   --workload docs/benchmarks/testdata/unified_dse/minimal_workload.json \
   --output-dir tmp/unified_dse_full_stage_status \
@@ -563,7 +563,7 @@ Stage B3 becomes referenced only when an external smoke report is supplied and
 validated:
 
 ```bash
-python3 docs/benchmarks/run_unified_dse_v0.py \
+python3 tools/benchmarks/run_unified_dse_v0.py \
   --design-space-spec docs/benchmarks/qe_architecture_family_design_space_spec_v0.json \
   --workload docs/benchmarks/testdata/unified_dse/minimal_workload.json \
   --gem5-smoke-report tmp/gem5_smoke_report.json \
@@ -584,7 +584,7 @@ Stage B3 smoke report that attempts to claim QE-equivalent SCF.
 Stage C can now be represented by an external correctness report reference:
 
 ```bash
-python3 docs/benchmarks/run_unified_dse_v0.py \
+python3 tools/benchmarks/run_unified_dse_v0.py \
   --design-space-spec docs/benchmarks/qe_architecture_family_design_space_spec_v0.json \
   --workload docs/benchmarks/testdata/unified_dse/minimal_workload.json \
   --qe-correctness-report tmp/qe_correctness_report.json \
@@ -607,7 +607,7 @@ but keep Stage C in `external_correctness_report_referenced_not_proven`.
 Stage D is also an external-artifact intake surface:
 
 ```bash
-python3 docs/benchmarks/run_unified_dse_v0.py \
+python3 tools/benchmarks/run_unified_dse_v0.py \
   --design-space-spec docs/benchmarks/qe_architecture_family_design_space_spec_v0.json \
   --workload docs/benchmarks/testdata/unified_dse/minimal_workload.json \
   --implementation-evidence tmp/implementation_evidence.json \
@@ -629,7 +629,7 @@ claims and production release readiness claims.
 
 Unified DSE Framework v0 explicitly does not do the following:
 
-- It does not replace `docs/benchmarks/run_systemc_architecture_family_dse_sweep.py` as the canonical current Stage-A runner.
+- It does not replace `tools/benchmarks/run_systemc_architecture_family_dse_sweep.py` as the canonical current Stage-A runner.
 - It does not replace `docs/benchmarks/qe_ic_adjudicator_authority_contract_v0.md` or any adjudicator output.
 - It does not make public best-family, release-ready or thesis-grade decisions.
 - It does not claim real HLS backend completion.
@@ -653,7 +653,7 @@ The following integrations are allowed as future work, but each requires its own
 
 ### 8.2 Existing runner adapter
 
-`systemc_backend` can wrap `docs/benchmarks/run_systemc_architecture_family_dse_sweep.py` instead of duplicating its logic. The adapter should preserve existing result schema fields and add only clearly namespaced Unified DSE metadata.
+`systemc_backend` can wrap `tools/benchmarks/run_systemc_architecture_family_dse_sweep.py` instead of duplicating its logic. The adapter should preserve existing result schema fields and add only clearly namespaced Unified DSE metadata.
 
 ### 8.3 `dse_v2` proposal/search PoC
 

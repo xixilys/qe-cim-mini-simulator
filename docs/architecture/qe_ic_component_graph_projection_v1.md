@@ -16,8 +16,8 @@
 当前它仍然是 **projection / adapter 规格**，不是新一套主 authority。
 
 当前 wave 1 已把可复用的 benchmark-layer projection/helper 逻辑收束到
-`docs/benchmarks/qe_ic_graph_projection_utils.py`，并由
-`docs/benchmarks/test_qe_ic_graph_projection_utils.py` 提供 regression coverage。
+`tools/benchmarks/qe_ic_graph_projection_utils.py`，并由
+`tools/benchmarks/test_qe_ic_graph_projection_utils.py` 提供 regression coverage。
 这里描述的是 helper 与 consumer 共同遵守的投影边界，不代表 release-facing
 authority 已迁到 helper，也不代表 `v0` / `v1` 已完成统一。
 
@@ -103,7 +103,7 @@ authority 已迁到 helper，也不代表 `v0` / `v1` 已完成统一。
 - `resident_policy`
 - `partition_strategy`
 
-`docs/benchmarks/qe_ic_graph_projection_utils.py` 只是把这些字段以及共享 graph
+`tools/benchmarks/qe_ic_graph_projection_utils.py` 只是把这些字段以及共享 graph
 semantic helpers 以 benchmark-layer 可复用形式集中起来，供 checker 和
 frontdoor 复用，不接管 release authority，也不改写现有 payload assembly。
 
@@ -319,7 +319,7 @@ frontdoor 复用，不接管 release authority，也不改写现有 payload asse
 当前最小 adapter 不需要直接改动主线 runner，即可先定义成一个纯检查/投影接口：
 
 当前实现上，这个纯检查/投影 helper 已落在
-`docs/benchmarks/qe_ic_graph_projection_utils.py`。wave 1 只覆盖 helper 抽取，以及
+`tools/benchmarks/qe_ic_graph_projection_utils.py`。wave 1 只覆盖 helper 抽取，以及
 checker / frontdoor 对 helper 的采用，不包含 evaluator 迁移、C++ runtime 迁移，
 也不包含 full `v0` / `v1` schema unification。
 
@@ -339,7 +339,7 @@ project -> graph_evidence_summary
 - `system_run_config_patch` 供 runnable model frontdoor 使用
 - `graph_evidence_summary` 供 sidecar / review package 使用
 - helper 的 regression coverage 在
-  `docs/benchmarks/test_qe_ic_graph_projection_utils.py`
+  `tools/benchmarks/test_qe_ic_graph_projection_utils.py`
 
 ---
 

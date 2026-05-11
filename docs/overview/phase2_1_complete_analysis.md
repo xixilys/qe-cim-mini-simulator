@@ -279,7 +279,7 @@ class ClusterGraphExecutor : public sc_core::sc_module {
 
 **交付物**:
 - `include/architecture_config.hpp`
-- `docs/benchmarks/template_to_systemc_config.py`
+- `tools/benchmarks/template_to_systemc_config.py`
 - 单元测试
 
 ### Phase 2.3: Dynamic Architecture Switching

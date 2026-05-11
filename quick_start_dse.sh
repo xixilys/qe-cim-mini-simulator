@@ -10,7 +10,7 @@ cd "$PROJECT_ROOT"
 echo "=========================================="
 echo "Step 1: 验证 Component Catalog 和 Graph"
 echo "=========================================="
-python3 docs/benchmarks/check_qe_ic_component_graph_v1.py \
+python3 tools/benchmarks/check_qe_ic_component_graph_v1.py \
   --component-catalog docs/architecture/qe_ic_component_catalog_system_level_v1.json \
   --graph-seed docs/architecture/qe_ic_graph_seed_system_level_v1.json \
   --print-projection
@@ -29,7 +29,7 @@ echo "=========================================="
 echo "Step 3: 运行快速 DSE Sweep (stub 模式)"
 echo "=========================================="
 mkdir -p results/quick_start
-python3 docs/benchmarks/run_systemc_architecture_family_dse_sweep.py \
+python3 tools/benchmarks/run_systemc_architecture_family_dse_sweep.py \
   --workloads si4_pbe_uspp_small \
   --families F1 F2 \
   --diag-policies device_first_fallback cpu_only \
@@ -57,7 +57,7 @@ echo "Step 5: (可选) 运行 SystemC Model 执行"
 echo "=========================================="
 echo "如果要运行真实 simulator，执行:"
 echo ""
-echo "python3 docs/benchmarks/run_systemc_architecture_family_dse_sweep.py \\"
+echo "python3 tools/benchmarks/run_systemc_architecture_family_dse_sweep.py \\"
 echo "  --workloads si4_pbe_uspp_small \\"
 echo "  --families F2 \\"
 echo "  --execute-model \\"

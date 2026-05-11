@@ -480,9 +480,9 @@ def step1_to_step2_pipeline(step1_json_path: str, design_space_path: str):
 ### 6.2 整合方案
 
 **新增文件**：
-1. `docs/benchmarks/workload_ir.py` — Workload IR 定义和转换
+1. `tools/benchmarks/workload_ir.py` — Workload IR 定义和转换
 2. `docs/benchmarks/workload_ir_schema_v0.json` — JSON Schema
-3. `docs/benchmarks/step1_to_step2_pipeline.py` — 数据流管道
+3. `tools/benchmarks/step1_to_step2_pipeline.py` — 数据流管道
 
 **修改文件**：
 1. `qe_architecture_family_comprehensive_evaluator.py` — 接受 WorkloadIR 输入
@@ -492,17 +492,17 @@ def step1_to_step2_pipeline(step1_json_path: str, design_space_path: str):
 
 ```bash
 # 1. 生成 Workload IR
-python3 docs/benchmarks/workload_ir.py \
+python3 tools/benchmarks/workload_ir.py \
     --step1-summary docs/benchmarks/results/qe_workload_revalidation/summary.json \
     --output workload_ir_si8.json
 
 # 2. 运行架构评估
-python3 docs/benchmarks/qe_architecture_family_comprehensive_evaluator.py \
+python3 tools/benchmarks/qe_architecture_family_comprehensive_evaluator.py \
     --workload-ir workload_ir_si8.json \
     --output-dir tmp/architecture_eval_si8
 
 # 3. 验证数据流
-python3 docs/benchmarks/step1_to_step2_pipeline.py \
+python3 tools/benchmarks/step1_to_step2_pipeline.py \
     --step1-summary docs/benchmarks/results/qe_workload_revalidation/summary.json \
     --design-space docs/architecture/architecture_comparison/architecture_design_space_v1.json \
     --output step2_output_si8.json

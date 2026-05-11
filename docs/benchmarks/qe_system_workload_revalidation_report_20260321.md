@@ -7,9 +7,9 @@
 本轮使用的自动化脚本与汇总产物如下：
 
 - 运行脚本：
-  - [`run_qe_workload_matrix.py`](/Volumes/remote/phd/year_2/project/dft加速/docs/benchmarks/run_qe_workload_matrix.py)
+  - [`run_qe_workload_matrix.py`](/Volumes/remote/phd/year_2/project/dft加速/tools/benchmarks/run_qe_workload_matrix.py)
 - 分析脚本：
-  - [`analyze_qe_workload_revalidation.py`](/Volumes/remote/phd/year_2/project/dft加速/docs/benchmarks/analyze_qe_workload_revalidation.py)
+  - [`analyze_qe_workload_revalidation.py`](/Volumes/remote/phd/year_2/project/dft加速/tools/benchmarks/analyze_qe_workload_revalidation.py)
 - 原始结果根目录：
   - [`qe_workload_revalidation`](/Volumes/remote/phd/year_2/project/dft加速/docs/benchmarks/results/qe_workload_revalidation)
 - 自动汇总表：

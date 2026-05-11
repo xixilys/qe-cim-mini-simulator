@@ -48,7 +48,7 @@ Phase 1成功实现了架构模板系统，使DSE框架能够表达和探索不�
 - **用途**: 测试cluster融合策略的可行性
 
 ### 3. Template Loader
-**File**: `docs/benchmarks/architecture_template_loader.py` (220行)
+**File**: `tools/benchmarks/architecture_template_loader.py` (220行)
 
 功能：
 - 加载单个模板或批量加载目录
@@ -57,7 +57,7 @@ Phase 1成功实现了架构模板系统，使DSE框架能够表达和探索不�
 - 可选的jsonschema依赖支持
 
 ### 4. Candidate Generator
-**File**: `docs/benchmarks/architecture_candidate_generator.py` (280行)
+**File**: `tools/benchmarks/architecture_candidate_generator.py` (280行)
 
 功能：
 - **Grid Search**: 生成所有参数组合
@@ -67,7 +67,7 @@ Phase 1成功实现了架构模板系统，使DSE框架能够表达和探索不�
 - 支持嵌套参数路径 (e.g., `compute_config.clock_mhz`)
 
 ### 5. End-to-End Test Suite
-**File**: `docs/benchmarks/test_architecture_templates.py` (230行)
+**File**: `tools/benchmarks/test_architecture_templates.py` (230行)
 
 5个测试用例：
 1. ✓ Template Loading - 加载3个模板
@@ -218,9 +218,9 @@ Phase 2将实现**Simulator配置驱动架构**，让SystemC模型能够根据�
 2. `docs/architecture/architecture_templates/4cluster_cim_baseline_v1.json` (85行)
 3. `docs/architecture/architecture_templates/4cluster_traditional_fpga_v1.json` (85行)
 4. `docs/architecture/architecture_templates/3cluster_fused_build_diag_v1.json` (80行)
-5. `docs/benchmarks/architecture_template_loader.py` (220行)
-6. `docs/benchmarks/architecture_candidate_generator.py` (280行)
-7. `docs/benchmarks/test_architecture_templates.py` (230行)
+5. `tools/benchmarks/architecture_template_loader.py` (220行)
+6. `tools/benchmarks/architecture_candidate_generator.py` (280行)
+7. `tools/benchmarks/test_architecture_templates.py` (230行)
 
 ### Modified (0 files)
 - 无修改现有文件，所有新功能独立实现

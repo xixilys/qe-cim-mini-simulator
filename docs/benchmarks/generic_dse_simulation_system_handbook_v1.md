@@ -113,7 +113,7 @@ Adjudicator controls public decision authority.
 | 子系统 | 状态 | 当前真实能力 | 必须保留的状态词 |
 | --- | --- | --- | --- |
 | `dse_v2` Step1/Step2/Step3 | implemented + partial | 已有 persisted workflow、generic IR、mapping handoff、Step3 evidence flow。 | `trusted_final_eligible`、`blocked_before_simulation`、`trusted_full_flow_evidence_emitted` |
-| `docs/benchmarks/unified_dse` | planned / bounded scaffold | Stage-A evidence-only wrapper 和合同表面，不是最终 authority。 | `Stage-A evidence-only`、`stub`、`reserved`、`projection_only` |
+| `tools/benchmarks/unified_dse` | planned / bounded scaffold | Stage-A evidence-only wrapper 和合同表面，不是最终 authority。 | `Stage-A evidence-only`、`stub`、`reserved`、`projection_only` |
 | `model/generic_sim_backend` | implemented L3 backend | 支持 `standalone_systemc`、heterogeneous accelerators、graph execution、timing/resource metrics。 | `standalone_systemc`、`passed`、`failed`、`blocked` |
 | `gem5_integration` generic accel | partial / blocked for L4 trust | 控制路径和 L4 proof harness 存在，但可信 L4 必须由 proof artifacts 支撑。 | `MMIO Timed Stub / L4 Blocked Prototype`、`gem5_l4_proof.json` |
 | BO / Ax / BoTorch scripts | proposal / experimental | 可生成候选或 Pareto-like rows，但不能直接声明 trusted winner。 | `candidate proposal layer`、`predicted-only` |

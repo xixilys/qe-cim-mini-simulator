@@ -124,7 +124,7 @@
 ### 4.4 当前主脚本
 
 ```bash
-python3 docs/benchmarks/run_qe_next_stage_dse_phase.py \
+python3 tools/benchmarks/run_qe_next_stage_dse_phase.py \
   --output-dir tmp/qe_next_stage_release \
   --execute-model
 ```
@@ -230,14 +230,14 @@ python3 docs/benchmarks/run_qe_next_stage_dse_phase.py \
 #### Release bundle validator
 
 ```bash
-python3 docs/benchmarks/check_qe_next_stage_release_bundle.py \
+python3 tools/benchmarks/check_qe_next_stage_release_bundle.py \
   --summary tmp/qe_next_stage_release/qe_next_stage_dse_phase_summary.json
 ```
 
 #### Strategy / contract validator
 
 ```bash
-python3 docs/benchmarks/check_qe_next_stage_dse_simulator_contracts.py
+python3 tools/benchmarks/check_qe_next_stage_dse_simulator_contracts.py
 ```
 
 ### 8.3 当前检查的核心条件

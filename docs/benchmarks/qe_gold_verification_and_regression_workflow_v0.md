@@ -16,12 +16,12 @@
 
 新增脚本：
 
-- `/Volumes/remote/phd/year_2/project/dft加速/docs/benchmarks/check_qe_gold_contract_regression.py`
+- `/Volumes/remote/phd/year_2/project/dft加速/tools/benchmarks/check_qe_gold_contract_regression.py`
 
 执行：
 
 ```bash
-python3 docs/benchmarks/check_qe_gold_contract_regression.py
+python3 tools/benchmarks/check_qe_gold_contract_regression.py
 ```
 
 这个 guard 固定检查下面几类回归：
@@ -67,19 +67,19 @@ guard 直接跑 compare helper，验证下面语义没有变：
 ### Step 1 — Python syntax sanity
 
 ```bash
-python3 -m py_compile docs/benchmarks/*.py
+python3 -m py_compile tools/benchmarks/*.py
 ```
 
 ### Step 2 — Frozen contract regression guard
 
 ```bash
-python3 docs/benchmarks/check_qe_gold_contract_regression.py
+python3 tools/benchmarks/check_qe_gold_contract_regression.py
 ```
 
 ### Step 3 — Canonical QE gold gate run
 
 ```bash
-python3 docs/benchmarks/run_systemc_architecture_family_dse_sweep.py \
+python3 tools/benchmarks/run_systemc_architecture_family_dse_sweep.py \
   --gold-required-only \
   --workloads si8_pbe_nc si8_pbe_uspp \
   --families F1 F2 F3 \
@@ -148,12 +148,12 @@ verification / regression lane 的最小交付不是“又跑一遍命令”，�
 
 本轮 worker-3 验证跑到的结果：
 
-- `python3 docs/benchmarks/check_qe_gold_contract_regression.py`：`PASS`
+- `python3 tools/benchmarks/check_qe_gold_contract_regression.py`：`PASS`
 - `cmake -S model/qe_band_solver_model -B model/qe_band_solver_model/build && cmake --build model/qe_band_solver_model/build -j4`：`PASS`
 - canonical QE gold gate：
 
   ```bash
-  python3 docs/benchmarks/run_systemc_architecture_family_dse_sweep.py \
+  python3 tools/benchmarks/run_systemc_architecture_family_dse_sweep.py \
     --gold-required-only \
     --workloads si8_pbe_nc si8_pbe_uspp \
     --families F1 F2 F3 \

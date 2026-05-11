@@ -7,7 +7,7 @@ This document freezes the **simulator-to-board observability contract** required
 - `.omx/plans/ralplan-final-qe-fpga-fullstack-co-design-20260413.md`
 - `model/qe_band_solver_model/README.md`
 - `docs/benchmarks/qe_cpu_gpu_fpga_shell_comparison_status_20260402.md`
-- `docs/benchmarks/run_systemc_architecture_family_dse_sweep.py`
+- `tools/benchmarks/run_systemc_architecture_family_dse_sweep.py`
 - `docs/benchmarks/systemc_architecture_family_dse_result_schema_v0.json`
 
 The goal is not to restate the whole thesis. The goal is to define **which simulator outputs must line up with which board-measurable sources** before FPGA evidence can be used to support:
@@ -44,16 +44,16 @@ Current repo reality that affects the contract:
 本文不仅对应 prose contract，也直接对应以下 machine-readable / validator surfaces：
 
 - `docs/benchmarks/systemc_architecture_family_dse_result_schema_v0.json`
-- `docs/benchmarks/run_systemc_architecture_family_dse_sweep.py`
+- `tools/benchmarks/run_systemc_architecture_family_dse_sweep.py`
 - `docs/benchmarks/qe_algorithm_rewrite_manifest_template_v0.json`
 - `docs/benchmarks/qe_cpu_gpu_baseline_manifest_template_v0.json`
 - `docs/benchmarks/qe_fpga_board_manifest_template_v0.json`
 - `docs/benchmarks/qe_fpga_board_metrics_template_v0.json`
 - `docs/benchmarks/qe_fpga_board_power_template_v0.json`
 - `docs/benchmarks/qe_fpga_board_compare_template_v0.json`
-- `docs/benchmarks/init_qe_phase1_artifact_bundle.py`
-- `docs/benchmarks/check_qe_phase1_artifact_contracts.py`
-- `docs/benchmarks/compare_qe_gold_correctness.py`
+- `tools/benchmarks/init_qe_phase1_artifact_bundle.py`
+- `tools/benchmarks/check_qe_phase1_artifact_contracts.py`
+- `tools/benchmarks/compare_qe_gold_correctness.py`
 
 phase-1 的执行要求是：进入 board calibration / ranking review 的 simulator row、board run、baseline manifest，必须都能落到这些 schema/template/validator 所使用的字段命名上，而不是只在 Markdown 里口头对齐。
 
@@ -235,7 +235,7 @@ Reusing the simulator/DSE naming (`stdout_path`, `metrics_path`, `compare_report
 推荐直接用 helper 生成 phase-1 board bundle：
 
 ```bash
-python3 docs/benchmarks/init_qe_phase1_artifact_bundle.py \
+python3 tools/benchmarks/init_qe_phase1_artifact_bundle.py \
   board \
   --out-dir "$BOARD_DIR" \
   --workload-id si4_pbe_uspp_small \
@@ -265,7 +265,7 @@ cp docs/benchmarks/qe_fpga_board_manifest_template_v0.json "$BOARD_DIR/board_man
 cp docs/benchmarks/qe_fpga_board_metrics_template_v0.json "$BOARD_DIR/board_metrics.json"
 cp docs/benchmarks/qe_fpga_board_power_template_v0.json "$BOARD_DIR/board_power.json"
 cp docs/benchmarks/qe_fpga_board_compare_template_v0.json "$BOARD_DIR/board_compare.json"
-python3 docs/benchmarks/check_qe_phase1_artifact_contracts.py \
+python3 tools/benchmarks/check_qe_phase1_artifact_contracts.py \
   --board-dir "$BOARD_DIR" \
   --require-board-bundle
 ```
@@ -283,10 +283,10 @@ python3 docs/benchmarks/check_qe_phase1_artifact_contracts.py \
 
 为了让本合同可执行而不是停留在描述层，phase-1 推荐按以下顺序验证：
 
-1. 用 `docs/benchmarks/run_systemc_architecture_family_dse_sweep.py` 产出带 contract id 的 DSE/bootstrap bundle；
+1. 用 `tools/benchmarks/run_systemc_architecture_family_dse_sweep.py` 产出带 contract id 的 DSE/bootstrap bundle；
 2. 用 `docs/benchmarks/systemc_architecture_family_dse_result_schema_v0.json` 检查结果字段是否齐全；
-3. 用 `docs/benchmarks/compare_qe_gold_correctness.py` 生成或复查 `board_compare.json`；
-4. 若 correctness/tolerance contract 有变动，再用 `docs/benchmarks/check_qe_gold_contract_regression.py` 做回归检查。
+3. 用 `tools/benchmarks/compare_qe_gold_correctness.py` 生成或复查 `board_compare.json`；
+4. 若 correctness/tolerance contract 有变动，再用 `tools/benchmarks/check_qe_gold_contract_regression.py` 做回归检查。
 
 ## 10. Gating rules
 

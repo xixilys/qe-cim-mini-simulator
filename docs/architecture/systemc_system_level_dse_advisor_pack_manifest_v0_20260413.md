@@ -26,7 +26,7 @@
 
 - QE correctness contract: `/Volumes/remote/phd/year_2/project/dft加速/docs/benchmarks/qe_gold_correctness_contract_v0.md`
 - QE numerical tolerance schema: `/Volumes/remote/phd/year_2/project/dft加速/docs/benchmarks/qe_gold_numerical_tolerance_schema_v0.json`
-- QE correctness compare helper: `/Volumes/remote/phd/year_2/project/dft加速/docs/benchmarks/compare_qe_gold_correctness.py`
+- QE correctness compare helper: `/Volumes/remote/phd/year_2/project/dft加速/tools/benchmarks/compare_qe_gold_correctness.py`
 
 这些文件意味着：`correctness_status` 与 `tolerance schema ID` 已经有具体落点，不再只是抽象占位。
 
@@ -45,8 +45,8 @@
 当前用于 projection 与 ranking 输出的上游文件包括：
 
 - DSE result schema: `/Volumes/remote/phd/year_2/project/dft加速/docs/benchmarks/systemc_architecture_family_dse_result_schema_v0.json`
-- DSE sweep runner: `/Volumes/remote/phd/year_2/project/dft加速/docs/benchmarks/run_systemc_architecture_family_dse_sweep.py`
-- Next-stage phase runner: `/Volumes/remote/phd/year_2/project/dft加速/docs/benchmarks/run_qe_next_stage_dse_phase.py`
+- DSE sweep runner: `/Volumes/remote/phd/year_2/project/dft加速/tools/benchmarks/run_systemc_architecture_family_dse_sweep.py`
+- Next-stage phase runner: `/Volumes/remote/phd/year_2/project/dft加速/tools/benchmarks/run_qe_next_stage_dse_phase.py`
 
 这意味着 `speedup_to_convergence_range`、`energy_to_convergence_range`、`confidence`、`assumption_set_id` 这些字段也已经有 concrete schema / runner 落点。
 

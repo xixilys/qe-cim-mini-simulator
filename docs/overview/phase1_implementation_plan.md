@@ -25,7 +25,7 @@
 - Timing模型使用代理公式（±20%精度）
 
 **关键文件：**
-- `docs/benchmarks/run_systemc_architecture_family_dse_sweep.py` - DSE主框架
+- `tools/benchmarks/run_systemc_architecture_family_dse_sweep.py` - DSE主框架
 - `docs/architecture/qe_ic_component_catalog_system_level_v1.json` - 组件目录
 - `docs/architecture/qe_ic_graph_seed_system_level_v1.json` - F2架构定义
 
@@ -92,7 +92,7 @@
 
 **目标：** 在DSE框架中添加模板加载和验证功能
 
-**实现位置：** `docs/benchmarks/architecture_template_loader.py`
+**实现位置：** `tools/benchmarks/architecture_template_loader.py`
 
 **功能需求：**
 ```python
@@ -126,7 +126,7 @@ class ArchitectureTemplateLoader:
 
 **目标：** 根据模板生成候选架构（参数sweep）
 
-**实现位置：** `docs/benchmarks/architecture_candidate_generator.py`
+**实现位置：** `tools/benchmarks/architecture_candidate_generator.py`
 
 **功能需求：**
 ```python

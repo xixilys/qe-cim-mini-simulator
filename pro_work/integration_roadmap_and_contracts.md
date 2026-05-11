@@ -309,7 +309,7 @@ project_root/
 
 ```text
 dse_v2/                         -> frontend/dse_core/search + models + adapters/qe
-_docs/benchmarks/unified_dse/    -> frontend/dse_core/contracts + adjudication
+_tools/benchmarks/unified_dse/    -> frontend/dse_core/contracts + adjudication
 gem5_integration/                -> backend/gem5 + backend/systemc_bridge
 model/qe_band_solver_model/      -> backend/systemc/models/qe_band_solver or model/
 ```

@@ -26,16 +26,16 @@
 与本文配套的 machine-readable run manifest template：
 
 - `docs/benchmarks/qe_cpu_gpu_baseline_manifest_template_v0.json`
-- `docs/benchmarks/init_qe_phase1_artifact_bundle.py`
+- `tools/benchmarks/init_qe_phase1_artifact_bundle.py`
 - 若目标是把当前 proxy 指标升级成工程级实测，请同时阅读：
   - `docs/benchmarks/qe_engineering_grade_measurement_handbook_v0.md`
 
 与本文直接配套的 validator / 执行入口：
 
 - `docs/benchmarks/qe_algorithm_rewrite_manifest_contract_v0.md`：定义 `algorithm_rewrite_manifest_id`、`rewrite_mode` 与 GPU applicability 的填写边界；
-- `docs/benchmarks/compare_qe_gold_correctness.py`：用于生成/复查 `correctness.json`；
-- `docs/benchmarks/check_qe_gold_contract_regression.py`：用于回归检查 same-correctness / same-tolerance contract 是否漂移。
-- `docs/benchmarks/assess_qe_cpu_gpu_baseline_readiness.py`：用于把采集后的 GPU row 归类为 `deferred / reference_only / thesis_eligible`，并用 `decisive_for_case` 标记当前 case 的最优 row。
+- `tools/benchmarks/compare_qe_gold_correctness.py`：用于生成/复查 `correctness.json`；
+- `tools/benchmarks/check_qe_gold_contract_regression.py`：用于回归检查 same-correctness / same-tolerance contract 是否漂移。
+- `tools/benchmarks/assess_qe_cpu_gpu_baseline_readiness.py`：用于把采集后的 GPU row 归类为 `deferred / reference_only / thesis_eligible`，并用 `decisive_for_case` 标记当前 case 的最优 row。
 
 ---
 
@@ -65,7 +65,7 @@
 如果希望直接生成同口径 scaffold，优先使用：
 
 ```bash
-python3 docs/benchmarks/init_qe_phase1_artifact_bundle.py \
+python3 tools/benchmarks/init_qe_phase1_artifact_bundle.py \
   baseline \
   --out-dir "$RUN_DIR" \
   --workload-id si4_pbe_uspp_small \
@@ -118,7 +118,7 @@ PY
 当一个或多个 GPU row 已经采集完毕后，推荐立即运行：
 
 ```bash
-python3 docs/benchmarks/assess_qe_cpu_gpu_baseline_readiness.py \
+python3 tools/benchmarks/assess_qe_cpu_gpu_baseline_readiness.py \
   --baseline-dir <strict-fp64-row-dir> \
   --baseline-dir <practical-row-dir>
 ```

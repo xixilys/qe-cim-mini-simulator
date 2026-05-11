@@ -38,9 +38,9 @@ The runnable model truth in this repository remains timed-functional to roughly 
 
 ### 3.1 Actual pipeline seam
 
-The adjudicator insertion point is frozen at the current seam that already exists in `docs/benchmarks/run_qe_next_stage_dse_phase.py`:
+The adjudicator insertion point is frozen at the current seam that already exists in `tools/benchmarks/run_qe_next_stage_dse_phase.py`:
 
-1. the DSE runner produces result bundles in `docs/benchmarks/run_systemc_architecture_family_dse_sweep.py`;
+1. the DSE runner produces result bundles in `tools/benchmarks/run_systemc_architecture_family_dse_sweep.py`;
 2. the phase runner imports those bundles and materializes `bundle["family_summary"]`;
 3. the phase runner then builds additional evidence surfaces such as GPU annex summaries, accurate-layer validation summaries, projection review packages, and phase-1 closure summaries;
 4. the adjudicator must run after the DSE bundle and its evidence-input bundle are available, and before or alongside final phase and evidence closure aggregation that would otherwise expose a release-facing recommendation.
@@ -65,7 +65,7 @@ They may inform the adjudicator. They may not act as the stack's public decision
 
 ### 4.1 DSE sweep evidence inputs
 
-From `docs/benchmarks/run_systemc_architecture_family_dse_sweep.py`:
+From `tools/benchmarks/run_systemc_architecture_family_dse_sweep.py`:
 
 - `family_summary`
 - row-level `projection`
@@ -77,7 +77,7 @@ These fields remain DSE evidence and projection evidence. They do not authorize 
 
 ### 4.2 GPU evidence inputs
 
-From `docs/benchmarks/run_qe_next_stage_dse_phase.py`:
+From `tools/benchmarks/run_qe_next_stage_dse_phase.py`:
 
 - `gpu_annex_summary`
 
@@ -85,7 +85,7 @@ This surface remains a GPU evidence annex only. It may constrain claim permissio
 
 ### 4.3 Phase closure evidence inputs
 
-From `docs/benchmarks/run_qe_next_stage_dse_phase.py`:
+From `tools/benchmarks/run_qe_next_stage_dse_phase.py`:
 
 - `phase1_evidence_closure`
 - `phase1_evidence_closure_summary`

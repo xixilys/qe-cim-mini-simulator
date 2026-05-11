@@ -306,7 +306,7 @@ cmake --build /Volumes/remote/phd/year_2/project/dft加速/soft/qe-7.5/build_sub
 trace summary：
 
 ```bash
-python3 docs/benchmarks/summarize_qe_subspace_trace.py /abs/path/qe_subspace_trace.csv
+python3 tools/benchmarks/summarize_qe_subspace_trace.py /abs/path/qe_subspace_trace.csv
 ```
 
 Planning concern：
@@ -561,15 +561,15 @@ Gate：
 验证命令：
 
 ```bash
-python3 docs/benchmarks/check_qe_next_stage_dse_simulator_contracts.py
-python3 docs/benchmarks/run_systemc_architecture_family_dse_sweep.py \
+python3 tools/benchmarks/check_qe_next_stage_dse_simulator_contracts.py
+python3 tools/benchmarks/run_systemc_architecture_family_dse_sweep.py \
   --component-catalog docs/architecture/qe_ic_component_catalog_system_level_v1.json \
   --graph-spec docs/architecture/qe_ic_graph_seed_system_level_v1.json \
   --output-dir tmp/dse_sweep_results
-python3 docs/benchmarks/run_qe_next_stage_dse_phase.py \
+python3 tools/benchmarks/run_qe_next_stage_dse_phase.py \
   --output-dir tmp/qe_next_stage_release \
   --execute-model
-python3 docs/benchmarks/check_qe_next_stage_release_bundle.py \
+python3 tools/benchmarks/check_qe_next_stage_release_bundle.py \
   --summary tmp/qe_next_stage_release/qe_next_stage_dse_phase_summary.json
 ```
 
@@ -595,8 +595,8 @@ Gate：
 
 ```bash
 cmake --build /Volumes/remote/phd/year_2/project/dft加速/soft/qe-7.5/build_subspace_trace --target qe_pw_exe -j4
-python3 docs/benchmarks/summarize_qe_subspace_trace.py /abs/path/qe_subspace_trace.csv
-python3 docs/benchmarks/run_systemc_architecture_family_dse_sweep.py \
+python3 tools/benchmarks/summarize_qe_subspace_trace.py /abs/path/qe_subspace_trace.csv
+python3 tools/benchmarks/run_systemc_architecture_family_dse_sweep.py \
   --gold-required-only \
   --workloads si8_pbe_nc si8_pbe_uspp \
   --families F1 F2 F3 \
@@ -628,10 +628,10 @@ Gate：
 验证命令：
 
 ```bash
-python3 docs/benchmarks/assess_qe_cpu_gpu_baseline_readiness.py \
+python3 tools/benchmarks/assess_qe_cpu_gpu_baseline_readiness.py \
   --baseline-dir tmp/cpu_gpu_baselines \
   --output tmp/baseline_readiness.json
-python3 docs/benchmarks/run_qe_phase1_closure_pipeline.py \
+python3 tools/benchmarks/run_qe_phase1_closure_pipeline.py \
   --output-dir tmp/closure_results
 ```
 

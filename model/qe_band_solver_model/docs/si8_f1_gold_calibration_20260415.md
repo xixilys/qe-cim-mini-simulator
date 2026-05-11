@@ -69,7 +69,7 @@ python3 -m unittest discover -s docs/benchmarks -p 'test_*.py'
 ### 4.3 focused accurate-layer sweep
 
 ```bash
-python3 docs/benchmarks/run_systemc_architecture_family_dse_sweep.py \
+python3 tools/benchmarks/run_systemc_architecture_family_dse_sweep.py \
   --output-dir /tmp/si8_check_final.Jni2Qf \
   --workloads si8_pbe_nc \
   --families F1 F2 \
@@ -84,7 +84,7 @@ python3 docs/benchmarks/run_systemc_architecture_family_dse_sweep.py \
 ### 4.4 phase-level check
 
 ```bash
-python3 docs/benchmarks/run_qe_next_stage_dse_phase.py \
+python3 tools/benchmarks/run_qe_next_stage_dse_phase.py \
   --output-dir /tmp/qe_next_stage_phase_final.4NBkgr \
   --execute-model
 ```
@@ -135,7 +135,7 @@ phase-level 结果：
 
 ### 6.3 passing lane 的 convergence report 已改成 anchor 语义
 
-`docs/benchmarks/run_systemc_architecture_family_dse_sweep.py` 现在会在 `compare_report["overall_pass"] is True` 时输出：
+`tools/benchmarks/run_systemc_architecture_family_dse_sweep.py` 现在会在 `compare_report["overall_pass"] is True` 时输出：
 
 - `dominant_blocker.kind = "gold_passed"`
 

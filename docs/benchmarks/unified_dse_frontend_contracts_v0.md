@@ -138,7 +138,7 @@ Calibration metadata includes `calibration_data_count`, `error_before`,
 Backward-compatible entry point:
 
 ```bash
-python3 docs/benchmarks/run_unified_dse_v0.py \
+python3 tools/benchmarks/run_unified_dse_v0.py \
   --design-space-spec docs/benchmarks/qe_architecture_family_design_space_spec_v0.json \
   --workload docs/benchmarks/testdata/unified_dse/minimal_workload.json \
   --output-dir tmp/unified_dse_results \
@@ -155,13 +155,13 @@ python3 docs/benchmarks/run_unified_dse_v0.py \
 Thin wrapper:
 
 ```bash
-python3 docs/benchmarks/qedse_frontend.py frontend enumerate --help
-python3 docs/benchmarks/qedse_frontend.py frontend optimize --help
-python3 docs/benchmarks/qedse_frontend.py frontend emit-handoff --help
-python3 docs/benchmarks/qedse_frontend.py frontend ingest-feedback --help
-python3 docs/benchmarks/qedse_frontend.py frontend calibrate --help
-python3 docs/benchmarks/qedse_frontend.py frontend adjudicate --help
-python3 docs/benchmarks/qedse_frontend.py frontend release --help
+python3 tools/benchmarks/qedse_frontend.py frontend enumerate --help
+python3 tools/benchmarks/qedse_frontend.py frontend optimize --help
+python3 tools/benchmarks/qedse_frontend.py frontend emit-handoff --help
+python3 tools/benchmarks/qedse_frontend.py frontend ingest-feedback --help
+python3 tools/benchmarks/qedse_frontend.py frontend calibrate --help
+python3 tools/benchmarks/qedse_frontend.py frontend adjudicate --help
+python3 tools/benchmarks/qedse_frontend.py frontend release --help
 ```
 
 `--execute-systemc` remains a hard error in the frontend CLI.
@@ -175,26 +175,26 @@ bundle deliberately keeps `final_public_family_winner: null`.
 
 ## Migration map
 
-The implementation remains in `docs/benchmarks/unified_dse` for compatibility.
+The implementation remains in `tools/benchmarks/unified_dse` for compatibility.
 Once the frozen schemas above stabilize, the package can move to a future
 `frontend/dse_core` tree with these mechanical mappings:
 
 | Current path | Future path |
 |---|---|
-| `docs/benchmarks/unified_dse/domain_contracts.py` | `frontend/dse_core/contracts.py` |
-| `docs/benchmarks/unified_dse/adapters.py` | `frontend/dse_core/workloads/adapters.py` |
-| `docs/benchmarks/unified_dse/search_engine.py` | `frontend/dse_core/search.py` |
-| `docs/benchmarks/unified_dse/active_multifidelity.py` | `frontend/dse_core/scheduler.py` |
-| `docs/benchmarks/unified_dse/backend_feedback_adapter.py` | `frontend/dse_core/evidence.py` |
-| `docs/benchmarks/unified_dse/release_bundle.py` | `frontend/dse_core/release.py` |
-| `docs/benchmarks/qedse_frontend.py` | `frontend/qedse_frontend.py` |
+| `tools/benchmarks/unified_dse/domain_contracts.py` | `frontend/dse_core/contracts.py` |
+| `tools/benchmarks/unified_dse/adapters.py` | `frontend/dse_core/workloads/adapters.py` |
+| `tools/benchmarks/unified_dse/search_engine.py` | `frontend/dse_core/search.py` |
+| `tools/benchmarks/unified_dse/active_multifidelity.py` | `frontend/dse_core/scheduler.py` |
+| `tools/benchmarks/unified_dse/backend_feedback_adapter.py` | `frontend/dse_core/evidence.py` |
+| `tools/benchmarks/unified_dse/release_bundle.py` | `frontend/dse_core/release.py` |
+| `tools/benchmarks/qedse_frontend.py` | `frontend/qedse_frontend.py` |
 
 The migration should be import-compatible and should not change backend JSON.
 
 ## Pro-frontend completion additions
 
 The pro-manual frontend surface is now exposed through `frontend/dse_core` while
-`docs/benchmarks/unified_dse` remains import-compatible for existing scripts.
+`tools/benchmarks/unified_dse` remains import-compatible for existing scripts.
 The new package is a stable domain-neutral facade over the same JSON contracts:
 
 - `frontend.dse_core.ir` — versioned IR builders and validators.

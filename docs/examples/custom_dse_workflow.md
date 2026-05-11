@@ -47,7 +47,7 @@ python3 -m json.tool results/quick_start/stub_sweep/sweep_stub.json | less
 探索不同的架构配置组合：
 
 ```bash
-python3 docs/benchmarks/run_systemc_architecture_family_dse_sweep.py \
+python3 tools/benchmarks/run_systemc_architecture_family_dse_sweep.py \
   --workloads si8_pbe_uspp graphene_pbe_uspp \
   --families F1 F2 F3 \
   --diag-policies device_first_fallback cpu_only aggressive_device \
@@ -63,7 +63,7 @@ python3 docs/benchmarks/run_systemc_architecture_family_dse_sweep.py \
 对选定的 design points 运行 SystemC model：
 
 ```bash
-python3 docs/benchmarks/run_systemc_architecture_family_dse_sweep.py \
+python3 tools/benchmarks/run_systemc_architecture_family_dse_sweep.py \
   --workloads si8_pbe_nc \
   --families F2 \
   --execute-model \
@@ -75,7 +75,7 @@ python3 docs/benchmarks/run_systemc_architecture_family_dse_sweep.py \
 ### 场景 3: 对比 CPU/GPU Baseline
 
 ```bash
-python3 docs/benchmarks/run_systemc_architecture_family_dse_sweep.py \
+python3 tools/benchmarks/run_systemc_architecture_family_dse_sweep.py \
   --workloads si8_pbe_uspp \
   --families F2 \
   --execute-model \
@@ -89,7 +89,7 @@ python3 docs/benchmarks/run_systemc_architecture_family_dse_sweep.py \
 ### 场景 4: 生成 Phase Closure 报告
 
 ```bash
-python3 docs/benchmarks/run_qe_phase1_closure_pipeline.py \
+python3 tools/benchmarks/run_qe_phase1_closure_pipeline.py \
   --baseline-root results/gold_baselines \
   --board-root results/simulator_run_001 \
   --output-dir results/closure_report
@@ -154,7 +154,7 @@ cat results/closure_report/qe_phase1_evidence_closure_report.md
 ### 验证自定义配置
 
 ```bash
-python3 docs/benchmarks/check_qe_ic_component_graph_v1.py \
+python3 tools/benchmarks/check_qe_ic_component_graph_v1.py \
   --component-catalog docs/architecture/qe_ic_component_catalog_system_level_v1.json \
   --graph-seed my_custom_graph.json \
   --print-projection
@@ -165,7 +165,7 @@ python3 docs/benchmarks/check_qe_ic_component_graph_v1.py \
 ### 第 1 轮：快速探索
 
 ```bash
-python3 docs/benchmarks/run_systemc_architecture_family_dse_sweep.py \
+python3 tools/benchmarks/run_systemc_architecture_family_dse_sweep.py \
   --workloads si4_pbe_uspp_small \
   --families F1 F2 F3 \
   --max-design-points 100 \
@@ -177,7 +177,7 @@ python3 docs/benchmarks/run_systemc_architecture_family_dse_sweep.py \
 ### 第 2 轮：精确验证
 
 ```bash
-python3 docs/benchmarks/run_systemc_architecture_family_dse_sweep.py \
+python3 tools/benchmarks/run_systemc_architecture_family_dse_sweep.py \
   --workloads si8_pbe_nc si8_pbe_uspp \
   --families F2 \
   --execute-model \
@@ -190,7 +190,7 @@ python3 docs/benchmarks/run_systemc_architecture_family_dse_sweep.py \
 ### 第 3 轮：泛化测试
 
 ```bash
-python3 docs/benchmarks/run_systemc_architecture_family_dse_sweep.py \
+python3 tools/benchmarks/run_systemc_architecture_family_dse_sweep.py \
   --workloads graphene_pbe_uspp au_slab_subspace sic32_subspace \
   --families F2 \
   --execute-model \
@@ -233,7 +233,7 @@ EOF
 ### 生成对比图表
 
 ```bash
-python3 docs/benchmarks/visualize_dse_results.py \
+python3 tools/benchmarks/visualize_dse_results.py \
   --input results/iteration_2/sweep.json \
   --output results/iteration_2/plots/
 ```

@@ -94,7 +94,7 @@ struct ArchitectureConfig {
 
 #### 2. Template to SystemC Config Script (195 lines)
 
-**File**: `docs/benchmarks/template_to_systemc_config.py`
+**File**: `tools/benchmarks/template_to_systemc_config.py`
 
 **Functionality**:
 - 读取架构模板JSON

@@ -23,7 +23,7 @@
 复现命令：
 
 ```bash
-python3 docs/benchmarks/analyze_qe_scf_operator_load.py \
+python3 tools/benchmarks/analyze_qe_scf_operator_load.py \
   /Volumes/remote/phd/year_2/project/dft加速/docs/benchmarks/results/qe_workload_revalidation/si8_pbe_uspp \
   --markdown-out docs/benchmarks/si8_scf_operator_load_experiment_plan.md
 ```

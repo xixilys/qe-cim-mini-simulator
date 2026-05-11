@@ -63,13 +63,13 @@ make -j4
 ```
 QE Real Workload (soft/qe-7.5/)
     ↓ (trace extraction)
-docs/benchmarks/ (Python analysis)
+tools/benchmarks/ (Python analysis tools; docs/benchmarks stores evidence/contracts)
     ↓ (parameter extraction)
 ozaki_subspace_model/ (algorithm validation)
     ↓ (algorithm freeze)
 qe_band_solver_model/ (system simulation)
     ↓ (performance estimation)
-DSE Framework (docs/benchmarks/run_systemc_architecture_family_dse_sweep.py)
+DSE Framework (tools/benchmarks/run_systemc_architecture_family_dse_sweep.py)
 ```
 
 ## Key Validation Artifacts

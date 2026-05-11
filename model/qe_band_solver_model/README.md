@@ -297,7 +297,7 @@ The formal QE gold gate currently freezes the canonical workload set `si8_pbe_nc
 Canonical gate command:
 
 ```bash
-python3 docs/benchmarks/run_systemc_architecture_family_dse_sweep.py \
+python3 tools/benchmarks/run_systemc_architecture_family_dse_sweep.py \
   --gold-required-only \
   --workloads si8_pbe_nc si8_pbe_uspp \
   --families F1 F2 F3 \

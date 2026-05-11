@@ -203,7 +203,7 @@ cmake --build model/qe_band_solver_model/build -j4
 ### 8.2 默认 execute-model phase run
 
 ```bash
-python3 docs/benchmarks/run_qe_next_stage_dse_phase.py \
+python3 tools/benchmarks/run_qe_next_stage_dse_phase.py \
   --output-dir /tmp/qe_next_stage_release \
   --execute-model
 ```

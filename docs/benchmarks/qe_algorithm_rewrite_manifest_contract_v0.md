@@ -28,7 +28,7 @@
 与本文直接相关的 validator / 执行入口：
 
 - `docs/benchmarks/qe_cpu_gpu_baseline_manifest_template_v0.json`：baseline row 需要回填 `algorithm_rewrite_manifest_id`；
-- `docs/benchmarks/run_systemc_architecture_family_dse_sweep.py`：DSE/bootstrap bundle 会携带 `algorithm_rewrite_manifest_id` 与 contract id；
+- `tools/benchmarks/run_systemc_architecture_family_dse_sweep.py`：DSE/bootstrap bundle 会携带 `algorithm_rewrite_manifest_id` 与 contract id；
 - `docs/benchmarks/systemc_architecture_family_dse_result_schema_v0.json`：结果 bundle 的 machine-readable schema。
 
 ---

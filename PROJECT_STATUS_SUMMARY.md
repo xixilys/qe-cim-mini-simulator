@@ -321,7 +321,7 @@ Mock模式基于：
 **DSE框架**:
 - `docs/architecture/architecture_template_loader.py`
 - `docs/architecture/architecture_candidate_generator.py`
-- `docs/benchmarks/template_to_systemc_config.py`
+- `tools/benchmarks/template_to_systemc_config.py`
 
 **SystemC模型**:
 - `model/qe_band_solver_model/` (31个源文件)

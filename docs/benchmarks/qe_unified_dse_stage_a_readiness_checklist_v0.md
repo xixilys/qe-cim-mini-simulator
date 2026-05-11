@@ -165,7 +165,7 @@ The advisor report template requires these fields to remain aligned with evidenc
 Focused dry-run command, when the CLI lane is available:
 
 ```bash
-python3 docs/benchmarks/run_unified_dse_v0.py \
+python3 tools/benchmarks/run_unified_dse_v0.py \
   --design-space-spec docs/benchmarks/qe_architecture_family_design_space_spec_v0.json \
   --workload docs/benchmarks/testdata/unified_dse/minimal_workload.json \
   --output-dir /tmp/unified_dse_stage_a_smoke \
@@ -195,7 +195,7 @@ PYSMOKE
 Descriptor-only Stage B0 handoff command:
 
 ```bash
-python3 docs/benchmarks/run_unified_dse_v0.py \
+python3 tools/benchmarks/run_unified_dse_v0.py \
   --design-space-spec docs/benchmarks/qe_architecture_family_design_space_spec_v0.json \
   --workload docs/benchmarks/testdata/unified_dse/minimal_workload.json \
   --output-dir /tmp/unified_dse_stage_b0_descriptors \
@@ -220,7 +220,7 @@ executed.
 SystemC feedback ingest, when an external artifact exists:
 
 ```bash
-python3 docs/benchmarks/run_unified_dse_v0.py \
+python3 tools/benchmarks/run_unified_dse_v0.py \
   --design-space-spec docs/benchmarks/qe_architecture_family_design_space_spec_v0.json \
   --workload docs/benchmarks/testdata/unified_dse/minimal_workload.json \
   --systemc-feedback tmp/systemc_feedback.json \
@@ -231,7 +231,7 @@ python3 docs/benchmarks/run_unified_dse_v0.py \
 Full-stage status surface:
 
 ```bash
-python3 docs/benchmarks/run_unified_dse_v0.py \
+python3 tools/benchmarks/run_unified_dse_v0.py \
   --design-space-spec docs/benchmarks/qe_architecture_family_design_space_spec_v0.json \
   --workload docs/benchmarks/testdata/unified_dse/minimal_workload.json \
   --output-dir /tmp/unified_dse_full_stage_status \
@@ -248,7 +248,7 @@ external artifacts.
 Stage B3 smoke intake, when a real external report exists:
 
 ```bash
-python3 docs/benchmarks/run_unified_dse_v0.py \
+python3 tools/benchmarks/run_unified_dse_v0.py \
   --design-space-spec docs/benchmarks/qe_architecture_family_design_space_spec_v0.json \
   --workload docs/benchmarks/testdata/unified_dse/minimal_workload.json \
   --gem5-smoke-report tmp/gem5_smoke_report.json \
@@ -264,7 +264,7 @@ must not set `qe_equivalent_scf_claim = true` or use a claim ceiling above
 Stage C correctness intake, when a real compare-backed report exists:
 
 ```bash
-python3 docs/benchmarks/run_unified_dse_v0.py \
+python3 tools/benchmarks/run_unified_dse_v0.py \
   --design-space-spec docs/benchmarks/qe_architecture_family_design_space_spec_v0.json \
   --workload docs/benchmarks/testdata/unified_dse/minimal_workload.json \
   --qe-correctness-report tmp/qe_correctness_report.json \
@@ -282,7 +282,7 @@ Stage D implementation-evidence intake, when real HLS/RTL/OpenROAD/board/ASIC
 evidence exists:
 
 ```bash
-python3 docs/benchmarks/run_unified_dse_v0.py \
+python3 tools/benchmarks/run_unified_dse_v0.py \
   --design-space-spec docs/benchmarks/qe_architecture_family_design_space_spec_v0.json \
   --workload docs/benchmarks/testdata/unified_dse/minimal_workload.json \
   --implementation-evidence tmp/implementation_evidence.json \

@@ -45,7 +45,7 @@
         "notes": "Can be represented through generated SystemC architecture config sidecars before stronger evidence is collected.",
         "status": "configurable_systemc_model",
         "supporting_artifact_refs": [
-          "docs/benchmarks/template_to_systemc_config.py",
+          "tools/benchmarks/template_to_systemc_config.py",
           "model/qe_band_solver_model/README.md"
         ]
       },
@@ -86,7 +86,7 @@
         "status": "configurable_systemc_model",
         "supporting_artifact_refs": [
           "docs/architecture/architecture_templates/f2_systolic_fpga_dense_path_v1.json",
-          "docs/benchmarks/template_to_systemc_config.py"
+          "tools/benchmarks/template_to_systemc_config.py"
         ]
       },
       "name": "Traditional FPGA systolic dense path",

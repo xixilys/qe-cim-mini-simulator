@@ -13,7 +13,7 @@
 
 - `/Volumes/remote/phd/year_2/project/dft加速/docs/benchmarks/qe_gold_numerical_tolerance_schema_v0.json`
 
-配套关系上，它和 `/Volumes/remote/phd/year_2/project/dft加速/docs/benchmarks/extract_qe_shell_cpu_baseline.py` 是互补的：前者抽 shell-level timing aggregate，这一套文件冻结的是 QE gold numerical gate。
+配套关系上，它和 `/Volumes/remote/phd/year_2/project/dft加速/tools/benchmarks/extract_qe_shell_cpu_baseline.py` 是互补的：前者抽 shell-level timing aggregate，这一套文件冻结的是 QE gold numerical gate。
 
 ## 0.1 Canonical gold matrix（v0）
 
@@ -144,20 +144,20 @@ helper 支持两类输入：
 
 baseline 归一化脚本在：
 
-- `/Volumes/remote/phd/year_2/project/dft加速/docs/benchmarks/normalize_qe_gold_baseline.py`
+- `/Volumes/remote/phd/year_2/project/dft加速/tools/benchmarks/normalize_qe_gold_baseline.py`
 
 比较脚本在：
 
-- `/Volumes/remote/phd/year_2/project/dft加速/docs/benchmarks/compare_qe_gold_correctness.py`
+- `/Volumes/remote/phd/year_2/project/dft加速/tools/benchmarks/compare_qe_gold_correctness.py`
 
 示例：
 
 ```bash
-python3 docs/benchmarks/normalize_qe_gold_baseline.py \
+python3 tools/benchmarks/normalize_qe_gold_baseline.py \
   --metadata docs/benchmarks/results/qe_workload_revalidation/si8_pbe_nc/metadata.json \
   --output /tmp/si8_pbe_nc.gold.json
 
-python3 docs/benchmarks/compare_qe_gold_correctness.py \
+python3 tools/benchmarks/compare_qe_gold_correctness.py \
   --baseline /tmp/si8_pbe_nc.gold.json \
   --candidate /path/to/candidate_result.json \
   --output /tmp/qe_gold_compare.json
@@ -172,7 +172,7 @@ python3 docs/benchmarks/compare_qe_gold_correctness.py \
 如果要把 QE gold lane 作为一条真正可执行的批量 gate 往前推，可以直接用 architecture-family sweep runner 的 canonical gold 命令：
 
 ```bash
-python3 docs/benchmarks/run_systemc_architecture_family_dse_sweep.py \
+python3 tools/benchmarks/run_systemc_architecture_family_dse_sweep.py \
   --gold-required-only \
   --workloads si8_pbe_nc si8_pbe_uspp \
   --families F1 F2 F3 \

@@ -199,7 +199,7 @@ Device -> Host (per SCF):
 - Trace data: 
   - `docs/benchmarks/results/qe_autonomous_si8_uspp/hpsi_trace.csv`
   - `docs/benchmarks/results/qe_autonomous_si8_uspp/subspace_trace.csv`
-- Analysis script: `docs/benchmarks/analyze_microelectronics_workload.py`
+- Analysis script: `tools/benchmarks/analyze_microelectronics_workload.py`
 - This report: `docs/benchmarks/microelectronics_workload_analysis_report.md`
 
 ---

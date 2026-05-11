@@ -63,7 +63,7 @@
 
 - `/Volumes/remote/phd/year_2/project/dft加速/docs/benchmarks/qe_gold_correctness_contract_v0.md`
 - `/Volumes/remote/phd/year_2/project/dft加速/docs/benchmarks/qe_gold_numerical_tolerance_schema_v0.json`
-- `/Volumes/remote/phd/year_2/project/dft加速/docs/benchmarks/compare_qe_gold_correctness.py`
+- `/Volumes/remote/phd/year_2/project/dft加速/tools/benchmarks/compare_qe_gold_correctness.py`
 
 这三项分别对应：
 - correctness gate 的文字合同
@@ -75,7 +75,7 @@
 当前仓库里已经可以直接配套引用：
 
 - `/Volumes/remote/phd/year_2/project/dft加速/docs/benchmarks/systemc_architecture_family_dse_result_schema_v0.json`
-- `/Volumes/remote/phd/year_2/project/dft加速/docs/benchmarks/run_systemc_architecture_family_dse_sweep.py`
+- `/Volumes/remote/phd/year_2/project/dft加速/tools/benchmarks/run_systemc_architecture_family_dse_sweep.py`
 
 这两项分别对应：
 - projection / ranking 结果的 machine-readable schema（含 `energy_to_convergence_range_j`、`ranking_grade_ready`、`projection_grade_ready` 等字段）

@@ -3,7 +3,7 @@
 ## Purpose
 
 This contract defines the external Stage C artifact accepted by
-`docs/benchmarks/run_unified_dse_v0.py --qe-correctness-report`.
+`tools/benchmarks/run_unified_dse_v0.py --qe-correctness-report`.
 The Unified DSE CLI validates and references this artifact; it does not run QE,
 SystemC, gem5, or the compare helper itself.
 

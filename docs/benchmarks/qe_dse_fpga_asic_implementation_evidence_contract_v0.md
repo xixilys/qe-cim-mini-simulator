@@ -3,7 +3,7 @@
 ## Purpose
 
 This contract defines the external Stage D artifact accepted by
-`docs/benchmarks/run_unified_dse_v0.py --implementation-evidence`.
+`tools/benchmarks/run_unified_dse_v0.py --implementation-evidence`.
 The Unified DSE CLI validates and references the artifact; it does not run HLS,
 RTL simulation, OpenROAD, FPGA board measurement, ASIC implementation, SystemC,
 or gem5.

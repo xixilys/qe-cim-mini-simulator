@@ -140,10 +140,10 @@ workload characterization
 
 | 文件 | 作用 |
 | --- | --- |
-| `docs/benchmarks/run_systemc_architecture_family_dse_sweep.py` | Stage-A architecture-family sweep 入口。 |
-| `docs/benchmarks/run_unified_dse_v0.py` | Unified DSE v0 薄 CLI；用于 dry-run / bounded evidence package，不声明 winner，不替代现有 Stage-A runner 或 adjudicator。 |
-| `docs/benchmarks/run_qe_next_stage_dse_phase.py` | next-stage fast/accurate/generalization/release phase runner。 |
-| `docs/benchmarks/run_qe_system_design_adjudicator.py` | adjudicator memo generator。 |
+| `tools/benchmarks/run_systemc_architecture_family_dse_sweep.py` | Stage-A architecture-family sweep 入口。 |
+| `tools/benchmarks/run_unified_dse_v0.py` | Unified DSE v0 薄 CLI；用于 dry-run / bounded evidence package，不声明 winner，不替代现有 Stage-A runner 或 adjudicator。 |
+| `tools/benchmarks/run_qe_next_stage_dse_phase.py` | next-stage fast/accurate/generalization/release phase runner。 |
+| `tools/benchmarks/run_qe_system_design_adjudicator.py` | adjudicator memo generator。 |
 | `docs/benchmarks/systemc_architecture_family_dse_result_schema_v0.json` | DSE result bundle schema。 |
 | `docs/benchmarks/qe_next_stage_dse_simulator_phase_config_v0.json` | next-stage phase config，包含 cases、objectives、promotion states 和 tie-band。 |
 | `docs/benchmarks/qe_fast_layer_proxy_assumption_set_v0.json` | fast-layer proxy assumption set。 |
@@ -153,10 +153,10 @@ workload characterization
 
 | 文件 | 作用 |
 | --- | --- |
-| `docs/benchmarks/check_qe_ic_component_graph_v1.py` | 检查 component catalog 与 graph seed。 |
-| `docs/benchmarks/check_qe_next_stage_dse_simulator_contracts.py` | 检查 phase config、execution checklist、schema、runner 是否漂移。 |
-| `docs/benchmarks/check_qe_next_stage_release_bundle.py` | 检查 release bundle manifest、summary、coverage 与下游 artifact 是否自洽。 |
-| `docs/benchmarks/check_qe_gold_contract_regression.py` | gold correctness contract regression。 |
+| `tools/benchmarks/check_qe_ic_component_graph_v1.py` | 检查 component catalog 与 graph seed。 |
+| `tools/benchmarks/check_qe_next_stage_dse_simulator_contracts.py` | 检查 phase config、execution checklist、schema、runner 是否漂移。 |
+| `tools/benchmarks/check_qe_next_stage_release_bundle.py` | 检查 release bundle manifest、summary、coverage 与下游 artifact 是否自洽。 |
+| `tools/benchmarks/check_qe_gold_contract_regression.py` | gold correctness contract regression。 |
 
 ### 3.5 Runnable model
 
@@ -456,7 +456,7 @@ Smoke 不是 final run，也不产生 thesis-grade claim。
 典型 bounded template-driven smoke：
 
 ```bash
-python3 docs/benchmarks/run_systemc_architecture_family_dse_sweep.py \
+python3 tools/benchmarks/run_systemc_architecture_family_dse_sweep.py \
   --template-driven \
   --architecture-template-dir docs/architecture/architecture_templates \
   --emit-projected-configs \
@@ -467,7 +467,7 @@ python3 docs/benchmarks/run_systemc_architecture_family_dse_sweep.py \
 更完整的 graph/catalog 入口：
 
 ```bash
-python3 docs/benchmarks/run_systemc_architecture_family_dse_sweep.py \
+python3 tools/benchmarks/run_systemc_architecture_family_dse_sweep.py \
   --component-catalog docs/architecture/qe_ic_component_catalog_system_level_v1.json \
   --graph-spec docs/architecture/qe_ic_graph_seed_system_level_v1.json \
   --output-dir tmp/dse_sweep_results
@@ -482,7 +482,7 @@ Unified DSE v0 的架构和实施计划见 `docs/benchmarks/qe_unified_dse_frame
 典型 dry-run 入口：
 
 ```bash
-python3 docs/benchmarks/run_unified_dse_v0.py \
+python3 tools/benchmarks/run_unified_dse_v0.py \
   --design-space-spec docs/benchmarks/qe_architecture_family_design_space_spec_v0.json \
   --workload tmp/workload_descriptor.json \
   --output-dir tmp/unified_dse_results \
@@ -499,7 +499,7 @@ python3 docs/benchmarks/run_unified_dse_v0.py \
 Stage B0 descriptor-only handoff 可以在不执行仿真的情况下显式生成：
 
 ```bash
-python3 docs/benchmarks/run_unified_dse_v0.py \
+python3 tools/benchmarks/run_unified_dse_v0.py \
   --design-space-spec docs/benchmarks/qe_architecture_family_design_space_spec_v0.json \
   --workload tmp/workload_descriptor.json \
   --output-dir tmp/unified_dse_results \
@@ -514,7 +514,7 @@ python3 docs/benchmarks/run_unified_dse_v0.py \
 如果已有外部 SystemC feedback artifact，可以用 `--systemc-feedback` 回流指标：
 
 ```bash
-python3 docs/benchmarks/run_unified_dse_v0.py \
+python3 tools/benchmarks/run_unified_dse_v0.py \
   --design-space-spec docs/benchmarks/qe_architecture_family_design_space_spec_v0.json \
   --workload tmp/workload_descriptor.json \
   --systemc-feedback tmp/systemc_feedback.json \
@@ -578,7 +578,7 @@ thesis-grade architecture decision
 Runnable model README 中给出的 canonical QE gold gate：
 
 ```bash
-python3 docs/benchmarks/run_systemc_architecture_family_dse_sweep.py \
+python3 tools/benchmarks/run_systemc_architecture_family_dse_sweep.py \
   --gold-required-only \
   --workloads si8_pbe_nc si8_pbe_uspp \
   --families F1 F2 F3 \
@@ -619,7 +619,7 @@ cmake --build model/qe_band_solver_model/build -j4
 运行 next-stage phase：
 
 ```bash
-python3 docs/benchmarks/run_qe_next_stage_dse_phase.py \
+python3 tools/benchmarks/run_qe_next_stage_dse_phase.py \
   --output-dir tmp/qe_next_stage_release \
   --execute-model
 ```
@@ -627,7 +627,7 @@ python3 docs/benchmarks/run_qe_next_stage_dse_phase.py \
 如果只需要 stub/source-kind flow，可使用 runner 支持的 non-execute mode，例如：
 
 ```bash
-python3 docs/benchmarks/run_qe_next_stage_dse_phase.py \
+python3 tools/benchmarks/run_qe_next_stage_dse_phase.py \
   --output-dir tmp/qe_next_stage_release \
   --include-conditional-families \
   --source-kind stub
@@ -768,8 +768,8 @@ final_residual_threshold_reached
 相关工具：
 
 ```text
-docs/benchmarks/normalize_qe_gold_baseline.py
-docs/benchmarks/compare_qe_gold_correctness.py
+tools/benchmarks/normalize_qe_gold_baseline.py
+tools/benchmarks/compare_qe_gold_correctness.py
 docs/benchmarks/qe_gold_numerical_tolerance_schema_v0.json
 ```
 
@@ -882,7 +882,7 @@ release_ready_recommendation 等于最终 public authority。
 ### 13.1 Component / graph validation
 
 ```bash
-python3 docs/benchmarks/check_qe_ic_component_graph_v1.py \
+python3 tools/benchmarks/check_qe_ic_component_graph_v1.py \
   --component-catalog docs/architecture/qe_ic_component_catalog_system_level_v1.json \
   --graph-spec docs/architecture/qe_ic_graph_seed_system_level_v1.json
 ```
@@ -897,7 +897,7 @@ python3 docs/benchmarks/check_qe_ic_component_graph_v1.py \
 ### 13.2 Next-stage simulator contract validation
 
 ```bash
-python3 docs/benchmarks/check_qe_next_stage_dse_simulator_contracts.py
+python3 tools/benchmarks/check_qe_next_stage_dse_simulator_contracts.py
 ```
 
 用途：
@@ -910,7 +910,7 @@ python3 docs/benchmarks/check_qe_next_stage_dse_simulator_contracts.py
 ### 13.3 Release bundle validation
 
 ```bash
-python3 docs/benchmarks/check_qe_next_stage_release_bundle.py \
+python3 tools/benchmarks/check_qe_next_stage_release_bundle.py \
   --summary tmp/qe_next_stage_release/qe_next_stage_dse_phase_summary.json
 ```
 
@@ -926,9 +926,9 @@ python3 docs/benchmarks/check_qe_next_stage_release_bundle.py \
 常用 regression tests：
 
 ```bash
-python3 docs/benchmarks/test_run_systemc_architecture_family_dse_sweep.py
-python3 docs/benchmarks/test_run_qe_next_stage_dse_phase.py
-python3 docs/benchmarks/test_run_qe_system_design_adjudicator.py
+python3 tools/benchmarks/test_run_systemc_architecture_family_dse_sweep.py
+python3 tools/benchmarks/test_run_qe_next_stage_dse_phase.py
+python3 tools/benchmarks/test_run_qe_system_design_adjudicator.py
 ```
 
 这些 test 用于保证 runner/schema/adjudicator 行为没有被无意破坏。它们不是 performance benchmark。
@@ -1116,7 +1116,7 @@ cmake --build model/qe_band_solver_model/build -j4
 ### 18.3 Run Stage-A sweep
 
 ```bash
-python3 docs/benchmarks/run_systemc_architecture_family_dse_sweep.py \
+python3 tools/benchmarks/run_systemc_architecture_family_dse_sweep.py \
   --component-catalog docs/architecture/qe_ic_component_catalog_system_level_v1.json \
   --graph-spec docs/architecture/qe_ic_graph_seed_system_level_v1.json \
   --output-dir tmp/dse_sweep_results
@@ -1125,7 +1125,7 @@ python3 docs/benchmarks/run_systemc_architecture_family_dse_sweep.py \
 ### 18.4 Run next-stage phase
 
 ```bash
-python3 docs/benchmarks/run_qe_next_stage_dse_phase.py \
+python3 tools/benchmarks/run_qe_next_stage_dse_phase.py \
   --output-dir tmp/qe_next_stage_release \
   --execute-model
 ```
@@ -1133,20 +1133,20 @@ python3 docs/benchmarks/run_qe_next_stage_dse_phase.py \
 ### 18.5 Validate contracts
 
 ```bash
-python3 docs/benchmarks/check_qe_next_stage_dse_simulator_contracts.py
+python3 tools/benchmarks/check_qe_next_stage_dse_simulator_contracts.py
 ```
 
 ### 18.6 Validate release bundle
 
 ```bash
-python3 docs/benchmarks/check_qe_next_stage_release_bundle.py \
+python3 tools/benchmarks/check_qe_next_stage_release_bundle.py \
   --summary tmp/qe_next_stage_release/qe_next_stage_dse_phase_summary.json
 ```
 
 ### 18.7 Generate adjudicator memo
 
 ```bash
-python3 docs/benchmarks/run_qe_system_design_adjudicator.py \
+python3 tools/benchmarks/run_qe_system_design_adjudicator.py \
   --help
 ```
 

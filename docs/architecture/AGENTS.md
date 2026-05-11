@@ -198,10 +198,10 @@ cat docs/architecture/qe_ic_component_catalog_system_level_v1.json | jq '.compon
 cat docs/architecture/qe_ic_graph_seed_system_level_v1.json | jq '.graph_topology'
 
 # 3. Validate component/graph contracts
-python3 docs/benchmarks/check_qe_ic_component_graph_v1.py
+python3 tools/benchmarks/check_qe_ic_component_graph_v1.py
 
 # 4. Preview projection
-python3 docs/benchmarks/qe_ic_graph_projection_utils.py --preview
+python3 tools/benchmarks/qe_ic_graph_projection_utils.py --preview
 ```
 
 ### Architecture Modification Workflow
@@ -213,10 +213,10 @@ vim docs/architecture/qe_ic_component_catalog_system_level_v1.json
 vim docs/architecture/qe_ic_graph_seed_system_level_v1.json
 
 # 3. Validate changes
-python3 docs/benchmarks/check_qe_ic_component_graph_v1.py
+python3 tools/benchmarks/check_qe_ic_component_graph_v1.py
 
 # 4. Run DSE sweep with new architecture
-python3 docs/benchmarks/run_systemc_architecture_family_dse_sweep.py \
+python3 tools/benchmarks/run_systemc_architecture_family_dse_sweep.py \
   --component-catalog docs/architecture/qe_ic_component_catalog_system_level_v1.json \
   --graph-spec docs/architecture/qe_ic_graph_seed_system_level_v1.json
 ```

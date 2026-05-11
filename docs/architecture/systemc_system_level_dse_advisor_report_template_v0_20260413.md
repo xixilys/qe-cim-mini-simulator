@@ -65,8 +65,8 @@
 ### 3.2 Projection summary
 - **Release-facing top-level entrypoint**：`qe_next_stage_artifact_bundle_manifest.json / .md`
 - **Projection schema**：`docs/benchmarks/systemc_architecture_family_dse_result_schema_v0.json`
-- **Projection sweep source**：`docs/benchmarks/run_systemc_architecture_family_dse_sweep.py`
-- **Next-stage phase runner**：`docs/benchmarks/run_qe_next_stage_dse_phase.py`
+- **Projection sweep source**：`tools/benchmarks/run_systemc_architecture_family_dse_sweep.py`
+- **Next-stage phase runner**：`tools/benchmarks/run_qe_next_stage_dse_phase.py`
 - **Projection review package**：`qe_next_stage_projection_review.json / .md`
 - **Stage-main recommendation package**：`qe_next_stage_stage_main_recommendation.json / .md`
 - **speedup_to_convergence_range**：只在 `recommendation_type = projection-grade` 时引用 machine-readable bundle；否则留空，并在 narrative 里解释为什么当前还不能展示 range

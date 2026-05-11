@@ -38,7 +38,7 @@
   "local_anchors": [
     {
       "anchor_id": "current_architecture_family_runner",
-      "path": "docs/benchmarks/run_systemc_architecture_family_dse_sweep.py",
+      "path": "tools/benchmarks/run_systemc_architecture_family_dse_sweep.py",
       "role": "Current architecture-family sweep producer for F1/F2/F3 rows plus template-driven scaffold rows, graph evidence, projection flags, gold-gate helpers, JSON bundles, and CSV bundles."
     },
     {
@@ -48,17 +48,17 @@
     },
     {
       "anchor_id": "architecture_template_loader",
-      "path": "docs/benchmarks/architecture_template_loader.py",
+      "path": "tools/benchmarks/architecture_template_loader.py",
       "role": "Loads and validates architecture templates against architecture_template_schema_v1.json."
     },
     {
       "anchor_id": "architecture_candidate_generator",
-      "path": "docs/benchmarks/architecture_candidate_generator.py",
+      "path": "tools/benchmarks/architecture_candidate_generator.py",
       "role": "Generates grid, random, and Latin-hypercube architecture candidates from template parameter ranges."
     },
     {
       "anchor_id": "template_to_systemc_projector",
-      "path": "docs/benchmarks/template_to_systemc_config.py",
+      "path": "tools/benchmarks/template_to_systemc_config.py",
       "role": "Projects architecture templates to SystemC architecture configuration JSON."
     },
     {
@@ -73,7 +73,7 @@
     },
     {
       "anchor_id": "graph_projection_helper",
-      "path": "docs/benchmarks/qe_ic_graph_projection_utils.py",
+      "path": "tools/benchmarks/qe_ic_graph_projection_utils.py",
       "role": "Pure helper for graph/component projection into design-point keys, shared join keys, and runtime frontdoor patches."
     },
     {
@@ -296,7 +296,7 @@
     ],
     "evidence_sources": [
       "docs/overview/qe_subspace_sampling.md",
-      "docs/benchmarks/summarize_qe_subspace_trace.py",
+      "tools/benchmarks/summarize_qe_subspace_trace.py",
       "docs/benchmarks/qe_kernel_characterization_matrix_for_system_dse_v0.md",
       "docs/benchmarks/qe_partition_and_interface_for_system_dse_v0.md",
       "docs/benchmarks/qe_dse_parameter_stack_for_system_dse_v0.md",
@@ -308,7 +308,7 @@
     "graph_surface": {
       "component_catalog_path": "docs/architecture/qe_ic_component_catalog_system_level_v1.json",
       "graph_seed_path": "docs/architecture/qe_ic_graph_seed_system_level_v1.json",
-      "projection_helper_path": "docs/benchmarks/qe_ic_graph_projection_utils.py",
+      "projection_helper_path": "tools/benchmarks/qe_ic_graph_projection_utils.py",
       "authority_keys": [
         "family",
         "diag_policy",
@@ -327,9 +327,9 @@
       ]
     },
     "template_surface": {
-      "loader_path": "docs/benchmarks/architecture_template_loader.py",
-      "generator_path": "docs/benchmarks/architecture_candidate_generator.py",
-      "projector_path": "docs/benchmarks/template_to_systemc_config.py",
+      "loader_path": "tools/benchmarks/architecture_template_loader.py",
+      "generator_path": "tools/benchmarks/architecture_candidate_generator.py",
+      "projector_path": "tools/benchmarks/template_to_systemc_config.py",
       "schema_path": "docs/architecture/architecture_template_schema_v1.json",
       "runtime_config_hook": "QEBS_ARCH_CONFIG",
       "runtime_executor_boundary": {
@@ -652,11 +652,11 @@
         "fidelity_class": "characterization_pruning",
         "source_kind": "trace_calibrated_proxy",
         "local_tools": [
-          "docs/benchmarks/run_qe_workload_matrix.py",
-          "docs/benchmarks/summarize_qe_subspace_trace.py",
-          "docs/benchmarks/analyze_qe_scf_operator_load.py",
-          "docs/benchmarks/analyze_qe_workload_revalidation.py",
-          "docs/benchmarks/extract_qe_shell_cpu_baseline.py"
+          "tools/benchmarks/run_qe_workload_matrix.py",
+          "tools/benchmarks/summarize_qe_subspace_trace.py",
+          "tools/benchmarks/analyze_qe_scf_operator_load.py",
+          "tools/benchmarks/analyze_qe_workload_revalidation.py",
+          "tools/benchmarks/extract_qe_shell_cpu_baseline.py"
         ],
         "allowed_outputs": [
           "workload_shape",
@@ -675,8 +675,8 @@
         "fidelity_class": "fast_timed_functional",
         "source_kind": "timed_functional_proxy",
         "local_tools": [
-          "docs/benchmarks/run_systemc_architecture_family_dse_sweep.py",
-          "docs/benchmarks/run_qe_next_stage_dse_phase.py",
+          "tools/benchmarks/run_systemc_architecture_family_dse_sweep.py",
+          "tools/benchmarks/run_qe_next_stage_dse_phase.py",
           "model/qe_band_solver_model/build/qe_band_solver_model"
         ],
         "allowed_outputs": [
@@ -698,8 +698,8 @@
         "fidelity_class": "correctness_capable",
         "source_kind": "mixed",
         "local_tools": [
-          "docs/benchmarks/compare_qe_gold_correctness.py",
-          "docs/benchmarks/normalize_qe_gold_baseline.py",
+          "tools/benchmarks/compare_qe_gold_correctness.py",
+          "tools/benchmarks/normalize_qe_gold_baseline.py",
           "docs/benchmarks/qe_gold_numerical_tolerance_schema_v0.json"
         ],
         "allowed_outputs": [
@@ -719,7 +719,7 @@
         "fidelity_class": "generalization_coverage",
         "source_kind": "mixed",
         "local_tools": [
-          "docs/benchmarks/run_qe_next_stage_dse_phase.py"
+          "tools/benchmarks/run_qe_next_stage_dse_phase.py"
         ],
         "allowed_outputs": [
           "generalization_case_status",
@@ -736,7 +736,7 @@
         "fidelity_class": "authority_adjudication",
         "source_kind": "mixed",
         "local_tools": [
-          "docs/benchmarks/run_qe_system_design_adjudicator.py",
+          "tools/benchmarks/run_qe_system_design_adjudicator.py",
           "docs/benchmarks/qe_ic_adjudicator_authority_contract_v0.md"
         ],
         "allowed_outputs": [
@@ -810,19 +810,19 @@
       {
         "generator_id": "canonical_runner_grid",
         "strategy": "canonical_grid",
-        "producer_path": "docs/benchmarks/run_systemc_architecture_family_dse_sweep.py",
+        "producer_path": "tools/benchmarks/run_systemc_architecture_family_dse_sweep.py",
         "authority_limit": "evaluated_row_producer"
       },
       {
         "generator_id": "template_grid_random_lhs_generator",
         "strategy": "latin_hypercube",
-        "producer_path": "docs/benchmarks/architecture_candidate_generator.py",
+        "producer_path": "tools/benchmarks/architecture_candidate_generator.py",
         "authority_limit": "candidate_proposal_only"
       },
       {
         "generator_id": "template_to_systemc_config_projector",
         "strategy": "grid_search",
-        "producer_path": "docs/benchmarks/template_to_systemc_config.py",
+        "producer_path": "tools/benchmarks/template_to_systemc_config.py",
         "authority_limit": "candidate_proposal_only"
       },
       {
@@ -871,7 +871,7 @@
         "classify_rows_as_reject_explain_only_or_promotion_eligible_without_public_winner_claims",
         "send_evidence_bundle_to_adjudicator_intake"
       ],
-      "bounded_smoke_command": "python3 docs/benchmarks/run_systemc_architecture_family_dse_sweep.py --template-driven --architecture-template-dir docs/architecture/architecture_templates --architecture-template-ids 4cluster_cim_baseline_v1 4cluster_traditional_fpga_v1 3cluster_fused_build_diag_v1 cim_dsp_vector_hybrid_v1 unified_fp64_gemm_fabric_v1 resident_dataflow_fabric_v1 --workloads si4_pbe_uspp_small graphene_pbe_uspp --max-design-points 12 --emit-projected-configs --design-space-spec docs/benchmarks/qe_architecture_family_design_space_spec_v0.json --source-kind stub --output-dir tmp/stage_a_template_dse_smoke",
+      "bounded_smoke_command": "python3 tools/benchmarks/run_systemc_architecture_family_dse_sweep.py --template-driven --architecture-template-dir docs/architecture/architecture_templates --architecture-template-ids 4cluster_cim_baseline_v1 4cluster_traditional_fpga_v1 3cluster_fused_build_diag_v1 cim_dsp_vector_hybrid_v1 unified_fp64_gemm_fabric_v1 resident_dataflow_fabric_v1 --workloads si4_pbe_uspp_small graphene_pbe_uspp --max-design-points 12 --emit-projected-configs --design-space-spec docs/benchmarks/qe_architecture_family_design_space_spec_v0.json --source-kind stub --output-dir tmp/stage_a_template_dse_smoke",
       "smoke_command_intent": "Bounded template-driven Stage-A DSE smoke over six templates and two QE workload proxies. It emits scaffold rows and projected config sidecars without --execute-model, so it does not claim completed SystemC executor support."
     }
   },

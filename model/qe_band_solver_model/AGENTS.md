@@ -169,7 +169,7 @@ sc_main (sc_main.cpp)
 
 ## Integration with DSE Framework
 
-The model is invoked by `docs/benchmarks/run_systemc_architecture_family_dse_sweep.py`:
+The model is invoked by `tools/benchmarks/run_systemc_architecture_family_dse_sweep.py`:
 
 1. DSE generates architecture configuration JSON
 2. Model loads configuration and workload parameters
@@ -187,7 +187,7 @@ cd model/qe_band_solver_model/build
 
 ### Run DSE Sweep
 ```bash
-python3 docs/benchmarks/run_systemc_architecture_family_dse_sweep.py \
+python3 tools/benchmarks/run_systemc_architecture_family_dse_sweep.py \
   --component-catalog docs/benchmarks/qe_ic_component_catalog_system_level_v1.json \
   --graph-spec docs/benchmarks/qe_ic_graph_seed_system_level_v1.json \
   --output-dir tmp/dse_sweep_results
@@ -202,7 +202,7 @@ cat tmp/dse_sweep_results/compare/speedup_summary.json
 ### Validate Against CPU Baseline
 ```bash
 # Compare against QE trace data
-python3 docs/benchmarks/summarize_qe_subspace_trace.py \
+python3 tools/benchmarks/summarize_qe_subspace_trace.py \
   docs/benchmarks/results/qe_si8_trace.csv
 ```
 

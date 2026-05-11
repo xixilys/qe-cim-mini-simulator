@@ -66,7 +66,7 @@
 - [ ] 若 stage 已到 `projection_eligible`，`stage_main_recommendation_package` 已生成
 - [ ] 若当前 package 已进入 release-facing 使用阶段，`stage_artifact_bundle_manifest` 已生成
 - [ ] 已引用 `/Volumes/remote/phd/year_2/project/dft加速/docs/benchmarks/systemc_architecture_family_dse_result_schema_v0.json`
-- [ ] 已引用 `/Volumes/remote/phd/year_2/project/dft加速/docs/benchmarks/run_systemc_architecture_family_dse_sweep.py`
+- [ ] 已引用 `/Volumes/remote/phd/year_2/project/dft加速/tools/benchmarks/run_systemc_architecture_family_dse_sweep.py`
 - [ ] `assumption_set_id` 已冻结
 - [ ] `QE baseline ID` 已冻结（不再是临时占位）
 - [ ] `QE numerical tolerance schema ID` 已冻结（不再是 `pending_*` 占位）

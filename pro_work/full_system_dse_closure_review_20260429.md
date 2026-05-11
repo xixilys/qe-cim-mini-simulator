@@ -25,10 +25,10 @@ for the exact artifact being used.
 
 Current positive signals:
 
-- `docs/benchmarks/unified_dse/domain_contracts.py` defines domain-neutral IR
+- `tools/benchmarks/unified_dse/domain_contracts.py` defines domain-neutral IR
   names (`ApplicationGraphIR`, `ArchitectureTemplateIR`, `MappingIR`,
   `EvidenceIR`) and keeps backend reports claim-ceiling validated by fidelity.
-- `docs/benchmarks/unified_dse/stage_b0_descriptors.py` emits separate sidecars
+- `tools/benchmarks/unified_dse/stage_b0_descriptors.py` emits separate sidecars
   for application graph, architecture template, mapping, candidate descriptor,
   SystemC config, gem5 handoff, and backend execution request.
 - Stage-B0 SystemC configs are explicitly `not_executed` and capped at
@@ -198,7 +198,7 @@ Do not use these phrases unless a separate validated artifact exists:
 ## 5. 2026-04-30 Option A+ B4 materialization closure
 
 Implementation closure for the real-gem5/B4 gate added producer-side B4 request
-materialization in `docs/benchmarks/run_qe_fpga_dse_e2e_v0.py` without changing
+materialization in `tools/benchmarks/run_qe_fpga_dse_e2e_v0.py` without changing
 the request/report schema:
 
 - B4-added refs (`gem5_executable`, `gem5_config`,
@@ -216,16 +216,16 @@ Current verification evidence after the Top-K/B4 materialization update:
 
 ```bash
 python3 -m unittest \
-  docs.benchmarks.test_run_unified_dse_v0 \
-  docs.benchmarks.test_backend_execution_runner \
-  docs.benchmarks.test_run_qe_fpga_dse_e2e_v0 \
-  docs.benchmarks.test_fpga_accelerator_simobject_contract
+  tools.benchmarks.test_run_unified_dse_v0 \
+  tools.benchmarks.test_backend_execution_runner \
+  tools.benchmarks.test_run_qe_fpga_dse_e2e_v0 \
+  tools.benchmarks.test_fpga_accelerator_simobject_contract
 ```
 
 Result: covered by the later full-suite command in Section 7.
 
 ```bash
-python3 docs/benchmarks/run_qe_fpga_dse_e2e_v0.py \
+python3 tools/benchmarks/run_qe_fpga_dse_e2e_v0.py \
   --output-dir tmp/qe_fpga_dse_top2_real_b4_probe \
   --max-design-points 4 \
   --shortlist-size 2 \
@@ -300,13 +300,13 @@ Verification evidence:
 PYTHONDONTWRITEBYTECODE=1 python3 -m compileall -q backend docs/benchmarks
 
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest \
-  docs.benchmarks.test_stage_c_qe_correctness_materializer \
-  docs.benchmarks.test_stage_d_implementation_evidence_materializer \
-  docs.benchmarks.test_qe_dse_claim_ceiling_status_matrix_v0 \
-  docs.benchmarks.test_run_unified_dse_v0 \
-  docs.benchmarks.test_run_qe_fpga_dse_e2e_v0 \
-  docs.benchmarks.test_backend_execution_runner \
-  docs.benchmarks.test_fpga_accelerator_simobject_contract
+  tools.benchmarks.test_stage_c_qe_correctness_materializer \
+  tools.benchmarks.test_stage_d_implementation_evidence_materializer \
+  tools.benchmarks.test_qe_dse_claim_ceiling_status_matrix_v0 \
+  tools.benchmarks.test_run_unified_dse_v0 \
+  tools.benchmarks.test_run_qe_fpga_dse_e2e_v0 \
+  tools.benchmarks.test_backend_execution_runner \
+  tools.benchmarks.test_fpga_accelerator_simobject_contract
 ```
 
 Result at the time of this lane: 84 tests OK. The later Top-K/B4 closure in
@@ -314,7 +314,7 @@ Section 7 supersedes this with 85 tests OK after adding the screening-rank and
 timing-sidecar regressions.
 
 ```bash
-PYTHONDONTWRITEBYTECODE=1 python3 docs/benchmarks/run_qe_fpga_dse_e2e_v0.py \
+PYTHONDONTWRITEBYTECODE=1 python3 tools/benchmarks/run_qe_fpga_dse_e2e_v0.py \
   --output-dir tmp/qe_fpga_dse_stage_cd_probe \
   --preferred-family F1 \
   --max-design-points 1 \
@@ -369,13 +369,13 @@ Fresh verification command:
 python3 -m compileall -q backend docs/benchmarks gem5_integration/configs
 
 python3 -m unittest \
-  docs.benchmarks.test_stage_c_qe_correctness_materializer \
-  docs.benchmarks.test_stage_d_implementation_evidence_materializer \
-  docs.benchmarks.test_qe_dse_claim_ceiling_status_matrix_v0 \
-  docs.benchmarks.test_run_unified_dse_v0 \
-  docs.benchmarks.test_run_qe_fpga_dse_e2e_v0 \
-  docs.benchmarks.test_backend_execution_runner \
-  docs.benchmarks.test_fpga_accelerator_simobject_contract
+  tools.benchmarks.test_stage_c_qe_correctness_materializer \
+  tools.benchmarks.test_stage_d_implementation_evidence_materializer \
+  tools.benchmarks.test_qe_dse_claim_ceiling_status_matrix_v0 \
+  tools.benchmarks.test_run_unified_dse_v0 \
+  tools.benchmarks.test_run_qe_fpga_dse_e2e_v0 \
+  tools.benchmarks.test_backend_execution_runner \
+  tools.benchmarks.test_fpga_accelerator_simobject_contract
 ```
 
 Result: 85 tests OK.
@@ -383,7 +383,7 @@ Result: 85 tests OK.
 Fresh Top-K/B4 smoke:
 
 ```bash
-python3 docs/benchmarks/run_qe_fpga_dse_e2e_v0.py \
+python3 tools/benchmarks/run_qe_fpga_dse_e2e_v0.py \
   --output-dir tmp/qe_fpga_dse_top2_real_b4_probe \
   --max-design-points 4 \
   --shortlist-size 2 \
@@ -440,7 +440,7 @@ team runtime:
 Fresh guarded Top-K/B4 run after the Ralph changes:
 
 ```bash
-python3 docs/benchmarks/run_qe_fpga_dse_e2e_v0.py \
+python3 tools/benchmarks/run_qe_fpga_dse_e2e_v0.py \
   --output-dir tmp/ralph_dse_evidence_e2e_b4_no_stage_cd \
   --top-k 2 \
   --b4-top-n 2 \
@@ -469,13 +469,13 @@ Fresh regression command:
 python3 -m compileall -q backend docs/benchmarks gem5_integration/configs
 
 python3 -m unittest \
-  docs.benchmarks.test_qe_dse_claim_ceiling_status_matrix_v0 \
-  docs.benchmarks.test_stage_c_qe_correctness_materializer \
-  docs.benchmarks.test_stage_d_implementation_evidence_materializer \
-  docs.benchmarks.test_run_qe_fpga_dse_e2e_v0 \
-  docs.benchmarks.test_backend_execution_runner \
-  docs.benchmarks.test_fpga_accelerator_simobject_contract \
-  docs.benchmarks.test_run_unified_dse_v0
+  tools.benchmarks.test_qe_dse_claim_ceiling_status_matrix_v0 \
+  tools.benchmarks.test_stage_c_qe_correctness_materializer \
+  tools.benchmarks.test_stage_d_implementation_evidence_materializer \
+  tools.benchmarks.test_run_qe_fpga_dse_e2e_v0 \
+  tools.benchmarks.test_backend_execution_runner \
+  tools.benchmarks.test_fpga_accelerator_simobject_contract \
+  tools.benchmarks.test_run_unified_dse_v0
 ```
 
 Result: 97 tests OK.
@@ -541,7 +541,7 @@ Observed: `execution_status=executed`,
 Fresh Top-K strict B4 E2E command:
 
 ```bash
-python3 docs/benchmarks/run_qe_fpga_dse_e2e_v0.py \
+python3 tools/benchmarks/run_qe_fpga_dse_e2e_v0.py \
   --output-dir tmp/qe_fpga_dse_event_tick_closed_loop_probe \
   --max-design-points 4 \
   --shortlist-size 2 \
@@ -579,18 +579,18 @@ than the bounded proxy triage flow.
 
 New decision authority files:
 
-- `docs/benchmarks/final_best_policy_v0.py` defines
+- `tools/benchmarks/final_best_policy_v0.py` defines
   `qe_fpga_final_best_policy_v0`. The v0 default is HLS-synthesis minimum:
   `minimum_stage_d_tier=hls_synthesis`,
   `allow_implementation_projection=false`.
-- `docs/benchmarks/build_qe_final_best_architecture_decision_v0.py` emits
+- `tools/benchmarks/build_qe_final_best_architecture_decision_v0.py` emits
   `qe_fpga_final_best_architecture_decision_v0.json` and selects a winner only
   after same-candidate Stage C + Stage D + strict B4 pass.
-- `docs/benchmarks/build_qe_candidate_evidence_manifest_v0.py` provides the
+- `tools/benchmarks/build_qe_candidate_evidence_manifest_v0.py` provides the
   candidate join manifest for external Stage C/D producer lanes.
-- `docs/benchmarks/run_qe_stage_c_correctness_for_candidates_v0.py` refuses
+- `tools/benchmarks/run_qe_stage_c_correctness_for_candidates_v0.py` refuses
   rather than fabricating Stage C when no real gold/QE summary is supplied.
-- `docs/benchmarks/stage_d_adapters/hls_synthesis_adapter_v0.py` is the first
+- `tools/benchmarks/stage_d_adapters/hls_synthesis_adapter_v0.py` is the first
   Stage-D adapter; placeholder/template data is still downgraded to projection.
 
 Important claim boundary:
@@ -629,7 +629,7 @@ Normative evidence-tier labels are exact strings:
 Release checker:
 
 ```bash
-python3 docs/benchmarks/check_qe_dse_release_claim_boundaries_v0.py
+python3 tools/benchmarks/check_qe_dse_release_claim_boundaries_v0.py
 ```
 
 The checker scans this review, the complete architecture-family DSE framework
@@ -728,7 +728,7 @@ override the final decision’s passed dominance closure for the selected winner
 Fresh final E2E command shape:
 
 ```bash
-python3 docs/benchmarks/run_qe_fpga_dse_e2e_v0.py \
+python3 tools/benchmarks/run_qe_fpga_dse_e2e_v0.py \
   --workload tmp/si8_workload.json \
   --output-dir tmp/closed_catalog_best_si8_top40_pass5 \
   --max-design-points 270 \
@@ -749,7 +749,7 @@ python3 docs/benchmarks/run_qe_fpga_dse_e2e_v0.py \
 Fresh release-boundary validation for the emitted JSON reports:
 
 ```bash
-python3 docs/benchmarks/check_qe_dse_release_claim_boundaries_v0.py --no-require-doc-language \
+python3 tools/benchmarks/check_qe_dse_release_claim_boundaries_v0.py --no-require-doc-language \
   tmp/closed_catalog_best_si8_top40_pass5/qe_fpga_final_best_architecture_decision_v0.json \
   tmp/closed_catalog_best_si8_top40_pass5/qe_fpga_dse_performance_summary_v0.json \
   tmp/closed_catalog_best_si8_top40_pass5/claim_ceiling_status_matrix_v0.json \

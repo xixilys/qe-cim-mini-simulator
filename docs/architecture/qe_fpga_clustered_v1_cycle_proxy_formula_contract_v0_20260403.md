@@ -146,7 +146,7 @@
 
 对应的自动计算脚本是：
 
-- `docs/benchmarks/compute_qe_clustered_cycle_proxy.py`
+- `tools/benchmarks/compute_qe_clustered_cycle_proxy.py`
 
 它会把本合同中的默认公式写回：
 

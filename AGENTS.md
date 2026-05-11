@@ -37,7 +37,7 @@ cmake .. && make -j4
 ./qe_band_solver_model
 
 # Run DSE sweep
-python3 docs/benchmarks/run_systemc_architecture_family_dse_sweep.py
+python3 tools/benchmarks/run_systemc_architecture_family_dse_sweep.py
 ```
 
 ## Repository Layout
@@ -65,14 +65,17 @@ python3 docs/benchmarks/run_systemc_architecture_family_dse_sweep.py
 │   │   ├── system_design_master_spec_v0.md
 │   │   ├── qe_ic_component_catalog_system_level_v1.json
 │   │   └── qe_ic_graph_seed_system_level_v1.json
-│   ├── benchmarks/                 # DSE framework and validation
-│   │   ├── AGENTS.md               # Benchmarks guide
-│   │   ├── run_systemc_architecture_family_dse_sweep.py
-│   │   └── 50+ analysis/validation scripts
+│   ├── benchmarks/                 # DSE contracts, runbooks, schemas, and results
+│   │   ├── AGENTS.md               # Benchmarks documentation guide
+│   │   ├── generic_dse_simulation_system_handbook_v1.md
+│   │   └── results/                # Historical benchmark evidence
 │   ├── overview/                   # Project timeline and handoff
 │   ├── cim/                        # CIM design specifications
 │   ├── control/                    # Control ISA specifications
 │   └── survey/                     # Industry surveys
+├── tools/                          # Runnable Python tools and analysis CLIs
+│   ├── benchmarks/                 # DSE/benchmark tools moved out of docs
+│   └── architecture_comparison/     # Architecture comparison tools
 ├── gem5_integration/               # gem5+SystemC co-simulation
 │   ├── AGENTS.md                   # Co-simulation guide
 │   ├── src/dev/fpga/               # gem5 FPGA device model
@@ -230,12 +233,12 @@ If you encounter this error:
 ## Benchmark / Analysis Commands
 
 - Summarize a QE trace CSV:
-  - `python3 docs/benchmarks/summarize_qe_subspace_trace.py /abs/path/qe_subspace_trace.csv`
+  - `python3 tools/benchmarks/summarize_qe_subspace_trace.py /abs/path/qe_subspace_trace.csv`
 - Rebuild the traced QE workspace copy when needed:
   - `cmake --build /Volumes/remote/phd/year_2/project/dft加速/soft/qe-7.5/build_subspace_trace --target qe_pw_exe -j4`
 - Additional benchmark helpers exist in:
-  - `docs/benchmarks/run_cpu_baseline.py`
-  - `docs/benchmarks/run_pyscf_ops_baseline.py`
+  - `tools/benchmarks/run_cpu_baseline.py`
+  - `tools/benchmarks/run_pyscf_ops_baseline.py`
 
 ## Lint / Formatting Status
 

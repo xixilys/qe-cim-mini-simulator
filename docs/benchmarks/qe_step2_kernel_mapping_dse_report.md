@@ -370,7 +370,7 @@ L3 = 4MB    (beta resident buffer)
 ## 生成的文件
 
 **分析工具**：
-- `docs/benchmarks/qe_kernel_mapping_dse_step2.py`
+- `tools/benchmarks/qe_kernel_mapping_dse_step2.py`
 
 **分析结果**：
 - `/tmp/qe_dse_step2/kernel_mapping_dse_npw2945_nkb144_m16.json`

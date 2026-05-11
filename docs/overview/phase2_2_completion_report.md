@@ -29,7 +29,7 @@
 ### 2. Python Projection Script (Phase 2.2.2)
 
 **File Created**:
-- `docs/benchmarks/template_to_systemc_config.py` (195 lines)
+- `tools/benchmarks/template_to_systemc_config.py` (195 lines)
 
 **Key Features**:
 - 读取Phase 1 JSON模板
@@ -125,7 +125,7 @@ Dynamic cluster instantiation
 
 **Test 1: 4-Cluster CIM Baseline**
 ```bash
-$ python3 docs/benchmarks/template_to_systemc_config.py \
+$ python3 tools/benchmarks/template_to_systemc_config.py \
     docs/architecture/architecture_templates/4cluster_cim_baseline_v1.json \
     tmp/systemc_config_cim.json
 
@@ -140,7 +140,7 @@ $ python3 docs/benchmarks/template_to_systemc_config.py \
 
 **Test 2: 4-Cluster Traditional FPGA**
 ```bash
-$ python3 docs/benchmarks/template_to_systemc_config.py \
+$ python3 tools/benchmarks/template_to_systemc_config.py \
     docs/architecture/architecture_templates/4cluster_traditional_fpga_v1.json \
     tmp/systemc_config_traditional.json
 
@@ -151,7 +151,7 @@ $ python3 docs/benchmarks/template_to_systemc_config.py \
 
 **Test 3: 3-Cluster Fused Build+Diag**
 ```bash
-$ python3 docs/benchmarks/template_to_systemc_config.py \
+$ python3 tools/benchmarks/template_to_systemc_config.py \
     docs/architecture/architecture_templates/3cluster_fused_build_diag_v1.json \
     tmp/systemc_config_3cluster.json
 
@@ -419,7 +419,7 @@ tmp/
 
 **Measurement**:
 ```bash
-$ time python3 docs/benchmarks/template_to_systemc_config.py \
+$ time python3 tools/benchmarks/template_to_systemc_config.py \
     docs/architecture/architecture_templates/4cluster_cim_baseline_v1.json \
     tmp/systemc_config_cim.json
 

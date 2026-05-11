@@ -60,11 +60,11 @@ flowchart TD
 
 行为级/定时功能模型由：
 
-- `docs/benchmarks/run_qe_next_stage_dse_phase.py --execute-model`
+- `tools/benchmarks/run_qe_next_stage_dse_phase.py --execute-model`
 
 触发，内部调用：
 
-- `docs/benchmarks/run_systemc_architecture_family_dse_sweep.py`
+- `tools/benchmarks/run_systemc_architecture_family_dse_sweep.py`
 
 关键位置：
 

@@ -42,17 +42,17 @@
 ### 2.1 这一层的工具
 
 #### 软件路径与 trace characterization
-- `docs/benchmarks/run_qe_workload_matrix.py`
-- `docs/benchmarks/summarize_qe_subspace_trace.py`
-- `docs/benchmarks/analyze_qe_scf_operator_load.py`
-- `docs/benchmarks/analyze_qe_workload_revalidation.py`
-- `docs/benchmarks/extract_qe_shell_cpu_baseline.py`
+- `tools/benchmarks/run_qe_workload_matrix.py`
+- `tools/benchmarks/summarize_qe_subspace_trace.py`
+- `tools/benchmarks/analyze_qe_scf_operator_load.py`
+- `tools/benchmarks/analyze_qe_workload_revalidation.py`
+- `tools/benchmarks/extract_qe_shell_cpu_baseline.py`
 
 #### computational-pattern / kernel-mapping 分析
 - `docs/benchmarks/qe_step1_computational_pattern_analysis_report.md`
 - `docs/benchmarks/qe_multi_case_analysis_report.md`
 - `docs/benchmarks/qe_step2_kernel_mapping_dse_report.md`
-- `docs/benchmarks/qe_kernel_mapping_dse_step2.py`
+- `tools/benchmarks/qe_kernel_mapping_dse_step2.py`
 
 ### 2.2 这一层应该回答的问题
 
@@ -87,8 +87,8 @@
 
 ### 3.1 这一层的工具
 
-- `docs/benchmarks/run_systemc_architecture_family_dse_sweep.py`
-- `docs/benchmarks/run_qe_next_stage_dse_phase.py`
+- `tools/benchmarks/run_systemc_architecture_family_dse_sweep.py`
+- `tools/benchmarks/run_qe_next_stage_dse_phase.py`
 - `model/qe_band_solver_model/build/qe_band_solver_model`
 
 ### 3.2 这一层当前的角色
@@ -350,15 +350,15 @@
 ### 9.1 characterization / operator-load
 
 ```bash
-python3 docs/benchmarks/analyze_qe_workload_revalidation.py
-python3 docs/benchmarks/analyze_qe_scf_operator_load.py \
+python3 tools/benchmarks/analyze_qe_workload_revalidation.py
+python3 tools/benchmarks/analyze_qe_scf_operator_load.py \
   docs/benchmarks/results/qe_workload_revalidation/si8_pbe_uspp
 ```
 
 ### 9.2 kernel mapping sweep
 
 ```bash
-python3 docs/benchmarks/qe_kernel_mapping_dse_step2.py \
+python3 tools/benchmarks/qe_kernel_mapping_dse_step2.py \
   --npw 2945 --nkb 144 --m 16 --output-dir /tmp/qe_dse_step2
 ```
 
@@ -368,7 +368,7 @@ python3 docs/benchmarks/qe_kernel_mapping_dse_step2.py \
 cmake -S model/qe_band_solver_model -B model/qe_band_solver_model/build
 cmake --build model/qe_band_solver_model/build -j4
 
-python3 docs/benchmarks/run_qe_next_stage_dse_phase.py \
+python3 tools/benchmarks/run_qe_next_stage_dse_phase.py \
   --output-dir tmp/qe_next_stage_release \
   --execute-model
 ```
@@ -376,10 +376,10 @@ python3 docs/benchmarks/run_qe_next_stage_dse_phase.py \
 ### 9.4 release validation
 
 ```bash
-python3 docs/benchmarks/check_qe_next_stage_release_bundle.py \
+python3 tools/benchmarks/check_qe_next_stage_release_bundle.py \
   --summary tmp/qe_next_stage_release/qe_next_stage_dse_phase_summary.json
 
-python3 docs/benchmarks/check_qe_next_stage_dse_simulator_contracts.py
+python3 tools/benchmarks/check_qe_next_stage_dse_simulator_contracts.py
 ```
 
 ---
