@@ -40,7 +40,17 @@ cmake --build model/qe_band_solver_model/build -j
 
 ## Key Design Files
 
-For design review, the current key files are:
+Start with `docs/README.md`. It defines the current reading order and separates global design, implementation notes, runbooks, OpenSpec changes, and historical evidence.
+
+For Generic DSE review, read:
+
+- `docs/architecture/generic_dse_global_system_design_v0.md`: global design for the generic DSE + SystemC/gem5+SystemC evidence loop
+- `docs/architecture/generic_dse_framework_design_spec_v2.md`: detailed DSE subsystem design
+- `docs/benchmarks/generic_dse_simulation_system_handbook_v1.md`: execution and evidence-review handbook
+- `dse_v2/README.md`: implementation entry point
+- `openspec/HANDBOOK.md`: OpenSpec governance and archive rules
+
+For the original QE/CIM system review, the key files are:
 
 - **System specs**
   - `docs/architecture/system_design_master_spec_v0.md`: canonical system-level master spec
@@ -68,16 +78,16 @@ For design review, the current key files are:
   - `docs/overview/qe_project_implementation_architecture_and_plan_v0.md`: project-level implementation architecture, roadmap, workstreams, and validation gates
   - `docs/overview/agent_handoff_20260312.md`: current handoff and priority context
   - `model/qe_band_solver_model/docs/qe_band_solver_smoke_run_20260326.md`: current `QE` / `CP2K` smoke validation notes
-  - `docs/README.md`: fuller docs index by category
+  - `docs/README.md`: current documentation reading order
 
 ## Notes
 
 - The code in `model/` is a prototype, not a drop-in QE plugin.
-- The canonical long-form development record is in [docs/overview/project_development_timeline.md](/Volumes/remote/phd/year_2/project/dft加速/docs/overview/project_development_timeline.md); newer stage notes are indexed there and should be folded back into it over time.
-- The merged `QE` band-solver SystemC overview is in [docs/architecture/qe_band_solver_systemc_overview_20260325.md](/Volumes/remote/phd/year_2/project/dft加速/docs/architecture/qe_band_solver_systemc_overview_20260325.md).
-- The merged `QE` band-solver transaction semantics are in [docs/architecture/qe_band_solver_transaction_semantics_20260326.md](/Volumes/remote/phd/year_2/project/dft加速/docs/architecture/qe_band_solver_transaction_semantics_20260326.md).
-- The standalone evaluator stack is summarized in [model/README.md](/Volumes/remote/phd/year_2/project/dft加速/model/README.md).
-- The generalized subspace behavioral validation flow is documented in [model/ozaki_subspace_model/docs/generalized_subspace_validation.md](/Volumes/remote/phd/year_2/project/dft加速/model/ozaki_subspace_model/docs/generalized_subspace_validation.md).
-- The full FP64 complex Ozaki-II emulation flow is documented in [model/ozaki_subspace_model/docs/complex_ozaki_fp64_validation.md](/Volumes/remote/phd/year_2/project/dft加速/model/ozaki_subspace_model/docs/complex_ozaki_fp64_validation.md).
+- The canonical long-form development record is in `docs/overview/project_development_timeline.md`.
+- The merged `QE` band-solver SystemC overview is in `docs/architecture/qe_band_solver_systemc_overview_20260325.md`.
+- The merged `QE` band-solver transaction semantics are in `docs/architecture/qe_band_solver_transaction_semantics_20260326.md`.
+- The standalone evaluator stack is summarized in `model/README.md`.
+- The generalized subspace behavioral validation flow is documented in `model/ozaki_subspace_model/docs/generalized_subspace_validation.md`.
+- The full FP64 complex Ozaki-II emulation flow is documented in `model/ozaki_subspace_model/docs/complex_ozaki_fp64_validation.md`.
 - The dedicated FP64 complex Ozaki-II executable is `model/ozaki_subspace_model/bin/complex_ozaki_eval`.
 - QE-specific benchmark helpers and tiny example inputs are kept under `docs/`.
