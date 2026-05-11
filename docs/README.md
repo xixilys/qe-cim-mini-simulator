@@ -43,3 +43,41 @@
 - `model/qe_band_solver_model/README.md`
 
 需要审查 QE/FPGA/CIM 旧主线时，从这些文档开始；需要审查通用 DSE 与仿真证据闭环时，从第 1 节开始。
+
+## 5. 文档清理与治理
+
+本仓库当前的文档基线是 170 个 Markdown 文件，632 个 JSON 文件。这个基线说明 docs 树里同时存在叙述性文档、机器可读契约和大量证据文件，清理时不能把它们一概视为“可移动杂项”。
+
+### 5.1 需要稳定保留的 JSON 入口
+
+- `docs/architecture/` 下的 contract、schema、template、catalog JSON 是活跃接口的一部分，默认必须保留在原路径。
+- `docs/benchmarks/` 下的 contract、schema、template、catalog JSON 也是活跃接口的一部分，除非所有引用和工具默认值都已同步更新，否则不要挪动。
+- 典型稳定路径包括 `docs/architecture/qe_ic_component_catalog_system_level_v1.json`、`docs/architecture/qe_ic_graph_seed_system_level_v1.json`、`docs/architecture/qe_ic_graph_seed_templates_v0.json`、`docs/architecture/qe_ic_graph_schema_v0.json`、`docs/architecture/architecture_template_schema_v1.json`，以及 `docs/benchmarks/qe_architecture_family_design_space_spec_v0.json`、`docs/benchmarks/systemc_architecture_family_dse_result_schema_v0.json`、`docs/benchmarks/qe_next_stage_dse_simulator_phase_config_v0.json`、`docs/benchmarks/qe_ic_full_flow_phase_config_v0.json`、`docs/benchmarks/qe_microarchitecture_catalog_v0.json`、`docs/benchmarks/qe_microarchitecture_catalog_freeze_manifest_v0.json`、`docs/benchmarks/gpu_case_list_v0.json`。
+
+### 5.2 证据目录不是随机杂项
+
+- `docs/benchmarks/results/` 是生成证据、历史结果、trace bundle 和可复现实验产物的保留区。
+- `docs/benchmarks/testdata/` 是测试夹具和 adjudicator 输入，不是随手堆放的临时文件夹。
+- `docs/benchmarks/results/` 下的 timestamped result 文件、QE traces 和 dumps 不能直接改写。
+- 任何生成证据的迁移或删除，都需要先完成引用扫描，再获得明确的用户批准。
+
+### 5.3 当前热点
+
+- `docs/benchmarks/results/systemc_architecture_family_dse_bootstrap/graph_evidence/` 是当前最集中的 JSON 热点，包含 540 个 graph JSON 证据文件。
+- 这批文件默认应原地保留，除非后续有明确批准的 archive move，并且同步更新所有引用。
+
+### 5.4 以后做移动前先查什么
+
+1. 先确认目标目录是 evidence、fixture，还是 active contract。
+2. 再用 `rg` 扫描所有引用、工具默认值和文档入口。
+3. 只有在引用链已经更新完毕后，才考虑移动、重命名或归档。
+
+### 5.5 快速验证清单
+
+```bash
+rg --files docs | rg '\.md$' | wc -l
+rg --files docs | rg '\.json$' | wc -l
+rg --files docs/benchmarks/results/systemc_architecture_family_dse_bootstrap | rg 'graph_evidence|adjudicator|\.json$|\.md$'
+rg -n 'graph_evidence|docs/benchmarks/results/|docs/benchmarks/testdata/' docs/README.md docs/benchmarks/results/README.md docs/benchmarks/results/systemc_architecture_family_dse_bootstrap/README.md docs/benchmarks/results/systemc_architecture_family_dse_bootstrap/graph_evidence/README.md docs/architecture/architecture_comparison/results/README.md
+rg --files tools/benchmarks | rg 'check_qe_ic_component_graph_v1.py|run_systemc_architecture_family_dse_sweep.py|summarize_qe_subspace_trace.py'
+```
