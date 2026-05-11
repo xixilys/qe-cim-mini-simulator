@@ -6,7 +6,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from docs.benchmarks.validate_dse_gpu_confidence import (
+from tools.benchmarks.validate_dse_gpu_confidence import (
     load_case_list,
     compute_relative_error,
     classify_confidence,

@@ -11,7 +11,7 @@ DEFAULT_PLAN_PATH = ROOT / ".omx/plans/ralplan-final-qe-next-stage-dse-simulator
 DEFAULT_CHECKLIST_PATH = ROOT / "docs/benchmarks/qe_next_stage_dse_simulator_execution_checklist_v0.md"
 DEFAULT_PHASE_CONFIG_PATH = ROOT / "docs/benchmarks/qe_next_stage_dse_simulator_phase_config_v0.json"
 DEFAULT_RESULT_SCHEMA_PATH = ROOT / "docs/benchmarks/systemc_architecture_family_dse_result_schema_v0.json"
-DEFAULT_PHASE_RUNNER_PATH = ROOT / "docs/benchmarks/run_qe_next_stage_dse_phase.py"
+DEFAULT_PHASE_RUNNER_PATH = ROOT / "tools/benchmarks/run_qe_next_stage_dse_phase.py"
 
 MAIN_CASES = ["si4_pbe_uspp_small", "graphene_pbe_uspp"]
 ANCHOR_CASE = "si8_pbe_nc"

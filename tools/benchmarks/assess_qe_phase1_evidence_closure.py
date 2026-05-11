@@ -10,8 +10,9 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
 BENCHMARKS_DIR = ROOT / "docs/benchmarks"
-GPU_ASSESSOR_PATH = BENCHMARKS_DIR / "assess_qe_cpu_gpu_baseline_readiness.py"
-VALIDATOR_PATH = BENCHMARKS_DIR / "check_qe_phase1_artifact_contracts.py"
+TOOLS_BENCHMARKS_DIR = Path(__file__).resolve().parent
+GPU_ASSESSOR_PATH = TOOLS_BENCHMARKS_DIR / "assess_qe_cpu_gpu_baseline_readiness.py"
+VALIDATOR_PATH = TOOLS_BENCHMARKS_DIR / "check_qe_phase1_artifact_contracts.py"
 
 PHASE1_DECISIVE_LANE = [
     "si4_pbe_uspp_small",

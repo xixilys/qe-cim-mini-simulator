@@ -15,13 +15,14 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
 BENCHMARKS_DIR = ROOT / "docs/benchmarks"
+TOOLS_BENCHMARKS_DIR = Path(__file__).resolve().parent
 PHASE_CONFIG_PATH = BENCHMARKS_DIR / "qe_next_stage_dse_simulator_phase_config_v0.json"
-RUNNER_PATH = BENCHMARKS_DIR / "run_systemc_architecture_family_dse_sweep.py"
-COMPONENT_REGISTRY_BUILDER_PATH = BENCHMARKS_DIR / "build_qe_ic_component_registry.py"
-GPU_BASELINE_READINESS_PATH = BENCHMARKS_DIR / "assess_qe_cpu_gpu_baseline_readiness.py"
-PHASE1_EVIDENCE_CLOSURE_PATH = BENCHMARKS_DIR / "assess_qe_phase1_evidence_closure.py"
-PHASE1_EVIDENCE_CLOSURE_RENDERER_PATH = BENCHMARKS_DIR / "render_qe_phase1_evidence_closure_md.py"
-ADJUDICATOR_RUNNER_PATH = BENCHMARKS_DIR / "run_qe_system_design_adjudicator.py"
+RUNNER_PATH = TOOLS_BENCHMARKS_DIR / "run_systemc_architecture_family_dse_sweep.py"
+COMPONENT_REGISTRY_BUILDER_PATH = TOOLS_BENCHMARKS_DIR / "build_qe_ic_component_registry.py"
+GPU_BASELINE_READINESS_PATH = TOOLS_BENCHMARKS_DIR / "assess_qe_cpu_gpu_baseline_readiness.py"
+PHASE1_EVIDENCE_CLOSURE_PATH = TOOLS_BENCHMARKS_DIR / "assess_qe_phase1_evidence_closure.py"
+PHASE1_EVIDENCE_CLOSURE_RENDERER_PATH = TOOLS_BENCHMARKS_DIR / "render_qe_phase1_evidence_closure_md.py"
+ADJUDICATOR_RUNNER_PATH = TOOLS_BENCHMARKS_DIR / "run_qe_system_design_adjudicator.py"
 BLOCKING_STATUSES = {
     "model_error",
     "candidate_missing",
@@ -776,7 +777,7 @@ def shell_join(parts: list[str]) -> str:
 def build_phase_runner_command(args: argparse.Namespace) -> str:
     parts = [
         "python3",
-        "docs/benchmarks/run_qe_next_stage_dse_phase.py",
+        "tools/benchmarks/run_qe_next_stage_dse_phase.py",
         "--output-dir",
         str(args.output_dir),
         "--phase-config",
@@ -807,7 +808,7 @@ def build_release_validator_command(summary_json_path: Path) -> str:
     return shell_join(
         [
             "python3",
-            "docs/benchmarks/check_qe_next_stage_release_bundle.py",
+            "tools/benchmarks/check_qe_next_stage_release_bundle.py",
             "--summary",
             str(summary_json_path),
         ]

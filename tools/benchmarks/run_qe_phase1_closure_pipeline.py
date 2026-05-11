@@ -9,8 +9,9 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
 BENCHMARKS_DIR = ROOT / "docs/benchmarks"
-ASSESSOR_PATH = BENCHMARKS_DIR / "assess_qe_phase1_evidence_closure.py"
-RENDERER_PATH = BENCHMARKS_DIR / "render_qe_phase1_evidence_closure_md.py"
+TOOLS_BENCHMARKS_DIR = Path(__file__).resolve().parent
+ASSESSOR_PATH = TOOLS_BENCHMARKS_DIR / "assess_qe_phase1_evidence_closure.py"
+RENDERER_PATH = TOOLS_BENCHMARKS_DIR / "render_qe_phase1_evidence_closure_md.py"
 
 
 def load_module(path: Path, name: str) -> Any:

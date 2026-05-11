@@ -12,7 +12,7 @@ MATRIX_PATH = ROOT / "docs/benchmarks/qe_ic_case_signature_matrix_v0.json"
 PHASE_CONFIG_PATH = ROOT / "docs/benchmarks/qe_ic_full_flow_phase_config_v0.json"
 WORKLOAD_MATRIX_PATH = ROOT / "docs/benchmarks/qe_device_oriented_workload_matrix_v0.md"
 SCHEMA_PATH = ROOT / "docs/benchmarks/systemc_architecture_family_dse_result_schema_v0.json"
-RUNNER_PATH = ROOT / "docs/benchmarks/run_systemc_architecture_family_dse_sweep.py"
+RUNNER_PATH = ROOT / "tools/benchmarks/run_systemc_architecture_family_dse_sweep.py"
 
 
 class QeIcSignatureArtifactsTests(unittest.TestCase):

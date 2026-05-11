@@ -10,7 +10,7 @@ from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[2]
-PACKAGE_DIR = ROOT / "docs/benchmarks/unified_dse"
+PACKAGE_DIR = ROOT / "tools/benchmarks/unified_dse"
 FIXTURE_DIR = ROOT / "docs/benchmarks/testdata/unified_dse"
 
 

@@ -19,12 +19,12 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
 SCHEMA_PATH = ROOT / "docs/benchmarks/systemc_architecture_family_dse_result_schema_v0.json"
-ADJUDICATOR_RUNNER_PATH = ROOT / "docs/benchmarks/run_qe_system_design_adjudicator.py"
+ADJUDICATOR_RUNNER_PATH = ROOT / "tools/benchmarks/run_qe_system_design_adjudicator.py"
 DEFAULT_OUTPUT_DIR = ROOT / "docs/benchmarks/results/systemc_architecture_family_dse_bootstrap"
 DEFAULT_CASE_PACK_PATH = ROOT / "docs/benchmarks/results/qe_ic_case_pack_v0.json"
 DEFAULT_MODEL_BIN = ROOT / "model/qe_band_solver_model/build/qe_band_solver_model"
-DEFAULT_COMPARE_HELPER = ROOT / "docs/benchmarks/compare_qe_gold_correctness.py"
-DEFAULT_NORMALIZE_GOLD_HELPER = ROOT / "docs/benchmarks/normalize_qe_gold_baseline.py"
+DEFAULT_COMPARE_HELPER = ROOT / "tools/benchmarks/compare_qe_gold_correctness.py"
+DEFAULT_NORMALIZE_GOLD_HELPER = ROOT / "tools/benchmarks/normalize_qe_gold_baseline.py"
 DEFAULT_GOLD_BASELINE_ROOT = ROOT / "docs/benchmarks/results/qe_workload_revalidation"
 DEFAULT_CPU_SHELL_AGGREGATE_PATH = (
     ROOT / "docs/benchmarks/results/qe_cpu_shell_aggregate_extract_20260402.json"

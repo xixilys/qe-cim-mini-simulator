@@ -8,10 +8,12 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 
+ROOT = Path(__file__).resolve().parents[2]
+
 CATALOG_SCHEMA_VERSION = "qe_microarchitecture_catalog_v0"
 CATALOG_SCHEMA_ID = "qe_microarchitecture_catalog_schema_v0"
-DEFAULT_CATALOG_PATH = Path(__file__).with_name("qe_microarchitecture_catalog_v0.json")
-DEFAULT_SCHEMA_PATH = Path(__file__).with_name("qe_microarchitecture_catalog_schema_v0.json")
+DEFAULT_CATALOG_PATH = ROOT / "docs/benchmarks/qe_microarchitecture_catalog_v0.json"
+DEFAULT_SCHEMA_PATH = ROOT / "docs/benchmarks/qe_microarchitecture_catalog_schema_v0.json"
 
 EXACT_EVIDENCE_TIERS = (
     "survey-catalog",

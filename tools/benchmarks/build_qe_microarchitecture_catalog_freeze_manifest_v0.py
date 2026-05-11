@@ -10,6 +10,7 @@ from time import gmtime, strftime
 from typing import Any, Mapping, Sequence
 
 SCRIPT_DIR = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parents[2]
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
@@ -17,7 +18,7 @@ import microarchitecture_catalog_loader_v0 as catalog_loader
 
 
 SCHEMA_VERSION = "qe_microarchitecture_catalog_freeze_manifest_v0"
-DEFAULT_MANIFEST_PATH = SCRIPT_DIR / "qe_microarchitecture_catalog_freeze_manifest_v0.json"
+DEFAULT_MANIFEST_PATH = ROOT / "docs/benchmarks/qe_microarchitecture_catalog_freeze_manifest_v0.json"
 DEFAULT_POLICY_ID = "qe_fpga_final_best_policy_systemc_b4_minimum_v0"
 
 PARTITION_COMPETITIVE = "competitive_evaluable"

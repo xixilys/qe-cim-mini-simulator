@@ -9,9 +9,10 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
 BENCHMARKS_DIR = ROOT / 'docs/benchmarks'
+TOOLS_BENCHMARKS_DIR = Path(__file__).resolve().parent
 MATRIX_PATH = BENCHMARKS_DIR / 'qe_ic_case_signature_matrix_v0.json'
 PHASE_CONFIG_PATH = BENCHMARKS_DIR / 'qe_ic_full_flow_phase_config_v0.json'
-RUNNER_PATH = BENCHMARKS_DIR / 'run_systemc_architecture_family_dse_sweep.py'
+RUNNER_PATH = TOOLS_BENCHMARKS_DIR / 'run_systemc_architecture_family_dse_sweep.py'
 DEFAULT_QE_TOLERANCE_SCHEMA_ID = 'qe_gold_numerical_tolerance_schema_v0'
 DEFAULT_ACCOUNTING_BOUNDARY_ID = 'scf_shell_convergence_scope_v1'
 DEFAULT_FAST_PROXY_ASSUMPTION_SET_ID = 'qe_next_stage_phase_v0'

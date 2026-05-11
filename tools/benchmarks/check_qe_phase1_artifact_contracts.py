@@ -11,6 +11,7 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
 BENCHMARKS_DIR = ROOT / "docs/benchmarks"
+TOOLS_BENCHMARKS_DIR = Path(__file__).resolve().parent
 BASELINE_TEMPLATE_PATH = BENCHMARKS_DIR / "qe_cpu_gpu_baseline_manifest_template_v0.json"
 REWRITE_TEMPLATE_PATH = BENCHMARKS_DIR / "qe_algorithm_rewrite_manifest_template_v0.json"
 DEFAULT_BOARD_FILES = {
@@ -51,7 +52,7 @@ def require(condition: bool, message: str) -> None:
 
 
 def load_runner_module() -> Any:
-    module_path = BENCHMARKS_DIR / "run_systemc_architecture_family_dse_sweep.py"
+    module_path = TOOLS_BENCHMARKS_DIR / "run_systemc_architecture_family_dse_sweep.py"
     spec = importlib.util.spec_from_file_location("qe_phase1_dse_runner", module_path)
     if spec is None or spec.loader is None:
         raise ValidationError(f"cannot import runner module from {module_path}")

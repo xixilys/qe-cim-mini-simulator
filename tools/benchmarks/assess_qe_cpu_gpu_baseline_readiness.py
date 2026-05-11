@@ -10,7 +10,8 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
 BENCHMARKS_DIR = ROOT / "docs/benchmarks"
-VALIDATOR_PATH = BENCHMARKS_DIR / "check_qe_phase1_artifact_contracts.py"
+TOOLS_BENCHMARKS_DIR = Path(__file__).resolve().parent
+VALIDATOR_PATH = TOOLS_BENCHMARKS_DIR / "check_qe_phase1_artifact_contracts.py"
 
 REQUIRED_ARTIFACT_KEYS = ["stdout", "stderr", "timing", "correctness", "convergence", "power", "summary"]
 

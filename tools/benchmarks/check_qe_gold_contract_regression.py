@@ -12,10 +12,11 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
 BENCHMARKS_DIR = ROOT / "docs/benchmarks"
+TOOLS_BENCHMARKS_DIR = Path(__file__).resolve().parent
 SCHEMA_PATH = BENCHMARKS_DIR / "qe_gold_numerical_tolerance_schema_v0.json"
-COMPARE_HELPER = BENCHMARKS_DIR / "compare_qe_gold_correctness.py"
-NORMALIZE_HELPER = BENCHMARKS_DIR / "normalize_qe_gold_baseline.py"
-SWEEP_RUNNER = BENCHMARKS_DIR / "run_systemc_architecture_family_dse_sweep.py"
+COMPARE_HELPER = TOOLS_BENCHMARKS_DIR / "compare_qe_gold_correctness.py"
+NORMALIZE_HELPER = TOOLS_BENCHMARKS_DIR / "normalize_qe_gold_baseline.py"
+SWEEP_RUNNER = TOOLS_BENCHMARKS_DIR / "run_systemc_architecture_family_dse_sweep.py"
 QE_BASELINE_ROOT = BENCHMARKS_DIR / "results/qe_workload_revalidation"
 FIRST_PRIORITY_CASE = "si8_pbe_nc"
 

@@ -7,7 +7,7 @@ for DFT acceleration based on workload characterization data.
 """
 
 from dataclasses import dataclass
-from typing import Dict, List, Tuple
+from typing import Any, Dict, List, Tuple
 import numpy as np
 
 
@@ -296,7 +296,7 @@ class DataflowFabric(ArchitectureModel):
         }
 
 
-def compare_architectures(workload: WorkloadCharacteristics) -> Dict:
+def compare_architectures(workload: WorkloadCharacteristics) -> Dict[str, Any]:
     """Compare all architecture candidates"""
     
     # Define architecture configurations

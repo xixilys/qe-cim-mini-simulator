@@ -397,7 +397,7 @@ def markdown_report(
     lines.append("复现命令：")
     lines.append("")
     lines.append("```bash")
-    lines.append("python3 docs/benchmarks/analyze_qe_scf_operator_load.py \\")
+    lines.append("python3 tools/benchmarks/analyze_qe_scf_operator_load.py \\")
     lines.append(f"  {case_dir} \\")
     lines.append("  --markdown-out docs/benchmarks/si8_scf_operator_load_experiment_plan.md")
     lines.append("```")

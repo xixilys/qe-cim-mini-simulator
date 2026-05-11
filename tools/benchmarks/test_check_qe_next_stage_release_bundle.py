@@ -550,8 +550,8 @@ class NextStageReleaseBundleTests(unittest.TestCase):
             "phase1_decisive_lane_closed": False,
             "phase1_next_blocker_class": "external_measurement_artifacts",
             "verification_commands": {
-                "phase_runner_command": "python3 docs/benchmarks/run_qe_next_stage_dse_phase.py --output-dir /tmp/out",
-                "release_validator_command": "python3 docs/benchmarks/check_qe_next_stage_release_bundle.py --summary /tmp/out/qe_next_stage_dse_phase_summary.json",
+                "phase_runner_command": "python3 tools/benchmarks/run_qe_next_stage_dse_phase.py --output-dir /tmp/out",
+                "release_validator_command": "python3 tools/benchmarks/check_qe_next_stage_release_bundle.py --summary /tmp/out/qe_next_stage_dse_phase_summary.json",
             },
             "artifact_paths": {
                 "manifest_json": str(manifest_json),

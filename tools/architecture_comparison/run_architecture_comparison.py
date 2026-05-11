@@ -5,16 +5,23 @@ Main script for running architecture comparison experiments
 
 import json
 import argparse
+import sys
 from pathlib import Path
+from typing import Any
 import matplotlib.pyplot as plt
 import numpy as np
-from comparison_framework import (
+
+ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from tools.architecture_comparison.comparison_framework import (
     WorkloadCharacteristics,
-    compare_architectures
+    compare_architectures,
 )
 
 
-def plot_comparison(results: dict, output_dir: Path):
+def plot_comparison(results: dict[str, Any], output_dir: Path) -> None:
     """Generate comparison plots"""
     
     arch_names = list(results.keys())
@@ -79,7 +86,7 @@ def plot_comparison(results: dict, output_dir: Path):
     print(f"Saved plot to {output_dir / 'architecture_comparison.png'}")
 
 
-def generate_report(results: dict, output_dir: Path):
+def generate_report(results: dict[str, Any], output_dir: Path) -> None:
     """Generate markdown report"""
     
     report = []

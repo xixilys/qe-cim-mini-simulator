@@ -1462,7 +1462,7 @@ def run_e2e(args: argparse.Namespace) -> dict[str, Any]:
 
     frontend_cmd = [
         sys.executable,
-        "docs/benchmarks/run_unified_dse_v0.py",
+        "tools/benchmarks/run_unified_dse_v0.py",
         "--design-space-spec",
         str(Path(args.design_space_spec)),
         "--workload",
@@ -1588,7 +1588,7 @@ def run_e2e(args: argparse.Namespace) -> dict[str, Any]:
             _enforce_real_gem5_smoke_gate(gem5_payload, gem5_report)
         gem5_ingest_cmd = [
             sys.executable,
-            "docs/benchmarks/qedse_frontend.py",
+            "tools/benchmarks/qedse_frontend.py",
             "frontend",
             "ingest-feedback",
             "--backend-report",
@@ -1699,7 +1699,7 @@ def run_e2e(args: argparse.Namespace) -> dict[str, Any]:
     )
     ingest_cmd = [
         sys.executable,
-        "docs/benchmarks/qedse_frontend.py",
+        "tools/benchmarks/qedse_frontend.py",
         "frontend",
         "ingest-feedback",
         "--backend-report",

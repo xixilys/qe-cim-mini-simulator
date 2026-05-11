@@ -9,9 +9,10 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
 BENCHMARKS_DIR = ROOT / 'docs/benchmarks'
+TOOLS_BENCHMARKS_DIR = Path(__file__).resolve().parent
 ARCH_DIR = ROOT / 'docs/architecture'
-RUNNER_PATH = BENCHMARKS_DIR / 'run_systemc_architecture_family_dse_sweep.py'
-REGISTRY_BUILDER_PATH = BENCHMARKS_DIR / 'build_qe_ic_component_registry.py'
+RUNNER_PATH = TOOLS_BENCHMARKS_DIR / 'run_systemc_architecture_family_dse_sweep.py'
+REGISTRY_BUILDER_PATH = TOOLS_BENCHMARKS_DIR / 'build_qe_ic_component_registry.py'
 DEFAULT_CATALOG_PATH = ARCH_DIR / 'qe_ic_component_catalog_seed_v0.json'
 DEFAULT_SCHEMA_PATH = ARCH_DIR / 'qe_ic_graph_schema_v0.json'
 DEFAULT_OUTPUT_PATH = BENCHMARKS_DIR / 'results/qe_ic_graph_frontdoor_eval_v0.json'

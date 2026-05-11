@@ -22,7 +22,7 @@ SPEC.loader.exec_module(MODULE)
 MODULE_ANY = cast(Any, MODULE)
 
 DESIGN_SPACE_PATH = ROOT / "docs/benchmarks/qe_architecture_family_design_space_spec_v0.json"
-FIXTURE_DIR = Path(__file__).with_name("testdata") / "unified_dse"
+FIXTURE_DIR = ROOT / "docs/benchmarks/testdata/unified_dse"
 
 
 class RunUnifiedDseV0Tests(unittest.TestCase):
@@ -1477,7 +1477,7 @@ class RunUnifiedDseV0Tests(unittest.TestCase):
             self.assertGreaterEqual(descriptor_manifest["unselected_valid_candidate_count"], 1)
 
     def test_qedse_frontend_wrapper_help_for_all_subcommands(self) -> None:
-        script = ROOT / "docs/benchmarks/qedse_frontend.py"
+        script = ROOT / "tools/benchmarks/qedse_frontend.py"
         for command in (
             "enumerate",
             "optimize",

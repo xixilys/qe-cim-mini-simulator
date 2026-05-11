@@ -11,9 +11,10 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
 BENCHMARKS_DIR = ROOT / 'docs/benchmarks'
-RUNNER_PATH = BENCHMARKS_DIR / 'run_systemc_architecture_family_dse_sweep.py'
-FRONTDOOR_EVAL_PATH = BENCHMARKS_DIR / 'evaluate_qe_ic_graph_frontdoor.py'
-PROJECTION_HELPER_PATH = BENCHMARKS_DIR / 'qe_ic_graph_projection_utils.py'
+TOOLS_BENCHMARKS_DIR = Path(__file__).resolve().parent
+RUNNER_PATH = TOOLS_BENCHMARKS_DIR / 'run_systemc_architecture_family_dse_sweep.py'
+FRONTDOOR_EVAL_PATH = TOOLS_BENCHMARKS_DIR / 'evaluate_qe_ic_graph_frontdoor.py'
+PROJECTION_HELPER_PATH = TOOLS_BENCHMARKS_DIR / 'qe_ic_graph_projection_utils.py'
 DEFAULT_OUTPUT_PATH = BENCHMARKS_DIR / 'results/qe_ic_graph_frontdoor_run_v0.json'
 
 
@@ -320,8 +321,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('--auto-match-baseline-iters', action='store_true')
     parser.add_argument('--cpu-shell-aggregate-path', type=Path, default=ROOT / 'docs/benchmarks/results/qe_cpu_shell_aggregate_extract_20260402.json')
     parser.add_argument('--fast-layer-proxy-assumptions-path', type=Path, default=ROOT / 'docs/benchmarks/qe_fast_layer_proxy_assumption_set_v0.json')
-    parser.add_argument('--compare-helper', type=Path, default=ROOT / 'docs/benchmarks/compare_qe_gold_correctness.py')
-    parser.add_argument('--normalize-gold-helper', type=Path, default=ROOT / 'docs/benchmarks/normalize_qe_gold_baseline.py')
+    parser.add_argument('--compare-helper', type=Path, default=ROOT / 'tools/benchmarks/compare_qe_gold_correctness.py')
+    parser.add_argument('--normalize-gold-helper', type=Path, default=ROOT / 'tools/benchmarks/normalize_qe_gold_baseline.py')
     parser.add_argument('--gold-baseline-root', type=Path, default=ROOT / 'docs/benchmarks/results/qe_workload_revalidation')
     return parser.parse_args()
 

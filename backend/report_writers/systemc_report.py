@@ -6,11 +6,10 @@ from typing import Any, Mapping
 import sys
 
 ROOT = Path(__file__).resolve().parents[2]
-BENCHMARKS_DIR = ROOT / "docs" / "benchmarks"
-if str(BENCHMARKS_DIR) not in sys.path:
-    sys.path.insert(0, str(BENCHMARKS_DIR))
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
-from unified_dse.backend_execution import (
+from tools.benchmarks.unified_dse.backend_execution import (
     MODE_TO_BACKEND_CLASS,
     MODE_TO_CLAIM_CEILING,
     MODE_TO_REQUESTED_FIDELITY,
