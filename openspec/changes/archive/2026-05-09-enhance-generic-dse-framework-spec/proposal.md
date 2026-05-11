@@ -11,6 +11,7 @@
 - 将 DFT/QE 用例限定为通用框架上的参考 workload，而非硬编码主路径；保留当前 Host+FPGA/CIM 研究主线所需的算子、数据流和验证要求。
 - 增加端到端 DSE workflow 契约：从 workload、architecture catalog、mapping search、gem5+SystemC simulation、evidence export 到 final analysis report 必须完整跑通。
 - 增加闭环选择最佳架构要求：低保真模型只负责初筛候选，SystemC/gem5+SystemC 仿真结果必须反哺搜索并决定最终可信 architecture/mapping。
+- 将 `docs/architecture/generic_dse_framework_design_spec_v2.md` 和 `docs/architecture/generic_dse_openspec_traceability_matrix_v2.md` 作为 P6 设计收口产物：前者定义端到端闭环架构，后者把 OpenSpec capabilities/scenarios 映射到专业设计文档章节。
 - 不引入新的运行时依赖；本变更先产出规范与实施任务，不直接修改核心代码。
 
 ## Capabilities

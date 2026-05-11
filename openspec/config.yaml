@@ -1,20 +1,128 @@
 schema: spec-driven
 
-# Project context (optional)
+# Project context
 # This is shown to AI when creating artifacts.
-# Add your tech stack, conventions, style guides, domain knowledge, etc.
-# Example:
-#   context: |
-#     Tech stack: TypeScript, React, Node.js
-#     We use conventional commits
-#     Domain: e-commerce platform
+context:
+  project_name: "Generic DSE Framework"
+  description: "A domain-neutral Design Space Exploration framework for heterogeneous computing systems supporting CPU, GPU, FPGA, CIM, and ASIC accelerators"
+  phase: "framework_completion_and_spec_hierarchy"
+  last_updated: "2026-05-10"
 
-# Per-artifact rules (optional)
-# Add custom rules for specific artifacts.
-# Example:
-#   rules:
-#     proposal:
-#       - Keep proposals under 500 words
-#       - Always include a "Non-goals" section
-#     tasks:
-#       - Break tasks into chunks of max 2 hours
+  tech_stack:
+    languages:
+      - name: C++
+        version: "C++17"
+        compiler: g++
+        flags: "-std=c++17 -O3 -Wall"
+      - name: Python
+        version: ">=3.9"
+        test_framework: pytest
+    build_systems:
+      - make
+      - cmake
+    simulation:
+      - SystemC (transaction-level modeling)
+      - gem5 (full-system co-simulation for L4 evidence)
+    key_dependencies:
+      - "SystemC headers/libraries"
+      - "pytest (testing)"
+      - "PyTorch 2.0+ (DSE v2 Bayesian Optimization)"
+      - "BoTorch 0.9+ (DSE v2)"
+      - "Ax Platform 0.3+ (DSE v2)"
+
+  domain:
+    primary: "Heterogeneous computing design space exploration"
+    scope: "Generic framework for evaluating accelerator architectures across workload families"
+    supported_targets:
+      - "CPU (multi-core, vector units)"
+      - "GPU (SIMD, tensor cores)"
+      - "FPGA (reconfigurable fabric)"
+      - "CIM (Compute-In-Memory)"
+      - "ASIC (custom accelerators)"
+    supported_workload_families:
+      - "Dense linear algebra (GEMM, eigenvalue, SVD)"
+      - "Sparse linear algebra (SpMV, sparse solver)"
+      - "ML/AI (tensor operations, attention, convolution)"
+      - "Stencil/streaming (finite difference, image processing)"
+      - "Graph analytics (BFS, PageRank, GNN)"
+      - "Database/vector search (indexing, similarity search)"
+      - "Custom scientific computations"
+    evaluation_fidelity_levels:
+      - "L1: Analytical models (Roofline, scheduling estimates)"
+      - "L2: Transaction-level models (communication, queueing)"
+      - "L3: Standalone SystemC simulation"
+      - "L4: gem5+SystemC full-system co-simulation"
+    current_priorities:
+      - "Complete spec hierarchy (Step1/Step2/Step3 workflow specs)"
+      - "Framework validation across multiple workload families"
+      - "Evidence-driven claim validation and convergence"
+
+  conventions:
+    naming:
+      types: "UpperCamelCase (e.g., ComputeGraph, SystemArchitecture)"
+      functions: "snake_case (e.g., run_mapping_search, validate_step2_artifacts)"
+      constants: "static functions at file scope or UPPER_SNAKE_CASE"
+      environment_helpers: "env_* prefix"
+      local_variables: "short and descriptive (graph, node, accel, mapping)"
+    code_style:
+      indentation: "4 spaces (C++ and Python)"
+      braces: "same line for functions, loops, conditionals"
+      spacing: "space before { and around binary operators"
+      line_length: "reasonably compact, no hard wrap"
+    includes:
+      order:
+        - "systemc.h first in SystemC units"
+        - "platform/framework headers"
+        - "standard library headers"
+        - "local project headers"
+    types:
+      small_dimensions: "int"
+      container_iteration: "size_t"
+      numeric_aliases: "explicit (e.g., using LapackInt = __CLPK_integer)"
+      buffers: "std::vector<T>"
+      complex: "std::complex<double> or split real/imag"
+      precision: "double or long double"
+    testing:
+      framework: "pytest for Python, standalone executables for C++"
+      python_tests: "pytest dse_v2/tests/ (79 tests)"
+      verification: "all tests must pass before claiming completion"
+      cross_step_tests: "mandatory for Step1->Step2->Step3 workflow validation"
+
+  documentation:
+    design_rationale: "docs/ or dse_v2/docs/ (not buried in source comments)"
+    validation_notes: "update when behavior/metrics/conclusions change"
+    commands: "use absolute or workspace-relative paths"
+    report_format: "include workload family, backend, evidence mode, and artifact paths"
+
+# Per-artifact rules
+rules:
+  proposal:
+    - "Keep proposals under 2 pages"
+    - "Always include a 'Non-goals' section"
+    - "Mark breaking changes with **BREAKING**"
+    - "Focus on 'why' not 'how'"
+  design:
+    - "Include Context, Goals/Non-Goals, Decisions with rationale, Risks/Trade-offs"
+    - "Decisions must include alternatives considered"
+    - "Focus on architecture, not line-by-line implementation"
+    - "Must be domain-neutral (no workload-specific hardcoding)"
+  spec:
+    - "Use SHALL/MUST for normative requirements (avoid should/may)"
+    - "Every requirement MUST have at least one scenario"
+    - "Scenarios use WHEN/THEN format with #### headers"
+    - "Requirements are testable and domain-neutral"
+    - "No workload-family-specific node names in core specs"
+  tasks:
+    - "Break tasks into chunks of max 4 hours"
+    - "Each task must be verifiable"
+    - "Include verification steps"
+    - "Order by dependency"
+  implementation:
+    - "Match existing file style strictly"
+    - "Favor standard library over custom helpers"
+    - "Keep helper functions static at file scope"
+    - "Prefer simple structs for plain data containers"
+    - "Never suppress type errors (no as any, @ts-ignore)"
+    - "Never use empty catch blocks"
+    - "Never delete failing tests to pass"
+    - "Domain logic belongs in adapters, not core framework"

@@ -167,11 +167,11 @@ The final analysis report must be generated from validated run artifacts. It mus
 1. Review and refine these OpenSpec artifacts.
 2. Define the end-to-end run contract and final analysis report schema before implementing more local evaluator features.
 3. Implement documentation restructuring: produce a v2 architecture spec or replace the v1 manual with a capability-indexed version.
-3. Add a requirement-to-file/test traceability matrix.
-4. Align Python/C++ schemas and return types with the IR/backend contracts.
-5. Close known Generic SystemC and gem5 blockers before claiming L3/L4 completion.
-6. Run targeted validations and update evidence tables.
-7. Archive the change only after implementation and verification meet the scenarios.
+4. Add a requirement-to-document traceability matrix linking OpenSpec capabilities/scenarios to the v2 professional architecture document.
+5. Align Python/C++ schemas and return types with the IR/backend contracts.
+6. Close known Generic SystemC and gem5 blockers before claiming L3/L4 completion.
+7. Run targeted validations and update evidence tables.
+8. Archive the change only after implementation and verification meet the scenarios.
 
 Rollback strategy: because this change initially adds OpenSpec artifacts only, rollback is deleting `openspec/changes/enhance-generic-dse-framework-spec/`. Once archived, rollback should be handled through a new OpenSpec change that modifies or removes affected requirements.
 
