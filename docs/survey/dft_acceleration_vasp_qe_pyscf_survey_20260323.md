@@ -262,7 +262,7 @@
 
 下面这些不是行业唯一证据，而是仓库内已有的本地补充材料，用来帮助判断 `QE` 为什么特别适合作为后续入口：
 
-- [qe_system_workload_revalidation_report_20260321.md](/Volumes/remote/phd/year_2/project/dft加速/docs/benchmarks/qe_system_workload_revalidation_report_20260321.md)
+- [docs/benchmarks/archive/reports/qe_system_workload_revalidation_report_20260321.md](/Volumes/remote/phd/year_2/project/dft加速/docs/benchmarks/archive/reports/docs/benchmarks/archive/reports/qe_system_workload_revalidation_report_20260321.md)
 - [qe_subspace_sampling.md](/Volumes/remote/phd/year_2/project/dft加速/docs/overview/qe_subspace_sampling.md)
 
 这些本地结果的关键信号是：
@@ -271,7 +271,7 @@
 - Davidson case 中，`h_psi/s_psi` 远重于 reduced diagonalization
 - `generalized Hermitian` 不是边角情况
 - `functional` 会切换 `Davidson` 与 `CG` 主路径  
-  见 [qe_system_workload_revalidation_report_20260321.md](/Volumes/remote/phd/year_2/project/dft加速/docs/benchmarks/qe_system_workload_revalidation_report_20260321.md)。
+  见 [docs/benchmarks/archive/reports/qe_system_workload_revalidation_report_20260321.md](/Volumes/remote/phd/year_2/project/dft加速/docs/benchmarks/archive/reports/docs/benchmarks/archive/reports/qe_system_workload_revalidation_report_20260321.md)。
 
 这使得 `QE` 既有行业代表性，又有比 `VASP` 更强的“可证据化入口”价值。
 
@@ -588,7 +588,7 @@
 ### C. 本地补充材料
 
 - [dft_acceleration_industry_survey_20260322.md](/Volumes/remote/phd/year_2/project/dft加速/docs/survey/dft_acceleration_industry_survey_20260322.md)
-- [qe_system_workload_revalidation_report_20260321.md](/Volumes/remote/phd/year_2/project/dft加速/docs/benchmarks/qe_system_workload_revalidation_report_20260321.md)
+- [docs/benchmarks/archive/reports/qe_system_workload_revalidation_report_20260321.md](/Volumes/remote/phd/year_2/project/dft加速/docs/benchmarks/archive/reports/docs/benchmarks/archive/reports/qe_system_workload_revalidation_report_20260321.md)
 - [qe_subspace_sampling.md](/Volumes/remote/phd/year_2/project/dft加速/docs/overview/qe_subspace_sampling.md)
 
 ### D. 说明

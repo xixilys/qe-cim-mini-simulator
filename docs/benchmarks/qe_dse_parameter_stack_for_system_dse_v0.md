@@ -18,7 +18,7 @@
 - `qe_next_stage_dse_strategy_v0.md`
 - `systemc_architecture_family_dse_result_schema_v0.json`
 - `qe_fast_layer_proxy_assumption_set_v0.json`
-- `qe_step2_kernel_mapping_dse_report.md`
+- `docs/benchmarks/archive/reports/qe_step2_kernel_mapping_dse_report.md`
 - `qe_kernel_mapping_dse_step2.py`
 - `run_systemc_architecture_family_dse_sweep.py`
 - `run_qe_next_stage_dse_phase.py`
@@ -220,7 +220,7 @@ Step-3 明确建议先扫的 system-level knobs 顺序是：
 
 ### 5.2 当前已有的 kernel-level先验
 
-来自 `qe_step2_kernel_mapping_dse_report.md`：
+来自 `docs/benchmarks/archive/reports/qe_step2_kernel_mapping_dse_report.md`：
 
 - `weight_stationary` 最优
 - `beta resident, psi streaming` 最优

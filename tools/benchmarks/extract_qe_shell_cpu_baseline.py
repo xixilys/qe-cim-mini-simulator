@@ -8,7 +8,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[2]
-RESULTS_ROOT = ROOT / "docs/benchmarks/results/qe_workload_revalidation"
+RESULTS_ROOT = ROOT / "docs/benchmarks/archive/results/qe_workload_revalidation"
 
 TIMING_RE = re.compile(
     r"^\s*(?P<name>[A-Za-z0-9_*:+-]+)\s*:\s*"
@@ -31,7 +31,7 @@ def parse_args() -> argparse.Namespace:
         "--cases",
         nargs="+",
         required=True,
-        help="Case ids under docs/benchmarks/results/qe_workload_revalidation.",
+        help="Case ids under docs/benchmarks/archive/results/qe_workload_revalidation.",
     )
     parser.add_argument(
         "--output",

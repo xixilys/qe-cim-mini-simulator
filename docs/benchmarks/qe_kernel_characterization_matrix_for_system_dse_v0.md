@@ -24,19 +24,19 @@
 当前矩阵只使用仓库内已经存在的本地证据：
 
 - 顶层 workload 复核：
-  - `docs/benchmarks/qe_system_workload_revalidation_report_20260321.md`
-  - `docs/benchmarks/results/qe_workload_revalidation/summary.json`
-  - `docs/benchmarks/results/qe_workload_revalidation/summary_tables.md`
+  - `docs/benchmarks/archive/reports/docs/benchmarks/archive/reports/qe_system_workload_revalidation_report_20260321.md`
+  - `docs/benchmarks/archive/results/qe_workload_revalidation/summary.json`
+  - `docs/benchmarks/archive/results/qe_workload_revalidation/summary_tables.md`
 - 子空间与 generalized 主路径采样：
   - `docs/overview/qe_subspace_sampling.md`
 - 算子级 / 数据流级分析：
   - `docs/benchmarks/si8_scf_operator_load_experiment_plan.md`
   - `tools/benchmarks/analyze_qe_scf_operator_load.py`
 - 计算模式与硬件亲和性分析：
-  - `docs/benchmarks/qe_step1_computational_pattern_analysis_report.md`
-  - `docs/benchmarks/qe_multi_case_analysis_report.md`
+  - `docs/benchmarks/archive/reports/docs/benchmarks/archive/reports/qe_step1_computational_pattern_analysis_report.md`
+  - `docs/benchmarks/archive/reports/docs/benchmarks/archive/reports/qe_multi_case_analysis_report.md`
 - kernel mapping 层 DSE：
-  - `docs/benchmarks/qe_step2_kernel_mapping_dse_report.md`
+  - `docs/benchmarks/archive/reports/docs/benchmarks/archive/reports/qe_step2_kernel_mapping_dse_report.md`
   - `tools/benchmarks/qe_kernel_mapping_dse_step2.py`
 - 系统级 DSE 主线与开放轴：
   - `docs/benchmarks/qe_ic_system_level_dse_axes_v0.md`
@@ -153,7 +153,7 @@
 5. dataflow (`weight_stationary / output_stationary / row_stationary`)
 6. `L1 / L2 / L3` buffer hierarchy
 
-当前已有 `qe_step2_kernel_mapping_dse_report.md` 给出的局部结论可直接作为默认先验：
+当前已有 `docs/benchmarks/archive/reports/qe_step2_kernel_mapping_dse_report.md` 给出的局部结论可直接作为默认先验：
 
 - `weight-stationary` 优先；
 - `beta resident, psi streaming` 优先；

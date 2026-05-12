@@ -278,7 +278,7 @@ DSE ranking 只应在 comparable workload、constraint、evaluator 和 fidelity 
 
 ```text
 docs/benchmarks/qe_ic_case_signature_matrix_v0.json
-docs/benchmarks/results/qe_ic_case_pack_v0.json
+docs/benchmarks/archive/results/qe_ic_case_pack_v0.json
 docs/overview/qe_subspace_sampling.md
 docs/benchmarks/qe_kernel_characterization_matrix_for_system_dse_v0.md
 ```

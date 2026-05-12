@@ -77,7 +77,7 @@ cmake --build /Volumes/remote/phd/year_2/project/dft加速/soft/qe-7.5/build_sub
 ### 6.2 运行 trace 摘要
 
 ```bash
-python3 /Volumes/remote/phd/year_2/project/dft加速/tools/benchmarks/summarize_qe_subspace_trace.py /Volumes/remote/phd/year_2/project/dft加速/docs/benchmarks/results/qe_fe_trace.csv
+python3 /Volumes/remote/phd/year_2/project/dft加速/tools/benchmarks/summarize_qe_subspace_trace.py /Volumes/remote/phd/year_2/project/dft加速/docs/benchmarks/archive/results/qe_fe_trace.csv
 ```
 
 ### 6.3 构建 generalized_subspace_eval

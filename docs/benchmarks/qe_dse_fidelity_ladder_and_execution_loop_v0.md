@@ -49,9 +49,9 @@
 - `tools/benchmarks/extract_qe_shell_cpu_baseline.py`
 
 #### computational-pattern / kernel-mapping 分析
-- `docs/benchmarks/qe_step1_computational_pattern_analysis_report.md`
-- `docs/benchmarks/qe_multi_case_analysis_report.md`
-- `docs/benchmarks/qe_step2_kernel_mapping_dse_report.md`
+- `docs/benchmarks/archive/reports/docs/benchmarks/archive/reports/qe_step1_computational_pattern_analysis_report.md`
+- `docs/benchmarks/archive/reports/docs/benchmarks/archive/reports/qe_multi_case_analysis_report.md`
+- `docs/benchmarks/archive/reports/docs/benchmarks/archive/reports/qe_step2_kernel_mapping_dse_report.md`
 - `tools/benchmarks/qe_kernel_mapping_dse_step2.py`
 
 ### 2.2 这一层应该回答的问题
@@ -352,7 +352,7 @@
 ```bash
 python3 tools/benchmarks/analyze_qe_workload_revalidation.py
 python3 tools/benchmarks/analyze_qe_scf_operator_load.py \
-  docs/benchmarks/results/qe_workload_revalidation/si8_pbe_uspp
+  docs/benchmarks/archive/results/qe_workload_revalidation/si8_pbe_uspp
 ```
 
 ### 9.2 kernel mapping sweep

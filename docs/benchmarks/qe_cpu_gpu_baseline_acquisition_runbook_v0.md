@@ -83,13 +83,13 @@ python3 tools/benchmarks/init_qe_phase1_artifact_bundle.py \
 若当前机器上还没有专门的 bundle helper，phase-1 也可直接从 template 起步。下面示例展示一条 `si4_pbe_uspp_small / strict_fp64` row 的最小落盘方式：
 
 ```bash
-RUN_DIR=docs/benchmarks/results/qe_cpu_gpu_baseline/si4_pbe_uspp_small/strict_fp64/20260414-120000
+RUN_DIR=tmp/qe_cpu_gpu_baseline/si4_pbe_uspp_small/strict_fp64/20260414-120000
 mkdir -p "$RUN_DIR"
 cp docs/benchmarks/qe_cpu_gpu_baseline_manifest_template_v0.json "$RUN_DIR/cpu_gpu_baseline_manifest.json"
 python3 - <<'PY'
 import json
 from pathlib import Path
-path = Path("docs/benchmarks/results/qe_cpu_gpu_baseline/si4_pbe_uspp_small/strict_fp64/20260414-120000/cpu_gpu_baseline_manifest.json")
+path = Path("tmp/qe_cpu_gpu_baseline/si4_pbe_uspp_small/strict_fp64/20260414-120000/cpu_gpu_baseline_manifest.json")
 data = json.loads(path.read_text())
 data["case_id"] = "si4_pbe_uspp_small"
 data["gpu_mode"] = "strict_fp64"
@@ -319,7 +319,7 @@ phase-1 里每一条 `CPU + GPU` row 必须显式属于以下之一：
 
 phase-1 建议将所有 `CPU + GPU` baseline artifact 放在：
 
-- `docs/benchmarks/results/qe_cpu_gpu_baseline/<case_id>/`
+- `tmp/qe_cpu_gpu_baseline/<case_id>/`
 
 每个 `case_id` 目录下再按 `gpu_mode` 分层：
 

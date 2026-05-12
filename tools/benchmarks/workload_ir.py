@@ -7,7 +7,7 @@ Workload IR - Step 1 to Step 2 Interface
 
 Usage:
     python3 workload_ir.py \
-        --step1-summary docs/benchmarks/results/qe_workload_revalidation/summary.json \
+        --step1-summary docs/benchmarks/archive/results/qe_workload_revalidation/summary.json \
         --output workload_ir_si8.json
 """
 

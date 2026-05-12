@@ -67,7 +67,7 @@ def build_case_pack(
         base = dict(default_workloads[workload_id])
         signature = dict(cases_by_id[workload_id])
         defaults = fast_defaults if lane_kind in {'stage_a', 'stage_b'} else accurate_defaults
-        gold_source_path = str(ROOT / 'docs/benchmarks/results/qe_workload_revalidation' / workload_id)
+        gold_source_path = str(ROOT / 'docs/benchmarks/archive/results/qe_workload_revalidation' / workload_id)
         descriptor = {
             'workload_id': workload_id,
             'display_label': signature['display_label'],

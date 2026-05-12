@@ -6,7 +6,7 @@ This document freezes the **simulator-to-board observability contract** required
 
 - `.omx/plans/ralplan-final-qe-fpga-fullstack-co-design-20260413.md`
 - `model/qe_band_solver_model/README.md`
-- `docs/benchmarks/qe_cpu_gpu_fpga_shell_comparison_status_20260402.md`
+- `docs/benchmarks/archive/reports/docs/benchmarks/archive/reports/qe_cpu_gpu_fpga_shell_comparison_status_20260402.md`
 - `tools/benchmarks/run_systemc_architecture_family_dse_sweep.py`
 - `docs/benchmarks/systemc_architecture_family_dse_result_schema_v0.json`
 

@@ -26,8 +26,8 @@
 本文只依赖当前仓库里已经落地的计划与 benchmark 证据：
 
 - 批准计划：`.omx/plans/ralplan-final-qe-fpga-fullstack-co-design-20260413.md`
-- 当前 shell-level 状态：`docs/benchmarks/qe_cpu_gpu_fpga_shell_comparison_status_20260402.md`
-- 系统 workload 复核：`docs/benchmarks/qe_system_workload_revalidation_report_20260321.md`
+- 当前 shell-level 状态：`docs/benchmarks/archive/reports/docs/benchmarks/archive/reports/qe_cpu_gpu_fpga_shell_comparison_status_20260402.md`
+- 系统 workload 复核：`docs/benchmarks/archive/reports/docs/benchmarks/archive/reports/qe_system_workload_revalidation_report_20260321.md`
 - QE gold correctness contract：`docs/benchmarks/qe_gold_correctness_contract_v0.md`
 - QE tolerance schema：`docs/benchmarks/qe_gold_numerical_tolerance_schema_v0.json`
 
@@ -306,7 +306,7 @@ phase-1 的最终 thesis 不能只靠：
 下面这些点还没有闭合，因此本文明确把它们列成 v0 open items：
 
 1. **CPU + GPU shell baseline 仍缺失**  
-   `qe_cpu_gpu_fpga_shell_comparison_status_20260402.md` 已经明确说明 GPU shell-level baseline 还是 deferred；在它补齐前，只能冻结 roster 和 correctness contract，不能宣称最终 thesis 已验证。
+   `docs/benchmarks/archive/reports/qe_cpu_gpu_fpga_shell_comparison_status_20260402.md` 已经明确说明 GPU shell-level baseline 还是 deferred；在它补齐前，只能冻结 roster 和 correctness contract，不能宣称最终 thesis 已验证。
 
 2. **只有 `si8_pbe_nc` / `si8_pbe_uspp` 已进入 canonical gold matrix v0**  
    `si4_pbe_uspp_small`、`graphene_pbe_uspp`、`au_slab_subspace`、`sic32_subspace` 还需要补各自的 normalized gold baseline / compare artifacts。

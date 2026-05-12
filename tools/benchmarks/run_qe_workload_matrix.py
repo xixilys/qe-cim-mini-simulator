@@ -13,7 +13,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 PW_BIN = ROOT / "soft/qe-7.5/build_subspace_trace/bin/pw.x"
-RESULTS_ROOT = ROOT / "docs/benchmarks/results/qe_workload_revalidation"
+RESULTS_ROOT = ROOT / "docs/benchmarks/archive/results/qe_workload_revalidation"
 
 CASE_INPUTS = {
     "h2_tiny": "docs/qe_inputs/h2_tiny_gamma.in",

@@ -84,7 +84,7 @@
 - candidate-result canonicalized payload artifact
 - final family ranking / projection result JSON
 
-并且在当前检查时，`docs/benchmarks/results/` 下也**没有发现**任何 `systemc_architecture_family_dse_*` 类生成结果文件。
+并且在该轮检查时，还**没有发现**可直接作为 final advisor pack 输入的 `systemc_architecture_family_dse_*` 类生成结果；后续历史生成证据归档在 `docs/benchmarks/archive/results/`。
 
 这意味着 docs lane 现在不应提前生成带具体数值的 advisor 首页，而应继续等待这些结果型上游产物真正落地。
 

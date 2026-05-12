@@ -22,7 +22,7 @@
 
 `2026-03-21` 之后新增的系统级 workload 复核、`QE-connected band-solver subsystem` 建模，以及以 `CIM Array Core` 为中心的 `v1` 执行架构，其核心结论现在也继续并入本文件；相关原文保留为查证和复现实验所需的源文档，主要包括：
 
-- [`docs/benchmarks/qe_system_workload_revalidation_report_20260321.md`](/Volumes/remote/phd/year_2/project/dft加速/docs/benchmarks/qe_system_workload_revalidation_report_20260321.md)
+- [`docs/benchmarks/archive/reports/docs/benchmarks/archive/reports/qe_system_workload_revalidation_report_20260321.md`](/Volumes/remote/phd/year_2/project/dft加速/docs/benchmarks/archive/reports/docs/benchmarks/archive/reports/qe_system_workload_revalidation_report_20260321.md)
 - [`docs/survey/vasp_qe_gpu_support_evolution_20260330.md`](/Volumes/remote/phd/year_2/project/dft加速/docs/survey/vasp_qe_gpu_support_evolution_20260330.md)
 - [`docs/architecture/qe_band_solver_systemc_overview_20260325.md`](/Volumes/remote/phd/year_2/project/dft加速/docs/architecture/qe_band_solver_systemc_overview_20260325.md)
 - [`docs/architecture/qe_band_solver_transaction_semantics_20260326.md`](/Volumes/remote/phd/year_2/project/dft加速/docs/architecture/qe_band_solver_transaction_semantics_20260326.md)
@@ -82,7 +82,7 @@
 | 2026-03-16 | 电路创新点转向 projector primitive | 真正值得打的创新点是什么，为什么不能只讲 transpose？ | `circuit_innovation_candidates_20260316.md`, `adjoint_projector_primitive_spec_v0.md`, `projector_primitive_hardware_solution_space_20260316.md` |
 | 2026-03-17 | 研讨会材料压缩与对外表达 | 如何把当前判断压成一份能讨论、能拍板的简报？ | `seminar_fp64_cim_macro_brief_20260317.md` |
 | 2026-03-18 | 实现形态收敛 | 如果真的做这个原语，最合理的宏级组织长什么样？ | `adjoint_projector_primitive_implementation_v0.md` |
-| 2026-03-21 | 系统级 workload 复核 | 真实 `QE` 全流程里到底应该抓哪个系统对象？ | `benchmarks/qe_system_workload_revalidation_report_20260321.md` |
+| 2026-03-21 | 系统级 workload 复核 | 真实 `QE` 全流程里到底应该抓哪个系统对象？ | `benchmarks/docs/benchmarks/archive/reports/qe_system_workload_revalidation_report_20260321.md` |
 | 2026-03-22 ~ 2026-03-23 | 行业对照与软件范式梳理 | 当前主流到底在加速什么，我们的切口与 GPU 主流路线差在哪？ | `dft_acceleration_industry_survey_20260322.md`, `dft_acceleration_vasp_qe_pyscf_survey_20260323.md` |
 | 2026-03-23 | 系统对象提升到 band-solver subsystem | 为什么不能只讲 `diaghg`，而应该讲 `QE-connected band-solver subsystem`？ | `system_design_master_spec_v0.md` |
 | 2026-03-25 ~ 2026-03-26 | `v1` 系统架构与 SystemC v0 demo 落地 | 如何把当前 Host/FPGA/Chip 分工、chip 内部划分与 `c_bands episode` 执行机制固定成统一口径？ | `qe_band_solver_systemc_overview_20260325.md`, `qe_band_solver_transaction_semantics_20260326.md`, `model/qe_band_solver_model/docs/qe_band_solver_smoke_run_20260326.md` |
@@ -437,7 +437,7 @@ project -> small transform -> back-project
 - 真正值得在系统层抓住的对象，到底是不是我们正在讲的这一段
 - 以及它究竟应该被叫作 `diaghg`、`Davidson reduced solve`，还是别的东西
 
-[`docs/benchmarks/qe_system_workload_revalidation_report_20260321.md`](/Volumes/remote/phd/year_2/project/dft加速/docs/benchmarks/qe_system_workload_revalidation_report_20260321.md) 的作用，就是把这个系统级问题重新用真实 rerun 数据钉一遍。
+[`docs/benchmarks/archive/reports/docs/benchmarks/archive/reports/qe_system_workload_revalidation_report_20260321.md`](/Volumes/remote/phd/year_2/project/dft加速/docs/benchmarks/archive/reports/docs/benchmarks/archive/reports/qe_system_workload_revalidation_report_20260321.md) 的作用，就是把这个系统级问题重新用真实 rerun 数据钉一遍。
 
 ### 13.2 这一阶段新增的关键事实
 
@@ -480,7 +480,7 @@ project -> small transform -> back-project
 
 ### 13.4 这一阶段的代表文档
 
-- [`docs/benchmarks/qe_system_workload_revalidation_report_20260321.md`](/Volumes/remote/phd/year_2/project/dft加速/docs/benchmarks/qe_system_workload_revalidation_report_20260321.md)
+- [`docs/benchmarks/archive/reports/docs/benchmarks/archive/reports/qe_system_workload_revalidation_report_20260321.md`](/Volumes/remote/phd/year_2/project/dft加速/docs/benchmarks/archive/reports/docs/benchmarks/archive/reports/qe_system_workload_revalidation_report_20260321.md)
 - [`tools/benchmarks/run_qe_workload_matrix.py`](/Volumes/remote/phd/year_2/project/dft加速/tools/benchmarks/run_qe_workload_matrix.py)
 - [`tools/benchmarks/analyze_qe_workload_revalidation.py`](/Volumes/remote/phd/year_2/project/dft加速/tools/benchmarks/analyze_qe_workload_revalidation.py)
 
@@ -801,7 +801,7 @@ HostSCF(mock)
 
 ### 2026-03-21
 
-1. [`docs/benchmarks/qe_system_workload_revalidation_report_20260321.md`](/Volumes/remote/phd/year_2/project/dft加速/docs/benchmarks/qe_system_workload_revalidation_report_20260321.md)
+1. [`docs/benchmarks/archive/reports/docs/benchmarks/archive/reports/qe_system_workload_revalidation_report_20260321.md`](/Volumes/remote/phd/year_2/project/dft加速/docs/benchmarks/archive/reports/docs/benchmarks/archive/reports/qe_system_workload_revalidation_report_20260321.md)
    用新一轮真实 `QE` rerun 复核系统级 workload，并把系统对象更明确地钉到 `electrons -> c_bands`。
 2. [`tools/benchmarks/run_qe_workload_matrix.py`](/Volumes/remote/phd/year_2/project/dft加速/tools/benchmarks/run_qe_workload_matrix.py)
    批量重跑小体系 `QE` workload 的自动化脚本。

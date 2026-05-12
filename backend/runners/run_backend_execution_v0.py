@@ -28,7 +28,7 @@ from systemc_report import (  # type: ignore  # noqa: E402
     validate_report,
 )
 
-DEFAULT_LEGACY_B3_REPORT = ROOT / "docs/benchmarks/results/qe_dse_gem5_systemc_smoke_report_v0.json"
+DEFAULT_LEGACY_B3_REPORT = ROOT / "docs/benchmarks/archive/results/qe_dse_gem5_systemc_smoke_report_v0.json"
 DEFAULT_SYSTEMC_EXECUTABLE = ROOT / "model/qe_band_solver_model/build/qe_band_solver_model"
 DEFAULT_GEM5_EXECUTABLE = ROOT / "gem5_integration/gem5/build/X86/gem5.opt"
 DEFAULT_QE_GEM5_CONFIG = ROOT / "gem5_integration/configs/fpga/qe_fpga_system.py"

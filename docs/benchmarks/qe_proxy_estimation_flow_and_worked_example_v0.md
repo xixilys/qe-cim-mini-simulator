@@ -10,7 +10,7 @@
 它是：
 
 - `docs/benchmarks/qe_engineering_grade_measurement_handbook_v0.md` 的配套解释页；
-- `docs/benchmarks/qe_proxy_estimation_onepage_summary_v0.md` 的详版展开页；
+- `docs/benchmarks/archive/reports/docs/benchmarks/archive/reports/qe_proxy_estimation_onepage_summary_v0.md` 的详版展开页；
 - 一个面向汇报/答辩/自己复核的 **worked example** 文档。
 
 它不是：

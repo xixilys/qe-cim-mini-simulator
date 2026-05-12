@@ -65,7 +65,7 @@ class BackendExecutionContractTests(unittest.TestCase):
 
     def test_valid_b3_smoke_result_fixture_loads(self) -> None:
         backend_execution = load_unified_dse_module("backend_execution")
-        path = ROOT / "docs/benchmarks/results/backend_execution_report_gem5_systemc_smoke_v0.json"
+        path = ROOT / "docs/benchmarks/archive/results/backend_execution_report_gem5_systemc_smoke_v0.json"
 
         report = backend_execution.load_backend_execution_report(path)
 

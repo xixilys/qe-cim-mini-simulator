@@ -21,7 +21,7 @@
 | 操作手册 | 给执行者说明命令、artifacts、验证方法和常见误读。 | `docs/benchmarks/generic_dse_simulation_system_handbook_v1.md` |
 | 实现入口 | 给开发者说明代码目录和最小运行命令。 | `dse_v2/README.md` |
 | 变更提案 | 记录有边界的设计变更、任务和归档历史。 | `openspec/changes/*` |
-| 历史证据 | 保留旧阶段、旧假设和实验记录。 | `docs/overview/*`、`docs/benchmarks/results/*` |
+| 历史证据 | 保留旧阶段、旧假设和实验记录。 | `docs/overview/*`、`docs/benchmarks/archive/results/*` |
 
 ## 3. Authority 规则
 
@@ -46,7 +46,7 @@
 
 ## 5. 文档清理与治理
 
-本仓库当前的文档基线是 170 个 Markdown 文件，632 个 JSON 文件。这个基线说明 docs 树里同时存在叙述性文档、机器可读契约和大量证据文件，清理时不能把它们一概视为“可移动杂项”。
+本仓库当前的文档基线是 179 个 Markdown 文件，632 个 JSON 文件。这个基线说明 docs 树里同时存在叙述性文档、机器可读契约和大量证据文件，清理时不能把它们一概视为“可移动杂项”。
 
 ### 5.1 需要稳定保留的 JSON 入口
 
@@ -56,15 +56,16 @@
 
 ### 5.2 证据目录不是随机杂项
 
-- `docs/benchmarks/results/` 是生成证据、历史结果、trace bundle 和可复现实验产物的保留区。
+- `docs/benchmarks/results/` 只保留当前结果入口说明和明确仍在使用的 live traces。
+- `docs/benchmarks/archive/results/` 保存历史生成证据、trace bundle 和可复现实验产物。
 - `docs/benchmarks/testdata/` 是测试夹具和 adjudicator 输入，不是随手堆放的临时文件夹。
-- `docs/benchmarks/results/` 下的 timestamped result 文件、QE traces 和 dumps 不能直接改写。
+- `docs/benchmarks/archive/results/` 下的 timestamped result 文件、QE traces 和 dumps 不能直接改写。
 - 任何生成证据的迁移或删除，都需要先完成引用扫描，再获得明确的用户批准。
 
 ### 5.3 当前热点
 
-- `docs/benchmarks/results/systemc_architecture_family_dse_bootstrap/graph_evidence/` 是当前最集中的 JSON 热点，包含 540 个 graph JSON 证据文件。
-- 这批文件默认应原地保留，除非后续有明确批准的 archive move，并且同步更新所有引用。
+- `docs/benchmarks/archive/results/systemc_architecture_family_dse_bootstrap/graph_evidence/` 是当前最集中的 JSON 热点，包含 540 个 graph JSON 证据文件。
+- 这批文件已经归档到 archive 路径；后续默认保留该路径，除非再次完成引用扫描并同步更新所有引用。
 
 ### 5.4 以后做移动前先查什么
 
@@ -77,7 +78,7 @@
 ```bash
 rg --files docs | rg '\.md$' | wc -l
 rg --files docs | rg '\.json$' | wc -l
-rg --files docs/benchmarks/results/systemc_architecture_family_dse_bootstrap | rg 'graph_evidence|adjudicator|\.json$|\.md$'
-rg -n 'graph_evidence|docs/benchmarks/results/|docs/benchmarks/testdata/' docs/README.md docs/benchmarks/results/README.md docs/benchmarks/results/systemc_architecture_family_dse_bootstrap/README.md docs/benchmarks/results/systemc_architecture_family_dse_bootstrap/graph_evidence/README.md docs/architecture/architecture_comparison/results/README.md
+rg --files docs/benchmarks/archive/results/systemc_architecture_family_dse_bootstrap | rg 'graph_evidence|adjudicator|\.json$|\.md$'
+rg -n 'graph_evidence|docs/benchmarks/results/|docs/benchmarks/testdata/' docs/README.md docs/benchmarks/results/README.md docs/benchmarks/archive/results/systemc_architecture_family_dse_bootstrap/README.md docs/benchmarks/archive/results/systemc_architecture_family_dse_bootstrap/graph_evidence/README.md docs/architecture/architecture_comparison/archive/results/README.md
 rg --files tools/benchmarks | rg 'check_qe_ic_component_graph_v1.py|run_systemc_architecture_family_dse_sweep.py|summarize_qe_subspace_trace.py'
 ```

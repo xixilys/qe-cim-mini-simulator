@@ -11,10 +11,10 @@
 - 分析脚本：
   - [`analyze_qe_workload_revalidation.py`](/Volumes/remote/phd/year_2/project/dft加速/tools/benchmarks/analyze_qe_workload_revalidation.py)
 - 原始结果根目录：
-  - [`qe_workload_revalidation`](/Volumes/remote/phd/year_2/project/dft加速/docs/benchmarks/results/qe_workload_revalidation)
+  - [`qe_workload_revalidation`](/Volumes/remote/phd/year_2/project/dft加速/docs/benchmarks/archive/results/qe_workload_revalidation)
 - 自动汇总表：
-  - [`summary_tables.md`](/Volumes/remote/phd/year_2/project/dft加速/docs/benchmarks/results/qe_workload_revalidation/summary_tables.md)
-  - [`summary.json`](/Volumes/remote/phd/year_2/project/dft加速/docs/benchmarks/results/qe_workload_revalidation/summary.json)
+  - [`summary_tables.md`](/Volumes/remote/phd/year_2/project/dft加速/docs/benchmarks/archive/results/qe_workload_revalidation/summary_tables.md)
+  - [`summary.json`](/Volumes/remote/phd/year_2/project/dft加速/docs/benchmarks/archive/results/qe_workload_revalidation/summary.json)
 
 本轮覆盖到的关键维度：
 

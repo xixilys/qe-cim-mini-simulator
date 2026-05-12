@@ -13,7 +13,7 @@ CATALOG_PATH = ROOT / 'docs/architecture/qe_ic_component_catalog_seed_v0.json'
 GRAPH_SEEDS_PATH = ROOT / 'docs/architecture/qe_ic_graph_seed_templates_v0.json'
 CMAKE_PATH = MODEL_DIR / 'CMakeLists.txt'
 README_PATH = MODEL_DIR / 'README.md'
-DEFAULT_OUTPUT = ROOT / 'docs/benchmarks/results/qe_ic_component_registry_v0.json'
+DEFAULT_OUTPUT = ROOT / 'tmp/qe_ic_component_registry_v0.json'
 
 COMPONENT_EXPECTED_CLASSES = {
     'system_container': ['DFTHybridSystem'],

@@ -11,7 +11,7 @@
 ## 快速验证清单
 
 ```bash
-rg --files docs/benchmarks/results/systemc_architecture_family_dse_bootstrap/graph_evidence | rg '\.json$' | wc -l
-rg -n 'graph_evidence|systemc_architecture_family_dse_bootstrap' docs/README.md docs/benchmarks/results/README.md docs/benchmarks/results/systemc_architecture_family_dse_bootstrap/README.md docs/benchmarks/results/systemc_architecture_family_dse_bootstrap/graph_evidence/README.md
+rg --files docs/benchmarks/archive/results/systemc_architecture_family_dse_bootstrap/graph_evidence | rg '\.json$' | wc -l
+rg -n 'graph_evidence|systemc_architecture_family_dse_bootstrap' docs/README.md docs/benchmarks/results/README.md docs/benchmarks/archive/results/systemc_architecture_family_dse_bootstrap/README.md docs/benchmarks/archive/results/systemc_architecture_family_dse_bootstrap/graph_evidence/README.md
 rg --files tools/benchmarks | rg 'run_systemc_architecture_family_dse_sweep.py|run_qe_system_design_adjudicator.py|check_qe_ic_component_graph_v1.py'
 ```

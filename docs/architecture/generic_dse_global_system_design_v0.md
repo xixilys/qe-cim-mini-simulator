@@ -176,5 +176,5 @@ Debug evidence 只有通过 repeatability、provenance、claim validation 和 ad
 - `docs/architecture/generic_dse_framework_design_spec_v2.md`
 - `docs/benchmarks/generic_dse_simulation_system_handbook_v1.md`
 - `dse_v2/docs/GENERIC_DSE_FULL_FLOW_REPORTING.md`
-- `docs/overview/gem5_systemc_wsl_joint_debug_plan_20260427.md`
+- `docs/overview/archive/docs/overview/archive/gem5_systemc_wsl_joint_debug_plan_20260427.md`
 - `openspec/HANDBOOK.md`

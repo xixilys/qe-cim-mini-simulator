@@ -410,6 +410,6 @@
 ## 参考文档
 
 - `docs/benchmarks/qe_cpu_speedup_envelope_20260402.md` - Amdahl定律分析
-- `docs/benchmarks/results/qe_cpu_shell_aggregate_extract_20260402.json` - 真实trace数据
+- `docs/benchmarks/archive/results/qe_cpu_shell_aggregate_extract_20260402.json` - 真实trace数据
 - `docs/architecture/cpu_fpga_cosimulation_design_v0.md` - 协同模拟方案
 - `docs/architecture/qe_ic_full_flow_simulator_contract_v0.md` - 模拟器契约

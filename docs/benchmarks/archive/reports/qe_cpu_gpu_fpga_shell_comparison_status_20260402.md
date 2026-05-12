@@ -24,8 +24,8 @@
 ### 2.1 trace-backed case 摘要
 
 ```bash
-python3 tools/benchmarks/summarize_qe_subspace_trace.py docs/benchmarks/results/qe_si_medium_trace.csv
-python3 tools/benchmarks/summarize_qe_subspace_trace.py docs/benchmarks/results/qe_graphene_trace.csv
+python3 tools/benchmarks/summarize_qe_subspace_trace.py docs/benchmarks/archive/results/qe_si_medium_trace.csv
+python3 tools/benchmarks/summarize_qe_subspace_trace.py docs/benchmarks/archive/results/qe_graphene_trace.csv
 ```
 
 ### 2.2 shell-contract runnable model
@@ -37,7 +37,7 @@ python3 tools/benchmarks/summarize_qe_subspace_trace.py docs/benchmarks/results/
 ### 2.3 CPU micro-benchmark 实际执行
 
 ```bash
-/usr/bin/python3 tools/benchmarks/run_cpu_baseline.py --threads 1 --output docs/benchmarks/results/qe_cpu_baseline_threads1_20260402.json
+/usr/bin/python3 tools/benchmarks/run_cpu_baseline.py --threads 1 --output docs/benchmarks/archive/results/qe_cpu_baseline_threads1_20260402.json
 ```
 
 结果：成功。这里刻意没有继续使用默认 `python3`，因为默认解释器缺少 `numpy/scipy/pyscf`；最终采用的是已经验证带依赖的 `/usr/bin/python3`。
@@ -46,7 +46,7 @@ python3 tools/benchmarks/summarize_qe_subspace_trace.py docs/benchmarks/results/
 
 ### 3.1 `Si` trace 摘要
 
-- 数据源：`docs/benchmarks/results/qe_si_medium_trace.csv`
+- 数据源：`docs/benchmarks/archive/results/qe_si_medium_trace.csv`
 - total calls：`180`
 - generalized-like calls：`140`
 - standard-like calls：`40`
@@ -55,7 +55,7 @@ python3 tools/benchmarks/summarize_qe_subspace_trace.py docs/benchmarks/results/
 
 ### 3.2 `graphene` trace 摘要
 
-- 数据源：`docs/benchmarks/results/qe_graphene_trace.csv`
+- 数据源：`docs/benchmarks/archive/results/qe_graphene_trace.csv`
 - total calls：`148`
 - generalized-like calls：`112`
 - standard-like calls：`36`
@@ -110,7 +110,7 @@ run-level 输出还确认：
 
 ### 3.4 当前真实 `CPU only` micro-benchmark 输出
 
-数据源：`docs/benchmarks/results/qe_cpu_baseline_threads1_20260402.json`
+数据源：`docs/benchmarks/archive/results/qe_cpu_baseline_threads1_20260402.json`
 
 这是当前仓库里已经真实执行得到的 `CPU only` 基线数据，不是 analytical 回填值。
 
@@ -142,22 +142,22 @@ run-level 输出还确认：
 
 第一轮数据源：
 
-- `docs/benchmarks/results/qe_workload_revalidation/si4_pbe_uspp_small/stdout.out`
-- `docs/benchmarks/results/qe_workload_revalidation/si8_pbe_uspp/stdout.out`
-- `docs/benchmarks/results/qe_workload_revalidation/graphene_pbe_uspp/stdout.out`
+- `docs/benchmarks/archive/results/qe_workload_revalidation/si4_pbe_uspp_small/stdout.out`
+- `docs/benchmarks/archive/results/qe_workload_revalidation/si8_pbe_uspp/stdout.out`
+- `docs/benchmarks/archive/results/qe_workload_revalidation/graphene_pbe_uspp/stdout.out`
 
 扩展后数据源：
 
-- `docs/benchmarks/results/qe_workload_revalidation/au_slab_subspace/stdout.out`
-- `docs/benchmarks/results/qe_workload_revalidation/sic32_subspace/stdout.out`
-- `docs/benchmarks/results/qe_cpu_shell_aggregate_extract_20260402.json`
+- `docs/benchmarks/archive/results/qe_workload_revalidation/au_slab_subspace/stdout.out`
+- `docs/benchmarks/archive/results/qe_workload_revalidation/sic32_subspace/stdout.out`
+- `docs/benchmarks/archive/results/qe_cpu_shell_aggregate_extract_20260402.json`
 
 抽取命令：
 
 ```bash
 python3 tools/benchmarks/extract_qe_shell_cpu_baseline.py \
   --cases si4_pbe_uspp_small si8_pbe_uspp graphene_pbe_uspp au_slab_subspace sic32_subspace \
-  --output docs/benchmarks/results/qe_cpu_shell_aggregate_extract_20260402.json
+  --output docs/benchmarks/archive/results/qe_cpu_shell_aggregate_extract_20260402.json
 ```
 
 这里的口径分两层：
@@ -181,8 +181,8 @@ python3 tools/benchmarks/extract_qe_shell_cpu_baseline.py \
 
 数据源：
 
-- `docs/benchmarks/results/qe_cpu_shell_aggregate_extract_20260402.json`
-- `docs/benchmarks/results/qe_cpu_speedup_envelope_20260402.json`
+- `docs/benchmarks/archive/results/qe_cpu_shell_aggregate_extract_20260402.json`
+- `docs/benchmarks/archive/results/qe_cpu_speedup_envelope_20260402.json`
 - `docs/benchmarks/qe_cpu_speedup_envelope_20260402.md`
 
 这一层不是 FPGA 实测，也不是 cluster latency model 的直接输出，而是：
@@ -242,9 +242,9 @@ python3 tools/benchmarks/extract_qe_shell_cpu_baseline.py \
 ### A. 真实执行结果
 
 - `Si / graphene` trace 摘要
-- `docs/benchmarks/results/qe_cpu_baseline_threads1_20260402.json` 中的 `CPU only` micro-benchmark
-- `docs/benchmarks/results/qe_cpu_shell_aggregate_extract_20260402.json` 中的五个 measured shell aggregates
-- `docs/benchmarks/results/qe_cpu_speedup_envelope_20260402.json` 中的 Amdahl-style speedup envelope
+- `docs/benchmarks/archive/results/qe_cpu_baseline_threads1_20260402.json` 中的 `CPU only` micro-benchmark
+- `docs/benchmarks/archive/results/qe_cpu_shell_aggregate_extract_20260402.json` 中的五个 measured shell aggregates
+- `docs/benchmarks/archive/results/qe_cpu_speedup_envelope_20260402.json` 中的 Amdahl-style speedup envelope
 
 ### B. contract-layer proxy
 

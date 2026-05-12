@@ -28,7 +28,7 @@
   "execution_mode": "gem5_systemc_smoke",
   "expected_report_schema": "backend_execution_report_v0",
   "input_refs": {
-    "legacy_b3_smoke_report": "docs/benchmarks/results/qe_dse_gem5_systemc_smoke_report_v0.json"
+    "legacy_b3_smoke_report": "docs/benchmarks/archive/results/qe_dse_gem5_systemc_smoke_report_v0.json"
   },
   "metrics_contract": {
     "required_groups": [

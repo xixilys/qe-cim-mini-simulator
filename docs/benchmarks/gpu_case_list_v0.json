@@ -1,84 +1,84 @@
 {
   "schema_version": "gpu_case_list_v0",
   "generated_at_utc": "2026-05-08T06:52:07.305322+00:00",
-  "source": "docs/benchmarks/results/qe_workload_revalidation + docs/benchmarks/results/qe_cpu_shell_aggregate_extract_*",
+  "source": "docs/benchmarks/archive/results/qe_workload_revalidation + docs/benchmarks/archive/results/qe_cpu_shell_aggregate_extract_*",
   "total_cases": 15,
   "cases": [
     {
       "case_id": "si4_pbe_uspp_small",
       "status": "completed",
       "actual_latency_s": 0.35,
-      "evidence_source": "docs/benchmarks/results/qe_cpu_shell_aggregate_extract_si4_20260402.json",
+      "evidence_source": "docs/benchmarks/archive/results/qe_cpu_shell_aggregate_extract_si4_20260402.json",
       "status_note": "real QE shell aggregate available"
     },
     {
       "case_id": "si8_pbe_nc",
       "status": "completed",
       "actual_latency_s": 0.86,
-      "evidence_source": "docs/benchmarks/results/qe_workload_revalidation/summary.json",
+      "evidence_source": "docs/benchmarks/archive/results/qe_workload_revalidation/summary.json",
       "status_note": "real QE revalidation summary available"
     },
     {
       "case_id": "si8_pbe_uspp",
       "status": "completed",
       "actual_latency_s": 0.94,
-      "evidence_source": "docs/benchmarks/results/qe_workload_revalidation/summary.json",
+      "evidence_source": "docs/benchmarks/archive/results/qe_workload_revalidation/summary.json",
       "status_note": "real QE revalidation summary available"
     },
     {
       "case_id": "graphene_pbe_uspp",
       "status": "completed",
       "actual_latency_s": 0.42,
-      "evidence_source": "docs/benchmarks/results/qe_workload_revalidation/summary.json",
+      "evidence_source": "docs/benchmarks/archive/results/qe_workload_revalidation/summary.json",
       "status_note": "real QE revalidation summary available"
     },
     {
       "case_id": "graphene_pbe_paw",
       "status": "completed",
       "actual_latency_s": 0.6,
-      "evidence_source": "docs/benchmarks/results/qe_workload_revalidation/summary.json",
+      "evidence_source": "docs/benchmarks/archive/results/qe_workload_revalidation/summary.json",
       "status_note": "real QE revalidation summary available"
     },
     {
       "case_id": "au_slab_subspace",
       "status": "completed",
       "actual_latency_s": 8.87,
-      "evidence_source": "docs/benchmarks/results/qe_cpu_shell_aggregate_extract_au_sic_20260402.json",
+      "evidence_source": "docs/benchmarks/archive/results/qe_cpu_shell_aggregate_extract_au_sic_20260402.json",
       "status_note": "real QE shell aggregate available"
     },
     {
       "case_id": "sic32_subspace",
       "status": "completed",
       "actual_latency_s": 13.83,
-      "evidence_source": "docs/benchmarks/results/qe_cpu_shell_aggregate_extract_au_sic_20260402.json",
+      "evidence_source": "docs/benchmarks/archive/results/qe_cpu_shell_aggregate_extract_au_sic_20260402.json",
       "status_note": "real QE shell aggregate available"
     },
     {
       "case_id": "h2_tiny",
       "status": "completed",
       "actual_latency_s": 0.04,
-      "evidence_source": "docs/benchmarks/results/qe_workload_revalidation/summary.json",
+      "evidence_source": "docs/benchmarks/archive/results/qe_workload_revalidation/summary.json",
       "status_note": "smoke case present in revalidation summary"
     },
     {
       "case_id": "si8_pbe0_uspp",
       "status": "completed",
       "actual_latency_s": 0.71,
-      "evidence_source": "docs/benchmarks/results/qe_workload_revalidation/summary.json",
+      "evidence_source": "docs/benchmarks/archive/results/qe_workload_revalidation/summary.json",
       "status_note": "functional-path QE revalidation summary available"
     },
     {
       "case_id": "bn32_pbe_uspp",
       "status": "completed",
       "actual_latency_s": 1.03,
-      "evidence_source": "docs/benchmarks/results/qe_workload_revalidation/summary.json",
+      "evidence_source": "docs/benchmarks/archive/results/qe_workload_revalidation/summary.json",
       "status_note": "projector-heavy stress case present in summary"
     },
     {
       "case_id": "bn32_pbe0_uspp",
       "status": "completed",
       "actual_latency_s": 2.48,
-      "evidence_source": "docs/benchmarks/results/qe_workload_revalidation/summary.json",
+      "evidence_source": "docs/benchmarks/archive/results/qe_workload_revalidation/summary.json",
       "status_note": "functional solver-path case present in summary"
     },
     {

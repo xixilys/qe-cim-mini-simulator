@@ -221,8 +221,8 @@ export QE_SUBSPACE_MIN_N=32
 
 截至 `2026-03-12`，已经在工作区副本 `soft/qe-7.5` 上完成了两组 `Si` SCF 样本的采样：
 
-- [`qe_si_medium_trace.csv`](/Volumes/remote/phd/year_2/project/dft加速/docs/benchmarks/results/qe_si_medium_trace.csv)
-- [`qe_si_large_trace.csv`](/Volumes/remote/phd/year_2/project/dft加速/docs/benchmarks/results/qe_si_large_trace.csv)
+- [`qe_si_medium_trace.csv`](/Volumes/remote/phd/year_2/project/dft加速/docs/benchmarks/archive/results/qe_si_medium_trace.csv)
+- [`qe_si_large_trace.csv`](/Volumes/remote/phd/year_2/project/dft加速/docs/benchmarks/archive/results/qe_si_large_trace.csv)
 
 对应的阶段性整理已经并入：
 

@@ -8,7 +8,7 @@ import re
 from pathlib import Path
 from collections import defaultdict
 
-WORKLOAD_DIR = Path('/Volumes/remote/phd/year_2/project/dft加速/docs/benchmarks/results/qe_workload_revalidation')
+WORKLOAD_DIR = Path('/Volumes/remote/phd/year_2/project/dft加速/docs/benchmarks/archive/results/qe_workload_revalidation')
 
 def extract_case_info(case_dir: Path) -> dict:
     """Extract key characteristics from a case"""

@@ -11,7 +11,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_CASE_DIR = ROOT / "docs/benchmarks/results/qe_workload_revalidation/si8_pbe_uspp"
+DEFAULT_CASE_DIR = ROOT / "docs/benchmarks/archive/results/qe_workload_revalidation/si8_pbe_uspp"
 DEFAULT_OUT = ROOT / "docs/benchmarks/si8_scf_operator_load_experiment_plan.md"
 
 COMPLEX_FP64_BYTES = 16

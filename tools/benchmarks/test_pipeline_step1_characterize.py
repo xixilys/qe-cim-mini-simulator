@@ -17,7 +17,7 @@ from pipeline import ArtifactStore, Step1_Characterize
 
 class Step1CharacterizeTest(unittest.TestCase):
     def test_characterizes_existing_qe_trace_bundle(self) -> None:
-        case_dir = ROOT / "docs/benchmarks/results/qe_workload_revalidation/h2_tiny"
+        case_dir = ROOT / "docs/benchmarks/archive/results/qe_workload_revalidation/h2_tiny"
         raw_bundle = {
             "schema_version": "raw_trace_bundle_v1",
             "case_id": "h2_tiny",

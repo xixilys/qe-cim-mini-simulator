@@ -319,11 +319,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('--model-bin', type=Path, default=ROOT / 'model/qe_band_solver_model/build/qe_band_solver_model')
     parser.add_argument('--model-max-scf-iters', type=int, default=1)
     parser.add_argument('--auto-match-baseline-iters', action='store_true')
-    parser.add_argument('--cpu-shell-aggregate-path', type=Path, default=ROOT / 'docs/benchmarks/results/qe_cpu_shell_aggregate_extract_20260402.json')
+    parser.add_argument('--cpu-shell-aggregate-path', type=Path, default=ROOT / 'docs/benchmarks/archive/results/qe_cpu_shell_aggregate_extract_20260402.json')
     parser.add_argument('--fast-layer-proxy-assumptions-path', type=Path, default=ROOT / 'docs/benchmarks/qe_fast_layer_proxy_assumption_set_v0.json')
     parser.add_argument('--compare-helper', type=Path, default=ROOT / 'tools/benchmarks/compare_qe_gold_correctness.py')
     parser.add_argument('--normalize-gold-helper', type=Path, default=ROOT / 'tools/benchmarks/normalize_qe_gold_baseline.py')
-    parser.add_argument('--gold-baseline-root', type=Path, default=ROOT / 'docs/benchmarks/results/qe_workload_revalidation')
+    parser.add_argument('--gold-baseline-root', type=Path, default=ROOT / 'docs/benchmarks/archive/results/qe_workload_revalidation')
     return parser.parse_args()
 
 

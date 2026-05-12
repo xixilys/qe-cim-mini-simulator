@@ -11,7 +11,7 @@
 ## 快速验证清单
 
 ```bash
-rg -n 'comparison_results.json|results/' docs/architecture/architecture_comparison/README.md docs/architecture/architecture_comparison/results/README.md
-rg --files docs/architecture/architecture_comparison/results | rg 'comparison_results.json|comparison_report.md|architecture_comparison\.png'
+rg -n 'comparison_results.json|results/' docs/architecture/architecture_comparison/README.md docs/architecture/architecture_comparison/archive/results/README.md
+rg --files docs/architecture/architecture_comparison/archive/results | rg 'comparison_results.json|comparison_report.md|architecture_comparison\.png'
 rg --files tools/architecture_comparison | rg 'run_architecture_comparison.py|comparison_framework.py|__init__.py'
 ```

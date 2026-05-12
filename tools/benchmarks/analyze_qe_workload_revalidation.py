@@ -11,7 +11,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[2]
-RESULTS_ROOT = ROOT / "docs/benchmarks/results/qe_workload_revalidation"
+RESULTS_ROOT = ROOT / "docs/benchmarks/archive/results/qe_workload_revalidation"
 
 CASE_ORDER = [
     "h2_tiny",

@@ -584,7 +584,7 @@ class BackendExecutionRunnerTests(unittest.TestCase):
             tmp = Path(tmpdir)
             request = self.write_request(tmp, self.make_request("gem5_systemc_smoke"))
             output = tmp / "report.json"
-            legacy = ROOT / "docs/benchmarks/results/qe_dse_gem5_systemc_smoke_report_v0.json"
+            legacy = ROOT / "docs/benchmarks/archive/results/qe_dse_gem5_systemc_smoke_report_v0.json"
 
             rc = RUNNER.main([
                 "--request",
@@ -612,7 +612,7 @@ class BackendExecutionRunnerTests(unittest.TestCase):
             tmp = Path(tmpdir)
             request = self.write_request(tmp, self.make_request("gem5_systemc_smoke"))
             output = tmp / "report.json"
-            legacy_src = ROOT / "docs/benchmarks/results/qe_dse_gem5_systemc_smoke_report_v0.json"
+            legacy_src = ROOT / "docs/benchmarks/archive/results/qe_dse_gem5_systemc_smoke_report_v0.json"
             legacy_payload = json.loads(legacy_src.read_text(encoding="utf-8"))
             for hidden_text in ("QE-equivalence passed", "domain-equivalence passed"):
                 with self.subTest(hidden_text=hidden_text):

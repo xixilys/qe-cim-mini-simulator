@@ -138,7 +138,7 @@ helper 支持两类输入：
 - convergence achieved / not achieved
 - SCF iteration 数
 
-这对当前 `docs/benchmarks/results/qe_workload_revalidation/*/metadata.json` 很有用。
+这对当前 `docs/benchmarks/archive/results/qe_workload_revalidation/*/metadata.json` 很有用。
 
 ## 6. 辅助脚本
 
@@ -154,7 +154,7 @@ baseline 归一化脚本在：
 
 ```bash
 python3 tools/benchmarks/normalize_qe_gold_baseline.py \
-  --metadata docs/benchmarks/results/qe_workload_revalidation/si8_pbe_nc/metadata.json \
+  --metadata docs/benchmarks/archive/results/qe_workload_revalidation/si8_pbe_nc/metadata.json \
   --output /tmp/si8_pbe_nc.gold.json
 
 python3 tools/benchmarks/compare_qe_gold_correctness.py \

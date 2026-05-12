@@ -474,7 +474,7 @@ def step1_to_step2_pipeline(step1_json_path: str, design_space_path: str):
 ### 6.1 现有 Step 1 输出
 
 当前代码库中的 Step 1 输出：
-- `docs/benchmarks/results/qe_workload_revalidation/summary.json`
+- `docs/benchmarks/archive/results/qe_workload_revalidation/summary.json`
 - `docs/benchmarks/qe_kernel_characterization_matrix_for_system_dse_v0.md`
 
 ### 6.2 整合方案
@@ -493,7 +493,7 @@ def step1_to_step2_pipeline(step1_json_path: str, design_space_path: str):
 ```bash
 # 1. 生成 Workload IR
 python3 tools/benchmarks/workload_ir.py \
-    --step1-summary docs/benchmarks/results/qe_workload_revalidation/summary.json \
+    --step1-summary docs/benchmarks/archive/results/qe_workload_revalidation/summary.json \
     --output workload_ir_si8.json
 
 # 2. 运行架构评估
@@ -503,7 +503,7 @@ python3 tools/benchmarks/qe_architecture_family_comprehensive_evaluator.py \
 
 # 3. 验证数据流
 python3 tools/benchmarks/step1_to_step2_pipeline.py \
-    --step1-summary docs/benchmarks/results/qe_workload_revalidation/summary.json \
+    --step1-summary docs/benchmarks/archive/results/qe_workload_revalidation/summary.json \
     --design-space docs/architecture/architecture_comparison/architecture_design_space_v1.json \
     --output step2_output_si8.json
 ```

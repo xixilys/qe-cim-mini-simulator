@@ -351,4 +351,4 @@ Task 6 的当前版本至少应产出：
 6. 一份替代方法披露记录，明确哪些数字是真实执行结果，哪些数字仍然只是 proxy / contract-layer / analytical support
 
 本文件即是第 1、3、4 项的 v0 冻结件。
-当前第 5 项的执行记录见 `docs/benchmarks/qe_cpu_gpu_fpga_shell_comparison_status_20260402.md`。
+当前第 5 项的执行记录见 `docs/benchmarks/archive/reports/docs/benchmarks/archive/reports/qe_cpu_gpu_fpga_shell_comparison_status_20260402.md`。

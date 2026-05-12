@@ -17,7 +17,7 @@ from typing import Dict, List, Optional
 
 DEFAULT_MAPE_THRESHOLD = 0.20
 DEFAULT_CASE_LIST = Path("docs/benchmarks/gpu_case_list_v0.json")
-DEFAULT_DSE_RESULTS = Path("docs/benchmarks/results/systemc_architecture_family_dse_bootstrap/systemc_architecture_family_dse_bootstrap_v0.json")
+DEFAULT_DSE_RESULTS = Path("docs/benchmarks/archive/results/systemc_architecture_family_dse_bootstrap/systemc_architecture_family_dse_bootstrap_v0.json")
 
 
 @dataclass

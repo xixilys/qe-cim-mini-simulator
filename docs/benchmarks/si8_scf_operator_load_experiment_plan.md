@@ -16,15 +16,15 @@
 
 ## 2. 数据来源与复现实验
 
-- 输入文件：`/Volumes/remote/phd/year_2/project/dft加速/docs/benchmarks/results/qe_workload_revalidation/si8_pbe_uspp/metadata.json` 记录的 `docs/qe_inputs/si8_pbe_uspp.in`
-- 运行产物目录：`/Volumes/remote/phd/year_2/project/dft加速/docs/benchmarks/results/qe_workload_revalidation/si8_pbe_uspp`
-- 关键 trace：`/Volumes/remote/phd/year_2/project/dft加速/docs/benchmarks/results/qe_workload_revalidation/si8_pbe_uspp/hpsi_trace.csv`、`/Volumes/remote/phd/year_2/project/dft加速/docs/benchmarks/results/qe_workload_revalidation/si8_pbe_uspp/bandsolver_trace.csv`、`/Volumes/remote/phd/year_2/project/dft加速/docs/benchmarks/results/qe_workload_revalidation/si8_pbe_uspp/subspace_trace.csv`
+- 输入文件：`/Volumes/remote/phd/year_2/project/dft加速/docs/benchmarks/archive/results/qe_workload_revalidation/si8_pbe_uspp/metadata.json` 记录的 `docs/qe_inputs/si8_pbe_uspp.in`
+- 运行产物目录：`/Volumes/remote/phd/year_2/project/dft加速/docs/benchmarks/archive/results/qe_workload_revalidation/si8_pbe_uspp`
+- 关键 trace：`/Volumes/remote/phd/year_2/project/dft加速/docs/benchmarks/archive/results/qe_workload_revalidation/si8_pbe_uspp/hpsi_trace.csv`、`/Volumes/remote/phd/year_2/project/dft加速/docs/benchmarks/archive/results/qe_workload_revalidation/si8_pbe_uspp/bandsolver_trace.csv`、`/Volumes/remote/phd/year_2/project/dft加速/docs/benchmarks/archive/results/qe_workload_revalidation/si8_pbe_uspp/subspace_trace.csv`
 
 复现命令：
 
 ```bash
 python3 tools/benchmarks/analyze_qe_scf_operator_load.py \
-  /Volumes/remote/phd/year_2/project/dft加速/docs/benchmarks/results/qe_workload_revalidation/si8_pbe_uspp \
+  /Volumes/remote/phd/year_2/project/dft加速/docs/benchmarks/archive/results/qe_workload_revalidation/si8_pbe_uspp \
   --markdown-out docs/benchmarks/si8_scf_operator_load_experiment_plan.md
 ```
 

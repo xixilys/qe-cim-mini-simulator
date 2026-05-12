@@ -36,7 +36,7 @@
 - 若你还需要理解当前 proxy 指标是**怎么从模型输出一路算出来的**，请同时阅读：
   - `docs/benchmarks/qe_proxy_estimation_flow_and_worked_example_v0.md`
 - 若你需要一页可以直接放进 PPT/周报的摘要，请同时阅读：
-  - `docs/benchmarks/qe_proxy_estimation_onepage_summary_v0.md`
+  - `docs/benchmarks/archive/reports/docs/benchmarks/archive/reports/qe_proxy_estimation_onepage_summary_v0.md`
 
 ---
 

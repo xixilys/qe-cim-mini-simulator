@@ -17,7 +17,7 @@ Current implementation anchors include:
 - `dse_v2/backends/generic_systemc_bridge.py`: Python-to-C++ generic backend bridge.
 - `model/generic_sim_backend/`: standalone C++ simulation backend and JSON request/result schemas.
 - `gem5_integration/src/dev/generic_accel/`: GenericAccel MMIO timed-stub device model.
-- `docs/overview/generic_dse_gem5_code_review_20260508.md`: reviewer findings that identify remaining blocking gaps.
+- `docs/overview/archive/docs/overview/archive/generic_dse_gem5_code_review_20260508.md`: reviewer findings that identify remaining blocking gaps.
 
 Stakeholders:
 

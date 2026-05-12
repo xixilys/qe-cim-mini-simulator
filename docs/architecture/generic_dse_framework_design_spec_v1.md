@@ -788,7 +788,7 @@ python3 dse_v2/tests/test_regression_generic_backend.py
 
 ### 13.1 审核报告
 
-**报告文件**：`docs/overview/generic_dse_gem5_code_review_20260508.md`
+**报告文件**：`docs/overview/archive/docs/overview/archive/generic_dse_gem5_code_review_20260508.md`
 
 **审核结论**：REQUEST CHANGES
 
@@ -924,7 +924,7 @@ python3 dse_v2/tests/test_regression_generic_backend.py
 | 文件 | 用途 |
 |------|------|
 | `docs/architecture/system_design_master_spec_v0.md` | 系统级主规范 |
-| `docs/overview/generic_dse_gem5_code_review_20260508.md` | 代码审核报告 |
+| `docs/overview/archive/docs/overview/archive/generic_dse_gem5_code_review_20260508.md` | 代码审核报告 |
 | `dse_v2/README.md` | DSE v2 项目说明 |
 
 ### 15.3 参考标准

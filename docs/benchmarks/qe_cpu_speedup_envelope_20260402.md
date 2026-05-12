@@ -8,8 +8,8 @@
 
 这里所有数字都来自：
 
-- `docs/benchmarks/results/qe_cpu_shell_aggregate_extract_20260402.json`
-- `docs/benchmarks/results/qe_cpu_speedup_envelope_20260402.json`
+- `docs/benchmarks/archive/results/qe_cpu_shell_aggregate_extract_20260402.json`
+- `docs/benchmarks/archive/results/qe_cpu_speedup_envelope_20260402.json`
 
 它们的证据等级是：
 

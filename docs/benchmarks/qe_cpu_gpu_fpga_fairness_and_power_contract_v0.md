@@ -13,7 +13,7 @@
 本文直接基于：
 
 - `.omx/plans/ralplan-final-qe-fpga-fullstack-co-design-20260413.md`
-- `docs/benchmarks/qe_cpu_gpu_fpga_shell_comparison_status_20260402.md`
+- `docs/benchmarks/archive/reports/docs/benchmarks/archive/reports/qe_cpu_gpu_fpga_shell_comparison_status_20260402.md`
 - `docs/benchmarks/qe_cpu_gpu_fpga_shell_comparison_plan_v0.md`
 - `docs/benchmarks/qe_shell_level_comparison_metrics_contract_v0.md`
 - `docs/benchmarks/qe_fpga_workload_group_and_correctness_contract_v0.md`
@@ -45,7 +45,7 @@ phase 1 只讨论：
 
 ### 1.2 当前状态约束
 
-根据 `qe_cpu_gpu_fpga_shell_comparison_status_20260402.md`：
+根据 `docs/benchmarks/archive/reports/qe_cpu_gpu_fpga_shell_comparison_status_20260402.md`：
 
 - `CPU only` 已有真实 shell aggregate；
 - `CPU + FPGA` 目前已有 runnable shell-contract proxy，但 `cdiaghg` 仍是 companion/proxy 计账；

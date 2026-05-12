@@ -214,11 +214,11 @@ python3 tools/benchmarks/qe_ic_graph_projection_utils.py \
 ```bash
 # Analyze QE trace
 python3 tools/benchmarks/summarize_qe_subspace_trace.py \
-  docs/benchmarks/results/qe_si8_trace.csv
+  docs/benchmarks/archive/results/qe_subspace_trace.csv
 
 # Analyze SCF operator load
 python3 tools/benchmarks/analyze_qe_scf_operator_load.py \
-  --trace-dir docs/benchmarks/results/qe_workload_revalidation
+  --trace-dir docs/benchmarks/archive/results/qe_workload_revalidation
 ```
 
 ## Testing and Validation

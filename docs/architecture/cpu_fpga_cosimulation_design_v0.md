@@ -397,7 +397,7 @@ SCFRunReport DFTHybridSystem::run_full_scf() {
 **目标：** 从真实QE trace提取timing数据
 
 **任务：**
-1. 分析现有QE trace文件（`docs/benchmarks/results/qe_*_trace.csv`）
+1. 分析现有QE trace文件（`docs/benchmarks/archive/results/qe_*_trace.csv`）
 2. 提取Phase A/C/D的timing数据
 3. 构建TraceDatabase类和JSON格式
 4. 验证timing数据的完整性
@@ -629,4 +629,4 @@ Bottleneck Analysis:
 - `docs/architecture/qe_ic_full_flow_simulator_contract_v0.md` - 模拟器契约
 - `docs/architecture/system_design_master_spec_v0.md` - 系统设计规范
 - `docs/benchmarks/qe_cpu_speedup_envelope_20260402.md` - 加速比计算
-- `docs/overview/phase3_complete_summary.md` - Phase 3完成总结
+- `docs/overview/archive/docs/overview/archive/phase3_complete_summary.md` - Phase 3完成总结

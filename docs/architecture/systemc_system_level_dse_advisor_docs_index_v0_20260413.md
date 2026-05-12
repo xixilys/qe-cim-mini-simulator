@@ -166,7 +166,7 @@
 - candidate-result canonicalized payload
 - final ranking/projection result output
 
-当前检查时，`docs/benchmarks/results/` 下尚未出现 `systemc_architecture_family_dse_*` 类生成结果文件。
+该轮检查时尚未出现可直接进入 final advisor pack 的 `systemc_architecture_family_dse_*` 类生成结果；后续历史生成证据归档在 `docs/benchmarks/archive/results/`。
 
 在这些结果真正出现前，advisor-facing 页面应继续保持模板/占位状态，而不是提前填入未经上游支撑的具体数值。
 

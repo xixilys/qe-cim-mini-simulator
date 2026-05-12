@@ -46,12 +46,12 @@
 
 ### 2.2 当前输入证据
 
-- `docs/benchmarks/qe_system_workload_revalidation_report_20260321.md`
-- `docs/benchmarks/results/qe_workload_revalidation/summary.json`
-- `docs/benchmarks/results/qe_workload_revalidation/summary_tables.md`
+- `docs/benchmarks/archive/reports/docs/benchmarks/archive/reports/qe_system_workload_revalidation_report_20260321.md`
+- `docs/benchmarks/archive/results/qe_workload_revalidation/summary.json`
+- `docs/benchmarks/archive/results/qe_workload_revalidation/summary_tables.md`
 - `docs/benchmarks/si8_scf_operator_load_experiment_plan.md`
-- `docs/benchmarks/qe_step1_computational_pattern_analysis_report.md`
-- `docs/benchmarks/qe_multi_case_analysis_report.md`
+- `docs/benchmarks/archive/reports/docs/benchmarks/archive/reports/qe_step1_computational_pattern_analysis_report.md`
+- `docs/benchmarks/archive/reports/docs/benchmarks/archive/reports/qe_multi_case_analysis_report.md`
 
 ### 2.3 当前 Step-1 artifact
 
@@ -108,7 +108,7 @@
 - `docs/benchmarks/qe_next_stage_dse_strategy_v0.md`
 - `docs/benchmarks/systemc_architecture_family_dse_result_schema_v0.json`
 - `docs/benchmarks/qe_fast_layer_proxy_assumption_set_v0.json`
-- `docs/benchmarks/qe_step2_kernel_mapping_dse_report.md`
+- `docs/benchmarks/archive/reports/docs/benchmarks/archive/reports/qe_step2_kernel_mapping_dse_report.md`
 - `tools/benchmarks/qe_kernel_mapping_dse_step2.py`
 
 ### 4.3 当前 Step-3 artifact
