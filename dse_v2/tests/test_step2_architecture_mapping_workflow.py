@@ -621,6 +621,16 @@ def test_step2_downgrades_missing_binding_and_diagnostic_claim_boundary(tmp_path
     assert diagnostic_promotion["trusted_final_claim"] is False
     assert any(reason["reason_id"] == "diagnostic_claim_boundary" for reason in diagnostic_status["reasons"])
 
+    unbound_queue = _load_json(tmp_path / "unbound" / "step3_simulation_queue.json")
+    diagnostic_queue = _load_json(tmp_path / "diagnostic" / "step3_simulation_queue.json")
+    assert unbound_queue["queue_mode"] == "selected-entry-only"
+    assert unbound_queue["entries"][0]["queue_state"] == "blocked_not_promoted"
+    assert unbound_queue["entries"][0]["promoted_for_simulation"] is False
+    assert unbound_queue["entries"][0]["trusted_final_claim"] is False
+    assert diagnostic_queue["entries"][0]["queue_state"] == "blocked_claim_boundary"
+    assert diagnostic_queue["entries"][0]["promoted_for_simulation"] is False
+    assert any(reason["reason_id"] == "diagnostic_claim_boundary" for reason in diagnostic_queue["entries"][0]["blocked_reasons"])
+
 
 def test_step2_artifact_validation_rejects_illegal_mapping_and_predicted_final_claim(tmp_path):
     graph = create_vector_search_graph("vector_validation")
@@ -663,10 +673,18 @@ def test_step2_screens_multiple_architectures_without_breaking_step3_handoff(tmp
     by_architecture = {record["architecture_id"]: record for record in records}
     balanced_dir = tmp_path / "architectures" / "balanced-generic-systemc-v0"
     future_dir = tmp_path / "architectures" / "future-custom-candidate-v0"
+    screening_queue = _load_json(tmp_path / "step3_simulation_queue.json")
+    screening_candidate_set = _load_json(tmp_path / "architecture_candidate_set.json")
 
     assert result.status == "architecture_screening_completed"
     assert result.trusted_final_eligible is False
     assert (tmp_path / "architecture_screening_records.json").exists()
+    assert screening_candidate_set["policy_scope"] == "architecture_screening"
+    assert screening_candidate_set["candidate_count"] == 2
+    assert screening_queue["queue_mode"] == "selected-entry-only"
+    assert screening_queue["entry_count"] == 2
+    assert {entry["architecture_id"] for entry in screening_queue["entries"]} == {"balanced-generic-systemc-v0", "future-custom-candidate-v0"}
+    assert {entry["queue_state"] for entry in screening_queue["entries"]} == {"scheduled_for_simulation", "blocked_not_promoted"}
     assert set(by_architecture) == {"balanced-generic-systemc-v0", "future-custom-candidate-v0"}
     assert by_architecture["balanced-generic-systemc-v0"]["step2_status"] == "ready_for_step3_simulation"
     assert by_architecture["balanced-generic-systemc-v0"]["promoted_for_simulation"] is True

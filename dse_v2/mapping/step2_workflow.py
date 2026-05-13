@@ -2121,6 +2121,8 @@ def run_step2_architecture_mapping_workflow(
         low_fidelity_policy=low_fidelity_policy,
         candidate_hints=candidate_hints_payload,
     )
+    selected_record.setdefault("mapping_id", design_config["mapping_id"])
+    mapping_artifacts["selected_record"] = selected_record
     design_point = DesignPoint(
         design_point_id=run_id,
         system_architecture=system_arch,

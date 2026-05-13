@@ -193,6 +193,9 @@ def test_step3_blocks_candidate_only_missing_binding_and_smoke_boundary(tmp_path
     unbound_step3 = tmp_path / "step3_unbound"
 
     run_step2_architecture_mapping_workflow(package, architecture_id="future-custom-candidate-v0", output_dir=unbound_step2)
+    queue = _load(unbound_step2 / "step3_simulation_queue.json")
+    queue["entries"][0]["queue_state"] = "scheduled_for_simulation"
+    (unbound_step2 / "step3_simulation_queue.json").write_text(json.dumps(queue, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     unbound = run_step3_simulation_evidence_workflow(unbound_step2, output_dir=unbound_step3, timeout=30)
     unbound_status = _load(unbound_step3 / "step3_status.json")
     unbound_reasons = {reason["reason_id"] for reason in unbound_status["reasons"]}
@@ -201,6 +204,8 @@ def test_step3_blocks_candidate_only_missing_binding_and_smoke_boundary(tmp_path
     assert unbound.trusted_for_final_ranking is False
     assert unbound_status["full_flow_simulation_attempted"] is False
     assert "step2_not_promoted_for_simulation" in unbound_reasons
+    assert "step2_artifact_validation_failed" in unbound_reasons
+    assert (unbound_step3 / "step2_input" / "step3_simulation_queue.json").exists()
 
     smoke_package = package_from_graph(
         graph,
