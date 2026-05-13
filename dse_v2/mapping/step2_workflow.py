@@ -79,6 +79,11 @@ STEP2_LOW_FIDELITY_ARTIFACT_KEYS = {
     "low_fidelity_summary": "low_fidelity_screening_summary.json",
 }
 
+STEP2_CANDIDATE_QUEUE_ARTIFACTS = [
+    "architecture_candidate_set.json",
+    "step3_simulation_queue.json",
+]
+
 STEP2_ARTIFACT_NAMES = [
     "step2_status.json",
     "architecture_catalog.json",
@@ -90,7 +95,10 @@ STEP2_ARTIFACT_NAMES = [
     "executable_graph.json",
     "mapping.json",
     "mapping_promotion_decision.json",
-] + STEP2_REQUIRED_MAPPING_ARTIFACTS + STEP2_LOW_FIDELITY_ARTIFACTS + CODESIGN_STEP2_ARTIFACTS
+] + STEP2_REQUIRED_MAPPING_ARTIFACTS + STEP2_LOW_FIDELITY_ARTIFACTS + CODESIGN_STEP2_ARTIFACTS + STEP2_CANDIDATE_QUEUE_ARTIFACTS
+
+HARD_DOMAIN_REVIEW_FLAGS = {"project_critical_conflict", "segmentation_uncertain"}
+SOFT_DOMAIN_REVIEW_FLAGS = {"insufficient_evidence", "important_input_parameter"}
 
 
 @dataclass
