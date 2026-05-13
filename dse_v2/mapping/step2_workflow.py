@@ -39,7 +39,7 @@ from dse_v2.core.architecture.accelerator import (
 from dse_v2.core.ir.compute_graph import ComputeGraph
 from dse_v2.core.workload.lowering import GraphLoweringResult, lower_compute_graph
 from dse_v2.core.workload.package import WorkloadPackage
-from dse_v2.core.workload.step1_workflow import load_step1_workload_package
+from dse_v2.core.workload.step1_workflow import load_step1_handoff, load_step1_workload_package
 from dse_v2.core.workload.workflows import DIAGNOSTIC_CLAIM_BOUNDARIES
 from dse_v2.codesign import (
     CODESIGN_L4_EVIDENCE_ARTIFACTS,
@@ -51,6 +51,12 @@ from dse_v2.dse.orchestrator import DesignPoint
 from dse_v2.dse.analytical_evaluator import EnhancedAnalyticalEvaluator
 from dse_v2.dse.tlm_evaluator import TLMEvaluator
 from dse_v2.mapping.search import mapping_violations, run_mapping_search, target_ids
+from dse_v2.mapping.domain_policy import (
+    Step2CandidateHints,
+    Step2DomainPolicyRegistry,
+    Step2PolicyInput,
+    default_step2_domain_policy_registry,
+)
 from dse_v2.promotion.promotion_engine import PromotionEngine
 
 STEP2_REQUIRED_MAPPING_ARTIFACTS = [
@@ -445,9 +451,11 @@ def _blocked_result(
     lowering: GraphLoweringResult,
     output_dir: Optional[Path],
     catalog: Optional[ArchitectureCatalog] = None,
+    source_graph: Optional[ComputeGraph] = None,
     architecture_instance: Optional[ArchitectureInstance] = None,
     architecture_artifact: Optional[Mapping[str, Any]] = None,
 ) -> Step2WorkflowResult:
+    source_graph = source_graph or workload_package.graph
     artifacts: Dict[str, Any] = {
         "step2_status": {
             "schema_version": "dse.step2.status.v1",
@@ -455,12 +463,12 @@ def _blocked_result(
             "trusted_final_eligible": False,
             "workload_id": workload_package.workload_id,
             "workload_family": workload_package.workload_family,
-            "source_graph_id": workload_package.graph.graph_id,
+            "source_graph_id": source_graph.graph_id,
             "executable_graph_id": lowering.report.get("executable_graph_id"),
             "reasons": reasons,
         },
         "workload_package": workload_package.to_dict(),
-        "workload_graph": workload_package.graph.to_dict(),
+        "workload_graph": source_graph.to_dict(),
         "graph_lowering_report": lowering.report,
     }
     if catalog is not None:
@@ -488,7 +496,7 @@ def _blocked_result(
         status=status,
         trusted_final_eligible=False,
         workload_package=workload_package,
-        source_graph=workload_package.graph,
+        source_graph=source_graph,
         lowering=lowering,
         executable_graph=lowering.executable_graph,
         architecture_instance=architecture_instance,
@@ -1896,6 +1904,80 @@ def validate_step2_artifacts(artifacts: Mapping[str, Any]) -> Dict[str, Any]:
     }
 
 
+def _lowering_from_step1_or_recompute(
+    *,
+    workload_package: WorkloadPackage,
+    source_graph: ComputeGraph,
+    executable_graph: Optional[ComputeGraph],
+    graph_lowering_report: Optional[Mapping[str, Any]],
+    step1_handoff_summary: Optional[Mapping[str, Any]],
+) -> GraphLoweringResult:
+    """Use a consistent persisted Step1 lowering, otherwise recompute visibly."""
+    replay: Dict[str, Any] = {
+        "schema_version": "dse.step2.replay_metadata.v1",
+        "source": "direct_package_call",
+        "recomputed_from_package": True,
+        "persisted_step1_handoff_used": False,
+    }
+    if step1_handoff_summary is not None:
+        replay["source"] = "step1_handoff_fallback_recompute"
+        replay["step1_handoff_summary"] = dict(step1_handoff_summary)
+
+    if graph_lowering_report is not None and executable_graph is not None:
+        report = dict(graph_lowering_report)
+        expected_source = str(report.get("source_graph_id", ""))
+        expected_executable = str(report.get("executable_graph_id", ""))
+        consistent = (
+            expected_source == source_graph.graph_id
+            and expected_executable == executable_graph.graph_id
+            and report.get("status") != "unsupported"
+        )
+        if consistent:
+            report["step2_replay"] = {
+                "schema_version": "dse.step2.replay_metadata.v1",
+                "source": "persisted_step1_handoff",
+                "recomputed_from_package": False,
+                "persisted_step1_handoff_used": True,
+                "step1_handoff_summary": dict(step1_handoff_summary or {}),
+            }
+            return GraphLoweringResult(report=report, executable_graph=executable_graph)
+        replay["persisted_step1_handoff_used"] = False
+        replay["persisted_inconsistency"] = {
+            "report_source_graph_id": expected_source,
+            "actual_source_graph_id": source_graph.graph_id,
+            "report_executable_graph_id": expected_executable,
+            "actual_executable_graph_id": executable_graph.graph_id,
+            "report_status": report.get("status"),
+        }
+
+    lowering = lower_compute_graph(source_graph, workload_package)
+    lowering.report["step2_replay"] = replay
+    return lowering
+
+
+def _merge_policy_hints(hints: Sequence[Step2CandidateHints]) -> Optional[Dict[str, Any]]:
+    matched = [hint for hint in hints if hint.matched]
+    if not matched:
+        return None
+    payloads = [hint.to_dict() for hint in matched]
+    review_flags = sorted({flag for payload in payloads for flag in payload.get("review_flags", [])})
+    hard_block_flags = sorted({flag for payload in payloads for flag in payload.get("hard_block_flags", [])})
+    review_required_flags = sorted({flag for payload in payloads for flag in payload.get("review_required_flags", [])})
+    return {
+        "schema_version": "dse.step2.domain_policy_hints.v1",
+        "matched": True,
+        "policies": payloads,
+        "policy_ids": [payload["policy_id"] for payload in payloads],
+        "domain_keys": sorted({payload["domain_key"] for payload in payloads}),
+        "review_flags": review_flags,
+        "hard_block_flags": hard_block_flags,
+        "review_required_flags": review_required_flags,
+        "review_required": bool(review_flags or hard_block_flags or review_required_flags),
+        "hard_blocked": bool(hard_block_flags),
+        "trusted_final_claim": False,
+    }
+
+
 def run_step2_architecture_mapping_workflow(
     workload_package: WorkloadPackage,
     *,
@@ -1913,17 +1995,49 @@ def run_step2_architecture_mapping_workflow(
     require_l4_proof: bool = False,
     l4_reason: str = "software-visible descriptor/request/completion proof requested for co-design claim",
     low_fidelity_policy: Optional[Mapping[str, Any]] = None,
-    candidate_hints: Optional[Mapping[str, Any]] = None,
+    source_graph: Optional[ComputeGraph] = None,
+    executable_graph: Optional[ComputeGraph] = None,
+    graph_lowering_report: Optional[Mapping[str, Any]] = None,
+    workload_characterization: Optional[Mapping[str, Any]] = None,
+    step1_handoff_summary: Optional[Mapping[str, Any]] = None,
+    domain_policy_registry: Optional[Step2DomainPolicyRegistry] = None,
+    enable_domain_policies: bool = False,
 ) -> Step2WorkflowResult:
     """Run Step2 and optionally persist all architecture/mapping artifacts."""
     catalog = catalog or seed_generic_dse_architecture_catalog()
     precision_policy = dict(precision_policy or {"default": "FP64", "unavailable_policy": "record_explicit_default"})
     fallback_policy = dict(fallback_policy or {"unsupported_ops": "host_fallback_visible", "final_claim_if_fallback": "requires_step3_evidence"})
     objective_directions = dict(objective_directions or {"latency_ms": "minimize", "energy_j": "minimize", "power_w": "minimize"})
-    candidate_hints_payload = _json_safe(candidate_hints) if isinstance(candidate_hints, Mapping) and candidate_hints else None
+    source_graph = source_graph or workload_package.graph
 
     validation = workload_package.validate()
-    lowering = lower_compute_graph(workload_package.graph, workload_package)
+    lowering = _lowering_from_step1_or_recompute(
+        workload_package=workload_package,
+        source_graph=source_graph,
+        executable_graph=executable_graph,
+        graph_lowering_report=graph_lowering_report,
+        step1_handoff_summary=step1_handoff_summary,
+    )
+    policy_registry = domain_policy_registry or default_step2_domain_policy_registry()
+    policy_input = Step2PolicyInput(
+        workload_package=workload_package,
+        source_graph=source_graph,
+        executable_graph=lowering.executable_graph,
+        lowering_report=lowering.report,
+        workload_characterization=workload_characterization,
+        step1_handoff_summary=step1_handoff_summary,
+        backend=backend,
+        evidence_mode=evidence_mode,
+        require_l4_proof=require_l4_proof,
+    )
+    if enable_domain_policies:
+        catalog = policy_registry.augment_catalog(policy_input, catalog)
+    policy_hints = (
+        policy_registry.build_hints(policy_input, catalog, architecture_id)
+        if enable_domain_policies
+        else []
+    )
+    policy_hints_payload = _merge_policy_hints(policy_hints)
     if not validation.get("valid", False):
         return _blocked_result(
             status="blocked_invalid_workload_package",
@@ -1932,6 +2046,7 @@ def run_step2_architecture_mapping_workflow(
             lowering=lowering,
             output_dir=output_dir,
             catalog=catalog,
+            source_graph=source_graph,
         )
     if lowering.report.get("status") == "unsupported" or lowering.executable_graph is None:
         return _blocked_result(
@@ -1947,6 +2062,7 @@ def run_step2_architecture_mapping_workflow(
             lowering=lowering,
             output_dir=output_dir,
             catalog=catalog,
+            source_graph=source_graph,
         )
     if architecture_id not in catalog.instances:
         return _blocked_result(
@@ -1956,6 +2072,7 @@ def run_step2_architecture_mapping_workflow(
             lowering=lowering,
             output_dir=output_dir,
             catalog=catalog,
+            source_graph=source_graph,
         )
 
     instance = catalog.instances[architecture_id]
