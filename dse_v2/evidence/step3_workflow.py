@@ -140,6 +140,9 @@ def _load_step2_handoff(step2_dir: Path) -> Dict[str, Any]:
         "mapping_selected_record": _load_json(step2_dir / "mapping_selected_record.json"),
         "mapping_feedback_state": _load_json(step2_dir / "mapping_feedback_state.json"),
         "convergence_status": _load_json(step2_dir / "convergence_status.json"),
+        "domain_policy_hints": _load_json(step2_dir / "domain_policy_hints.json"),
+        "architecture_candidate_set": _load_json(step2_dir / "architecture_candidate_set.json"),
+        "step3_simulation_queue": _load_json(step2_dir / "step3_simulation_queue.json"),
         "l1_evaluation_result": _load_json(step2_dir / "l1_evaluation_result.json"),
         "l1_promotion_decision": _load_json(step2_dir / "l1_promotion_decision.json"),
         "l2_evaluation_result": _load_json(step2_dir / "l2_evaluation_result.json"),
@@ -221,6 +224,7 @@ def validate_step2_handoff_for_step3(step2_dir: Path) -> Dict[str, Any]:
         artifact
         for artifact in STEP2_INPUT_ARTIFACTS
         if artifact != "step2_artifact_validation.json"
+        and artifact not in STEP2_OPTIONAL_INPUT_ARTIFACTS
         and (artifact not in STEP2_LOW_FIDELITY_ARTIFACTS or low_fidelity_required)
         and (artifact not in CODESIGN_STEP2_ARTIFACTS or co_design.get("l4_required") or codesign_present)
     ]
