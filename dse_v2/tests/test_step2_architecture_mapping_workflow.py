@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 
 from dse_v2.backends.generic_systemc_bridge import GenericSystemCBackend
-from dse_v2.core.ir.compute_graph import ComputeGraph
+from dse_v2.core.ir.compute_graph import ComputeGraph, ComputeNode, DataEdge, TensorSpec
 from dse_v2.core.workload import (
     WorkloadPackage,
     create_dynamic_custom_graph,
@@ -53,6 +53,40 @@ def _load_json(path: Path):
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def _create_policy_hint_graph(graph_id: str) -> ComputeGraph:
+    graph = ComputeGraph(graph_id=graph_id, metadata={"workload_family": "ml_tensor"})
+    graph.add_node(ComputeNode(
+        "input",
+        "placeholder",
+        outputs=["x"],
+        output_specs={"x": TensorSpec(shape=(16, 16), dtype="FP64")},
+        estimated_memory_bytes=2048,
+    ))
+    graph.add_node(ComputeNode(
+        "dense",
+        "gemm",
+        inputs=["x", "w"],
+        outputs=["y"],
+        input_specs={"x": TensorSpec(shape=(16, 16), dtype="FP64"), "w": TensorSpec(shape=(16, 16), dtype="FP64")},
+        output_specs={"y": TensorSpec(shape=(16, 16), dtype="FP64")},
+        estimated_flops=8192,
+        estimated_memory_bytes=4096,
+    ))
+    graph.add_node(ComputeNode(
+        "reduce",
+        "reduction",
+        inputs=["y"],
+        outputs=["z"],
+        input_specs={"y": TensorSpec(shape=(16, 16), dtype="FP64")},
+        output_specs={"z": TensorSpec(shape=(1,), dtype="FP64")},
+        estimated_flops=256,
+        estimated_memory_bytes=2048,
+    ))
+    graph.add_edge(DataEdge("input", "dense", "x", TensorSpec(shape=(16, 16), dtype="FP64")))
+    graph.add_edge(DataEdge("dense", "reduce", "y", TensorSpec(shape=(16, 16), dtype="FP64")))
+    return graph
+
+
 def _policy_candidate_hints(graph: ComputeGraph, *, review_flags=None):
     node_ids = list(graph.nodes)
     return {
@@ -65,20 +99,23 @@ def _policy_candidate_hints(graph: ComputeGraph, *, review_flags=None):
         "claim_boundary": "candidate_only",
         "node_target_preferences": [
             {
-                "node_id": node_ids[0],
+                "node_id": node_ids[1 if len(node_ids) > 2 else 0],
                 "preferred_targets": ["fpga", "gpu", "host"],
-                "reason": "phase-aware streaming offload preference",
+                "reason": "phase-aware dense/offload preference",
             },
             {
                 "node_id": node_ids[-1],
                 "preferred_targets": ["gpu", "fpga", "host"],
-                "reason": "phase-aware dense/offload preference",
+                "reason": "phase-aware streaming offload preference",
             },
         ],
         "mapping_seeds": [
             {
                 "seed_name": "phase_aware_balanced",
-                "mapping": {node_ids[0]: "fpga", node_ids[-1]: "gpu"},
+                "mapping": {
+                    node_ids[1 if len(node_ids) > 2 else 0]: "fpga",
+                    node_ids[-1]: "gpu",
+                },
                 "annotations": {"seed_fact_ids": ["fact:phase:0"]},
             }
         ],
@@ -433,8 +470,8 @@ def test_step2_writes_replayable_codesign_candidate_when_l4_proof_requested(tmp_
 
 
 def test_step2_policy_mapping_hints_dedupe_and_respect_legality(tmp_path):
-    graph = create_sparse_spmv_graph("sparse_policy_mapping_step2")
-    package = package_from_graph(graph, workload_family="sparse_la", importer_id="generic_json")
+    graph = _create_policy_hint_graph("policy_mapping_step2")
+    package = package_from_graph(graph, workload_family="ml_tensor", importer_id="generic_json")
     hints = _policy_candidate_hints(graph)
 
     result = run_step2_architecture_mapping_workflow(package, output_dir=tmp_path, candidate_hints=hints)
@@ -473,8 +510,8 @@ def test_step2_policy_mapping_hints_dedupe_and_respect_legality(tmp_path):
 
 
 def test_step2_codesign_policy_hints_preserve_descriptor_and_candidate_only_boundary(tmp_path):
-    graph = create_sparse_spmv_graph("sparse_policy_codesign_step2")
-    package = package_from_graph(graph, workload_family="sparse_la", importer_id="generic_json")
+    graph = _create_policy_hint_graph("policy_codesign_step2")
+    package = package_from_graph(graph, workload_family="ml_tensor", importer_id="generic_json")
     hints = _policy_candidate_hints(graph)
 
     run_step2_architecture_mapping_workflow(
@@ -518,8 +555,8 @@ def test_step2_codesign_policy_hints_preserve_descriptor_and_candidate_only_boun
 
 
 def test_step2_hard_policy_review_flags_block_promotion_without_losing_candidates(tmp_path):
-    graph = create_sparse_spmv_graph("sparse_policy_hard_review_step2")
-    package = package_from_graph(graph, workload_family="sparse_la", importer_id="generic_json")
+    graph = _create_policy_hint_graph("policy_hard_review_step2")
+    package = package_from_graph(graph, workload_family="ml_tensor", importer_id="generic_json")
     hints = _policy_candidate_hints(graph, review_flags=["project_critical_conflict"])
 
     result = run_step2_architecture_mapping_workflow(package, output_dir=tmp_path, candidate_hints=hints)
