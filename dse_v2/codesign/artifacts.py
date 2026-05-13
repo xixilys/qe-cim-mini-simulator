@@ -60,6 +60,150 @@ _REQUIRED_CANDIDATE_FIELDS = [
 ]
 
 
+def _string_list(value: Any) -> List[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, Mapping):
+        return []
+    if isinstance(value, Iterable):
+        return [str(item) for item in value if item is not None]
+    return [str(value)]
+
+
+def _candidate_hint_policy(candidate_hints: Optional[Mapping[str, Any]]) -> Dict[str, Any]:
+    if not isinstance(candidate_hints, Mapping) or not candidate_hints:
+        return {}
+    raw = candidate_hints.get("domain_policy", {})
+    policy = dict(raw) if isinstance(raw, Mapping) else {}
+    policy.setdefault("policy_id", str(candidate_hints.get("policy_id") or "domain_policy"))
+    if "domain_key" in candidate_hints:
+        policy.setdefault("domain_key", candidate_hints.get("domain_key"))
+    if "matched" in candidate_hints:
+        policy.setdefault("matched", bool(candidate_hints.get("matched")))
+    return {
+        str(key): value
+        for key, value in policy.items()
+        if key in {"policy_id", "domain_key", "matched", "policy_version"}
+    }
+
+
+def _candidate_hint_review_flags(candidate_hints: Optional[Mapping[str, Any]]) -> List[str]:
+    if not isinstance(candidate_hints, Mapping):
+        return []
+    flags: List[str] = []
+    for key in ("review_flags", "review_required_flags", "hard_block_flags", "hard_review_flags"):
+        flags.extend(_string_list(candidate_hints.get(key)))
+    review = candidate_hints.get("review", {})
+    if isinstance(review, Mapping):
+        flags.extend(_string_list(review.get("flags")))
+        flags.extend(_string_list(review.get("hard_block_flags")))
+        flags.extend(_string_list(review.get("review_required_flags")))
+    return sorted(dict.fromkeys(flag for flag in flags if flag))
+
+
+def _candidate_hint_phase_groups(candidate_hints: Optional[Mapping[str, Any]]) -> List[Any]:
+    if not isinstance(candidate_hints, Mapping):
+        return []
+    phase_groups = candidate_hints.get("phase_groups")
+    if phase_groups is None:
+        annotations = candidate_hints.get("annotations", {})
+        if isinstance(annotations, Mapping):
+            dft_annotations = annotations.get("dft", {})
+            if isinstance(dft_annotations, Mapping):
+                phase_groups = dft_annotations.get("phase_groups")
+    return list(phase_groups) if isinstance(phase_groups, list) else []
+
+
+def _candidate_hint_metadata(candidate_hints: Optional[Mapping[str, Any]]) -> Dict[str, Any]:
+    if not isinstance(candidate_hints, Mapping) or not candidate_hints:
+        return {}
+    review_flags = _candidate_hint_review_flags(candidate_hints)
+    metadata: Dict[str, Any] = {
+        "domain_policy": _candidate_hint_policy(candidate_hints),
+        "review_flags": review_flags,
+        "review_required": bool(candidate_hints.get("review_required", False) or review_flags),
+        "review_status": "review_required" if (candidate_hints.get("review_required", False) or review_flags) else "not_required",
+        "claim_boundary": str(candidate_hints.get("claim_boundary", "candidate_only")),
+        "trusted_final_claim": False,
+    }
+    phase_groups = _candidate_hint_phase_groups(candidate_hints)
+    if phase_groups:
+        metadata["phase_groups"] = phase_groups
+    data_locality_intent = candidate_hints.get("data_locality_intent")
+    if data_locality_intent is None and isinstance(candidate_hints.get("data_placement"), Mapping):
+        data_locality_intent = candidate_hints["data_placement"].get("data_locality_intent")
+    if data_locality_intent is not None:
+        metadata["data_locality_intent"] = data_locality_intent
+    annotations = candidate_hints.get("annotations")
+    if isinstance(annotations, Mapping):
+        metadata["policy_annotations"] = dict(annotations)
+    return metadata
+
+
+def _apply_hint_metadata(payload: Dict[str, Any], metadata: Mapping[str, Any]) -> Dict[str, Any]:
+    if not metadata:
+        return payload
+    for key in ("domain_policy", "review_flags", "review_required", "review_status", "phase_groups", "data_locality_intent", "claim_boundary", "trusted_final_claim"):
+        if key in metadata:
+            payload[key] = metadata[key]
+    if "policy_annotations" in metadata:
+        payload["policy_annotations"] = metadata["policy_annotations"]
+    return payload
+
+
+def _merge_codesign_policy_hints(
+    *,
+    sw: Dict[str, Any],
+    lowering: Dict[str, Any],
+    runtime: Dict[str, Any],
+    descriptor: Dict[str, Any],
+    memory: Dict[str, Any],
+    candidate_hints: Optional[Mapping[str, Any]],
+) -> Dict[str, Any]:
+    """Merge optional domain-policy metadata without overriding GSIM invariants."""
+    if not isinstance(candidate_hints, Mapping) or not candidate_hints:
+        return {}
+    metadata = _candidate_hint_metadata(candidate_hints)
+    if not metadata:
+        return {}
+
+    for payload in [sw, lowering, runtime, descriptor, memory]:
+        _apply_hint_metadata(payload, metadata)
+
+    for artifact_key, payload in [
+        ("runtime_schedule", runtime),
+        ("descriptor_protocol", descriptor),
+        ("memory_policy", memory),
+    ]:
+        raw = candidate_hints.get(artifact_key)
+        if isinstance(raw, Mapping):
+            safe_metadata = {
+                key: raw[key]
+                for key in ("review_flags", "review_status", "review_required", "phase_groups", "data_locality_intent", "claim_boundary")
+                if key in raw
+            }
+            if safe_metadata:
+                _apply_hint_metadata(payload, safe_metadata)
+
+    data_hint = candidate_hints.get("data_placement")
+    if isinstance(data_hint, Mapping):
+        data_placement = memory.setdefault("data_placement", {})
+        if isinstance(data_placement, dict):
+            for key in ("policy_id", "status", "placements", "preferred_locations", "phase_groups", "data_locality_intent"):
+                if key in data_hint:
+                    data_placement[key] = data_hint[key]
+            data_placement.setdefault("trusted_final_claim", False)
+            data_placement.setdefault("claim_boundary", metadata.get("claim_boundary", "candidate_only"))
+
+    # Preserve GSIM contract fields even if a policy hint contains descriptor metadata.
+    descriptor["magic"] = f"0x{GSIM_MAGIC:08x}"
+    descriptor["version"] = GSIM_DESCRIPTOR_VERSION
+    descriptor["command_type"] = GSIM_COMMAND_TYPE_GRAPH
+    return dict(metadata)
+
+
 def _mapping_id(design_point: DesignPoint) -> str:
     return str(design_point.config.get("mapping_id") or f"{design_point.design_point_id}_mapping")
 
@@ -123,6 +267,7 @@ def build_default_codesign_artifacts(
     runtime_schedule: Optional[Mapping[str, Any]] = None,
     descriptor_protocol: Optional[Mapping[str, Any]] = None,
     memory_policy: Optional[Mapping[str, Any]] = None,
+    candidate_hints: Optional[Mapping[str, Any]] = None,
 ) -> Dict[str, Dict[str, Any]]:
     """Build a replayable Step2 co-design artifact set.
 
@@ -266,6 +411,14 @@ def build_default_codesign_artifacts(
             "cache_invalidate_required_after_completion": True,
         },
     })
+    hint_metadata = _merge_codesign_policy_hints(
+        sw=sw,
+        lowering=lowering,
+        runtime=runtime,
+        descriptor=descriptor,
+        memory=memory,
+        candidate_hints=candidate_hints,
+    )
 
     expected_claims = ["timing", "resource", "data_movement"]
     if l4_required or backend == "gem5_systemc":
@@ -339,6 +492,20 @@ def build_default_codesign_artifacts(
         },
         "trusted_final_claim": False,
     }
+    if hint_metadata:
+        candidate.update({
+            "domain_policy": hint_metadata.get("domain_policy", {}),
+            "review_flags": list(hint_metadata.get("review_flags", []) or []),
+            "review_required": bool(hint_metadata.get("review_required", False)),
+            "review_status": hint_metadata.get("review_status", "not_required"),
+            "claim_boundary": hint_metadata.get("claim_boundary", "candidate_only"),
+        })
+        if "phase_groups" in hint_metadata:
+            candidate["phase_groups"] = hint_metadata["phase_groups"]
+        if "data_locality_intent" in hint_metadata:
+            candidate["data_locality_intent"] = hint_metadata["data_locality_intent"]
+        if "policy_annotations" in hint_metadata:
+            candidate["policy_annotations"] = hint_metadata["policy_annotations"]
     return {
         "codesign_candidate": candidate,
         "software_stack_config": sw,

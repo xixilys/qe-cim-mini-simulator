@@ -516,6 +516,113 @@ def _json_safe(value: Any) -> Any:
     return value
 
 
+def _string_list(value: Any) -> List[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, Mapping):
+        return []
+    if isinstance(value, Iterable):
+        return [str(item) for item in value if item is not None]
+    return [str(value)]
+
+
+def _candidate_hint_domain_policy(candidate_hints: Optional[Mapping[str, Any]]) -> Dict[str, Any]:
+    if not isinstance(candidate_hints, Mapping) or not candidate_hints:
+        return {}
+    raw = candidate_hints.get("domain_policy", {})
+    policy = dict(raw) if isinstance(raw, Mapping) else {}
+    policy.setdefault("policy_id", str(candidate_hints.get("policy_id") or "domain_policy"))
+    if "domain_key" in candidate_hints:
+        policy.setdefault("domain_key", candidate_hints.get("domain_key"))
+    if "matched" in candidate_hints:
+        policy.setdefault("matched", bool(candidate_hints.get("matched")))
+    return {
+        str(key): value
+        for key, value in policy.items()
+        if key in {"policy_id", "domain_key", "matched", "policy_version"}
+    }
+
+
+def _candidate_hint_review_flags(candidate_hints: Optional[Mapping[str, Any]]) -> List[str]:
+    if not isinstance(candidate_hints, Mapping):
+        return []
+    flags: List[str] = []
+    for key in ("review_flags", "review_required_flags", "hard_block_flags", "hard_review_flags"):
+        flags.extend(_string_list(candidate_hints.get(key)))
+    review = candidate_hints.get("review", {})
+    if isinstance(review, Mapping):
+        flags.extend(_string_list(review.get("flags")))
+        flags.extend(_string_list(review.get("hard_block_flags")))
+        flags.extend(_string_list(review.get("review_required_flags")))
+    return sorted(dict.fromkeys(flag for flag in flags if flag))
+
+
+def _candidate_hint_phase_groups(candidate_hints: Optional[Mapping[str, Any]]) -> List[Any]:
+    if not isinstance(candidate_hints, Mapping):
+        return []
+    phase_groups = candidate_hints.get("phase_groups")
+    if phase_groups is None:
+        annotations = candidate_hints.get("annotations", {})
+        if isinstance(annotations, Mapping):
+            dft_annotations = annotations.get("dft", {})
+            if isinstance(dft_annotations, Mapping):
+                phase_groups = dft_annotations.get("phase_groups")
+    return list(phase_groups) if isinstance(phase_groups, list) else []
+
+
+def _candidate_hint_metadata(candidate_hints: Optional[Mapping[str, Any]]) -> Dict[str, Any]:
+    if not isinstance(candidate_hints, Mapping) or not candidate_hints:
+        return {}
+    review_flags = _candidate_hint_review_flags(candidate_hints)
+    metadata: Dict[str, Any] = {
+        "domain_policy": _candidate_hint_domain_policy(candidate_hints),
+        "review_flags": review_flags,
+        "review_required": bool(candidate_hints.get("review_required", False) or review_flags),
+        "review_status": "review_required" if (candidate_hints.get("review_required", False) or review_flags) else "not_required",
+        "claim_boundary": str(candidate_hints.get("claim_boundary", "candidate_only")),
+        "trusted_final_claim": False,
+    }
+    phase_groups = _candidate_hint_phase_groups(candidate_hints)
+    if phase_groups:
+        metadata["phase_groups"] = phase_groups
+    annotations = candidate_hints.get("annotations")
+    if isinstance(annotations, Mapping):
+        metadata["policy_annotations"] = dict(annotations)
+    return metadata
+
+
+def _attach_candidate_hint_metadata(payload: Dict[str, Any], candidate_hints: Optional[Mapping[str, Any]]) -> Dict[str, Any]:
+    metadata = _candidate_hint_metadata(candidate_hints)
+    if not metadata:
+        return payload
+    for key in ("domain_policy", "review_flags", "review_required", "review_status", "phase_groups", "claim_boundary", "trusted_final_claim"):
+        if key in metadata:
+            payload[key] = metadata[key]
+    annotations = dict(payload.get("annotations", {}) if isinstance(payload.get("annotations", {}), Mapping) else {})
+    annotations.setdefault("domain_policy", metadata.get("domain_policy", {}))
+    annotations.setdefault("review_flags", list(metadata.get("review_flags", []) or []))
+    annotations.setdefault("review_status", metadata.get("review_status", "not_required"))
+    annotations.setdefault("claim_boundary", metadata.get("claim_boundary", "candidate_only"))
+    annotations.setdefault("trusted_final_claim", False)
+    if "phase_groups" in metadata:
+        annotations.setdefault("phase_groups", metadata["phase_groups"])
+    if "policy_annotations" in metadata:
+        annotations.setdefault("policy_annotations", metadata["policy_annotations"])
+    payload["annotations"] = annotations
+    return payload
+
+
+def _hard_review_flags(candidate_hints: Optional[Mapping[str, Any]], review_flags: Sequence[str]) -> List[str]:
+    hard_defaults = {"project_critical_conflict", "segmentation_uncertain"}
+    explicit = set()
+    if isinstance(candidate_hints, Mapping):
+        explicit.update(_string_list(candidate_hints.get("hard_block_flags")))
+        explicit.update(_string_list(candidate_hints.get("hard_review_flags")))
+    return sorted(flag for flag in set(review_flags) if flag in hard_defaults or flag in explicit)
+
+
 def _result_to_dict(result: Any) -> Dict[str, Any]:
     payload = _json_safe(result)
     return payload if isinstance(payload, dict) else {"value": payload}
@@ -1018,11 +1125,16 @@ def _promotion_decision(
     require_l4_proof: bool = False,
     l4_reason: str = "software-visible descriptor/request/completion proof requested for co-design claim",
     low_fidelity_summary: Optional[Mapping[str, Any]] = None,
+    candidate_hints: Optional[Mapping[str, Any]] = None,
 ) -> Dict[str, Any]:
     selected_legal = not selected_record.get("violations")
     architecture_trusted = bool(architecture_artifact.get("trusted_final_eligible", False))
     low_fidelity_passed = True if low_fidelity_summary is None else bool(low_fidelity_summary.get("passed", False))
-    promoted = selected_legal and architecture_trusted and low_fidelity_passed
+    review_flags = _candidate_hint_review_flags(candidate_hints)
+    hard_review_flags = _hard_review_flags(candidate_hints, review_flags)
+    review_required = bool((candidate_hints or {}).get("review_required", False) or review_flags) if isinstance(candidate_hints, Mapping) else False
+    base_promoted = selected_legal and architecture_trusted and low_fidelity_passed
+    promoted = base_promoted and not hard_review_flags
     reasons: List[Dict[str, Any]] = []
     if not selected_legal:
         reasons.append({"reason_id": "illegal_selected_mapping", "violations": list(selected_record.get("violations", []) or [])})
@@ -1033,6 +1145,18 @@ def _promotion_decision(
             "reason_id": "low_fidelity_screening_failed",
             "detail": "Step2 L1/L2 screening summary did not satisfy the pre-Step3 gate",
             "blockers": list((low_fidelity_summary or {}).get("blockers", []) or []),
+        })
+    if hard_review_flags:
+        reasons.append({
+            "reason_id": "domain_review_gate_blocked",
+            "detail": "domain policy hard review flags must be resolved before Step3 scheduling",
+            "review_flags": hard_review_flags,
+        })
+    elif review_required:
+        reasons.append({
+            "reason_id": "domain_review_required",
+            "detail": "domain policy marks this candidate for human review before trusting downstream interpretation",
+            "review_flags": review_flags,
         })
     if promoted:
         reasons.append({
@@ -1051,6 +1175,10 @@ def _promotion_decision(
         "backend": backend,
         "evidence_mode": evidence_mode,
         "promoted_for_simulation": promoted,
+        "review_flags": review_flags,
+        "review_required": review_required,
+        "review_status": "blocked_by_review_gate" if hard_review_flags else ("review_required" if review_required else "not_required"),
+        "domain_policy": _candidate_hint_domain_policy(candidate_hints),
         "trusted_final_claim": False,
         "low_fidelity_role": "candidate_generator_only",
         "low_fidelity_screening": {
@@ -1123,9 +1251,10 @@ def _design_point_config(
     random_seed: int,
     require_l4_proof: bool = False,
     low_fidelity_policy: Optional[Mapping[str, Any]] = None,
+    candidate_hints: Optional[Mapping[str, Any]] = None,
 ) -> Dict[str, Any]:
     mapping_id = f"{run_id}_mapping"
-    return {
+    config = {
         "schema_version": "dse.step2.design_point_config.v1",
         "step": "step2_architecture_mapping",
         "workload_id": workload_package.workload_id,
@@ -1192,6 +1321,28 @@ def _design_point_config(
             "no_hidden_python_state_required": True,
         },
     }
+    hint_metadata = _candidate_hint_metadata(candidate_hints)
+    if hint_metadata:
+        config["domain_policy"] = {
+            "hints_artifact": "domain_policy_hints.json",
+            "domain_policy": hint_metadata.get("domain_policy", {}),
+            "review_flags": list(hint_metadata.get("review_flags", []) or []),
+            "review_required": bool(hint_metadata.get("review_required", False)),
+            "review_status": hint_metadata.get("review_status", "not_required"),
+            "claim_boundary": hint_metadata.get("claim_boundary", "candidate_only"),
+            "trusted_final_claim": False,
+        }
+        config["replay_metadata"]["domain_policy_hints"] = "domain_policy_hints.json"
+        data_hint = candidate_hints.get("data_placement") if isinstance(candidate_hints, Mapping) else None
+        if isinstance(data_hint, Mapping):
+            config["data_placement"].update({
+                key: data_hint[key]
+                for key in ("policy_id", "status", "placements", "preferred_locations", "phase_groups", "data_locality_intent")
+                if key in data_hint
+            })
+            config["data_placement"].setdefault("trusted_final_claim", False)
+            config["data_placement"].setdefault("claim_boundary", hint_metadata.get("claim_boundary", "candidate_only"))
+    return config
 
 
 def validate_step2_artifacts(artifacts: Mapping[str, Any]) -> Dict[str, Any]:
@@ -1307,12 +1458,14 @@ def run_step2_architecture_mapping_workflow(
     require_l4_proof: bool = False,
     l4_reason: str = "software-visible descriptor/request/completion proof requested for co-design claim",
     low_fidelity_policy: Optional[Mapping[str, Any]] = None,
+    candidate_hints: Optional[Mapping[str, Any]] = None,
 ) -> Step2WorkflowResult:
     """Run Step2 and optionally persist all architecture/mapping artifacts."""
     catalog = catalog or seed_generic_dse_architecture_catalog()
     precision_policy = dict(precision_policy or {"default": "FP64", "unavailable_policy": "record_explicit_default"})
     fallback_policy = dict(fallback_policy or {"unsupported_ops": "host_fallback_visible", "final_claim_if_fallback": "requires_step3_evidence"})
     objective_directions = dict(objective_directions or {"latency_ms": "minimize", "energy_j": "minimize", "power_w": "minimize"})
+    candidate_hints_payload = _json_safe(candidate_hints) if isinstance(candidate_hints, Mapping) and candidate_hints else None
 
     validation = workload_package.validate()
     lowering = lower_compute_graph(workload_package.graph, workload_package)
@@ -1366,15 +1519,17 @@ def run_step2_architecture_mapping_workflow(
         selected_mapping=None,
         trusted_sample=False,
         beam_width=beam_width,
+        candidate_hints=candidate_hints_payload,
     )
     selected_record = dict(mapping_artifacts["selected_record"])
+    _attach_candidate_hint_metadata(selected_record, candidate_hints_payload)
     selected_mapping = {str(k): str(v) for k, v in (selected_record.get("mapping", {}) or {}).items()}
     selected_violations = mapping_violations(selected_mapping, executable_graph, mapping_artifacts["legality_matrix"])
     if selected_violations:
         selected_record["violations"] = selected_violations
         selected_record["state"] = "rejected"
         selected_record["trusted_final_eligible"] = False
-        mapping_artifacts["selected_record"] = selected_record
+    mapping_artifacts["selected_record"] = selected_record
 
     run_id = f"{workload_package.workload_id}__{instance.architecture_id}__step2"
     design_config = _design_point_config(
@@ -1392,6 +1547,7 @@ def run_step2_architecture_mapping_workflow(
         random_seed=random_seed,
         require_l4_proof=require_l4_proof,
         low_fidelity_policy=low_fidelity_policy,
+        candidate_hints=candidate_hints_payload,
     )
     design_point = DesignPoint(
         design_point_id=run_id,
@@ -1424,6 +1580,7 @@ def run_step2_architecture_mapping_workflow(
         require_l4_proof=require_l4_proof,
         l4_reason=l4_reason,
         low_fidelity_summary=low_fidelity_artifacts["low_fidelity_summary"],
+        candidate_hints=candidate_hints_payload,
     )
     mapping_payload = _mapping_summary_payload(
         run_id=run_id,
@@ -1442,6 +1599,7 @@ def run_step2_architecture_mapping_workflow(
         evidence_mode=evidence_mode,
         l4_required=require_l4_proof or backend == "gem5_systemc",
         l4_reason=l4_reason,
+        candidate_hints=candidate_hints_payload,
     )
     codesign_validation = validate_codesign_artifacts(codesign_artifacts)
 
@@ -1483,6 +1641,10 @@ def run_step2_architecture_mapping_workflow(
                 "low_fidelity_role": "candidate_generator_only",
                 "trusted_final_claim": False,
             },
+            "domain_policy": _candidate_hint_domain_policy(candidate_hints_payload),
+            "review_flags": _candidate_hint_review_flags(candidate_hints_payload),
+            "review_required": bool((promotion_decision or {}).get("review_required", False)),
+            "review_status": (promotion_decision or {}).get("review_status", "not_required"),
             "reasons": status_reasons,
         },
         "architecture_catalog": catalog_payload,
@@ -1514,6 +1676,8 @@ def run_step2_architecture_mapping_workflow(
         "memory_policy": codesign_artifacts["memory_policy"],
         "codesign_artifact_validation": codesign_validation,
     }
+    if candidate_hints_payload:
+        artifacts["domain_policy_hints"] = candidate_hints_payload
     artifacts["step2_artifact_validation"] = validate_step2_artifacts({
         **artifacts,
         "system_architecture": design_point.system_architecture.to_dict(),
@@ -1555,6 +1719,8 @@ def run_step2_architecture_mapping_workflow(
             "memory_policy": "memory_policy.json",
             "codesign_artifact_validation": "codesign_artifact_validation.json",
         }
+        if "domain_policy_hints" in artifacts:
+            name_map["domain_policy_hints"] = "domain_policy_hints.json"
         for key, filename in name_map.items():
             _write_json(output / filename, artifacts[key])
             artifact_paths[key] = filename
@@ -1635,6 +1801,7 @@ def run_step2_architecture_screening_workflow(
     random_seed: int = 0,
     beam_width: int = 3,
     low_fidelity_policy: Optional[Mapping[str, Any]] = None,
+    candidate_hints: Optional[Mapping[str, Any]] = None,
 ) -> Step2WorkflowResult:
     """Run Step2 architecture screening over multiple catalog instances.
 
@@ -1665,6 +1832,7 @@ def run_step2_architecture_screening_workflow(
             random_seed=random_seed,
             beam_width=beam_width,
             low_fidelity_policy=low_fidelity_policy,
+            candidate_hints=candidate_hints,
         )
         child_results.append(child)
         records.append(_architecture_screening_record(child, child_dir or Path(architecture_id)))
