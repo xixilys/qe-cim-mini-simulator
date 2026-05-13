@@ -280,6 +280,112 @@ def test_step2_writes_replayable_codesign_candidate_when_l4_proof_requested(tmp_
     assert validation["valid"] is True
 
 
+def test_step2_policy_mapping_hints_dedupe_and_respect_legality(tmp_path):
+    graph = create_sparse_spmv_graph("sparse_policy_mapping_step2")
+    package = package_from_graph(graph, workload_family="sparse_la", importer_id="generic_json")
+    hints = _policy_candidate_hints(graph)
+
+    result = run_step2_architecture_mapping_workflow(package, output_dir=tmp_path, candidate_hints=hints)
+
+    seed_set = _load_json(tmp_path / "mapping_seed_set.json")
+    candidate_records = _load_json(tmp_path / "mapping_candidate_records.json")
+    selected = _load_json(tmp_path / "mapping_selected_record.json")
+    legality = _load_json(tmp_path / "mapping_legality_matrix.json")
+    domain_hints = _load_json(tmp_path / "domain_policy_hints.json")
+    legal_by_node = {row["node_id"]: set(row["legal_targets"]) for row in legality["rows"]}
+    seed_keys = [tuple(sorted(seed["mapping"].items())) for seed in seed_set["seeds"]]
+    policy_seeds = [seed for seed in seed_set["seeds"] if seed["seed_name"].startswith("policy:dft_reference_step2:")]
+    policy_candidates = [
+        record
+        for record in candidate_records["candidates"]
+        if str(record.get("seed_name", "")).startswith("policy:dft_reference_step2:")
+    ]
+
+    assert result.status == "ready_for_step3_simulation"
+    assert len(seed_keys) == len(set(seed_keys))
+    assert policy_seeds
+    assert policy_candidates
+    assert domain_hints["policy_id"] == "dft_reference_step2"
+    for seed in policy_seeds:
+        assert seed["annotations"]["domain_policy"]["policy_id"] == "dft_reference_step2"
+        assert seed["annotations"]["trusted_final_claim"] is False
+        assert "phase_aware" in seed["description"] or "policy" in seed["description"] or "review-safe" in seed["description"]
+        for node_id, target in seed["mapping"].items():
+            assert target in legal_by_node[node_id]
+    assert selected["domain_policy"]["policy_id"] == "dft_reference_step2"
+    assert selected["review_required"] is True
+    assert selected["review_flags"] == ["insufficient_evidence"]
+    assert selected["trusted_final_claim"] is False
+    assert all(not record.get("violations") for record in policy_candidates)
+    assert all("h_psi" not in record["seed_name"] for record in policy_candidates)
+
+
+def test_step2_codesign_policy_hints_preserve_descriptor_and_candidate_only_boundary(tmp_path):
+    graph = create_sparse_spmv_graph("sparse_policy_codesign_step2")
+    package = package_from_graph(graph, workload_family="sparse_la", importer_id="generic_json")
+    hints = _policy_candidate_hints(graph)
+
+    run_step2_architecture_mapping_workflow(
+        package,
+        output_dir=tmp_path,
+        require_l4_proof=True,
+        l4_reason="claim-critical L4 oracle sample",
+        candidate_hints=hints,
+    )
+
+    candidate = _load_json(tmp_path / "codesign_candidate.json")
+    protocol = _load_json(tmp_path / "descriptor_protocol.json")
+    runtime = _load_json(tmp_path / "runtime_schedule.json")
+    memory = _load_json(tmp_path / "memory_policy.json")
+    software = _load_json(tmp_path / "software_stack_config.json")
+    lowering = _load_json(tmp_path / "compiler_lowering.json")
+    validation = _load_json(tmp_path / "codesign_artifact_validation.json")
+    promotion = _load_json(tmp_path / "mapping_promotion_decision.json")
+
+    assert protocol["magic"] == "0x4753494d"
+    assert protocol["version"] == 1
+    assert protocol["command_type"] == 1
+    assert candidate["descriptor_protocol"] == protocol
+    assert candidate["runtime_schedule"] == runtime
+    assert candidate["memory_policy"] == memory
+    assert candidate["software_stack_config"] == software
+    assert candidate["compiler_lowering"] == lowering
+    assert candidate["trusted_final_claim"] is False
+    assert candidate["review_required"] is True
+    assert candidate["review_status"] == "review_required"
+    assert candidate["domain_policy"]["policy_id"] == "dft_reference_step2"
+    assert runtime["trusted_final_claim"] is False
+    assert protocol["trusted_final_claim"] is False
+    assert memory["trusted_final_claim"] is False
+    assert memory["data_placement"]["trusted_final_claim"] is False
+    assert memory["data_placement"]["data_locality_intent"] == "keep streamed tensors close to legal accelerator memory"
+    assert promotion["review_required"] is True
+    assert promotion["review_status"] == "review_required"
+    assert promotion["promoted_for_simulation"] is True
+    assert validation["valid"] is True
+
+
+def test_step2_hard_policy_review_flags_block_promotion_without_losing_candidates(tmp_path):
+    graph = create_sparse_spmv_graph("sparse_policy_hard_review_step2")
+    package = package_from_graph(graph, workload_family="sparse_la", importer_id="generic_json")
+    hints = _policy_candidate_hints(graph, review_flags=["project_critical_conflict"])
+
+    result = run_step2_architecture_mapping_workflow(package, output_dir=tmp_path, candidate_hints=hints)
+
+    promotion = _load_json(tmp_path / "mapping_promotion_decision.json")
+    candidate_records = _load_json(tmp_path / "mapping_candidate_records.json")
+    status = _load_json(tmp_path / "step2_status.json")
+
+    assert result.status == "candidate_only_or_blocked"
+    assert promotion["promoted_for_simulation"] is False
+    assert promotion["review_required"] is True
+    assert promotion["review_status"] == "blocked_by_review_gate"
+    assert any(reason["reason_id"] == "domain_review_gate_blocked" for reason in promotion["reasons"])
+    assert status["review_flags"] == ["project_critical_conflict"]
+    assert candidate_records["candidates"]
+    assert all(record["trusted_final_eligible"] is False for record in candidate_records["candidates"] if record["state"] != "selected")
+
+
 def test_step2_blocks_unsupported_lowering_before_mapping_promotion(tmp_path):
     graph = create_dynamic_custom_graph("unsupported_step2", supported=False)
     package = package_from_graph(graph, workload_family="dynamic_custom", importer_id="generic_json")
