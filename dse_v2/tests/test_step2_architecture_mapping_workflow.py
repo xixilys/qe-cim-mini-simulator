@@ -20,6 +20,7 @@ from dse_v2.core.workload import (
 )
 from dse_v2.reference_workloads.dft_qe import QE_SCF_REQUIRED_COVERAGE, create_qe_reference_package
 from dse_v2.mapping.step2_workflow import (
+    STEP2_CANDIDATE_QUEUE_ARTIFACTS,
     STEP2_LOW_FIDELITY_ARTIFACTS,
     STEP2_REQUIRED_MAPPING_ARTIFACTS,
     load_step2_design_point,
@@ -220,6 +221,48 @@ def test_step2_runs_representative_non_qe_workloads_and_writes_required_artifact
         assert workload["workload_package"]["importer"]["importer_id"] == "generic_json"
         assert QE_PHASE_NAMES.isdisjoint(set(workload["required_coverage"]))
         assert "npw" not in json.dumps(request)
+
+
+def test_step2_writes_architecture_candidate_set_and_selected_entry_queue(tmp_path):
+    graph = create_sparse_spmv_graph("sparse_queue_step2")
+    package = package_from_graph(graph, workload_family="sparse_la", importer_id="generic_json")
+
+    result = run_step2_architecture_mapping_workflow(package, output_dir=tmp_path)
+
+    candidate_set = _load_json(tmp_path / "architecture_candidate_set.json")
+    queue = _load_json(tmp_path / "step3_simulation_queue.json")
+    status = _load_json(tmp_path / "step2_status.json")
+    design_point = _load_json(tmp_path / "design_point.json")
+    promotion = _load_json(tmp_path / "mapping_promotion_decision.json")
+    selected = _load_json(tmp_path / "mapping_selected_record.json")
+    validation = _load_json(tmp_path / "step2_artifact_validation.json")
+
+    assert result.status == "ready_for_step3_simulation"
+    assert set(STEP2_CANDIDATE_QUEUE_ARTIFACTS) == {"architecture_candidate_set.json", "step3_simulation_queue.json"}
+    assert candidate_set["schema_version"] == "dse.step2.architecture_candidate_set.v1"
+    assert candidate_set["trusted_final_claim"] is False
+    assert candidate_set["selected_architecture_id"] == "balanced-generic-systemc-v0"
+    assert any(candidate["selected_for_step2_mapping"] for candidate in candidate_set["candidates"])
+    assert all(candidate["trusted_final_claim"] is False for candidate in candidate_set["candidates"])
+    assert queue["schema_version"] == "dse.step3.simulation_queue.v1"
+    assert queue["queue_mode"] == "selected-entry-only"
+    assert queue["entry_count"] == 1
+    assert queue["trusted_final_claim"] is False
+    entry = queue["entries"][0]
+    assert entry["queue_state"] == "scheduled_for_simulation"
+    assert entry["blocked_reasons"] == []
+    assert entry["review_required"] is False
+    assert entry["trusted_final_claim"] is False
+    assert entry["design_point_id"] == design_point["design_point_id"]
+    assert entry["design_point_artifact"] == "design_point.json"
+    assert entry["mapping_id"] == promotion["mapping_id"]
+    assert entry["mapping_candidate_id"] == selected["candidate_id"]
+    assert entry["architecture_id"] == status["architecture_id"]
+    assert entry["required_step3_artifacts"] == promotion["required_evidence"]
+    assert entry["priority_score"] > 0
+    assert design_point["config"]["step3_simulation_queue"]["artifact"] == "step3_simulation_queue.json"
+    assert design_point["config"]["architecture_candidate_set"]["artifact"] == "architecture_candidate_set.json"
+    assert validation["valid"] is True
 
 
 def test_step2_qe_reference_regression_keeps_qe_seed_profile_scoped(tmp_path):

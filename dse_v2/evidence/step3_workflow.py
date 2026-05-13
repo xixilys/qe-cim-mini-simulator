@@ -280,6 +280,8 @@ def validate_step2_handoff_for_step3(step2_dir: Path) -> Dict[str, Any]:
         "executable_graph": handoff["executable_graph"],
         "selected_record": selected,
         "promotion_decision": promotion,
+        "architecture_candidate_set": handoff["architecture_candidate_set"],
+        "step3_simulation_queue": handoff["step3_simulation_queue"],
         "feedback_state": handoff["mapping_feedback_state"],
         "l1_evaluation_result": handoff["l1_evaluation_result"],
         "l1_promotion_decision": handoff["l1_promotion_decision"],
