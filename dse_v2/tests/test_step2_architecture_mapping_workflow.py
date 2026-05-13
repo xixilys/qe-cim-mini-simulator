@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import json
+import importlib
+import sys
 from pathlib import Path
 
 from dse_v2.backends.generic_systemc_bridge import GenericSystemCBackend
@@ -16,8 +18,12 @@ from dse_v2.core.workload import (
     create_stencil_streaming_graph,
     create_tensor_chain_graph,
     create_vector_search_graph,
+    default_importer_registry,
+    default_profile_registry,
     package_from_graph,
+    run_step1_workload_ingestion_workflow,
 )
+from dse_v2.mapping.domain_policy import Step2CandidateHints, Step2DomainPolicyRegistry
 from dse_v2.reference_workloads.dft_qe import QE_SCF_REQUIRED_COVERAGE, create_qe_reference_package
 from dse_v2.mapping.step2_workflow import (
     STEP2_CANDIDATE_QUEUE_ARTIFACTS,
@@ -126,6 +132,39 @@ def _roundtrip_backend_request(run_dir: Path):
     return design_point, package, executable_graph, request
 
 
+class _RecordingPhasePolicy:
+    policy_id = "recording-phase-policy-v1"
+    domain_key = "phase_test"
+
+    def __init__(self, *, require_characterization: bool = False):
+        self.require_characterization = require_characterization
+        self.inputs = []
+
+    def matches(self, policy_input):
+        self.inputs.append(policy_input)
+        if self.require_characterization:
+            return bool((policy_input.workload_characterization or {}).get("domain_phase_summary"))
+        return policy_input.workload_package.workload_family == "sparse_la"
+
+    def augment_catalog(self, policy_input, catalog):
+        return catalog
+
+    def build_hints(self, policy_input, catalog, architecture_id):
+        phase_summary = (policy_input.workload_characterization or {}).get("domain_phase_summary", {})
+        return Step2CandidateHints(
+            policy_id=self.policy_id,
+            domain_key=self.domain_key,
+            node_target_preferences={},
+            mapping_seeds=[{
+                "seed_name": f"policy:{self.policy_id}:noop",
+                "description": "test policy emits replayable no-op hints",
+                "trusted_final_claim": False,
+            }],
+            annotations={"phase_test": {"phase_summary": phase_summary, "architecture_id": architecture_id}},
+            trusted_final_claim=False,
+        )
+
+
 def test_step2_runs_representative_non_qe_workloads_and_writes_required_artifacts(tmp_path):
     for family, build_graph in REPRESENTATIVE_BUILDERS.items():
         run_dir = tmp_path / family
@@ -223,46 +262,116 @@ def test_step2_runs_representative_non_qe_workloads_and_writes_required_artifact
         assert "npw" not in json.dumps(request)
 
 
-def test_step2_writes_architecture_candidate_set_and_selected_entry_queue(tmp_path):
-    graph = create_sparse_spmv_graph("sparse_queue_step2")
+def test_step2_domain_policy_empty_registry_noops_for_generic_workload(tmp_path):
+    graph = create_sparse_spmv_graph("sparse_empty_policy")
+    package = package_from_graph(graph, workload_family="sparse_la", importer_id="generic_json")
+
+    result = run_step2_architecture_mapping_workflow(
+        package,
+        output_dir=tmp_path,
+        enable_domain_policies=True,
+        domain_policy_registry=Step2DomainPolicyRegistry(),
+    )
+
+    status = _load_json(tmp_path / "step2_status.json")
+    assert result.status == "ready_for_step3_simulation"
+    assert "domain_policy_hints" not in result.artifacts
+    assert not (tmp_path / "domain_policy_hints.json").exists()
+    assert status["domain_policy"] == {
+        "enabled": True,
+        "matched": False,
+        "policy_ids": [],
+        "review_required": False,
+        "hard_blocked": False,
+    }
+
+
+def test_step2_domain_policy_registry_selects_without_dft_required_fields(tmp_path):
+    graph = create_sparse_spmv_graph("sparse_policy_registry")
+    package = package_from_graph(graph, workload_family="sparse_la", importer_id="generic_json")
+    policy = _RecordingPhasePolicy()
+
+    result = run_step2_architecture_mapping_workflow(
+        package,
+        output_dir=tmp_path,
+        enable_domain_policies=True,
+        domain_policy_registry=Step2DomainPolicyRegistry([policy]),
+    )
+
+    hints = _load_json(tmp_path / "domain_policy_hints.json")
+    assert result.status == "ready_for_step3_simulation"
+    assert package.domain_metadata == {}
+    assert hints["policy_ids"] == [policy.policy_id]
+    assert hints["policies"][0]["domain_key"] == "phase_test"
+    assert hints["policies"][0]["trusted_final_claim"] is False
+    assert policy.inputs[-1].summary_dict()["domain_metadata_keys"] == []
+
+
+def test_step2_mapping_core_does_not_import_dft_policy_by_default():
+    sys.modules.pop("dse_v2.reference_workloads.dft_step2_policy", None)
+
+    importlib.import_module("dse_v2.mapping.domain_policy")
+    importlib.import_module("dse_v2.mapping.step2_workflow")
+
+    assert "dse_v2.reference_workloads.dft_step2_policy" not in sys.modules
+
+
+def test_step2_from_step1_uses_persisted_workload_characterization(tmp_path):
+    phase_summary = {
+        "schema_version": "dse.domain_phase_summary.v1",
+        "phase_summaries": [{"phase_id": "generic_phase", "dominance": "candidate"}],
+        "dominance_summary": {"dominant_phase_ids": []},
+        "review_flags": ["important_input_parameter"],
+    }
+    graph = create_sparse_spmv_graph("sparse_step1_phase")
+    package = package_from_graph(
+        graph,
+        workload_family="sparse_la",
+        importer_id="generic_json",
+        domain_metadata={"characterization": {"domain_phase_summary": phase_summary}},
+    )
+    step1_dir = tmp_path / "step1"
+    step2_dir = tmp_path / "step2"
+    step1 = run_step1_workload_ingestion_workflow(
+        package,
+        profile_id="sparse_la",
+        importer_id="generic_json",
+        source_kind="hand_authored",
+        output_dir=step1_dir,
+        profile_registry=default_profile_registry(),
+        importer_registry=default_importer_registry(),
+    )
+    policy = _RecordingPhasePolicy(require_characterization=True)
+
+    result = run_step2_architecture_mapping_workflow_from_step1(
+        step1_dir,
+        output_dir=step2_dir,
+        enable_domain_policies=True,
+        domain_policy_registry=Step2DomainPolicyRegistry([policy]),
+    )
+
+    lowering = _load_json(step2_dir / "graph_lowering_report.json")
+    hints = _load_json(step2_dir / "domain_policy_hints.json")
+    persisted_characterization = _load_json(step2_dir / "workload_characterization.json")
+    assert step1.status == "complete"
+    assert result.status == "ready_for_step3_simulation"
+    assert persisted_characterization["domain_phase_summary"] == phase_summary
+    assert policy.inputs[-1].workload_characterization["domain_phase_summary"] == phase_summary
+    assert hints["policies"][0]["annotations"]["phase_test"]["phase_summary"] == phase_summary
+    assert lowering["step2_replay"]["source"] == "persisted_step1_handoff"
+    assert lowering["step2_replay"]["recomputed_from_package"] is False
+
+
+def test_step2_direct_package_call_records_recomputed_replay_source(tmp_path):
+    graph = create_sparse_spmv_graph("sparse_direct_recompute")
     package = package_from_graph(graph, workload_family="sparse_la", importer_id="generic_json")
 
     result = run_step2_architecture_mapping_workflow(package, output_dir=tmp_path)
 
-    candidate_set = _load_json(tmp_path / "architecture_candidate_set.json")
-    queue = _load_json(tmp_path / "step3_simulation_queue.json")
-    status = _load_json(tmp_path / "step2_status.json")
-    design_point = _load_json(tmp_path / "design_point.json")
-    promotion = _load_json(tmp_path / "mapping_promotion_decision.json")
-    selected = _load_json(tmp_path / "mapping_selected_record.json")
-    validation = _load_json(tmp_path / "step2_artifact_validation.json")
-
+    lowering = _load_json(tmp_path / "graph_lowering_report.json")
     assert result.status == "ready_for_step3_simulation"
-    assert set(STEP2_CANDIDATE_QUEUE_ARTIFACTS) == {"architecture_candidate_set.json", "step3_simulation_queue.json"}
-    assert candidate_set["schema_version"] == "dse.step2.architecture_candidate_set.v1"
-    assert candidate_set["trusted_final_claim"] is False
-    assert candidate_set["selected_architecture_id"] == "balanced-generic-systemc-v0"
-    assert any(candidate["selected_for_step2_mapping"] for candidate in candidate_set["candidates"])
-    assert all(candidate["trusted_final_claim"] is False for candidate in candidate_set["candidates"])
-    assert queue["schema_version"] == "dse.step3.simulation_queue.v1"
-    assert queue["queue_mode"] == "selected-entry-only"
-    assert queue["entry_count"] == 1
-    assert queue["trusted_final_claim"] is False
-    entry = queue["entries"][0]
-    assert entry["queue_state"] == "scheduled_for_simulation"
-    assert entry["blocked_reasons"] == []
-    assert entry["review_required"] is False
-    assert entry["trusted_final_claim"] is False
-    assert entry["design_point_id"] == design_point["design_point_id"]
-    assert entry["design_point_artifact"] == "design_point.json"
-    assert entry["mapping_id"] == promotion["mapping_id"]
-    assert entry["mapping_candidate_id"] == selected["candidate_id"]
-    assert entry["architecture_id"] == status["architecture_id"]
-    assert entry["required_step3_artifacts"] == promotion["required_evidence"]
-    assert entry["priority_score"] > 0
-    assert design_point["config"]["step3_simulation_queue"]["artifact"] == "step3_simulation_queue.json"
-    assert design_point["config"]["architecture_candidate_set"]["artifact"] == "architecture_candidate_set.json"
-    assert validation["valid"] is True
+    assert lowering["step2_replay"]["source"] == "direct_package_call"
+    assert lowering["step2_replay"]["recomputed_from_package"] is True
 
 
 def test_step2_qe_reference_regression_keeps_qe_seed_profile_scoped(tmp_path):

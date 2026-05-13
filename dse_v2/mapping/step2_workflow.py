@@ -39,7 +39,7 @@ from dse_v2.core.architecture.accelerator import (
 from dse_v2.core.ir.compute_graph import ComputeGraph
 from dse_v2.core.workload.lowering import GraphLoweringResult, lower_compute_graph
 from dse_v2.core.workload.package import WorkloadPackage
-from dse_v2.core.workload.step1_workflow import load_step1_handoff, load_step1_workload_package
+from dse_v2.core.workload.step1_workflow import load_step1_handoff
 from dse_v2.core.workload.workflows import DIAGNOSTIC_CLAIM_BOUNDARIES
 from dse_v2.codesign import (
     CODESIGN_L4_EVIDENCE_ARTIFACTS,
@@ -2230,7 +2230,7 @@ def run_step2_architecture_mapping_workflow(
             "trusted_final_claim": False,
             "workload_id": workload_package.workload_id,
             "workload_family": workload_package.workload_family,
-            "source_graph_id": workload_package.graph.graph_id,
+            "source_graph_id": source_graph.graph_id,
             "executable_graph_id": executable_graph.graph_id,
             "architecture_id": instance.architecture_id,
             "design_point_id": design_point.design_point_id,
@@ -2238,6 +2238,14 @@ def run_step2_architecture_mapping_workflow(
             "selected_candidate_id": selected_record.get("candidate_id"),
             "backend": backend,
             "required_coverage": list(lowering.report.get("required_coverage", [])),
+            "step1_replay": dict(lowering.report.get("step2_replay", {})),
+            "domain_policy": {
+                "enabled": bool(enable_domain_policies),
+                "matched": bool(policy_hints_payload),
+                "policy_ids": list(policy_hints_payload.get("policy_ids", [])) if policy_hints_payload else [],
+                "review_required": bool(policy_hints_payload.get("review_required", False)) if policy_hints_payload else False,
+                "hard_blocked": bool(policy_hints_payload.get("hard_blocked", False)) if policy_hints_payload else False,
+            },
             "low_fidelity_screening": {
                 "summary_artifact": "low_fidelity_screening_summary.json",
                 "passed": bool(low_fidelity_artifacts["low_fidelity_summary"].get("passed", False)),
@@ -2255,7 +2263,7 @@ def run_step2_architecture_mapping_workflow(
         "architecture": architecture_artifact,
         "design_point": design_point.to_dict(),
         "workload_package": workload_package.to_dict(),
-        "workload_graph": workload_package.graph.to_dict(),
+        "workload_graph": source_graph.to_dict(),
         "graph_lowering_report": lowering.report,
         "executable_graph": executable_graph.to_dict(),
         "mapping": mapping_payload,
@@ -2282,8 +2290,12 @@ def run_step2_architecture_mapping_workflow(
         "memory_policy": codesign_artifacts["memory_policy"],
         "codesign_artifact_validation": codesign_validation,
     }
-    if candidate_hints_payload:
-        artifacts["domain_policy_hints"] = candidate_hints_payload
+    if workload_characterization is not None:
+        artifacts["workload_characterization"] = dict(workload_characterization)
+    if step1_handoff_summary is not None:
+        artifacts["step1_handoff_summary"] = dict(step1_handoff_summary)
+    if policy_hints_payload is not None:
+        artifacts["domain_policy_hints"] = policy_hints_payload
     artifacts["step2_artifact_validation"] = validate_step2_artifacts({
         **artifacts,
         "system_architecture": design_point.system_architecture.to_dict(),
@@ -2300,6 +2312,9 @@ def run_step2_architecture_mapping_workflow(
             "design_point": "design_point.json",
             "workload_package": "workload_package.json",
             "workload_graph": "workload_graph.json",
+            "workload_characterization": "workload_characterization.json",
+            "step1_handoff_summary": "step1_handoff_summary.json",
+            "domain_policy_hints": "domain_policy_hints.json",
             "graph_lowering_report": "graph_lowering_report.json",
             "executable_graph": "executable_graph.json",
             "mapping": "mapping.json",
@@ -2330,14 +2345,15 @@ def run_step2_architecture_mapping_workflow(
         if "domain_policy_hints" in artifacts:
             name_map["domain_policy_hints"] = "domain_policy_hints.json"
         for key, filename in name_map.items():
-            _write_json(output / filename, artifacts[key])
-            artifact_paths[key] = filename
+            if key in artifacts:
+                _write_json(output / filename, artifacts[key])
+                artifact_paths[key] = filename
 
     return Step2WorkflowResult(
         status=status,
         trusted_final_eligible=trusted_final_eligible,
         workload_package=workload_package,
-        source_graph=workload_package.graph,
+        source_graph=source_graph,
         lowering=lowering,
         executable_graph=executable_graph,
         architecture_instance=instance,
@@ -2360,8 +2376,22 @@ def run_step2_architecture_mapping_workflow_from_step1(
     a live importer/package object from Step1.
     """
 
-    workload_package = load_step1_workload_package(step1_dir)
-    return run_step2_architecture_mapping_workflow(workload_package, **kwargs)
+    handoff = load_step1_handoff(step1_dir)
+    workload_package = handoff["workload_package"]
+    workflow_kwargs = dict(kwargs)
+    workflow_kwargs.setdefault("source_graph", handoff.get("workload_graph"))
+    workflow_kwargs.setdefault("executable_graph", handoff.get("executable_graph"))
+    workflow_kwargs.setdefault("graph_lowering_report", handoff.get("graph_lowering_report"))
+    if handoff.get("workload_characterization") is not None:
+        workflow_kwargs.setdefault("workload_characterization", handoff.get("workload_characterization"))
+    workflow_kwargs.setdefault("step1_handoff_summary", {
+        "schema_version": "dse.step1.handoff_summary.v1",
+        "step1_dir": str(Path(step1_dir)),
+        "status": handoff.get("status", {}),
+        "artifact_verification": handoff.get("artifact_verification", {}),
+        "loaded_artifacts": sorted(str(key) for key in handoff.keys()),
+    })
+    return run_step2_architecture_mapping_workflow(workload_package, **workflow_kwargs)
 
 
 def _architecture_screening_record(result: Step2WorkflowResult, run_dir: Path) -> Dict[str, Any]:

@@ -9,6 +9,12 @@ from dse_v2.mapping.search import (
     screen_mapping,
     select_initial_mapping,
 )
+from dse_v2.mapping.domain_policy import (
+    Step2CandidateHints,
+    Step2DomainPolicyRegistry,
+    Step2PolicyInput,
+    default_step2_domain_policy_registry,
+)
 from dse_v2.mapping.step2_workflow import (
     STEP2_ARTIFACT_NAMES,
     STEP2_LOW_FIDELITY_ARTIFACTS,
@@ -34,9 +40,13 @@ __all__ = [
     "STEP2_LOW_FIDELITY_ARTIFACT_KEYS",
     "STEP2_REQUIRED_MAPPING_ARTIFACTS",
     "Step2WorkflowResult",
+    "Step2CandidateHints",
+    "Step2DomainPolicyRegistry",
+    "Step2PolicyInput",
     "architecture_instance_to_system_architecture",
     "build_architecture_artifact",
     "build_legality_matrix",
+    "default_step2_domain_policy_registry",
     "design_point_from_dict",
     "generate_seed_mappings",
     "load_step2_design_point",
