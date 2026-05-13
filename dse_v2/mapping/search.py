@@ -10,7 +10,7 @@ only; trusted selection requires SystemC/gem5+SystemC evidence.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
 from dse_v2.core.architecture.accelerator import Accelerator, SystemArchitecture
@@ -145,9 +145,10 @@ class MappingCandidate:
     state: str
     selection_reason: str
     violations: List[str]
+    annotations: Dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
-        return {
+        payload = {
             "candidate_id": self.candidate_id,
             "seed_name": self.seed_name,
             "mapping": dict(self.mapping),
@@ -164,6 +165,9 @@ class MappingCandidate:
             "violations": list(self.violations),
             "trusted_final_eligible": False,
         }
+        if self.annotations:
+            payload["annotations"] = dict(self.annotations)
+        return payload
 
 
 def target_ids(architecture: SystemArchitecture) -> List[str]:
@@ -229,21 +233,275 @@ def build_legality_matrix(graph: ComputeGraph, architecture: SystemArchitecture)
 
 
 def _first_by_type(architecture: SystemArchitecture, type_names: Sequence[str], legal_targets: Iterable[str]) -> str:
-    legal = set(legal_targets)
+    legal_sequence = [str(target) for target in legal_targets]
+    legal = set(legal_sequence)
     for type_name in type_names:
+        type_name = str(type_name)
+        if type_name in legal:
+            return type_name
         if type_name == "host" and "host" in legal:
             return "host"
         for accel in architecture.accelerators:
             if accel.accel_type == type_name and accel.accel_id in legal:
                 return accel.accel_id
-    return next(iter(legal), "host")
+    return legal_sequence[0] if legal_sequence else "host"
 
 
 def _legality_lookup(matrix: Mapping[str, Any]) -> Dict[str, List[str]]:
     return {row["node_id"]: list(row["legal_targets"]) for row in matrix.get("rows", [])}
 
 
-def generate_seed_mappings(graph: ComputeGraph, architecture: SystemArchitecture, matrix: Optional[Mapping[str, Any]] = None) -> List[Dict[str, Any]]:
+def _string_list(value: Any) -> List[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, Mapping):
+        for key in ("preferred_targets", "target_preferences", "targets", "target_ids", "target_types", "resource_preferences", "architecture_targets"):
+            if key in value:
+                return _string_list(value.get(key))
+        if "target" in value:
+            return _string_list(value.get("target"))
+        if "target_id" in value:
+            return _string_list(value.get("target_id"))
+        if "target_type" in value:
+            return _string_list(value.get("target_type"))
+        return []
+    if isinstance(value, Iterable):
+        return [str(item) for item in value if item is not None]
+    return [str(value)]
+
+
+def _hint_policy_id(candidate_hints: Optional[Mapping[str, Any]]) -> str:
+    if not isinstance(candidate_hints, Mapping):
+        return "domain_policy"
+    domain_policy = candidate_hints.get("domain_policy", {})
+    if isinstance(domain_policy, Mapping) and domain_policy.get("policy_id"):
+        return str(domain_policy.get("policy_id"))
+    return str(candidate_hints.get("policy_id") or "domain_policy")
+
+
+def _hint_domain_policy(candidate_hints: Mapping[str, Any]) -> Dict[str, Any]:
+    domain_policy = candidate_hints.get("domain_policy", {})
+    if isinstance(domain_policy, Mapping):
+        payload = {str(key): value for key, value in domain_policy.items() if key in {"policy_id", "domain_key", "matched"}}
+    else:
+        payload = {}
+    payload.setdefault("policy_id", _hint_policy_id(candidate_hints))
+    if "domain_key" in candidate_hints:
+        payload.setdefault("domain_key", candidate_hints.get("domain_key"))
+    if "matched" in candidate_hints:
+        payload.setdefault("matched", bool(candidate_hints.get("matched")))
+    return payload
+
+
+def _hint_review_flags(candidate_hints: Mapping[str, Any]) -> List[str]:
+    flags: List[str] = []
+    for key in ("review_flags", "review_required_flags", "hard_block_flags", "hard_review_flags"):
+        flags.extend(_string_list(candidate_hints.get(key)))
+    review = candidate_hints.get("review", {})
+    if isinstance(review, Mapping):
+        flags.extend(_string_list(review.get("flags")))
+        flags.extend(_string_list(review.get("hard_block_flags")))
+        flags.extend(_string_list(review.get("review_required_flags")))
+    return sorted(dict.fromkeys(flag for flag in flags if flag))
+
+
+def _hint_phase_groups(candidate_hints: Mapping[str, Any]) -> List[Any]:
+    phase_groups = candidate_hints.get("phase_groups")
+    if phase_groups is None:
+        annotations = candidate_hints.get("annotations", {})
+        if isinstance(annotations, Mapping):
+            dft_annotations = annotations.get("dft", {})
+            if isinstance(dft_annotations, Mapping):
+                phase_groups = dft_annotations.get("phase_groups")
+    if isinstance(phase_groups, list):
+        return list(phase_groups)
+    return []
+
+
+def _hint_annotations(
+    candidate_hints: Mapping[str, Any],
+    *,
+    seed_role: str,
+    description: str,
+) -> Dict[str, Any]:
+    review_flags = _hint_review_flags(candidate_hints)
+    annotations: Dict[str, Any] = {
+        "candidate_hint_source": "step2_domain_policy",
+        "domain_policy": _hint_domain_policy(candidate_hints),
+        "seed_role": seed_role,
+        "seed_reason": description,
+        "review_flags": review_flags,
+        "review_required": bool(candidate_hints.get("review_required", False) or review_flags),
+        "review_status": "review_required" if (candidate_hints.get("review_required", False) or review_flags) else "not_required",
+        "claim_boundary": str(candidate_hints.get("claim_boundary", "candidate_only")),
+        "trusted_final_claim": False,
+    }
+    phase_groups = _hint_phase_groups(candidate_hints)
+    if phase_groups:
+        annotations["phase_groups"] = phase_groups
+    if isinstance(candidate_hints.get("annotations"), Mapping):
+        annotations["policy_annotations"] = dict(candidate_hints.get("annotations", {}))
+    return annotations
+
+
+def _node_hint_entries(candidate_hints: Optional[Mapping[str, Any]]) -> List[Dict[str, Any]]:
+    if not isinstance(candidate_hints, Mapping):
+        return []
+    raw = (
+        candidate_hints.get("node_target_preferences")
+        or candidate_hints.get("node_preferences")
+        or candidate_hints.get("target_preferences")
+        or []
+    )
+    entries: List[Dict[str, Any]] = []
+    if isinstance(raw, Mapping):
+        for node_id, spec in raw.items():
+            if isinstance(spec, Mapping):
+                entry = dict(spec)
+            else:
+                entry = {"preferred_targets": spec}
+            entry.setdefault("node_id", str(node_id))
+            entries.append(entry)
+    elif isinstance(raw, Iterable) and not isinstance(raw, (str, bytes)):
+        for item in raw:
+            if isinstance(item, Mapping):
+                entries.append(dict(item))
+    return entries
+
+
+def _entry_matches_node(entry: Mapping[str, Any], node_id: str, op_type: str) -> bool:
+    if str(entry.get("node_id", "")) == node_id:
+        return True
+    node_ids = _string_list(entry.get("node_ids"))
+    if node_id in node_ids:
+        return True
+    op_types = _string_list(entry.get("op_type") or entry.get("op_types"))
+    return bool(op_types and op_type in op_types)
+
+
+def _entry_targets(entry: Mapping[str, Any]) -> List[str]:
+    for key in ("preferred_targets", "target_preferences", "targets", "target_ids", "target_types", "resource_preferences", "architecture_targets"):
+        targets = _string_list(entry.get(key))
+        if targets:
+            return targets
+    return _string_list(entry.get("target") or entry.get("target_id") or entry.get("target_type"))
+
+
+def _hint_preferences_for_node(candidate_hints: Optional[Mapping[str, Any]], node_id: str, op_type: str) -> List[str]:
+    preferences: List[str] = []
+    for entry in _node_hint_entries(candidate_hints):
+        if _entry_matches_node(entry, node_id, op_type):
+            preferences.extend(_entry_targets(entry))
+    return list(dict.fromkeys(preferences))
+
+
+def _hinted_mapping(
+    *,
+    graph: ComputeGraph,
+    architecture: SystemArchitecture,
+    legal: Mapping[str, List[str]],
+    candidate_hints: Mapping[str, Any],
+    fallback: str,
+) -> Dict[str, str]:
+    mapping: Dict[str, str] = {}
+    for node_id, node in graph.nodes.items():
+        preferences = _hint_preferences_for_node(candidate_hints, node_id, node.op_type)
+        if not preferences and fallback == "workflow":
+            preferences = _node_preferences(graph, node_id)
+        elif not preferences and fallback == "host_visible":
+            preferences = ["host"]
+        elif not preferences:
+            preferences = ["fpga", "gpu", "cim", "asic", "host"]
+        mapping[node_id] = _first_by_type(architecture, preferences, legal.get(node_id, ["host"]))
+    return mapping
+
+
+def _explicit_hint_seed_mappings(
+    *,
+    graph: ComputeGraph,
+    architecture: SystemArchitecture,
+    legal: Mapping[str, List[str]],
+    candidate_hints: Mapping[str, Any],
+) -> List[Tuple[str, str, Dict[str, str], Dict[str, Any]]]:
+    policy_id = _hint_policy_id(candidate_hints)
+    raw_seeds = candidate_hints.get("mapping_seeds", []) or []
+    if isinstance(raw_seeds, Mapping):
+        raw_seeds = [raw_seeds]
+    seeds: List[Tuple[str, str, Dict[str, str], Dict[str, Any]]] = []
+    if not isinstance(raw_seeds, Iterable) or isinstance(raw_seeds, (str, bytes)):
+        return seeds
+    for index, seed in enumerate(raw_seeds):
+        if not isinstance(seed, Mapping):
+            continue
+        raw_mapping = seed.get("mapping") or seed.get("placements") or {}
+        if not isinstance(raw_mapping, Mapping):
+            continue
+        mapping: Dict[str, str] = {}
+        for node_id, node in graph.nodes.items():
+            requested = raw_mapping.get(node_id)
+            preferences = _string_list(requested) or _hint_preferences_for_node(candidate_hints, node_id, node.op_type) or _node_preferences(graph, node_id)
+            mapping[node_id] = _first_by_type(architecture, preferences, legal.get(node_id, ["host"]))
+        seed_role = str(seed.get("seed_role") or seed.get("seed_name") or f"explicit_{index}")
+        name = str(seed.get("seed_name") or f"policy:{policy_id}:{seed_role}")
+        if not name.startswith("policy:"):
+            name = f"policy:{policy_id}:{name}"
+        description = str(seed.get("description") or "policy supplied mapping seed filtered through the generic legality matrix")
+        annotations = _hint_annotations(candidate_hints, seed_role=seed_role, description=description)
+        if isinstance(seed.get("annotations"), Mapping):
+            annotations["seed_annotations"] = dict(seed.get("annotations", {}))
+        seeds.append((name, description, mapping, annotations))
+    return seeds
+
+
+def _policy_hint_seeds(
+    graph: ComputeGraph,
+    architecture: SystemArchitecture,
+    legal: Mapping[str, List[str]],
+    candidate_hints: Optional[Mapping[str, Any]],
+) -> List[Tuple[str, str, Dict[str, str], Dict[str, Any]]]:
+    if not isinstance(candidate_hints, Mapping) or not candidate_hints:
+        return []
+    policy_id = _hint_policy_id(candidate_hints)
+    seeds = _explicit_hint_seed_mappings(
+        graph=graph,
+        architecture=architecture,
+        legal=legal,
+        candidate_hints=candidate_hints,
+    )
+    balanced_desc = "phase-aware policy preferences applied to legal generic targets"
+    dominant_desc = "dominant hinted nodes offloaded when legal, with workflow fallback"
+    review_desc = "host-visible review-safe placement derived from policy review boundary"
+    seeds.extend([
+        (
+            f"policy:{policy_id}:phase_aware_balanced",
+            balanced_desc,
+            _hinted_mapping(graph=graph, architecture=architecture, legal=legal, candidate_hints=candidate_hints, fallback="workflow"),
+            _hint_annotations(candidate_hints, seed_role="phase_aware_balanced", description=balanced_desc),
+        ),
+        (
+            f"policy:{policy_id}:dominant_phase_offload",
+            dominant_desc,
+            _hinted_mapping(graph=graph, architecture=architecture, legal=legal, candidate_hints=candidate_hints, fallback="accelerator"),
+            _hint_annotations(candidate_hints, seed_role="dominant_phase_offload", description=dominant_desc),
+        ),
+        (
+            f"policy:{policy_id}:host_visible_review_safe",
+            review_desc,
+            _hinted_mapping(graph=graph, architecture=architecture, legal=legal, candidate_hints=candidate_hints, fallback="host_visible"),
+            _hint_annotations(candidate_hints, seed_role="host_visible_review_safe", description=review_desc),
+        ),
+    ])
+    return seeds
+
+
+def generate_seed_mappings(
+    graph: ComputeGraph,
+    architecture: SystemArchitecture,
+    matrix: Optional[Mapping[str, Any]] = None,
+    candidate_hints: Optional[Mapping[str, Any]] = None,
+) -> List[Dict[str, Any]]:
     matrix = matrix or build_legality_matrix(graph, architecture)
     legal = _legality_lookup(matrix)
     family = _workload_family(graph)
@@ -252,11 +510,11 @@ def generate_seed_mappings(graph: ComputeGraph, architecture: SystemArchitecture
     def all_to(target: str) -> Dict[str, str]:
         return {node_id: target if target in legal.get(node_id, []) else "host" for node_id in graph.nodes}
 
-    seeds: List[Tuple[str, str, Dict[str, str]]] = [
-        ("host_baseline", "all nodes on host fallback", all_to("host")),
+    seeds: List[Tuple[str, str, Dict[str, str], Dict[str, Any]]] = [
+        ("host_baseline", "all nodes on host fallback", all_to("host"), {}),
     ]
     for accel in architecture.accelerators:
-        seeds.append((f"all_{accel.accel_type}_{accel.accel_id}", f"all legal nodes on {accel.accel_id}", all_to(accel.accel_id)))
+        seeds.append((f"all_{accel.accel_type}_{accel.accel_id}", f"all legal nodes on {accel.accel_id}", all_to(accel.accel_id), {}))
 
     workflow_mapping: Dict[str, str] = {}
     for node_id, node in graph.nodes.items():
@@ -266,24 +524,29 @@ def generate_seed_mappings(graph: ComputeGraph, architecture: SystemArchitecture
         _family_seed_name(family),
         f"{family} workflow-declared balanced placement",
         workflow_mapping,
+        {},
     ))
 
     streaming_mapping: Dict[str, str] = {}
     for node_id, node in graph.nodes.items():
         preferences = ["fpga", "cim", "gpu", "host"] if node.op_type in {"reduction", "fft", "elementwise"} else ["gpu", "fpga", "host"]
         streaming_mapping[node_id] = _first_by_type(architecture, preferences, legal.get(node_id, ["host"]))
-    seeds.append(("streaming_memory_locality", "favor FPGA/CIM for streaming and reductions", streaming_mapping))
+    seeds.append(("streaming_memory_locality", "favor FPGA/CIM for streaming and reductions", streaming_mapping, {}))
+    seeds.extend(_policy_hint_seeds(graph, architecture, legal, candidate_hints))
 
     unique: Dict[Tuple[Tuple[str, str], ...], Dict[str, Any]] = {}
-    for name, description, mapping in seeds:
+    for name, description, mapping, annotations in seeds:
         key = tuple(sorted(mapping.items()))
-        unique.setdefault(key, {
+        payload = {
             "seed_name": name,
             "description": description,
             "workload_family": family,
             "workflow_mapping_policies": list(workflow.get("default_mapping_policies", []) or []),
             "mapping": mapping,
-        })
+        }
+        if annotations:
+            payload["annotations"] = dict(annotations)
+        unique.setdefault(key, payload)
     return list(unique.values())
 
 
@@ -360,6 +623,7 @@ def screen_mapping(seed: Mapping[str, Any], graph: ComputeGraph, architecture: S
         state="screened" if not violations else "rejected",
         selection_reason="workflow_seed_screening" if not violations else "illegal_mapping",
         violations=violations,
+        annotations=dict(seed.get("annotations", {}) if isinstance(seed.get("annotations", {}), Mapping) else {}),
     )
 
 
@@ -400,10 +664,11 @@ def run_mapping_search(
     additional_feedback_samples: Optional[Sequence[Mapping[str, Any]]] = None,
     trusted_sample: bool = False,
     beam_width: int = 3,
+    candidate_hints: Optional[Mapping[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Run deterministic seed/beam mapping search and return artifact payloads."""
     matrix = build_legality_matrix(graph, architecture)
-    seed_set = generate_seed_mappings(graph, architecture, matrix)
+    seed_set = generate_seed_mappings(graph, architecture, matrix, candidate_hints=candidate_hints)
     candidates = [screen_mapping(seed, graph, architecture, idx) for idx, seed in enumerate(seed_set)]
     legal = [candidate for candidate in candidates if not candidate.violations]
     legal_sorted = sorted(legal, key=lambda c: (-c.promotion_priority, c.predicted_latency_ms, c.candidate_id))
