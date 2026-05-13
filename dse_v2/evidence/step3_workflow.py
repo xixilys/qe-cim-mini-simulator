@@ -27,6 +27,7 @@ from dse_v2.core.workload.package import WorkloadPackage
 from dse_v2.core.workload.workflows import DIAGNOSTIC_CLAIM_BOUNDARIES
 from dse_v2.evidence.full_flow import write_full_flow_evidence
 from dse_v2.mapping.step2_workflow import (
+    STEP2_CANDIDATE_QUEUE_ARTIFACTS,
     STEP2_LOW_FIDELITY_ARTIFACTS,
     STEP2_LOW_FIDELITY_ARTIFACT_KEYS,
     design_point_from_dict,
@@ -52,7 +53,9 @@ STEP2_INPUT_ARTIFACTS = [
     "mapping_simulation_samples.json",
     "mapping_feedback_state.json",
     "convergence_status.json",
-] + STEP2_LOW_FIDELITY_ARTIFACTS + CODESIGN_STEP2_ARTIFACTS
+] + STEP2_LOW_FIDELITY_ARTIFACTS + CODESIGN_STEP2_ARTIFACTS + STEP2_CANDIDATE_QUEUE_ARTIFACTS + ["domain_policy_hints.json"]
+
+STEP2_OPTIONAL_INPUT_ARTIFACTS = set(STEP2_CANDIDATE_QUEUE_ARTIFACTS + ["domain_policy_hints.json"])
 
 STEP3_EVIDENCE_ARTIFACTS = [
     "simulation_request.json",
