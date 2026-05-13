@@ -46,6 +46,72 @@ def _load_json(path: Path):
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def _policy_candidate_hints(graph: ComputeGraph, *, review_flags=None):
+    node_ids = list(graph.nodes)
+    return {
+        "schema_version": "dse.step2.candidate_hints.v1",
+        "policy_id": "dft_reference_step2",
+        "domain_key": "dft",
+        "matched": True,
+        "review_flags": list(review_flags or ["insufficient_evidence"]),
+        "review_required": True,
+        "claim_boundary": "candidate_only",
+        "node_target_preferences": [
+            {
+                "node_id": node_ids[0],
+                "preferred_targets": ["fpga", "gpu", "host"],
+                "reason": "phase-aware streaming offload preference",
+            },
+            {
+                "node_id": node_ids[-1],
+                "preferred_targets": ["gpu", "fpga", "host"],
+                "reason": "phase-aware dense/offload preference",
+            },
+        ],
+        "mapping_seeds": [
+            {
+                "seed_name": "phase_aware_balanced",
+                "mapping": {node_ids[0]: "fpga", node_ids[-1]: "gpu"},
+                "annotations": {"seed_fact_ids": ["fact:phase:0"]},
+            }
+        ],
+        "phase_groups": [
+            {
+                "phase_group_id": "phase_group_0",
+                "node_ids": [node_ids[0]],
+                "source_fact_ids": ["fact:phase:0"],
+            }
+        ],
+        "data_placement": {
+            "policy_id": "dft_data_locality",
+            "status": "candidate_only",
+            "preferred_locations": {"density_grid": "hbm_or_host_visible"},
+            "data_locality_intent": "keep streamed tensors close to legal accelerator memory",
+        },
+        "runtime_schedule": {
+            "review_status": "review_required",
+            "claim_boundary": "candidate_only",
+        },
+        "descriptor_protocol": {
+            "magic": "0x00000000",
+            "version": -1,
+            "command_type": -1,
+            "claim_boundary": "candidate_only",
+        },
+        "memory_policy": {
+            "data_locality_intent": "hbm_streaming_candidate_only",
+            "claim_boundary": "candidate_only",
+        },
+        "annotations": {
+            "dft": {
+                "phase_ids": ["phase_group_0"],
+                "source_fact_ids": ["fact:phase:0"],
+                "limitations": ["policy hints are candidate generation only"],
+            }
+        },
+    }
+
+
 def _roundtrip_backend_request(run_dir: Path):
     design_point = load_step2_design_point(run_dir)
     package = WorkloadPackage.from_dict(_load_json(run_dir / "workload_package.json"))
