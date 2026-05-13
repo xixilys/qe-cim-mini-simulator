@@ -576,7 +576,6 @@ def seed_generic_dse_architecture_catalog() -> ArchitectureCatalog:
         ComponentType("asic_block", "accelerator", "Fixed-function ASIC block", ["gemm", "reduction", "eigen", "elementwise"], ["FP64", "FP32"]),
         ComponentType("hbm_memory", "memory", "High-bandwidth memory stack", [], ["bytes"]),
         ComponentType("noc_interconnect", "interconnect", "NoC/CXL/PCIe communication fabric", ["dma", "collective", "stream"], ["bytes"]),
-        ComponentType("legacy_cluster", "legacy", "Legacy four-cluster DFT reference block", ["h_psi", "s_psi", "build_subspace", "diagonalize", "refresh"], ["FP64"]),
     ]:
         catalog.add_component_type(component_type)
 
@@ -601,26 +600,27 @@ def seed_generic_dse_architecture_catalog() -> ArchitectureCatalog:
     catalog.add_binding(SimulationBinding(
         binding_id="gem5_systemc_descriptor_path_v1",
         backend="gem5_systemc",
-        status=ArchitectureStatus.STUB,
-        adapter="gem5_integration GenericAccel descriptor bridge",
-        supported_ops=["gemm", "fft", "stencil", "reduction", "elementwise", "eigen", "vector_add"],
-        required_artifacts=required_artifacts + ["gem5.log"],
-        unavailable_reason="Descriptor ingestion and completion/result writeback are not yet closed for full QE SCF shell evidence.",
-        notes=["Keep L4 claims blocked until real gem5-driven descriptor/completion evidence exists."],
+        status=ArchitectureStatus.IMPLEMENTED,
+        adapter="gem5_integration GenericAccel descriptor/request/microarchitecture bridge",
+        supported_ops=["gemm", "fft", "stencil", "reduction", "elementwise", "eigen", "vector_add", "dma", "stream"],
+        required_artifacts=required_artifacts + ["gem5.log", "gem5_l4_proof.json", "completion_proof.json"],
+        notes=[
+            "Trusted only when descriptor_read, uarch_request_decode, microarchitecture_execute, completion_writeback, and guest completion proof pass.",
+            "L4 remains an expensive sample/calibration path, not a brute-force search engine.",
+        ],
     ))
 
     families = [
         ("cpu-only-baseline", "CPU-only baseline", "Software reference and host fallback baseline.", ArchitectureStatus.CANDIDATE_ONLY, ["host"], "calibrated CPU baseline or SystemC-equivalent evidence"),
         ("host-fpga-minimal", "Host+FPGA minimal", "Smallest host-managed FPGA offload candidate.", ArchitectureStatus.PROTOTYPE, ["host", "fpga", "interconnect"], "standalone SystemC binding for offloaded operators"),
         ("host-fpga-cim", "Host+FPGA+CIM", "Hybrid FPGA fabric plus CIM array for GEMM/vector-heavy kernels.", ArchitectureStatus.PROTOTYPE, ["host", "fpga", "cim", "interconnect"], "CIM op-model binding with SystemC artifacts"),
-        ("diag-heavy", "Diag-heavy", "Eigensolver-heavy architecture for cdiaghg/diagonalization phases.", ArchitectureStatus.PROTOTYPE, ["host", "fpga", "asic", "interconnect"], "eigensolver SystemC model coverage"),
-        ("streaming-heavy", "Streaming-heavy", "Operator-sweep and h_psi/s_psi streaming-oriented family.", ArchitectureStatus.PROTOTYPE, ["host", "fpga", "hbm", "interconnect"], "streaming/buffer SystemC model coverage"),
+        ("diag-heavy", "Solver-heavy", "Solver-heavy architecture for eigen/linear-solve workloads.", ArchitectureStatus.PROTOTYPE, ["host", "fpga", "asic", "interconnect"], "eigensolver SystemC model coverage"),
+        ("streaming-heavy", "Streaming-heavy", "Streaming and buffer-oriented architecture family.", ArchitectureStatus.PROTOTYPE, ["host", "fpga", "hbm", "interconnect"], "streaming/buffer SystemC model coverage"),
         ("memory-rich", "Memory-rich", "Large local memory/HBM/buffer exploration family.", ArchitectureStatus.PROTOTYPE, ["host", "fpga", "hbm", "interconnect"], "memory contention model coverage"),
         ("low-power", "Low-power", "Energy-constrained candidate family.", ArchitectureStatus.UNVERIFIED, ["host", "fpga", "cim"], "power model confidence label plus SystemC evidence"),
         ("balanced", "Balanced", "Pareto-balanced heterogeneous template.", ArchitectureStatus.TRUSTED_FINAL_ELIGIBLE, ["host", "fpga", "gpu", "cim", "interconnect"], "all relevant component bindings"),
         ("debug", "Debug/observability", "Trace-heavy architecture for evidence and co-debug runs.", ArchitectureStatus.PROTOTYPE, ["host", "fpga", "gpu", "cim", "interconnect"], "debug-capable SystemC artifacts"),
         ("future-custom", "Future custom", "Extension hook for new Host/FPGA/Chip/CIM/GPU/ASIC/custom families.", ArchitectureStatus.CANDIDATE_ONLY, ["custom"], "candidate-only until explicit binding exists"),
-        ("legacy-four-cluster-reference", "Legacy 4-cluster reference", "Reference-only representation of the previous four-cluster DFT pipeline.", ArchitectureStatus.CANDIDATE_ONLY, ["legacy_cluster"], "reference only; not default or only architecture"),
     ]
     for family_args in families:
         catalog.add_family(_family(*family_args[:3], status=family_args[3], component_roles=family_args[4], binding_requirement=family_args[5]))
@@ -631,7 +631,7 @@ def seed_generic_dse_architecture_catalog() -> ArchitectureCatalog:
         parameters={"replicas": 1, "clock_mhz": 250.0, "evidence_mode": "summary"},
         components=[
             _component("host-0", "host_cpu", "control_host", status=ArchitectureStatus.IMPLEMENTED, ops=["control", "fallback", "elementwise", "reduction"], memory_gb=512, bandwidth_gbps=100, power_w=180, area_mm2=0, connected_to=["fpga-0", "gpu-0", "cim-0"]),
-            _component("fpga-0", "fpga_fabric", "operator_sweep_and_reduction", ops=["gemm", "fft", "reduction", "elementwise", "eigen", "stream"], memory_gb=32, bandwidth_gbps=460, power_w=225, area_mm2=900, connected_to=["host-0", "gpu-0", "cim-0", "hbm-0"]),
+            _component("fpga-0", "fpga_fabric", "streaming_compute_and_reduction", ops=["gemm", "fft", "reduction", "elementwise", "eigen", "stream"], memory_gb=32, bandwidth_gbps=460, power_w=225, area_mm2=900, connected_to=["host-0", "gpu-0", "cim-0", "hbm-0"]),
             _component("gpu-0", "gpu_sm", "dense_linear_algebra", ops=["gemm", "fft", "stencil", "elementwise", "reduction", "eigen"], memory_gb=80, bandwidth_gbps=2000, power_w=300, area_mm2=826, connected_to=["host-0", "fpga-0"]),
             _component("cim-0", "cim_array", "near_memory_vector_gemm", ops=["gemm", "elementwise", "vector_add", "reduction"], memory_gb=4, bandwidth_gbps=1024, power_w=60, area_mm2=120, connected_to=["host-0", "fpga-0"]),
             _component("hbm-0", "hbm_memory", "shared_hbm", ops=[], memory_gb=64, bandwidth_gbps=1600, power_w=25, area_mm2=80, connected_to=["fpga-0"]),
@@ -669,25 +669,6 @@ def seed_generic_dse_architecture_catalog() -> ArchitectureCatalog:
         constraints=ConstraintSet(notes=["Deliberately candidate-only until a concrete component set and binding are supplied."]),
         simulation_bindings={},
         status=ArchitectureStatus.CANDIDATE_ONLY,
-    ))
-
-    catalog.add_instance(ArchitectureInstance(
-        architecture_id="legacy-four-cluster-reference-v0",
-        family_id="legacy-four-cluster-reference",
-        parameters={"replicas": 4, "clock_mhz": 250.0, "evidence_mode": "summary"},
-        components=[
-            _component("cluster-a", "legacy_cluster", "operator_sweep_reference", status=ArchitectureStatus.CANDIDATE_ONLY, ops=["h_psi", "s_psi"], connected_to=["cluster-b"]),
-            _component("cluster-b", "legacy_cluster", "reduced_build_reference", status=ArchitectureStatus.CANDIDATE_ONLY, ops=["build_subspace"], connected_to=["cluster-a", "cluster-c"]),
-            _component("cluster-c", "legacy_cluster", "diagonalization_reference", status=ArchitectureStatus.CANDIDATE_ONLY, ops=["diagonalize"], connected_to=["cluster-b", "cluster-d"]),
-            _component("cluster-d", "legacy_cluster", "refresh_residual_reference", status=ArchitectureStatus.CANDIDATE_ONLY, ops=["refresh"], connected_to=["cluster-c"]),
-        ],
-        memory_hierarchy={"levels": ["legacy_cluster_local"], "total_capacity_bytes": int(16 * 1024**3)},
-        interconnect_topology={"type": "legacy_pipeline", "bandwidth_gbps": 64.0, "latency_us": 1.0},
-        constraints=ConstraintSet(notes=["Reference only; do not use as default/only architecture family."]),
-        simulation_bindings={},
-        status=ArchitectureStatus.CANDIDATE_ONLY,
-        legacy_reference=True,
-        notes=["Represents historical four-cluster split as legacy/reference, not as the catalog default."],
     ))
 
     catalog.raise_if_invalid()

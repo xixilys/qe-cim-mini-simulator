@@ -15,6 +15,9 @@ GraphExecutor::GraphExecutor(const SimulationRequest& req, const OpModelRegistry
     device_available_at_["host"] = 0.0;
     device_compute_time_["host"] = 0.0;
     device_dma_time_["host"] = 0.0;
+
+    // Initialize microarchitecture simulators
+    initialize_microarchitecture_simulators();
 }
 
 std::vector<std::string> GraphExecutor::topological_sort() const {
@@ -62,14 +65,7 @@ double GraphExecutor::estimate_transfer_time(const DataEdge& edge, const std::st
         return 0.0;  // No transfer needed
     }
     
-    // Calculate tensor size
-    double tensor_size_bytes = 0.0;
-    if (!edge.tensor_shape.empty()) {
-        tensor_size_bytes = 8.0;  // FP64 default
-        for (int dim : edge.tensor_shape) {
-            tensor_size_bytes *= dim;
-        }
-    }
+    const double tensor_size_bytes = tensor_payload_bytes(edge);
     
     // Get bandwidth
     double bandwidth_gbps = get_interconnect_bandwidth();
@@ -162,10 +158,10 @@ SimulationResult GraphExecutor::execute() {
             double device_ready = device_available_at_[accel_id];
             double start_time = std::max(earliest_start, device_ready);
             
-            // Estimate compute cycles
+            // Estimate compute cycles using microarchitecture simulator
             double compute_cycles = 0.0;
-            if (op_model && accel) {
-                compute_cycles = op_model->estimate_compute_cycles(node, *accel, 0.0);
+            if (accel) {
+                compute_cycles = simulate_compute_with_microarchitecture(node, accel);
             } else {
                 // Host execution fallback
                 double host_clock_mhz = req_.architecture.host.clock_mhz;
@@ -235,10 +231,7 @@ SimulationResult GraphExecutor::execute() {
             auto src_it = req_.mapping.find(edge.source);
             auto dst_it = req_.mapping.find(edge.target);
             if (src_it != req_.mapping.end() && dst_it != req_.mapping.end() && src_it->second != dst_it->second) {
-                double tensor_size = 8.0;
-                for (int dim : edge.tensor_shape) {
-                    tensor_size *= dim;
-                }
+                double tensor_size = tensor_payload_bytes(edge);
                 total_data_mb += tensor_size / (1024.0 * 1024.0);
             }
         }
@@ -262,6 +255,49 @@ SimulationResult GraphExecutor::execute() {
     }
     
     return result;
+}
+
+void GraphExecutor::initialize_microarchitecture_simulators() {
+    for (const auto& accel : req_.architecture.accelerators) {
+        const auto& ma = accel.microarchitecture;
+        const bool has_microarchitecture_config =
+            ma.array_size > 0 ||
+            ma.crossbar_rows > 0 || ma.crossbar_cols > 0 ||
+            ma.sm_count > 0 ||
+            ma.pipeline_stages > 0 ||
+            ma.memory_bandwidth_gbps > 0.0 ||
+            ma.memory_ports > 0;
+        if (!has_microarchitecture_config) {
+            continue;
+        }
+        auto sim = MicroarchitectureSimulatorFactory::create_simulator(accel.accel_type);
+        if (sim) {
+            micro_simulators_[accel.accel_id] = std::move(sim);
+        }
+    }
+}
+
+double GraphExecutor::simulate_compute_with_microarchitecture(
+    const ComputeNode& node,
+    const AcceleratorDesc* accel
+) {
+    if (!accel) return 0.0;
+
+    auto it = micro_simulators_.find(accel->accel_id);
+    if (it != micro_simulators_.end() && it->second) {
+        return it->second->simulate_compute_cycles(node, *accel);
+    }
+
+    const OpModel* op_model = registry_.find_model(node.op_type);
+    if (!op_model) {
+        op_model = registry_.find_model("generic_op");
+    }
+    if (op_model) {
+        return op_model->estimate_compute_cycles(node, *accel, 0.0);
+    }
+
+    double peak_gflops = accel->clock_mhz * 1e6 * 16 / 1e9;
+    return node.estimated_flops / (peak_gflops * 1e9) * accel->clock_mhz * 1e6;
 }
 
 } // namespace gsim

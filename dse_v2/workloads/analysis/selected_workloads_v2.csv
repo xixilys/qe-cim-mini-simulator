@@ -1,6 +1,0 @@
-workload_id,category,material,npw,nkb,nbnd,compute_intensity,l1_pressure,l2_pressure,fft_pressure,projector_density,band_scaling,problem_size,size_category,solver_complexity,intensity_class,working_set_kb,total_flops,total_bytes,cluster
-si8_pbe_uspp,semiconductor,Silicon (Si),2945,144,16,17.375480111513536,24.1328125,3.0166015625,0.718994140625,0.048896434634974534,1.0,47120,small,1.0,compute_bound,772.25,13740251.66450312,790784,2
-hbn_monolayer_pbe,2d_material,Hexagonal Boron Nitride (h-BN),2100,48,10,6.203095387953363,10.48828125,1.31103515625,0.5126953125,0.022857142857142857,0.625,21000,small,1.0,compute_bound,335.625,2131879.8229318117,343680,0
-tio2_rutile_pbe,oxide,Titanium Dioxide (TiO2),3500,112,24,13.714434189361267,42.328125,5.291015625,0.8544921875,0.032,1.5,84000,medium,1.5,compute_bound,1354.5,19022029.936117593,1387008,3
-benzene_pbe_uspp,organic,Benzene (C6H6),8500,96,24,12.034050176817729,100.734375,12.591796875,2.0751953125,0.011294117647058824,1.5,204000,large,1.0,compute_bound,3223.5,39722763.00285128,3300864,1
-water_dimer_pbe,organic,Water Dimer (H2O)2,4200,48,16,6.164628617385777,33.1875,4.1484375,1.025390625,0.011428571428571429,1.0,67200,medium,1.0,compute_bound,1062.0,6703959.645863623,1087488,4

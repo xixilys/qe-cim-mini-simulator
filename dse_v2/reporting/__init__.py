@@ -5,9 +5,11 @@ from dse_v2.reporting.final_report import (
     build_evidence_index,
     evidence_requirement_table,
     generate_final_report,
+    generate_final_report_artifacts,
     render_markdown_report,
     validate_claim,
     validate_claims,
+    validate_report_claims,
     write_final_report_artifacts,
 )
 
@@ -16,8 +18,10 @@ __all__ = [
     "build_evidence_index",
     "evidence_requirement_table",
     "generate_final_report",
+    "generate_final_report_artifacts",
     "render_markdown_report",
     "validate_claim",
     "validate_claims",
+    "validate_report_claims",
     "write_final_report_artifacts",
 ]

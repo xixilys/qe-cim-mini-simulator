@@ -4,25 +4,25 @@
 Define the versioned IR contracts for generic DSE workloads, tasks, architecture references, tensors, data movement, execution timelines, serialization, and validation across Python, SystemC, and gem5 integration boundaries.
 ## Requirements
 ### Requirement: WorkloadPackage is the domain-neutral ingestion unit
-The system SHALL ingest every workload through a versioned WorkloadPackage that wraps a ComputeGraph with source provenance, adapter identity, constraints, calibration references, and opaque domain metadata. Core DSE stages SHALL depend on the generic package and graph contract, not on QE, ML, database, sparse, stencil, or any other domain-specific fields.
+The system SHALL ingest every workload through a versioned WorkloadPackage that wraps a ComputeGraph with source provenance, profile/importer identity, constraints, calibration references, and opaque domain metadata. Core DSE stages SHALL depend on the generic package and graph contract, not on QE, ML, database, sparse, stencil, or any other domain-specific fields.
 
 #### Scenario: Non-DFT workload enters through the same package
-- **WHEN** a workload adapter emits an ML tensor graph, sparse linear algebra graph, stencil pipeline, graph analytics workload, database/vector-search pipeline, or user-defined scientific computation graph
-- **THEN** the package is accepted when it contains valid generic graph nodes, edges, tensor/resource metadata, cost hints or cost-model bindings, provenance, and adapter identity
+- **WHEN** a workload importer emits an ML tensor graph, sparse linear algebra graph, stencil pipeline, graph analytics workload, database/vector-search pipeline, or user-defined scientific computation graph
+- **THEN** the package is accepted when it contains valid generic graph nodes, edges, tensor/resource metadata, cost hints or cost-model bindings, provenance, and profile/importer identity
 
 #### Scenario: Domain metadata stays opaque to core DSE
-- **WHEN** a package carries adapter metadata such as QE `npw`, ML batch size, sparse matrix format, stencil halo depth, or query shape
-- **THEN** core IR validation preserves the metadata but does not require or interpret it unless an adapter-specific validator is invoked
+- **WHEN** a package carries profile/importer metadata such as QE `npw`, ML batch size, sparse matrix format, stencil halo depth, or query shape
+- **THEN** core IR validation preserves the metadata but does not require or interpret it unless a profile/importer-specific validator is invoked
 
-### Requirement: Workload adapter registry separates domain import from core IR
-The system SHALL route workload ingestion through a registry of WorkloadAdapter implementations. Each adapter SHALL declare supported source kinds, adapter version, emitted WorkloadPackage schema, validation rules, default mapping policies, domain metrics, and claim boundary. Adding a new adapter SHALL NOT require changing core IR classes or generic backend request schemas. Core IR validation SHALL NOT contain hardcoded checks for domain-specific node names, phase templates, or operator enums.
+### Requirement: Workload profile/importer registry separates domain import from core IR
+The system SHALL route workload ingestion through a registry of WorkloadImporter implementations. Each importer SHALL declare supported source kinds, importer version, emitted WorkloadPackage schema, and validation rules; workload profiles SHALL declare mapping policies, domain metrics, coverage, and claim boundary. Adding a new importer/profile SHALL NOT require changing core IR classes or generic backend request schemas. Core IR validation SHALL NOT contain hardcoded checks for domain-specific node names, phase templates, or operator enums.
 
-#### Scenario: New workload adapter is added without core schema changes
-- **WHEN** a developer adds an adapter for a new workload family such as ONNX/ML, stencil, sparse linear algebra, graph analytics, streaming pipeline, dynamic-control workload, or custom JSON graph
+#### Scenario: New workload importer is added without core schema changes
+- **WHEN** a developer adds an importer/profile pair for a new workload family such as ONNX/ML, stencil, sparse linear algebra, graph analytics, streaming pipeline, dynamic-control workload, or custom JSON graph
 - **THEN** it can emit WorkloadPackage and ComputeGraph artifacts consumed by architecture generation, mapping search, simulation, and reporting without QE-specific fields
 
 #### Scenario: Reduced or diagnostic workload is labeled non-final
-- **WHEN** an adapter emits a reduced, sampled, synthetic, imported-trace-only, or diagnostic workload
+- **WHEN** an importer emits a reduced, sampled, synthetic, imported-trace-only, or diagnostic workload
 - **THEN** the WorkloadPackage records that claim boundary and final validation prevents it from satisfying full-workload completion evidence
 
 #### Scenario: Core IR rejects domain-specific node name checks
@@ -33,9 +33,9 @@ The system SHALL route workload ingestion through a registry of WorkloadAdapter 
 - **WHEN** mapping search processes a ComputeGraph
 - **THEN** it uses generic properties (`op_type`, `tensor_specs`, `estimated_flops`) rather than hardcoded QE phase names or node ids
 
-#### Scenario: Adapter policy is scoped to adapter
-- **WHEN** a DFT/QE adapter provides mapping policies
-- **THEN** those policies are registered under the adapter namespace and are only applied when the DFT/QE adapter is explicitly selected
+#### Scenario: Profile policy is scoped to profile
+- **WHEN** a DFT/QE profile provides mapping policies
+- **THEN** those policies are registered under the profile/importer namespace and are only applied when the DFT/QE reference profile/importer is explicitly selected
 
 ### Requirement: Versioned four-level IR stack
 The system SHALL expose a versioned four-level IR stack with L3 Compute Graph, L2 Task Graph, L1 Architecture reference, and L0 Execution Timeline contracts. Each IR object SHALL carry enough identity and schema information to be serialized, compared, and validated across Python and simulation backends.
@@ -72,11 +72,11 @@ The ComputeGraph SHALL represent an application workload as a domain-neutral com
 - **THEN** validation fails with a structured error identifying the participating node ids and the missing semantic annotation
 
 #### Scenario: Declared loop or feedback graph is accepted
-- **WHEN** a ComputeGraph contains a loop, feedback edge, streaming recurrence, or control-flow region with bounds, convergence criteria, trace-derived trip counts, or an adapter-provided summary model
+- **WHEN** a ComputeGraph contains a loop, feedback edge, streaming recurrence, or control-flow region with bounds, convergence criteria, trace-derived trip counts, or a profile/importer-provided summary model
 - **THEN** core IR validation accepts the graph and records the declared semantics for graph lowering and claim-boundary checks
 
 #### Scenario: Hierarchical graph preserves subgraph identity
-- **WHEN** an adapter emits a fused kernel, loop body, pipeline stage, or reusable subgraph region
+- **WHEN** an importer emits a fused kernel, loop body, pipeline stage, or reusable subgraph region
 - **THEN** the ComputeGraph preserves both the region identity and the contained node/edge ids so mapping, lowering, and reporting can cite either level
 
 ### Requirement: TensorSpec defines units, shape, dtype, and layout
@@ -124,7 +124,7 @@ Before a ComputeGraph is evaluated by a scheduler, L1/L2 evaluator, standalone S
 - **THEN** lowering either expands or summarizes the loop, records the policy in `graph_lowering_report.json`, and exposes an executable view to mapping and simulation
 
 #### Scenario: Unsupported dynamic graph fails before final evidence
-- **WHEN** a graph contains dynamic control, recursion, data-dependent iteration, or stateful behavior that no adapter or backend can lower or summarize
+- **WHEN** a graph contains dynamic control, recursion, data-dependent iteration, or stateful behavior that no profile/importer or backend can lower or summarize
 - **THEN** the workflow returns an unsupported-graph diagnostic and prevents final trusted simulation or reporting claims for that workload
 
 ### Requirement: TaskGraph captures placement, scheduling, dependencies, and movement
@@ -183,17 +183,17 @@ The IR layer SHALL return structured validation errors with object type, object 
 - **THEN** DSE evaluation does not proceed to ranking or backend invocation for that design point
 
 ### Requirement: Core IR rejects workload-family leakage
-Core IR validation, serialization, mapping input generation, and backend request schemas SHALL remain workload-family neutral. Domain-specific node names, phase names, correctness labels, source parser fields, and preferred mapping targets SHALL be preserved as opaque adapter metadata or workflow metadata and SHALL NOT become required core fields.
+Core IR validation, serialization, mapping input generation, and backend request schemas SHALL remain workload-family neutral. Domain-specific node names, phase names, correctness labels, source parser fields, and preferred mapping targets SHALL be preserved as opaque profile/importer metadata or workflow metadata and SHALL NOT become required core fields.
 
 #### Scenario: AI metadata remains opaque
-- **WHEN** an ML/tensor adapter includes batch size, sequence length, layout, quantization policy, or model-output reference metadata
+- **WHEN** an ML/tensor importer/profile includes batch size, sequence length, layout, quantization policy, or model-output reference metadata
 - **THEN** core IR preserves that metadata without adding ML-specific required fields to `ComputeGraph` or `WorkloadPackage`
 
 #### Scenario: Scientific metadata remains opaque
-- **WHEN** a scientific-computing adapter includes solver residuals, mesh shape, halo depth, timestep counts, sparse format, or QE `npw`/`nkb` values
-- **THEN** core IR preserves that metadata without interpreting it outside adapter-owned validation
+- **WHEN** a scientific-computing importer/profile includes solver residuals, mesh shape, halo depth, timestep counts, sparse format, or QE `npw`/`nkb` values
+- **THEN** core IR preserves that metadata without interpreting it outside profile/importer-owned validation
 
 #### Scenario: Domain-specific required fields are rejected
 - **WHEN** a core IR boundary requires fields such as QE SCF phases, ML accuracy labels, SQL query semantics, graph convergence labels, or sparse residual names for all workloads
-- **THEN** validation reports domain leakage and the implementation must move that requirement into adapter/workflow metadata
+- **THEN** validation reports domain leakage and the implementation must move that requirement into profile/workflow metadata
 

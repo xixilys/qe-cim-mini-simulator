@@ -1,10 +1,10 @@
 # generic-simulation-backend Specification
 
 ## Purpose
-Define the generic simulation backend contract for a **truly heterogeneous architecture** (Host + GPU/FPGA/CIM/ASIC), replacing the legacy 4-Cluster (A/B/C/D) model. This spec covers JSON IPC, Python bridge semantics, C++/SystemC parsing and execution, architecture-difference probes, result/error semantics, evidence artifacts, and the explicit gem5 GenericAccel diagnostic/untrusted versus trusted L4 boundary.
+Define the generic simulation backend contract for a **truly heterogeneous architecture** (Host + GPU/FPGA/CIM/ASIC/custom accelerators). This spec covers JSON IPC, Python bridge semantics, C++/SystemC parsing and execution, architecture-difference probes, result/error semantics, evidence artifacts, and the explicit gem5 GenericAccel diagnostic/untrusted versus trusted L4 boundary.
 
 ## Architecture Transition
-The backend SHALL support a **configurable heterogeneous architecture** where accelerators are dynamically specified in the simulation request (e.g., `gpu-0`, `fpga-0`, `cim-0`), rather than hardcoded to the legacy 4-Cluster pipeline (Cluster A/B/C/D). The legacy 4-Cluster model is deprecated and SHALL only be used for backward compatibility via an explicit `legacy_4cluster` mode flag.
+The backend SHALL support a **configurable heterogeneous architecture** where accelerators are dynamically specified in the simulation request (e.g., `gpu-0`, `fpga-0`, `cim-0`), rather than hardcoded to a historical fixed application pipeline. Legacy fixed-pipeline models are removed from active simulator modes and may be restored only as explicit data-only reference artifacts.
 ## Requirements
 ### Requirement: Simulation IPC uses versioned JSON schemas
 The Python-to-C++ simulation interface SHALL use versioned JSON request and result schemas. The request schema SHALL include architecture, workload, mapping, scheduling, and output configuration; the result schema SHALL include metrics, events, resource utilization, uncertainty, and errors.
@@ -23,16 +23,16 @@ GenericSystemCBackend SHALL translate DesignPoint and ComputeGraph inputs into a
 #### Scenario: Accelerator capabilities are emitted for heterogeneous system
 - **WHEN** a design point contains GPU, FPGA, and CIM accelerators with ids `gpu-0`, `fpga-0`, `cim-0`
 - **THEN** the JSON request includes each accelerator id, type, operator capabilities, peak rates, memory, and power fields
-- **AND** the backend executes them as independent devices, not as fixed Cluster A/B/C/D roles
+- **AND** the backend executes them as independent devices, not as fixed application-pipeline roles
 
-#### Scenario: Legacy 4-Cluster mode is explicitly requested
-- **WHEN** the request includes `mode: "legacy_4cluster"` or `architecture_family: "legacy-four-cluster"`
-- **THEN** the backend MAY map to the deprecated 4-Cluster execution path for backward compatibility
-- **AND** the result SHALL include a `legacy_mode_warning` in the provenance
+#### Scenario: Historical fixed-pipeline mode is rejected from the active backend
+- **WHEN** the request includes a legacy fixed-pipeline mode or architecture family
+- **THEN** the backend rejects it as unsupported by the active generic simulator contract
+- **AND** the runbook points the user to legacy reference storage if they need to inspect historical artifacts
 
-#### Scenario: Heterogeneous architecture produces different results than 4-Cluster
-- **WHEN** the same workload is evaluated with a balanced heterogeneous architecture (Host+GPU+FPGA+CIM) versus the legacy 4-Cluster architecture
-- **THEN** the results show different latency, power, and data movement patterns reflecting the actual accelerator capabilities and interconnect topology
+#### Scenario: Heterogeneous architecture reflects explicit capabilities
+- **WHEN** the same workload is evaluated with different heterogeneous architecture descriptors
+- **THEN** the results show different latency, power, and data movement patterns reflecting the explicit accelerator capabilities and interconnect topology
 
 #### Scenario: Workload edges are emitted
 - **WHEN** the ComputeGraph contains dependencies between nodes
@@ -152,7 +152,7 @@ GenericSystemCBackend and generic_sim SHALL distinguish parse errors, executable
 - **THEN** the DSE run records the failed design point and continues evaluating independent candidates if configured
 
 ### Requirement: Backend supports architecture-difference regression probes for heterogeneous systems
-The generic backend SHALL include regression tests or probes that confirm different accelerator descriptors, mappings, and interconnects affect output metrics in expected directions. The backend SHALL specifically test heterogeneous configurations (e.g., GPU+FPGA+CIM) against homogeneous and legacy 4-Cluster baselines.
+The generic backend SHALL include regression tests or probes that confirm different accelerator descriptors, mappings, and interconnects affect output metrics in expected directions. The backend SHALL specifically test heterogeneous configurations (e.g., GPU+FPGA+CIM) against homogeneous baselines.
 
 #### Scenario: Heterogeneous vs homogeneous performance
 - **WHEN** the same workload is evaluated on a heterogeneous system (Host+GPU+FPGA+CIM) versus a homogeneous system (Host-only or GPU-only)
@@ -166,10 +166,6 @@ The generic backend SHALL include regression tests or probes that confirm differ
 - **WHEN** a two-node workload is mapped to one accelerator versus two accelerators with cross-device transfer
 - **THEN** total data movement or communication overhead differs according to the mapping
 
-#### Scenario: Legacy 4-Cluster deprecation warning
-- **WHEN** a regression test compares the legacy 4-Cluster result with a heterogeneous equivalent
-- **THEN** the legacy result includes a deprecation warning and the heterogeneous result shows improved or different performance characteristics
-
 ### Requirement: gem5 GenericAccel L4 trust boundary is explicit
 The gem5 GenericAccel path SHALL be trusted only when a real gem5-driven run validates descriptor/request ingestion, SystemC backend submission, completion/result writeback, guest-visible success, and result status. The workflow SHALL NOT synthesize diagnostic evidence for missing L4 runs.
 
@@ -181,18 +177,18 @@ The gem5 GenericAccel path SHALL be trusted only when a real gem5-driven run val
 - **WHEN** a report claims full L4 gem5 + SystemC co-simulation
 - **THEN** evidence shows descriptor/request ingestion, backend execution, result delivery, and guest-visible completion
 
-#### Scenario: QE compatibility target is not sufficient for generic L4 closure
-- **WHEN** `gem5_systemc_standalone` or the QE compatibility `Gem5TLMTarget` completes through the legacy `DFTHybridSystemGem5` electrons path
+#### Scenario: Legacy compatibility target is not sufficient for generic L4 closure
+- **WHEN** a legacy application-specific TLM/MMIO compatibility target completes through a historical fixed-purpose device path
 - **THEN** the result MAY be cited as local TLM/MMIO compatibility evidence
 - **AND** it SHALL NOT be cited as generic heterogeneous L4 closure unless the GSIM descriptor/request/completion proof also passes
 
 ### Requirement: Build, regression, and full-flow pilot commands are reproducible for heterogeneous architectures
-The backend SHALL document and support reproducible build/regression commands for C++ generic_sim with **heterogeneous accelerator support**, standalone SystemC timing-level full-workload pilots, and gem5+SystemC validation when the L4 binding is available. The build system SHALL compile the generic heterogeneous backend by default; the legacy 4-Cluster model SHALL be available only through an explicit compile flag. Smoke checks MAY exist only as bring-up diagnostics and SHALL NOT be treated as DSE completion evidence. A final trusted check SHALL require a complete SystemC or gem5+SystemC full-flow simulation for the selected WorkloadPackage; smoke-only, fixed-timing bring-up, legacy smoke conversion, or diagnostic replay paths SHALL fail final trusted validation even when their commands exit successfully.
+The backend SHALL document and support reproducible build/regression commands for C++ generic_sim with **heterogeneous accelerator support**, standalone SystemC timing-level full-workload pilots, and gem5+SystemC validation when the L4 binding is available. The build system SHALL compile the generic heterogeneous backend by default; historical fixed-pipeline models SHALL remain outside the default active build. Smoke checks MAY exist only as bring-up diagnostics and SHALL NOT be treated as DSE completion evidence. A final trusted check SHALL require a complete SystemC or gem5+SystemC full-flow simulation for the selected WorkloadPackage; smoke-only, fixed-timing bring-up, legacy smoke conversion or diagnostic replay paths SHALL fail final trusted validation even when their commands exit successfully.
 
 #### Scenario: C++ heterogeneous backend build is verified
 - **WHEN** implementation claims the standalone backend is usable
 - **THEN** `cmake --build model/generic_sim_backend/build -j4` or equivalent succeeds and produces a `generic_sim` executable that supports heterogeneous accelerator configurations
-- **AND** the build does NOT default to the legacy 4-Cluster model
+- **AND** the build does NOT default to a historical fixed-pipeline model
 
 #### Scenario: Standalone SystemC full-flow pilot is verified before trusted L3 claims
 - **WHEN** implementation claims standalone SystemC timing-level evidence is usable for DSE
@@ -202,10 +198,10 @@ The backend SHALL document and support reproducible build/regression commands fo
 - **WHEN** implementation claims L4 integration is usable for DSE
 - **THEN** a gem5+SystemC pilot runs the selected full WorkloadPackage through command submission, SystemC timing execution, completion, and evidence export
 
-#### Scenario: QE full-flow uses heterogeneous backend, not legacy 4-Cluster
-- **WHEN** the DFT/QE adapter is selected and the architecture is a heterogeneous system (e.g., Host+FPGA+CIM)
+#### Scenario: Reference workload uses heterogeneous backend, not a historical fixed pipeline
+- **WHEN** a reference workload profile/importer is selected and the architecture is a heterogeneous system (e.g., Host+FPGA+CIM)
 - **THEN** the generic backend consumes its emitted ComputeGraph through the same heterogeneous request schema used for other workload families
-- **AND** the backend maps QE phases (h_psi, s_psi, build_H_sub, build_S_sub, diagonalize, refresh, residual) to the appropriate accelerators based on their capabilities, NOT to fixed Cluster A/B/C/D roles
+- **AND** workload-specific node names remain profile/importer metadata instead of fixed backend roles
 
 #### Scenario: Smoke-only evidence fails final validation
 - **WHEN** a report, candidate, or run attempts to use smoke output as completion evidence
@@ -248,11 +244,10 @@ Simulation sample records SHALL include backend-specific proof status. For gem5+
 The generic simulation backend integration SHALL mark gem5+SystemC evidence as trusted L4 only when the real gem5 path submits a descriptor or equivalent request to the SystemC backend and observes completion/result writeback through the guest-visible path.
 
 #### Scenario: GenericAccel descriptor path drives SystemC request
-- **WHEN** `Gem5SystemCClosureAdapter` runs the real L4 harness
+- **WHEN** `Gem5SystemCClosureProfile/importer` runs the real L4 harness
 - **THEN** the generated proof records gem5 descriptor/request ingestion and SystemC backend submission for the selected generic heterogeneous workload
 - **AND** standalone TLM/MMIO compatibility output alone is not accepted as generic L4 closure
 
 #### Scenario: SystemC status is included in L4 proof
 - **WHEN** the SystemC backend returns a failed or malformed result during a real L4 run
 - **THEN** the L4 proof fails and records the SystemC result status as the blocker
-

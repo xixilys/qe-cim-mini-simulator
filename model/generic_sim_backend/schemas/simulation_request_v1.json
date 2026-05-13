@@ -75,7 +75,17 @@
               },
               "tensor_dtype": {
                 "type": "string",
-                "enum": ["FP64", "FP32", "FP16", "INT8"]
+                "enum": ["FP64", "FP32", "FP16", "BF16", "INT64", "INT32", "INT16", "INT8", "BOOL", "COMPLEX_FP64", "COMPLEX_FP32"]
+              },
+              "element_size": {
+                "type": "number",
+                "minimum": 1,
+                "description": "Tensor element size in bytes after dtype resolution"
+              },
+              "size_bytes": {
+                "type": "number",
+                "minimum": 0,
+                "description": "Total tensor payload size in bytes"
               }
             }
           }

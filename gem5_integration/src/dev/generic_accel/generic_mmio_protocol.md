@@ -95,15 +95,16 @@ struct CompletionDescriptor {
 ## Claim Boundary
 
 The register map above is the required L4 descriptor/request/completion
-contract. The current GenericAccel implementation is a timed MMIO stub unless a
-run log proves all of these events:
+contract. A run is trusted only when the log proves all of these events:
 
 1. `descriptor_read`: GenericAccel read the GSIM command descriptor from guest
    memory.
-2. `systemc_submit`: the request payload was submitted to the generic SystemC
-   backend from the gem5 device path.
-3. `completion_writeback`: the result JSON and completion descriptor were
+2. `uarch_request_decode`: GenericAccel parsed the request payload and built the
+   microarchitecture schedule.
+3. `microarchitecture_execute`: the in-gem5 microarchitecture model executed
+   the scheduled micro-ops from the device path.
+4. `completion_writeback`: the result JSON and completion descriptor were
    written back to guest-visible memory.
 
-If any item is missing, the correct result is a blocked/prototype verdict, not
-an L4-complete claim.
+If any item is missing, the correct result is a blocked verdict, not an
+L4-complete claim.

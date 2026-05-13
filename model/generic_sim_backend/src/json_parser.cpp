@@ -289,6 +289,10 @@ static DataEdge parse_data_edge(const std::string& s, size_t& pos) {
             }
         } else if (key == "tensor_dtype") {
             edge.tensor_dtype = parse_json_string(s, pos);
+        } else if (key == "element_size") {
+            edge.element_size = parse_json_number(s, pos);
+        } else if (key == "size_bytes") {
+            edge.size_bytes = parse_json_number(s, pos);
         } else {
             skip_json_value(s, pos);
         }
@@ -326,7 +330,8 @@ static AcceleratorDesc parse_accelerator(const std::string& s, size_t& pos) {
         if (key == "accel_id") {
             accel.accel_id = parse_json_string(s, pos);
         } else if (key == "accel_type") {
-            accel.accel_type = parse_json_string(s, pos);
+            accel.accel_type_str = parse_json_string(s, pos);
+            accel.resolve_accel_type();
         } else if (key == "clock_mhz") {
             accel.clock_mhz = parse_json_number(s, pos);
         } else if (key == "local_memory_kb") {
@@ -380,6 +385,113 @@ static AcceleratorDesc parse_accelerator(const std::string& s, size_t& pos) {
                     if (pos < s.size() && s[pos] == ',') pos++;
                 }
             }
+        } else if (key == "microarchitecture") {
+            // Parse microarchitecture configuration (v2 schema)
+            if (expect_char(s, pos, '{')) {
+                while (true) {
+                    skip_ws(s, pos);
+                    if (pos < s.size() && s[pos] == '}') {
+                        pos++;
+                        break;
+                    }
+                    std::string mkey = parse_json_string(s, pos);
+                    expect_char(s, pos, ':');
+                    
+                    if (mkey == "fpga") {
+                        if (expect_char(s, pos, '{')) {
+                            while (true) {
+                                skip_ws(s, pos);
+                                if (pos < s.size() && s[pos] == '}') { pos++; break; }
+                                std::string fkey = parse_json_string(s, pos);
+                                expect_char(s, pos, ':');
+                                if (fkey == "array_size") accel.microarchitecture.array_size = static_cast<int>(parse_json_number(s, pos));
+                                else if (fkey == "local_sram_kb") accel.microarchitecture.local_sram_kb = static_cast<int>(parse_json_number(s, pos));
+                                else if (fkey == "dma_channels") accel.microarchitecture.dma_channels = static_cast<int>(parse_json_number(s, pos));
+                                else skip_json_value(s, pos);
+                                skip_ws(s, pos);
+                                if (pos < s.size() && s[pos] == ',') pos++;
+                            }
+                        }
+                    } else if (mkey == "cim") {
+                        if (expect_char(s, pos, '{')) {
+                            while (true) {
+                                skip_ws(s, pos);
+                                if (pos < s.size() && s[pos] == '}') { pos++; break; }
+                                std::string ckey = parse_json_string(s, pos);
+                                expect_char(s, pos, ':');
+                                if (ckey == "crossbar_rows") accel.microarchitecture.crossbar_rows = static_cast<int>(parse_json_number(s, pos));
+                                else if (ckey == "crossbar_cols") accel.microarchitecture.crossbar_cols = static_cast<int>(parse_json_number(s, pos));
+                                else if (ckey == "adc_resolution") accel.microarchitecture.adc_resolution = static_cast<int>(parse_json_number(s, pos));
+                                else if (ckey == "dac_resolution") accel.microarchitecture.dac_resolution = static_cast<int>(parse_json_number(s, pos));
+                                else if (ckey == "peripheral_digital_units") accel.microarchitecture.peripheral_digital_units = static_cast<int>(parse_json_number(s, pos));
+                                else skip_json_value(s, pos);
+                                skip_ws(s, pos);
+                                if (pos < s.size() && s[pos] == ',') pos++;
+                            }
+                        }
+                    } else if (mkey == "gpu") {
+                        if (expect_char(s, pos, '{')) {
+                            while (true) {
+                                skip_ws(s, pos);
+                                if (pos < s.size() && s[pos] == '}') { pos++; break; }
+                                std::string gkey = parse_json_string(s, pos);
+                                expect_char(s, pos, ':');
+                                if (gkey == "sm_count") accel.microarchitecture.sm_count = static_cast<int>(parse_json_number(s, pos));
+                                else if (gkey == "shared_memory_kb") accel.microarchitecture.shared_memory_kb = static_cast<int>(parse_json_number(s, pos));
+                                else if (gkey == "warp_size") accel.microarchitecture.warp_size = static_cast<int>(parse_json_number(s, pos));
+                                else if (gkey == "max_warps_per_sm") accel.microarchitecture.max_warps_per_sm = static_cast<int>(parse_json_number(s, pos));
+                                else skip_json_value(s, pos);
+                                skip_ws(s, pos);
+                                if (pos < s.size() && s[pos] == ',') pos++;
+                            }
+                        }
+                    } else if (mkey == "asic") {
+                        if (expect_char(s, pos, '{')) {
+                            while (true) {
+                                skip_ws(s, pos);
+                                if (pos < s.size() && s[pos] == '}') { pos++; break; }
+                                std::string akey = parse_json_string(s, pos);
+                                expect_char(s, pos, ':');
+                                if (akey == "pipeline_stages") accel.microarchitecture.pipeline_stages = static_cast<int>(parse_json_number(s, pos));
+                                else if (akey == "vector_width") accel.microarchitecture.vector_width = static_cast<int>(parse_json_number(s, pos));
+                                else if (akey == "custom_dims") {
+                                    if (expect_char(s, pos, '[')) {
+                                        while (true) {
+                                            skip_ws(s, pos);
+                                            if (pos < s.size() && s[pos] == ']') { pos++; break; }
+                                            accel.microarchitecture.custom_dims.push_back(static_cast<int>(parse_json_number(s, pos)));
+                                            skip_ws(s, pos);
+                                            if (pos < s.size() && s[pos] == ',') pos++;
+                                        }
+                                    }
+                                }
+                                else skip_json_value(s, pos);
+                                skip_ws(s, pos);
+                                if (pos < s.size() && s[pos] == ',') pos++;
+                            }
+                        }
+                    } else if (mkey == "common") {
+                        if (expect_char(s, pos, '{')) {
+                            while (true) {
+                                skip_ws(s, pos);
+                                if (pos < s.size() && s[pos] == '}') { pos++; break; }
+                                std::string ckey = parse_json_string(s, pos);
+                                expect_char(s, pos, ':');
+                                if (ckey == "memory_ports") accel.microarchitecture.memory_ports = static_cast<int>(parse_json_number(s, pos));
+                                else if (ckey == "memory_bandwidth_gbps") accel.microarchitecture.memory_bandwidth_gbps = parse_json_number(s, pos);
+                                else skip_json_value(s, pos);
+                                skip_ws(s, pos);
+                                if (pos < s.size() && s[pos] == ',') pos++;
+                            }
+                        }
+                    } else {
+                        skip_json_value(s, pos);
+                    }
+                    
+                    skip_ws(s, pos);
+                    if (pos < s.size() && s[pos] == ',') pos++;
+                }
+            }
         } else {
             skip_json_value(s, pos);
         }
@@ -413,8 +525,13 @@ static MappingDesc parse_mapping(const std::string& s, size_t& pos) {
         
         std::string key = parse_json_string(s, pos);
         expect_char(s, pos, ':');
-        std::string val = parse_json_string(s, pos);
-        mapping[key] = val;
+        skip_ws(s, pos);
+        if (pos < s.size() && s[pos] == '"') {
+            std::string val = parse_json_string(s, pos);
+            mapping[key] = val;
+        } else {
+            skip_json_value(s, pos);
+        }
         
         skip_ws(s, pos);
         if (pos < s.size() && s[pos] == ',') {

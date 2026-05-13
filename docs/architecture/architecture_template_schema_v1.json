@@ -1,230 +1,100 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "QE Architecture Template Schema v1",
-  "description": "Schema for defining parameterized architecture templates that can be instantiated into concrete IC graphs for DSE exploration.",
-  "version": "1.0.0",
-  
-  "definitions": {
-    "compute_unit_type": {
-      "type": "string",
-      "enum": [
-        "cim_array",
-        "traditional_fpga_dsp",
-        "pim_bram_based",
-        "pim_3d_stacked",
-        "hybrid_cim_dsp",
-        "custom"
-      ],
-      "description": "Type of compute unit for GEMM/matrix operations"
-    },
-    
-    "eigensolver_type": {
-      "type": "string",
-      "enum": [
-        "host_lapack",
-        "device_jacobi",
-        "device_qr",
-        "device_divide_conquer",
-        "hybrid_threshold"
-      ],
-      "description": "Eigensolver implementation strategy"
-    },
-    
-    "cluster_config": {
-      "type": "object",
-      "required": ["cluster_id", "role", "compute_unit", "enabled"],
-      "properties": {
-        "cluster_id": {
-          "type": "string",
-          "pattern": "^cluster_[a-z]$",
-          "description": "Cluster identifier (cluster_a, cluster_b, etc.)"
-        },
-        "role": {
-          "type": "string",
-          "enum": [
-            "operator_sweep",
-            "reduced_build",
-            "hardware_diag",
-            "refresh_residual",
-            "fused_operator_build",
-            "fused_diag_refresh"
-          ],
-          "description": "Functional role of this cluster"
-        },
-        "compute_unit": {
-          "$ref": "#/definitions/compute_unit_type"
-        },
-        "enabled": {
-          "type": "boolean",
-          "description": "Whether this cluster is active in the architecture"
-        },
-        "fusion_group": {
-          "type": "string",
-          "description": "Optional fusion group ID for merged clusters"
-        },
-        "timing_model": {
-          "type": "string",
-          "enum": ["proxy_formula", "cycle_accurate", "hybrid"],
-          "default": "proxy_formula"
-        },
-        "resource_budget": {
-          "type": "object",
-          "properties": {
-            "dsp_count": {"type": "integer", "minimum": 0},
-            "bram_18k_count": {"type": "integer", "minimum": 0},
-            "lut_count": {"type": "integer", "minimum": 0},
-            "uram_count": {"type": "integer", "minimum": 0}
-          }
-        }
-      }
-    }
-  },
-  
+  "title": "Generic DSE Architecture Template Schema v1",
+  "description": "Domain-neutral schema for reusable architecture candidates consumed by DSE/TLM/SystemC/gem5 flows.",
   "type": "object",
-  "required": ["template_id", "template_version", "family", "clusters", "policies"],
-  
+  "required": [
+    "template_id",
+    "template_version",
+    "description",
+    "compute_resources",
+    "memory_system",
+    "interconnect",
+    "fidelity_targets",
+    "claim_boundary"
+  ],
   "properties": {
     "template_id": {
       "type": "string",
-      "pattern": "^[a-z0-9_]+$",
-      "description": "Unique identifier for this template"
+      "pattern": "^[a-z0-9_]+$"
     },
-    
     "template_version": {
       "type": "string",
-      "pattern": "^v[0-9]+$",
-      "description": "Template version (v1, v2, etc.)"
+      "pattern": "^v[0-9]+$"
     },
-    
-    "family": {
-      "type": "string",
-      "enum": ["F1", "F2", "F3", "F4", "F5", "custom"],
-      "description": "Architecture family classification"
+    "description": {
+      "type": "string"
     },
-    
-    "label": {
-      "type": "string",
-      "description": "Human-readable description of this architecture"
-    },
-    
-    "clusters": {
+    "compute_resources": {
       "type": "array",
       "minItems": 1,
-      "maxItems": 8,
       "items": {
-        "$ref": "#/definitions/cluster_config"
-      },
-      "description": "Cluster configuration array"
-    },
-    
-    "policies": {
-      "type": "object",
-      "required": ["diag_policy", "offload_scope", "resident_policy", "partition_strategy"],
-      "properties": {
-        "diag_policy": {
-          "type": "string",
-          "enum": ["cpu_only", "device_first_fallback", "aggressive_device"],
-          "description": "Diagonalization placement policy"
-        },
-        "offload_scope": {
-          "type": "string",
-          "enum": ["single_hotpath", "balanced", "device_heavy"],
-          "description": "Scope of device offload"
-        },
-        "resident_policy": {
-          "type": "string",
-          "enum": ["fit_first", "spill_tolerant"],
-          "description": "Resident memory management policy"
-        },
-        "partition_strategy": {
-          "type": "string",
-          "enum": [
-            "single_hotpath_partition",
-            "operator_build_fused__diag__refresh",
-            "operator__build__diag__refresh",
-            "operator__build_diag_fused__refresh",
-            "operator_build_fused__diag_refresh_fused"
-          ],
-          "description": "Stage partitioning strategy"
-        }
-      }
-    },
-    
-    "compute_config": {
-      "type": "object",
-      "properties": {
-        "clock_mhz": {
-          "type": "number",
-          "minimum": 100,
-          "maximum": 500,
-          "description": "Target clock frequency in MHz"
-        },
-        "gemm_tile_size": {
-          "type": "integer",
-          "minimum": 8,
-          "maximum": 64,
-          "description": "GEMM tile/block size"
-        },
-        "dsp_array_dims": {
-          "type": "object",
-          "properties": {
-            "rows": {"type": "integer", "minimum": 1},
-            "cols": {"type": "integer", "minimum": 1}
-          }
-        },
-        "cim_config": {
-          "type": "object",
-          "properties": {
-            "moduli_count": {"type": "integer", "minimum": 8, "maximum": 32},
-            "use_karatsuba": {"type": "boolean"},
-            "residue_width": {"type": "integer"}
-          }
-        }
-      }
-    },
-    
-    "memory_hierarchy": {
-      "type": "object",
-      "properties": {
-        "l1_buffer_kb": {"type": "number"},
-        "l2_buffer_kb": {"type": "number"},
-        "resident_budget_scale": {"type": "number", "minimum": 0.1, "maximum": 2.0}
-      }
-    },
-    
-    "component_overrides": {
-      "type": "object",
-      "description": "Override specific component implementations",
-      "additionalProperties": {
         "type": "object",
+        "required": ["resource_id", "resource_type", "supported_ops"],
         "properties": {
-          "component_ref": {"type": "string"},
-          "implementation_variant": {"type": "string"},
-          "config_overrides": {"type": "object"}
-        }
+          "resource_id": {"type": "string"},
+          "resource_type": {
+            "type": "string",
+            "enum": ["host_cpu", "gpu", "fpga", "cim", "near_memory", "cgra", "asic", "custom"]
+          },
+          "clock_mhz": {"type": "number", "minimum": 1},
+          "supported_ops": {
+            "type": "array",
+            "items": {"type": "string"}
+          },
+          "memory_capacity_mb": {"type": "number", "minimum": 0},
+          "power_model": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "microarchitecture": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "additionalProperties": true
       }
     },
-    
-    "dse_metadata": {
+    "memory_system": {
       "type": "object",
+      "required": ["host_memory_gb"],
       "properties": {
-        "exploration_priority": {
-          "type": "string",
-          "enum": ["high", "medium", "low"]
-        },
-        "expected_performance_class": {
-          "type": "string",
-          "enum": ["baseline", "competitive", "aggressive"]
-        },
-        "risk_level": {
-          "type": "string",
-          "enum": ["low", "medium", "high"]
-        },
-        "tags": {
-          "type": "array",
-          "items": {"type": "string"}
-        }
+        "host_memory_gb": {"type": "number", "minimum": 0},
+        "hbm_stacks": {"type": "integer", "minimum": 0},
+        "scratchpad_mb": {"type": "number", "minimum": 0},
+        "coherency_model": {"type": "string"}
+      },
+      "additionalProperties": true
+    },
+    "interconnect": {
+      "type": "object",
+      "required": ["topology", "bandwidth_gbps"],
+      "properties": {
+        "topology": {"type": "string"},
+        "bandwidth_gbps": {"type": "number", "minimum": 0},
+        "latency_ns": {"type": "number", "minimum": 0}
+      },
+      "additionalProperties": true
+    },
+    "mapping_policy_hints": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "fidelity_targets": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["l1_analytical", "l2_tlm", "l3_systemc", "l4_gem5_systemc"]
       }
+    },
+    "claim_boundary": {
+      "type": "string",
+      "enum": ["template_only", "simulation_candidate", "validated_candidate"]
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": true
     }
-  }
+  },
+  "additionalProperties": false
 }

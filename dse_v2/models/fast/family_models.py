@@ -7,7 +7,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any, Dict, Mapping
 
-from interfaces.types import DesignPoint
+from dse_v2.interfaces.types import DesignPoint
 
 
 @dataclass(frozen=True)
@@ -36,23 +36,23 @@ class FamilyModel(ABC):
         system = dict(params.get('system_level', {}))
         workload_dict = dict(workload)
 
-        npw = max(1.0, float(workload_dict.get('npw', 2945)))
-        nkb = max(1.0, float(workload_dict.get('nkb', max(16.0, npw / 32.0))))
-        m = max(1.0, float(workload_dict.get('m', workload_dict.get('nbnd', 16))))
+        problem_size = max(1.0, float(workload_dict.get('problem_size', 4096)))
+        feature_size = max(1.0, float(workload_dict.get('feature_size', max(16.0, problem_size / 32.0))))
+        batch_size = max(1.0, float(workload_dict.get('batch_size', 16)))
         iterations = max(1.0, float(workload_dict.get('iterations', workload_dict.get('total_iterations', 1.0))))
         mix = self._kernel_mix(workload_dict)
 
-        h_psi_ops = (5.0 * npw * math.log2(max(2.0, npw)) * m) + (2.0 * npw * nkb * m)
-        cdiaghg_ops = max(1.0, (nkb ** 3) * max(1.0, m / 16.0))
-        reduction_ops = max(1.0, npw * m * 0.5)
-        refresh_ops = max(1.0, npw * m * 0.25)
-        bytes_moved = (npw * m * 16.0) + (npw * nkb * 16.0) + (m * m * 16.0)
+        compute_ops = (5.0 * problem_size * math.log2(max(2.0, problem_size)) * batch_size) + (2.0 * problem_size * feature_size * batch_size)
+        solve_ops = max(1.0, (feature_size ** 3) * max(1.0, batch_size / 16.0))
+        reduce_ops = max(1.0, problem_size * batch_size * 0.5)
+        update_ops = max(1.0, problem_size * batch_size * 0.25)
+        bytes_moved = (problem_size * batch_size * 16.0) + (problem_size * feature_size * 16.0) + (batch_size * batch_size * 16.0)
 
         kernel_times = self._kernel_times(
-            h_psi_ops=h_psi_ops,
-            cdiaghg_ops=cdiaghg_ops,
-            reduction_ops=reduction_ops,
-            refresh_ops=refresh_ops,
+            compute_ops=compute_ops,
+            solve_ops=solve_ops,
+            reduce_ops=reduce_ops,
+            update_ops=update_ops,
             bytes_moved=bytes_moved,
             iterations=iterations,
             mix=mix,
@@ -77,7 +77,7 @@ class FamilyModel(ABC):
             feasible=feasible,
             kernel_times_s=kernel_times,
             resource_utilization=resource_utilization,
-            metadata={'kernel_mix_h_psi': mix['h_psi'], 'kernel_mix_cdiaghg': mix['cdiaghg'], 'kernel_mix_reduction': mix['reduction'], 'kernel_mix_refresh': mix['refresh']},
+            metadata={'kernel_mix_compute': mix['compute'], 'kernel_mix_solve': mix['solve'], 'kernel_mix_reduce': mix['reduce'], 'kernel_mix_update': mix['update']},
         )
 
     def _kernel_mix(self, workload: Mapping[str, Any]) -> Dict[str, float]:
@@ -85,23 +85,23 @@ class FamilyModel(ABC):
         if not isinstance(raw, Mapping):
             raw = {}
         mix = {
-            'h_psi': float(raw.get('h_psi', 0.68)),
-            'cdiaghg': float(raw.get('cdiaghg', 0.23)),
-            'reduction': float(raw.get('reduction', 0.04)),
-            'refresh': float(raw.get('refresh', 0.05)),
+            'compute': float(raw.get('compute', 0.55)),
+            'solve': float(raw.get('solve', 0.20)),
+            'reduce': float(raw.get('reduce', 0.15)),
+            'update': float(raw.get('update', 0.10)),
         }
         total = sum(max(0.0, value) for value in mix.values())
         if total <= 0.0:
-            return {'h_psi': 0.68, 'cdiaghg': 0.23, 'reduction': 0.04, 'refresh': 0.05}
+            return {'compute': 0.55, 'solve': 0.20, 'reduce': 0.15, 'update': 0.10}
         return {key: max(0.0, value) / total for key, value in mix.items()}
 
     def _kernel_times(
         self,
         *,
-        h_psi_ops: float,
-        cdiaghg_ops: float,
-        reduction_ops: float,
-        refresh_ops: float,
+        compute_ops: float,
+        solve_ops: float,
+        reduce_ops: float,
+        update_ops: float,
         bytes_moved: float,
         iterations: float,
         mix: Mapping[str, float],
@@ -179,27 +179,27 @@ class F1PipelineModel(FamilyModel):
     family = 'F1'
     model_name = 'F1PipelineModel'
 
-    def _kernel_times(self, *, h_psi_ops: float, cdiaghg_ops: float, reduction_ops: float, refresh_ops: float, bytes_moved: float, iterations: float, mix: Mapping[str, float], system: Mapping[str, Any], workload: Mapping[str, Any]) -> Dict[str, float]:
+    def _kernel_times(self, *, compute_ops: float, solve_ops: float, reduce_ops: float, update_ops: float, bytes_moved: float, iterations: float, mix: Mapping[str, float], system: Mapping[str, Any], workload: Mapping[str, Any]) -> Dict[str, float]:
         scale = max(1.0, iterations)
         clock_mhz = float(system.get('clock_mhz', 250.0))
         pipeline_depth = float(system.get('pipeline_depth', 4.0))
         parallel_units = max(1.0, float(system.get('parallel_units', 4.0)))
         rate = clock_mhz * parallel_units * 1.0e6 * (0.55 + 0.05 * pipeline_depth)
-        t_h = h_psi_ops * mix['h_psi'] * scale / rate
-        t_c = cdiaghg_ops * mix['cdiaghg'] * scale / (rate * 0.35)
-        t_r = reduction_ops * mix['reduction'] * scale / (rate * 0.75)
-        t_f = refresh_ops * mix['refresh'] * scale / (rate * 0.85)
+        t_h = compute_ops * mix['compute'] * scale / rate
+        t_c = solve_ops * mix['solve'] * scale / (rate * 0.35)
+        t_r = reduce_ops * mix['reduce'] * scale / (rate * 0.75)
+        t_f = update_ops * mix['update'] * scale / (rate * 0.85)
         return {
-            'h_psi': t_h,
-            'cdiaghg': t_c,
-            'reduction': t_r,
-            'refresh': t_f,
+            'compute': t_h,
+            'solve': t_c,
+            'reduce': t_r,
+            'update': t_f,
         }
 
     def _combine_kernel_times(self, kernel_times: Mapping[str, float], mix: Mapping[str, float], system: Mapping[str, Any], workload: Mapping[str, Any], iterations: float) -> float:
         scale = max(1.0, iterations)
         per_iter = {key: value / scale for key, value in kernel_times.items()}
-        barrier = (per_iter['h_psi'] + per_iter['cdiaghg'] + per_iter['reduction'] + per_iter['refresh']) * 0.12
+        barrier = (per_iter['compute'] + per_iter['solve'] + per_iter['reduce'] + per_iter['update']) * 0.12
         return (max(per_iter.values()) + barrier) * scale
 
 
@@ -207,16 +207,16 @@ class F2SystolicModel(FamilyModel):
     family = 'F2'
     model_name = 'F2SystolicModel'
 
-    def _kernel_times(self, *, h_psi_ops: float, cdiaghg_ops: float, reduction_ops: float, refresh_ops: float, bytes_moved: float, iterations: float, mix: Mapping[str, float], system: Mapping[str, Any], workload: Mapping[str, Any]) -> Dict[str, float]:
+    def _kernel_times(self, *, compute_ops: float, solve_ops: float, reduce_ops: float, update_ops: float, bytes_moved: float, iterations: float, mix: Mapping[str, float], system: Mapping[str, Any], workload: Mapping[str, Any]) -> Dict[str, float]:
         scale = max(1.0, iterations)
         array_size = max(1.0, float(system.get('array_size', workload.get('array_size', 1024.0))))
         f_pe = max(1.0, float(system.get('f_pe', 1.0)))
         util = max(0.05, float(system.get('utilization', 0.85)))
-        gemm_time = h_psi_ops * mix['h_psi'] * scale / (array_size * f_pe * util * 1.0e6)
-        diag_time = cdiaghg_ops * mix['cdiaghg'] * scale / (array_size * f_pe * util * 3.5e5)
-        reduction_time = reduction_ops * mix['reduction'] * scale / (array_size * f_pe * util * 7.5e5)
-        refresh_time = refresh_ops * mix['refresh'] * scale / (array_size * f_pe * util * 9.0e5)
-        return {'h_psi': gemm_time, 'cdiaghg': diag_time, 'reduction': reduction_time, 'refresh': refresh_time}
+        gemm_time = compute_ops * mix['compute'] * scale / (array_size * f_pe * util * 1.0e6)
+        diag_time = solve_ops * mix['solve'] * scale / (array_size * f_pe * util * 3.5e5)
+        reduction_time = reduce_ops * mix['reduce'] * scale / (array_size * f_pe * util * 7.5e5)
+        refresh_time = update_ops * mix['update'] * scale / (array_size * f_pe * util * 9.0e5)
+        return {'compute': gemm_time, 'solve': diag_time, 'reduce': reduction_time, 'update': refresh_time}
 
     def _combine_kernel_times(self, kernel_times: Mapping[str, float], mix: Mapping[str, float], system: Mapping[str, Any], workload: Mapping[str, Any], iterations: float) -> float:
         scale = max(1.0, iterations)
@@ -228,15 +228,15 @@ class F3DataflowModel(FamilyModel):
     family = 'F3'
     model_name = 'F3DataflowModel'
 
-    def _kernel_times(self, *, h_psi_ops: float, cdiaghg_ops: float, reduction_ops: float, refresh_ops: float, bytes_moved: float, iterations: float, mix: Mapping[str, float], system: Mapping[str, Any], workload: Mapping[str, Any]) -> Dict[str, float]:
+    def _kernel_times(self, *, compute_ops: float, solve_ops: float, reduce_ops: float, update_ops: float, bytes_moved: float, iterations: float, mix: Mapping[str, float], system: Mapping[str, Any], workload: Mapping[str, Any]) -> Dict[str, float]:
         scale = max(1.0, iterations)
         compute_scale = max(0.5, float(system.get('compute_scale', 1.0)))
         memory_scale = max(0.5, float(system.get('memory_scale', 1.0)))
         interconnect_scale = max(0.5, float(system.get('interconnect_scale', 1.0)))
-        compute = (h_psi_ops * mix['h_psi'] + cdiaghg_ops * mix['cdiaghg'] + reduction_ops * mix['reduction'] + refresh_ops * mix['refresh']) * scale / (2.5e9 * compute_scale)
+        compute = (compute_ops * mix['compute'] + solve_ops * mix['solve'] + reduce_ops * mix['reduce'] + update_ops * mix['update']) * scale / (2.5e9 * compute_scale)
         memory = bytes_moved * scale / (77.0e9 * memory_scale)
         interconnect = (bytes_moved * 0.12) * scale / (40.0e9 * interconnect_scale)
-        return {'h_psi': compute * mix['h_psi'], 'cdiaghg': compute * mix['cdiaghg'], 'reduction': compute * mix['reduction'], 'refresh': compute * mix['refresh'], 'compute': compute, 'memory': memory, 'interconnect': interconnect}
+        return {'compute': compute, 'solve': compute * mix['solve'], 'reduce': compute * mix['reduce'], 'update': compute * mix['update'], 'memory': memory, 'interconnect': interconnect}
 
     def _combine_kernel_times(self, kernel_times: Mapping[str, float], mix: Mapping[str, float], system: Mapping[str, Any], workload: Mapping[str, Any], iterations: float) -> float:
         scale = max(1.0, iterations)
@@ -248,22 +248,22 @@ class F4CimDspHbmModel(FamilyModel):
     family = 'F4'
     model_name = 'F4CimDspHbmModel'
 
-    def _kernel_times(self, *, h_psi_ops: float, cdiaghg_ops: float, reduction_ops: float, refresh_ops: float, bytes_moved: float, iterations: float, mix: Mapping[str, float], system: Mapping[str, Any], workload: Mapping[str, Any]) -> Dict[str, float]:
+    def _kernel_times(self, *, compute_ops: float, solve_ops: float, reduce_ops: float, update_ops: float, bytes_moved: float, iterations: float, mix: Mapping[str, float], system: Mapping[str, Any], workload: Mapping[str, Any]) -> Dict[str, float]:
         scale = max(1.0, iterations)
         cim_rate = float(system.get('cim_rate_scale', 1.0)) * 3.2e9
         dsp_rate = float(system.get('dsp_rate_scale', 1.0)) * 2.1e9
         hbm_bw = float(system.get('hbm_bw_gbs', 128.0)) * 1.0e9
-        operator = min(h_psi_ops / cim_rate, h_psi_ops / dsp_rate) * mix['h_psi'] * scale
-        diag = cdiaghg_ops * mix['cdiaghg'] * scale / (1.8e9)
-        reduction = reduction_ops * mix['reduction'] * scale / (2.8e9)
-        refresh = refresh_ops * mix['refresh'] * scale / (3.2e9)
+        operator = min(compute_ops / cim_rate, compute_ops / dsp_rate) * mix['compute'] * scale
+        diag = solve_ops * mix['solve'] * scale / (1.8e9)
+        reduction = reduce_ops * mix['reduce'] * scale / (2.8e9)
+        refresh = update_ops * mix['update'] * scale / (3.2e9)
         memory = bytes_moved * scale / hbm_bw
-        return {'h_psi': operator, 'cdiaghg': diag, 'reduction': reduction, 'refresh': refresh, 'memory': memory}
+        return {'compute': operator, 'solve': diag, 'reduce': reduction, 'update': refresh, 'memory': memory}
 
     def _combine_kernel_times(self, kernel_times: Mapping[str, float], mix: Mapping[str, float], system: Mapping[str, Any], workload: Mapping[str, Any], iterations: float) -> float:
         scale = max(1.0, iterations)
         per_iter = {key: value / scale for key, value in kernel_times.items()}
-        compute = per_iter['h_psi'] + per_iter['cdiaghg'] + per_iter['reduction'] + per_iter['refresh']
+        compute = per_iter['compute'] + per_iter['solve'] + per_iter['reduce'] + per_iter['update']
         return (max(compute, per_iter['memory']) + 0.5 * per_iter['memory']) * scale
 
 
@@ -271,58 +271,58 @@ class F5CgraModel(FamilyModel):
     family = 'F5'
     model_name = 'F5CgraModel'
 
-    def _kernel_times(self, *, h_psi_ops: float, cdiaghg_ops: float, reduction_ops: float, refresh_ops: float, bytes_moved: float, iterations: float, mix: Mapping[str, float], system: Mapping[str, Any], workload: Mapping[str, Any]) -> Dict[str, float]:
+    def _kernel_times(self, *, compute_ops: float, solve_ops: float, reduce_ops: float, update_ops: float, bytes_moved: float, iterations: float, mix: Mapping[str, float], system: Mapping[str, Any], workload: Mapping[str, Any]) -> Dict[str, float]:
         scale = max(1.0, iterations)
         rows = max(1.0, float(system.get('cgra_rows', 16.0)))
         cols = max(1.0, float(system.get('cgra_cols', 16.0)))
         fabric = rows * cols * max(0.5, float(system.get('compute_scale', 1.0)))
         reconfig = float(workload.get('reconfiguration_cycles', 4000.0)) / (float(system.get('clock_mhz', 250.0)) * 1.0e6)
-        h = h_psi_ops * mix['h_psi'] * scale / (fabric * 2.4e9)
-        c = cdiaghg_ops * mix['cdiaghg'] * scale / (fabric * 0.85e9)
-        r = reduction_ops * mix['reduction'] * scale / (fabric * 1.6e9)
-        f = refresh_ops * mix['refresh'] * scale / (fabric * 1.9e9)
-        return {'h_psi': h + reconfig * 0.35 * scale, 'cdiaghg': c, 'reduction': r, 'refresh': f, 'reconfig': reconfig * scale}
+        h = compute_ops * mix['compute'] * scale / (fabric * 2.4e9)
+        c = solve_ops * mix['solve'] * scale / (fabric * 0.85e9)
+        r = reduce_ops * mix['reduce'] * scale / (fabric * 1.6e9)
+        f = update_ops * mix['update'] * scale / (fabric * 1.9e9)
+        return {'compute': h + reconfig * 0.35 * scale, 'solve': c, 'reduce': r, 'update': f, 'reconfig': reconfig * scale}
 
     def _combine_kernel_times(self, kernel_times: Mapping[str, float], mix: Mapping[str, float], system: Mapping[str, Any], workload: Mapping[str, Any], iterations: float) -> float:
         scale = max(1.0, iterations)
         per_iter = {key: value / scale for key, value in kernel_times.items()}
-        return (sum(per_iter[k] for k in ('h_psi', 'cdiaghg', 'reduction', 'refresh')) + per_iter['reconfig'] * 0.25) * scale
+        return (sum(per_iter[k] for k in ('compute', 'solve', 'reduce', 'update')) + per_iter['reconfig'] * 0.25) * scale
 
 
 class F6CustomModel(FamilyModel):
     family = 'F6'
     model_name = 'F6CustomModel'
 
-    def _kernel_times(self, *, h_psi_ops: float, cdiaghg_ops: float, reduction_ops: float, refresh_ops: float, bytes_moved: float, iterations: float, mix: Mapping[str, float], system: Mapping[str, Any], workload: Mapping[str, Any]) -> Dict[str, float]:
+    def _kernel_times(self, *, compute_ops: float, solve_ops: float, reduce_ops: float, update_ops: float, bytes_moved: float, iterations: float, mix: Mapping[str, float], system: Mapping[str, Any], workload: Mapping[str, Any]) -> Dict[str, float]:
         scale = max(1.0, iterations)
         chiplets = max(1.0, float(system.get('chiplets', 4.0)))
         noc_bw = float(system.get('noc_bw_gbs', 256.0)) * 1.0e9
         local = chiplets * float(system.get('local_compute_scale', 1.0))
-        h = h_psi_ops * mix['h_psi'] * scale / (local * 2.1e9)
-        c = cdiaghg_ops * mix['cdiaghg'] * scale / (local * 0.95e9)
-        r = reduction_ops * mix['reduction'] * scale / (local * 1.7e9)
-        f = refresh_ops * mix['refresh'] * scale / (local * 1.8e9)
+        h = compute_ops * mix['compute'] * scale / (local * 2.1e9)
+        c = solve_ops * mix['solve'] * scale / (local * 0.95e9)
+        r = reduce_ops * mix['reduce'] * scale / (local * 1.7e9)
+        f = update_ops * mix['update'] * scale / (local * 1.8e9)
         noc = bytes_moved * scale / noc_bw
         skew = 0.002 * math.log2(chiplets + 1.0) * scale
-        return {'h_psi': h, 'cdiaghg': c, 'reduction': r, 'refresh': f, 'noc': noc, 'skew': skew}
+        return {'compute': h, 'solve': c, 'reduce': r, 'update': f, 'noc': noc, 'skew': skew}
 
     def _combine_kernel_times(self, kernel_times: Mapping[str, float], mix: Mapping[str, float], system: Mapping[str, Any], workload: Mapping[str, Any], iterations: float) -> float:
         scale = max(1.0, iterations)
         per_iter = {key: value / scale for key, value in kernel_times.items()}
-        return (max(per_iter['h_psi'] + per_iter['cdiaghg'] + per_iter['reduction'] + per_iter['refresh'], per_iter['noc']) + per_iter['skew']) * scale
+        return (max(per_iter['compute'] + per_iter['solve'] + per_iter['reduce'] + per_iter['update'], per_iter['noc']) + per_iter['skew']) * scale
 
 
 class F7FutureModel(FamilyModel):
     family = 'F7'
     model_name = 'F7FutureModel'
 
-    def _kernel_times(self, *, h_psi_ops: float, cdiaghg_ops: float, reduction_ops: float, refresh_ops: float, bytes_moved: float, iterations: float, mix: Mapping[str, float], system: Mapping[str, Any], workload: Mapping[str, Any]) -> Dict[str, float]:
+    def _kernel_times(self, *, compute_ops: float, solve_ops: float, reduce_ops: float, update_ops: float, bytes_moved: float, iterations: float, mix: Mapping[str, float], system: Mapping[str, Any], workload: Mapping[str, Any]) -> Dict[str, float]:
         scale = max(1.0, iterations)
-        blend = 0.5 * (h_psi_ops / 2.0e9) + 0.3 * (cdiaghg_ops / 1.2e9) + 0.1 * (reduction_ops / 1.6e9) + 0.1 * (refresh_ops / 1.8e9)
+        blend = 0.5 * (compute_ops / 2.0e9) + 0.3 * (solve_ops / 1.2e9) + 0.1 * (reduce_ops / 1.6e9) + 0.1 * (update_ops / 1.8e9)
         adaptive = blend / max(1.0, float(system.get('adaptivity_factor', 1.0)))
-        return {'h_psi': adaptive * mix['h_psi'] * scale, 'cdiaghg': adaptive * mix['cdiaghg'] * scale, 'reduction': adaptive * mix['reduction'] * scale, 'refresh': adaptive * mix['refresh'] * scale, 'reconfigure': 0.003 * float(system.get('adaptivity_factor', 1.0)) * scale}
+        return {'compute': adaptive * mix['compute'] * scale, 'solve': adaptive * mix['solve'] * scale, 'reduce': adaptive * mix['reduce'] * scale, 'update': adaptive * mix['update'] * scale, 'reconfigure': 0.003 * float(system.get('adaptivity_factor', 1.0)) * scale}
 
     def _combine_kernel_times(self, kernel_times: Mapping[str, float], mix: Mapping[str, float], system: Mapping[str, Any], workload: Mapping[str, Any], iterations: float) -> float:
         scale = max(1.0, iterations)
         per_iter = {key: value / scale for key, value in kernel_times.items()}
-        return (sum(per_iter[k] for k in ('h_psi', 'cdiaghg', 'reduction', 'refresh')) + per_iter['reconfigure']) * scale
+        return (sum(per_iter[k] for k in ('compute', 'solve', 'reduce', 'update')) + per_iter['reconfigure']) * scale

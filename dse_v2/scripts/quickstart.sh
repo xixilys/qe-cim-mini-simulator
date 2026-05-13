@@ -2,56 +2,31 @@
 
 set -e
 
-echo "🚀 DSE v2 Quick Start Guide"
-echo "================================"
-echo ""
+echo "🚀 Generic DSE / TLM / SystemC quick start"
+echo "=========================================="
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 PROJECT_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
+cd "$PROJECT_ROOT"
 
-cd "$PROJECT_ROOT/dse_v2"
+echo "Step 1: Validate Python modules"
+python3 -m compileall -q dse_v2
 
-echo "Step 1: Setup environment"
-echo "-------------------------"
-if [ ! -d "venv" ]; then
-    echo "Creating virtual environment..."
-    bash scripts/setup/setup_env.sh
-else
-    echo "✓ Virtual environment already exists"
-fi
+echo "Step 2: Run focused generic workflow tests"
+python3 -m pytest -q \
+  dse_v2/tests/test_workload_importer_registry.py \
+  dse_v2/tests/test_generic_workload_ir.py \
+  dse_v2/tests/test_step2_architecture_mapping_workflow.py \
+  dse_v2/tests/test_step3_cross_step_workflow.py
 
-echo ""
-echo "Step 2: Activate environment"
-echo "----------------------------"
-source venv/bin/activate
-echo "✓ Environment activated"
+echo "Step 3: Run a generic sparse workload pilot"
+python3 dse_v2/scripts/dse/run_full_flow_pilot.py \
+  --profile sparse_la \
+  --importer generic_json \
+  --generator sparse_spmv \
+  --backend systemc \
+  --out runs/dse/generic_systemc_pilot \
+  --timeout 60
 
-echo ""
-echo "Step 3: Analyze existing workloads"
-echo "-----------------------------------"
-python3 scripts/workload/analyze_existing_workloads.py
-
-echo ""
-echo "Step 4: Define design space"
-echo "---------------------------"
-python3 scripts/setup/define_design_space.py
-
-echo ""
-echo "Step 5: Test fast performance model"
-echo "------------------------------------"
-python3 models/fast/performance_model.py
-
-echo ""
-echo "Step 6: Run Bayesian Optimization (50 iterations)"
-echo "--------------------------------------------------"
-python3 scripts/dse/run_bayesian_dse.py
-
-echo ""
-echo "✅ Quick start complete!"
-echo ""
-echo "Results saved to: results/pareto/bayesian_dse_results_v2.csv"
-echo ""
-echo "Next steps:"
-echo "  - Review Pareto frontier in results/"
-echo "  - Add new workloads to workloads/definitions/"
-echo "  - Adjust design space in design_space/definitions/"
+echo "✅ Quick start complete. Active output: runs/dse/generic_systemc_pilot"
+echo "Legacy application-specific files are not part of the active tree."

@@ -3,7 +3,7 @@
 > **文档版本：** v1.0  
 > **日期：** 2026-05-11  
 > **状态：** 操作手册与证据审查指南；全局设计入口见 `docs/architecture/generic_dse_global_system_design_v0.md`  
-> **旧手册：** `docs/benchmarks/qe_dse_framework_user_manual_v0.md` 继续作为 QE reference / legacy lane 使用  
+> **旧手册：** 应用专用历史材料已从 active tree 移除；如需单个 artifact，应从历史中定点恢复  
 > **核心原则：** DSE 组织候选与证据；可信结论由 evidence、claim gate 和 adjudicator 共同约束。
 
 ---
@@ -12,12 +12,12 @@
 
 本手册说明当前仓库中的通用 Design Space Exploration（DSE）与仿真证据闭环系统如何被运行、扩展和审查。全局架构以 `docs/architecture/generic_dse_global_system_design_v0.md` 为准；本文只保留执行规则、artifact 规则和 claim 边界。它面向 4 类读者：
 
-1. 后续开发者：需要继续实现 workload adapter、architecture family、backend 或 optimizer。
+1. 后续开发者：需要继续实现 workload profile/importer、architecture family、backend 或 optimizer。
 2. 实验执行者：需要跑通 Step1、Step2、Step3 和反馈闭环。
 3. 报告编写者：需要把 artifacts 组织成 advisor-facing 或论文阶段材料。
 4. 审查者：需要判断某个结果是否能支撑可信 claim。
 
-本手册的主身份不再是 QE-only 辅助工具，而是：
+本手册的主身份是通用 DSE / 仿真证据闭环操作手册：
 
 ```text
 generic workload package
@@ -47,7 +47,7 @@ Adjudicator controls public decision authority.
 | “SystemC 进程退出 0，所以结论可信” | 还必须检查 `verdict.json`、`claim_validation.json`、coverage 和 evidence ids。 |
 | “单个 pilot 证明全局 Pareto frontier” | 单个 full-flow pilot 只能是 feasibility / timing evidence。 |
 | “gem5+SystemC 已自动可信” | 必须有通过的 `gem5_l4_proof.json`。 |
-| “QE 字段是核心 IR 必需字段” | QE 是 reference adapter，不是 core schema。 |
+| “应用专用字段是核心 IR 必需字段” | 应用/领域字段只能属于 profile/importer metadata，不是 core schema。 |
 | “projection-only row 是 native executor result” | `projection_only` 只能用于解释、筛选或提名。 |
 
 ---
@@ -63,7 +63,7 @@ Adjudicator controls public decision authority.
 │                        Generic DSE Loop                       │
 ├──────────────────────────────────────────────────────────────┤
 │ Step1                                                        │
-│   Workload source / trace / graph / adapter input             │
+│   Workload source / trace / graph / importer input            │
 │        ↓                                                      │
 │   WorkloadPackage + ComputeGraph + graph lowering             │
 │        ↓                                                      │
@@ -86,7 +86,7 @@ Adjudicator controls public decision authority.
 
 | 层级 | 作用 | 当前可信边界 |
 | --- | --- | --- |
-| Workload layer | 接入 domain source，生成 `WorkloadPackage` / `ComputeGraph` | QE 只是 `dft_qe` reference adapter。 |
+| Workload layer | 接入 domain source，生成 `WorkloadPackage` / `ComputeGraph` | 领域专用内容只能作为 profile/importer；DFT→FPGA 是当前主证明场景但不进入 core schema。 |
 | Design-space layer | 定义 architecture family、component、binding 和 constraints | 无 binding 的 family 是 candidate-only。 |
 | Mapping/search layer | 生成 legal mappings、候选和 promotion decision | 不能输出 trusted final claim。 |
 | Simulation layer | 运行 L3 SystemC 或 L4 gem5+SystemC | L4 需要 `gem5_l4_proof.json` 通过。 |
@@ -117,7 +117,7 @@ Adjudicator controls public decision authority.
 | `model/generic_sim_backend` | implemented L3 backend | 支持 `standalone_systemc`、heterogeneous accelerators、graph execution、timing/resource metrics。 | `standalone_systemc`、`passed`、`failed`、`blocked` |
 | `gem5_integration` generic accel | partial / blocked for L4 trust | 控制路径和 L4 proof harness 存在，但可信 L4 必须由 proof artifacts 支撑。 | `MMIO Timed Stub / L4 Blocked Prototype`、`gem5_l4_proof.json` |
 | BO / Ax / BoTorch scripts | proposal / experimental | 可生成候选或 Pareto-like rows，但不能直接声明 trusted winner。 | `candidate proposal layer`、`predicted-only` |
-| QE reference path | reference adapter / legacy lane | 可作为 DFT/QE reference workload 和 legacy Stage-A 入口。 | `dft_qe`、`reference adapter`、`legacy Stage-A` |
+| DFT/reference profiles | reference profile/importer / vertical proof lane | DFT→FPGA 可作为主证明场景进入 generic flow；其他历史材料仍需隔离。 | `reference importer`、`vertical proof lane`、`legacy lane` |
 
 ### 2.1 状态等级
 
@@ -136,13 +136,13 @@ Adjudicator controls public decision authority.
 
 ### 3.1 WorkloadPackage
 
-`WorkloadPackage` 是进入通用 DSE 的 workload contract。它携带 workload id、family、source provenance、adapter id/version、claim boundary、domain metadata 和 graph payload。
+`WorkloadPackage` 是进入通用 DSE 的 workload contract。它携带 workload id、family、source provenance、profile/importer id/version、claim boundary、domain metadata 和 graph payload。
 
 核心规则：
 
 - Core DSE 只能依赖 generic fields。
-- Domain-specific metadata 归 adapter 所有。
-- QE 的 `npw`、`nkb`、`h_psi`、`diagonalize` 等不能成为 core schema 必需字段。
+- Domain-specific metadata 归 profile/importer 所有。
+- 应用/领域专用参数和节点名不能成为 core schema 必需字段。
 - reduced、synthetic、trace-only、diagnostic-only workload 不能通过 full-workload trusted claim gate。
 
 ### 3.2 ComputeGraph
@@ -152,7 +152,7 @@ Adjudicator controls public decision authority.
 - open `op_type`；
 - nodes、edges、tensor/resource metadata；
 - loops / streaming / dynamic constructs 的 bounds 或 summary；
-- adapter-owned opaque metadata；
+- profile/importer-owned opaque metadata；
 - source-to-executable graph lowering audit。
 
 ### 3.3 DesignPoint
@@ -188,30 +188,30 @@ Step1 的职责是把 domain source 归一化为可审计的 workload artifacts�
 
 ```text
 domain input
-  -> adapter registry
+  -> profile registry + importer registry
   -> WorkloadPackage
   -> ComputeGraph
   -> graph lowering report
   -> required coverage
 ```
 
-### 4.2 Adapter registry
+### 4.2 Profile/importer registry
 
-内建 adapter 可以包括：
+内建 profile/importer 可以包括：
 
-| Adapter | 角色 |
+| Entry | 角色 |
 | --- | --- |
-| `generic_json` | 通用 JSON / hand-authored graph 输入。 |
-| `dft_qe` | QE reference adapter。 |
-| future adapters | ONNX-like ML、MatrixMarket sparse、stencil DSL、graph dataset、query plan 等。 |
+| `generic_json` importer | 通用 JSON / generated / hand-authored graph 输入。 |
+| DFT/reference importers | DFT→FPGA 主证明 importer 或其他 reference/profile importer；不属于 core schema。 |
+| future importers | ONNX-like ML、MatrixMarket sparse、stencil DSL、graph dataset、query plan 等。 |
 
-新增 adapter 不应修改 core IR classes、generic simulator schema、report validator 或 mapping-search core。
+新增 importer/profile 不应修改 core IR classes、generic simulator schema、report validator 或 mapping-search core。
 
 ### 4.3 Step1 artifact
 
 | Artifact | 作用 |
 | --- | --- |
-| `workload_package.json` | workload id、family、adapter、source、claim boundary。 |
+| `workload_package.json` | workload id、family、profile/importer、source、claim boundary。 |
 | `workload_graph.json` | source graph 的 nodes、edges、metadata。 |
 | `graph_lowering_report.json` | lowering 状态、unsupported constructs、full-workload eligibility。 |
 | `executable_graph.json` | 如果 lowering 成功，供 Step2/Step3 使用的可执行图。 |
@@ -223,7 +223,7 @@ Step1 通过不等于可最终声明。它只说明 workload 能进入后续 DSE
 - graph lowering 未成功；
 - workload 是 smoke / reduced / trace-only；
 - required coverage 无法映射到 executable graph；
-- adapter 没有 domain validation，但报告试图声明 domain correctness。
+- profile/importer 没有 domain validation，但报告试图声明 domain correctness。
 
 ---
 
@@ -260,7 +260,7 @@ domain seed generation
   -> promotion to SystemC/gem5+SystemC
 ```
 
-原因是 mapping space 高度离散、受 legality 约束、强依赖 workload / adapter seed。BO、NSGA-II、HyperMapper 或 Ax/BoTorch 类搜索应作为 plugin 接入，而不是绕过 legality 和 evidence gate。
+原因是 mapping space 高度离散、受 legality 约束、强依赖 workload / profile seed。BO、NSGA-II、HyperMapper 或 Ax/BoTorch 类搜索应作为 plugin 接入，而不是绕过 legality 和 evidence gate。
 
 ### 5.4 Step2 artifacts
 
@@ -271,7 +271,7 @@ domain seed generation
 | `architecture.json` | selected architecture instance | 缺 binding 时是 candidate-only。 |
 | `design_point.json` | replayable DesignPoint | Step3 输入。 |
 | `mapping_legality_matrix.json` | node/resource legality | 解释 rejection。 |
-| `mapping_seed_set.json` | generic / adapter seed mappings | 复现搜索。 |
+| `mapping_seed_set.json` | generic / profile-owned seed mappings | 复现搜索。 |
 | `mapping_candidate_records.json` | generated candidates | candidate audit。 |
 | `mapping_selected_record.json` | selected mapping | final report 需引用。 |
 | `mapping_promotion_decision.json` | 是否进入 Step3 | 不能声明 trusted final。 |
@@ -437,7 +437,7 @@ limitations: list[string]
 | Feasibility | verdict、violation list、no-deadlock/no-overflow 或等价 evidence。 |
 | Pareto frontier | trusted result set、objective directions、dominance computation artifact。 |
 | Convergence | search-state snapshots、feedback iterations、budget 和 stopping reason。 |
-| Numerical correctness | generic timing-level check；domain correctness 需要 adapter reference evidence。 |
+| Numerical correctness | generic timing-level check；domain correctness 需要 profile/importer reference evidence。 |
 | Smoke / diagnostic limitation | 显式 diagnostic-only status，不能进入 trusted ranking。 |
 
 ### 8.4 Claim wording cookbook
@@ -455,19 +455,19 @@ limitations: list[string]
 
 ## 9. 开发者扩展指南
 
-### 9.1 新增 workload adapter
+### 9.1 新增 workload profile/importer
 
-新增 adapter 的最小要求：
+新增 profile/importer 的最小要求：
 
-- 注册 adapter id/version；
+- 注册 profile id/version 和 importer id/version；
 - 输出 valid `WorkloadPackage`；
 - 保留 source provenance；
 - 声明 claim boundary；
 - 声明 required coverage；
 - 提供 graph lowering 规则或 unsupported diagnostics；
-- 若要声明 domain correctness，必须提供 adapter-domain validation evidence。
+- 若要声明 domain correctness，必须提供 profile/importer-domain validation evidence。
 
-不得把 adapter-specific metadata 写成 core IR requirement。
+不得把 profile/importer-specific metadata 写成 core IR requirement。
 
 ### 9.2 新增 architecture family
 
@@ -531,14 +531,16 @@ model/generic_sim_backend/build/generic_sim
 
 可信等级：只说明 L3 backend executable 可用，不生成 DSE claim。
 
-### 10.2 运行 DFT/QE reference full-flow pilot
+### 10.2 运行 generic profile full-flow pilot
 
 ```bash
 python3 dse_v2/scripts/dse/run_full_flow_pilot.py \
-  --workload qe_scf_shell \
+  --profile sparse_la \
+  --importer generic_json \
+  --generator sparse_spmv \
   --backend systemc \
   --evidence-mode debug \
-  --out runs/dse/qe_scf_shell_systemc
+  --out runs/dse/sparse_la_systemc
 ```
 
 预期 artifacts：
@@ -563,6 +565,9 @@ claim_validation.json
 
 ```bash
 python3 dse_v2/scripts/dse/run_full_flow_pilot.py \
+  --profile sparse_la \
+  --importer generic_json \
+  --generator sparse_spmv \
   --backend systemc \
   --evidence-mode debug \
   --feedback-samples 2 \
@@ -584,6 +589,9 @@ feedback_samples/
 
 ```bash
 python3 dse_v2/scripts/dse/run_full_flow_pilot.py \
+  --profile sparse_la \
+  --importer generic_json \
+  --generator sparse_spmv \
   --backend gem5_systemc \
   --gem5-real-l4 \
   --evidence-mode debug \
@@ -606,7 +614,7 @@ claim_validation.json
 
 ```bash
 python3 -m pytest -q \
-  dse_v2/tests/test_workload_adapter_registry.py \
+  dse_v2/tests/test_workload_importer_registry.py \
   dse_v2/tests/test_workload_workflows.py \
   dse_v2/tests/test_step2_architecture_mapping_workflow.py \
   dse_v2/tests/test_step3_cross_step_workflow.py \
@@ -618,12 +626,12 @@ python3 -m pytest -q \
 
 ---
 
-## 11. QE reference adapter 与 legacy Stage-A lane
+## 11. Removed legacy/reference lane
 
-旧 `docs/benchmarks/qe_dse_framework_user_manual_v0.md` 不删除。它现在的定位是：
+旧应用材料不再保留在 active tree。若后续需要引用，它的定位应是：
 
 ```text
-QE reference adapter / legacy Stage-A evidence manual
+scoped reference profile/importer / DFT vertical proof evidence / historical evidence restored only on demand
 ```
 
 ### 11.1 保留内容
@@ -639,17 +647,17 @@ QE reference adapter / legacy Stage-A evidence manual
 
 | 旧内容 | 新位置 |
 | --- | --- |
-| Stage-A architecture-family sweep | Legacy / QE reference runbook。 |
+| Stage-A architecture-family sweep | Historical/reference runbook, restored only when needed。 |
 | next-stage release package | Release-facing appendix。 |
 | F4/F5/custom projection-only 细节 | Troubleshooting。 |
-| QE-specific workload phases | `dft_qe` adapter section。 |
+| Reference workload phases | 对应 reference profile/importer section。 |
 
 ### 11.3 迁移规则
 
-当旧 QE artifact 进入新手册语境时，必须补齐：
+当旧应用 artifact 进入新手册语境时，必须补齐：
 
 - workload package identity；
-- adapter id/version；
+- profile/importer id/version；
 - claim boundary；
 - evidence mode；
 - support status；
@@ -727,8 +735,8 @@ gem5.log
 - [ ] L4 claim 是否引用并通过 `gem5_l4_proof.json`？
 - [ ] single pilot 是否只写成 feasibility / timing evidence？
 - [ ] BO / surrogate / optimizer 是否只写成 candidate proposal layer？
-- [ ] QE 是否只作为 `dft_qe` reference adapter，而非 core schema？
-- [ ] domain correctness 是否有 adapter-specific validation evidence？
+- [ ] optional/reference workload 是否只作为 profile/importer，而非 core schema？
+- [ ] domain correctness 是否有 profile/importer-specific validation evidence？
 - [ ] Pareto / best architecture 是否基于多个 comparable trusted samples？
 - [ ] runbook 是否记录 command、output directory、artifact paths 和 trust level？
 - [ ] public claim 是否仍交由 adjudicator memo 控制？
@@ -763,7 +771,7 @@ gem5.log
 | 入口 | 路径 |
 | --- | --- |
 | 通用 DSE 设计规范 | `docs/architecture/generic_dse_framework_design_spec_v2.md` |
-| 旧 QE DSE 手册 | `docs/benchmarks/qe_dse_framework_user_manual_v0.md` |
+| 旧应用专用 DSE 手册 | `legacy/` |
 | DSE v2 README | `dse_v2/README.md` |
 | Full-flow reporting | `dse_v2/docs/GENERIC_DSE_FULL_FLOW_REPORTING.md` |
 | Step2 workflow | `dse_v2/mapping/step2_workflow.py` |

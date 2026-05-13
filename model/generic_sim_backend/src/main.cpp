@@ -8,6 +8,47 @@
 
 using namespace gsim;
 
+namespace {
+
+bool is_supported_schema_version(const std::string& schema_version) {
+    return schema_version == "gsim.request.v1";
+}
+
+bool is_supported_mode(const std::string& mode) {
+    return mode == "standalone_systemc" ||
+           mode == "gem5_cosim" ||
+           mode == "gem5_systemc_blocked" ||
+           mode == "analytical";
+}
+
+bool validate_request_contract(const SimulationRequest& req, std::string& error) {
+    if (!is_supported_schema_version(req.schema_version)) {
+        error = "unsupported schema_version: " + req.schema_version;
+        return false;
+    }
+    if (!is_supported_mode(req.mode)) {
+        error = "unsupported mode: " + req.mode;
+        return false;
+    }
+    if (req.run_id.empty()) {
+        error = "missing run_id";
+        return false;
+    }
+    for (const auto& edge : req.workload.edges) {
+        if (edge.size_bytes < 0.0) {
+            error = "negative size_bytes for edge: " + edge.tensor_name;
+            return false;
+        }
+        if (edge.element_size < 0.0) {
+            error = "negative element_size for edge: " + edge.tensor_name;
+            return false;
+        }
+    }
+    return true;
+}
+
+} // namespace
+
 void print_usage(const char* program) {
     std::cerr << "Usage: " << program << " --request <request.json> --result <result.json>\n";
 }
@@ -49,8 +90,9 @@ int main(int argc, char* argv[]) {
         // Parse request
         SimulationRequest req = JsonParser::parse_request(request_json);
         
-        if (req.run_id.empty()) {
-            std::cerr << "Error: Failed to parse request or missing run_id\n";
+        std::string validation_error;
+        if (!validate_request_contract(req, validation_error)) {
+            std::cerr << "Error: Invalid request contract: " << validation_error << "\n";
             return 1;
         }
         

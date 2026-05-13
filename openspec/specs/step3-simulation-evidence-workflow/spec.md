@@ -51,9 +51,9 @@ Step3 SHALL rebuild the backend request using persisted workload package, execut
 - **WHEN** Step3 runs a sparse, ML/tensor, stencil, graph analytics, database/vector-search, or custom non-QE workload
 - **THEN** the request and final report do not require QE-only fields such as `npw`, `nkb`, `h_psi`, `s_psi`, `diagonalize`, `mix_rho`, or `veff`
 
-#### Scenario: DFT/QE request preserves adapter boundary
-- **WHEN** Step3 runs the DFT/QE adapter workflow
-- **THEN** QE-specific coverage appears only as adapter/workflow metadata and does not become a required global field for other workload families
+#### Scenario: DFT/QE request preserves profile/importer boundary
+- **WHEN** Step3 runs the DFT/QE reference profile/importer workflow
+- **THEN** QE-specific coverage appears only as profile/workflow metadata and does not become a required global field for other workload families
 
 ### Requirement: Step3 emits full-flow evidence and structured status artifacts
 A Step3 run SHALL write `step3_status.json` for every attempt. A completed simulation attempt SHALL emit `simulation_request.json`, `simulation_result.json`, `numerical_validation.json`, `verdict.json`, `evidence_requirements.json`, `claim_validation.json`, `final_report.json`, `final_report.md`, `artifact_manifest.json`, and `manifest.json` or explicit unavailable/blocker reasons. Trusted status SHALL derive from the full-flow evidence gates, not from simulator exit code alone.
@@ -70,8 +70,8 @@ A Step3 run SHALL write `step3_status.json` for every attempt. A completed simul
 - **WHEN** the configured SystemC or gem5+SystemC executable is unavailable
 - **THEN** Step3 writes `status` `blocked_simulator_unavailable`, preserves available Step2 inputs, and SHALL NOT synthesize a successful result
 
-### Requirement: Step3 cross-step validation covers generic and adapter-specific workflows
-Step3 implementation validation SHALL include tests that start from Step1 workload/package generation, run Step2 artifact emission, and then run Step3 simulation/evidence or blocked-handoff checks. Tests SHALL cover representative non-QE workloads and DFT/QE adapter regression.
+### Requirement: Step3 cross-step validation covers generic and profile/importer-specific workflows
+Step3 implementation validation SHALL include tests that start from Step1 workload/package generation, run Step2 artifact emission, and then run Step3 simulation/evidence or blocked-handoff checks. Tests SHALL cover representative non-QE workloads and DFT/QE reference profile/importer regression.
 
 #### Scenario: Generic sparse workflow passes without QE assumptions
 - **WHEN** a sparse linear-algebra workload runs through Step1, Step2, and Step3
@@ -81,9 +81,9 @@ Step3 implementation validation SHALL include tests that start from Step1 worklo
 - **WHEN** a database/vector-search workload runs through Step1, Step2, and Step3
 - **THEN** Step3 emits trusted full-flow evidence and no QE-only required phases are introduced
 
-#### Scenario: DFT/QE regression keeps adapter-scoped seeds and coverage
+#### Scenario: DFT/QE regression keeps profile-scoped seeds and coverage
 - **WHEN** a DFT/QE workload runs through Step1, Step2, and Step3
-- **THEN** DFT/QE seed policies and required coverage remain adapter-scoped and do not rename or expose old QE-domain global defaults
+- **THEN** DFT/QE seed policies and required coverage remain profile-scoped and do not rename or expose old QE-domain global defaults
 
 ### Requirement: Step3 artifact writes are atomic and concurrency-safe
 Step3 SHALL ensure that simulation results, evidence artifacts, and status files are written atomically and are safe under concurrent execution. Concurrent Step3 runs SHALL NOT corrupt shared artifacts or leave partial results visible to downstream stages.
@@ -101,13 +101,13 @@ Step3 SHALL ensure that simulation results, evidence artifacts, and status files
 - **THEN** each append is atomic and no evidence records are lost or interleaved
 
 ### Requirement: Step3 evidence is broad-workload aware
-Step3 SHALL reconstruct simulation requests, evidence requirements, verdicts, claim validation, and final reports from generic Step2 artifacts for every supported workload family. Step3 SHALL apply adapter-specific coverage only when it is declared by the selected workload package or workflow metadata.
+Step3 SHALL reconstruct simulation requests, evidence requirements, verdicts, claim validation, and final reports from generic Step2 artifacts for every supported workload family. Step3 SHALL apply profile/importer-specific coverage only when it is declared by the selected workload package or workflow metadata.
 
 #### Scenario: Non-QE Step3 request has no QE required fields
 - **WHEN** Step3 reconstructs a simulation request for an ML/tensor, sparse, stencil, graph analytics, database/vector-search, or custom workload
 - **THEN** the request is valid without QE-only fields such as `npw`, `nkb`, `h_psi`, `s_psi`, `mix_rho`, or `veff`
 
-#### Scenario: Adapter validation controls domain claims
-- **WHEN** Step3 has complete generic simulation evidence but missing adapter-domain validation for a workload family
+#### Scenario: Profile/importer validation controls domain claims
+- **WHEN** Step3 has complete generic simulation evidence but missing profile/importer-domain validation for a workload family
 - **THEN** trusted timing/resource claims may pass while domain correctness claims remain blocked or unavailable
 

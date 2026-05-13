@@ -19,10 +19,11 @@ from dse_v2.core.architecture.accelerator import (
     create_gpu_a100, create_fpga_u280, create_cim_array,
     create_example_system,
 )
-from dse_v2.core.ir.compute_graph import create_gemm_graph, create_dft_scf_graph
+from dse_v2.core.ir.compute_graph import create_gemm_graph
 from dse_v2.core.ir.task_graph import map_compute_to_tasks
 from dse_v2.core.ir.execution import create_example_timeline
 from dse_v2.dse.orchestrator import SearchSpace, AnalyticalEvaluator, DSEOrchestrator
+from dse_v2.core.workload import create_sparse_spmv_graph
 
 
 def test_architecture():
@@ -47,10 +48,10 @@ def test_compute_graph():
     assert len(topo) == 4
     print(f"  GEMM graph: {len(gemm.nodes)} nodes, {gemm.total_flops()/1e9:.2f} GFLOPs")
     
-    # DFT graph
-    dft = create_dft_scf_graph()
-    assert dft.metadata.get("domain") == "dft"
-    print(f"  DFT graph: {len(dft.nodes)} nodes, {dft.total_flops()/1e9:.2f} GFLOPs")
+    # Generic sparse graph
+    sparse = create_sparse_spmv_graph("integration_sparse")
+    assert sparse.metadata.get("workload_family") == "sparse_la"
+    print(f"  Sparse graph: {len(sparse.nodes)} nodes, {sparse.total_flops()/1e9:.2f} GFLOPs")
     print("  PASS")
 
 
@@ -116,8 +117,8 @@ def test_end_to_end():
     print("\nTesting End-to-End Integration...")
     
     # 1. Define workload
-    dft = create_dft_scf_graph()
-    print(f"  1. Workload: {dft.graph_id} ({len(dft.nodes)} ops)")
+    workload = create_sparse_spmv_graph("integration_full_stack_sparse")
+    print(f"  1. Workload: {workload.graph_id} ({len(workload.nodes)} ops)")
     
     # 2. Define architecture
     sys = create_example_system()
@@ -134,7 +135,7 @@ def test_end_to_end():
     # 4. Run DSE
     evaluator = AnalyticalEvaluator()
     orchestrator = DSEOrchestrator(ss, evaluator)
-    results = orchestrator.explore(dft, max_points=20)
+    results = orchestrator.explore(workload, max_points=20)
     
     print(f"  4. DSE complete: {len(results)} Pareto points")
     

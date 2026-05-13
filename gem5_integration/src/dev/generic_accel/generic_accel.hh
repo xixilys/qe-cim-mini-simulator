@@ -4,6 +4,9 @@
 #include "params/GenericAccel.hh"
 #include "sim/eventq.hh"
 
+#include <string>
+#include <vector>
+
 namespace gem5 {
 
 class GenericAccel : public BasicPioDevice {
@@ -16,7 +19,20 @@ public:
     Tick write(PacketPtr pkt) override;
     
     AddrRangeList getAddrRanges() const override;
-    
+
+    struct ScheduledMicroOp {
+        std::string kind;
+        std::string nodeId;
+        std::string device;
+        std::string opType;
+        uint64_t bytes = 0;
+        uint64_t cycles = 0;
+        Tick startTick = 0;
+        Tick endTick = 0;
+        double startNs = 0.0;
+        double endNs = 0.0;
+    };
+
 private:
     // Register offsets
     static constexpr Addr REG_CONTROL = 0x0000;
@@ -28,6 +44,8 @@ private:
     static constexpr Addr REG_CMD_DESC_ADDR_HI = 0x1008;
     static constexpr Addr REG_CMD_DESC_SIZE = 0x100C;
     static constexpr Addr REG_COMP_STATUS = 0x3000;
+    static constexpr Addr REG_COMP_DESC_ADDR_LO = 0x3004;
+    static constexpr Addr REG_COMP_DESC_ADDR_HI = 0x3008;
     static constexpr Addr REG_COMP_ERROR_CODE = 0x300C;
     static constexpr Addr REG_METRIC_CYCLES = 0x4000;
     static constexpr Addr REG_METRIC_OPS = 0x4004;
@@ -45,6 +63,8 @@ private:
     
     // Completion
     uint32_t comp_status = 0;
+    uint32_t comp_desc_addr_lo = 0;
+    uint32_t comp_desc_addr_hi = 0;
     uint32_t comp_error_code = 0;
     
     // Metrics
@@ -59,12 +79,24 @@ private:
     const bool supportsGemm;
     const bool supportsFft;
     const bool supportsEigen;
+    const bool useSystemC;
+    const std::string systemcExecutable;
     
     // Simulation state
+
     bool busy = false;
+    uint64_t pendingCycles = 0;
+    uint64_t pendingResultAddr = 0;
+    uint64_t pendingCompletionAddr = 0;
+    std::string pendingResultJson;
+    std::string pendingResultPath;
+    std::vector<ScheduledMicroOp> pendingMicroOps;
+    size_t pendingMicroOpIndex = 0;
+    EventFunctionWrapper microOpEvent;
     EventFunctionWrapper completionEvent;
     
     void processCommand();
+    void advanceMicroOp();
     void completeCommand();
     uint64_t estimateCycles(uint32_t opType, uint64_t flops);
 };

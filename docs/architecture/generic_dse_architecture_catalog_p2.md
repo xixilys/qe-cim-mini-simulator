@@ -72,28 +72,25 @@ evidence and claim gating.
 8. `balanced`
 9. `debug`
 10. `future-custom`
-11. `legacy-four-cluster-reference`
 
-The historical four-cluster design is represented only as
-`legacy-four-cluster-reference-v0` with `candidate-only` status and
-`legacy_reference=true`; it is not the default or only architecture family.
+Historical fixed-pipeline or application-specific designs have been removed from the active catalog and are not active families.
 
 ## Seed instances and bindings
 
 The seed catalog includes:
 
 - `balanced-generic-systemc-v0` — heterogeneous host+FPGA+GPU+CIM+HBM instance
-  with standalone SystemC binding eligibility and gem5+SystemC stub metadata.
+  with standalone SystemC binding eligibility and gem5 GenericAccel L4 binding metadata.
 - `host-fpga-minimal-v0` — Host+FPGA prototype instance available for screening
   and SystemC bring-up, but not trusted-final eligible until promoted by status.
 - `future-custom-candidate-v0` — empty candidate-only extension hook.
-- `legacy-four-cluster-reference-v0` — candidate-only legacy/reference instance.
 
 Bindings are separated from instances:
 
 - `standalone_generic_systemc_v1` — implemented SystemC timing backend metadata.
-- `gem5_systemc_descriptor_path_v1` — stub/blocked gem5+SystemC metadata with an
-  unavailable reason for descriptor/completion closure.
+- `gem5_systemc_descriptor_path_v1` — implemented gem5 GenericAccel
+  descriptor/request/decode/microarchitecture/completion metadata; trusted only
+  when `gem5_l4_proof.json` and completion proof pass.
 
 ## Minimum DesignPoint payload
 
@@ -118,15 +115,14 @@ payload without hidden Python state:
 Downstream mapping and simulation lanes may fill mapping/data-placement choices,
 but the catalog owns the architecture-side replay payload.
 
-## Smoke check
+## Catalog sanity check
 
 ```bash
 python3 - <<'PY'
 from dse_v2.architecture import catalog_summary, seed_generic_dse_architecture_catalog
 catalog = seed_generic_dse_architecture_catalog()
 summary = catalog_summary(catalog)
-assert summary["family_count"] >= 10
-assert "legacy-four-cluster-reference-v0" in summary["candidate_only_instances"]
+assert summary["family_count"] >= 9
 assert "balanced-generic-systemc-v0" in summary["trusted_final_eligible_instances"]
 assert summary["validation"] == []
 PY

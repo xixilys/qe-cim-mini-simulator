@@ -1,35 +1,16 @@
-# AGENTS Guide - Runtime API
+# AGENTS Guide - runtime_api/
 
 ## Purpose
 
-Domain-neutral C ABI for SE/FS proxy programs. Provides stable offload command descriptors and runtime metrics before full application adapters are linked.
+Domain-neutral C ABI for proxy offload programs and gem5 SE/FS experiments.
 
-## Interface
+## Active interface
 
-- `command_descriptor.h` - Generic offload command descriptor with `offload_*` aliases
-- `offload_runtime.h/.c` - Synchronous submit, ROI markers, counters, JSON report emission
+- `command_descriptor.h` — command descriptor and MMIO register vocabulary.
+- `offload_runtime.h/.c` — synchronous submit, ROI markers, counters, JSON report emission.
 
-## Compatibility
+## Rules
 
-- `qebs_*` symbols remain for QE band-solver prototype
-- New backend code should use `offload_*` names
-- Keep QE-specific data in adapter code, not here
-
-## Claim Boundary
-
-Runtime output is host/control proxy evidence only. Does not claim:
-- Workload equivalence
-- Cycle-accurate RTL timing
-- Board measurement
-- ASIC evidence
-- Final architecture recommendation
-
-## Integration Points
-
-- **With adapters/qe_runtime/**: QE-specific adapter layer
-- **With gem5_integration/**: Used by proxy programs for co-simulation
-
-## Next Steps
-
-- For QE adapter: see `adapters/qe_runtime/README.md`
-- For SystemC model: see `model/qe_band_solver_model/AGENTS.md`
+- Use `offload_*` names for exported ABI symbols and macros.
+- Keep application-specific payload semantics outside this directory.
+- Runtime output is proxy/control evidence only; it does not prove workload correctness, RTL timing, board measurement, or final architecture ranking.

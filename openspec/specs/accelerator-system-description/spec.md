@@ -4,7 +4,7 @@
 Define how heterogeneous CPU/GPU/FPGA/ASIC/CIM and distributed resources self-describe compute, memory, communication, power, constraints, and simulation-binding eligibility so generic DSE stages can validate and compare architectures without hidden type-specific assumptions.
 
 ## Architecture Model
-The system architecture model SHALL support **configurable heterogeneous systems** where accelerators are dynamically composed, rather than hardcoded to a fixed pipeline (e.g., 4-Cluster). The legacy 4-Cluster model (Cluster A/B/C/D) is deprecated and SHALL be replaced with a flexible accelerator-composition model.
+The system architecture model SHALL support **configurable heterogeneous systems** where accelerators are dynamically composed, rather than hardcoded to any fixed application pipeline. Historical fixed-pipeline templates are review-only legacy references and SHALL NOT be an active architecture mode.
 
 ### Heterogeneous System Composition
 A SystemArchitecture SHALL be composed of:
@@ -14,8 +14,8 @@ A SystemArchitecture SHALL be composed of:
 - **Memory Hierarchy**: Per-accelerator local memory and shared memory levels
 - **Constraints**: Power, area, and cost budgets
 
-### Legacy 4-Cluster Deprecation
-The legacy 4-Cluster architecture (Cluster A: operator sweep, Cluster B: reduced build, Cluster C: hardware diag, Cluster D: refresh/residual) is deprecated. It MAY be supported for backward compatibility through an explicit `legacy_4cluster` mode, but new designs SHALL use the heterogeneous composition model.
+### Historical fixed-pipeline removal
+Historical fixed-pipeline application architectures SHALL live outside the active architecture catalog unless explicitly reintroduced as data-only reference templates. Active design points SHALL use heterogeneous composition with explicit accelerators, capabilities, mapping, and interconnects.
 
 ## Requirements
 ### Requirement: Accelerator self-description covers four capability domains
@@ -87,12 +87,12 @@ Built-in templates such as GPU A100, FPGA U280, and CIM Array SHALL be documente
 #### Scenario: Heterogeneous composition replaces fixed clusters
 - **WHEN** a system is composed of Host + GPU + FPGA + CIM accelerators
 - **THEN** each accelerator is independently configured and mapped to workload nodes based on capabilities
-- **AND** the system is NOT constrained to a fixed 4-Cluster pipeline (A/B/C/D roles)
+- **AND** the system is NOT constrained to fixed application-pipeline roles
 
-#### Scenario: Legacy 4-Cluster is explicitly deprecated
-- **WHEN** a design point uses the legacy 4-Cluster architecture family
-- **THEN** the system emits a deprecation warning and recommends migrating to the heterogeneous composition model
-- **AND** the legacy mode is only available through an explicit backward-compatibility flag
+#### Scenario: Historical fixed-pipeline template is not active
+- **WHEN** a historical fixed-pipeline template is encountered
+- **THEN** it is absent from the active catalog or restored only as data-only documentation
+- **AND** it is not accepted as an active simulator mode without a new explicit spec change
 
 ### Requirement: Accelerator descriptors may include microarchitecture blocks
 Accelerator descriptors MAY include type-specific microarchitecture fields for timing refinement. These fields SHALL be explicit, optional, and type scoped; their absence SHALL mean capability-level evaluation rather than an implicit hardware structure.

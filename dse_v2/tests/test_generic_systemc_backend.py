@@ -6,18 +6,18 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from dse_v2.core.ir.compute_graph import create_dft_scf_graph
-from dse_v2.core.ir.dft_workload import create_complete_qe_scf_graph
+from dse_v2.core.ir.compute_graph import ComputeGraph, ComputeNode, DataEdge, TensorSpec
+from dse_v2.reference_workloads.dft_qe import QE_SCF_REQUIRED_COVERAGE, create_qe_reference_package
 from dse_v2.core.architecture.accelerator import create_gpu_a100, create_fpga_u280, create_cim_array
 from dse_v2.dse.orchestrator import DesignPoint, SystemArchitecture
 from dse_v2.backends.generic_systemc_bridge import GenericSystemCBackend
-from dse_v2.evidence.full_flow import REQUIRED_QE_SCF_PHASES
 
 
 def test_request_builder():
     print("Testing GenericSystemCBackend request builder...")
     
-    g = create_dft_scf_graph()
+    from dse_v2.core.workload import create_tensor_chain_graph
+    g = create_tensor_chain_graph("tensor_request")
     sys_arch = SystemArchitecture(
         system_id='test',
         accelerators=[create_gpu_a100('gpu-0')],
@@ -30,7 +30,7 @@ def test_request_builder():
     
     assert request['schema_version'] == 'gsim.request.v1'
     assert request['run_id'] == 'dp_test'
-    assert len(request['workload']['nodes']) == 4
+    assert len(request['workload']['nodes']) == 3
     assert len(request['architecture']['accelerators']) == 1
     
     print("  Request structure: PASS")
@@ -47,7 +47,8 @@ def test_request_builder():
 def test_complete_workload():
     print("\nTesting with complete workload...")
     
-    g = create_complete_qe_scf_graph()
+    package = create_qe_reference_package()
+    g = package.graph
     sys_arch = SystemArchitecture(
         system_id='test',
         accelerators=[
@@ -76,10 +77,11 @@ def test_complete_workload():
     
     dp = DesignPoint('dp_complete', sys_arch, m)
     backend = GenericSystemCBackend()
-    request = backend._build_request(dp, g)
+    request = backend._build_request(dp, g, workload_package=package)
     
     assert len(request['workload']['nodes']) == 14
-    for phase in REQUIRED_QE_SCF_PHASES:
+    assert request['workload']['required_coverage'] == QE_SCF_REQUIRED_COVERAGE
+    for phase in QE_SCF_REQUIRED_COVERAGE:
         assert phase in request['workload']['nodes']
     assert len(request['architecture']['accelerators']) == 2
     
@@ -88,10 +90,59 @@ def test_complete_workload():
     print(f"  Accelerators: {len(request['architecture']['accelerators'])}")
 
 
+def test_request_builder_preserves_tensor_byte_metadata():
+    g = ComputeGraph(graph_id='byte_metadata_graph')
+    g.add_node(ComputeNode(
+        node_id='producer',
+        op_type='gemm',
+        outputs=['x'],
+        estimated_flops=1024.0,
+        estimated_memory_bytes=256.0,
+    ))
+    g.add_node(ComputeNode(
+        node_id='consumer',
+        op_type='reduction',
+        inputs=['x'],
+        estimated_flops=256.0,
+        estimated_memory_bytes=128.0,
+    ))
+    g.add_edge(DataEdge(
+        source_node='producer',
+        target_node='consumer',
+        tensor_name='x',
+        tensor_spec=TensorSpec(shape=(8, 4), dtype='BF16'),
+    ))
+
+    sys_arch = SystemArchitecture(
+        system_id='test',
+        accelerators=[create_fpga_u280('fpga-0'), create_cim_array('cim-0')],
+    )
+    dp = DesignPoint('dp_tensor_bytes', sys_arch, {'producer': 'fpga-0', 'consumer': 'cim-0'})
+    request = GenericSystemCBackend()._build_request(dp, g)
+
+    edge = request['workload']['edges'][0]
+    assert edge['tensor_shape'] == [8, 4]
+    assert edge['tensor_dtype'] == 'BF16'
+    assert edge['element_size'] == 2
+    assert edge['size_bytes'] == 64
+
+
+def test_generic_request_schema_declares_supported_modes_and_tensor_sizes():
+    schema_path = Path(__file__).resolve().parents[2] / 'model' / 'generic_sim_backend' / 'schemas' / 'simulation_request_v1.json'
+    schema = __import__('json').loads(schema_path.read_text())
+
+    assert 'standalone_systemc' in schema['properties']['mode']['enum']
+    assert 'legacy_4cluster' not in schema['properties']['mode']['enum']
+    edge_props = schema['properties']['workload']['properties']['edges']['items']['properties']
+    assert 'size_bytes' in edge_props
+    assert 'element_size' in edge_props
+
+
 def test_error_handling():
     print("\nTesting error handling...")
     
-    g = create_dft_scf_graph()
+    from dse_v2.core.workload import create_tensor_chain_graph
+    g = create_tensor_chain_graph("tensor_request")
     sys_arch = SystemArchitecture(system_id='test', accelerators=[create_gpu_a100('gpu-0')])
     m = {nid: 'gpu-0' for nid in g.nodes}
     dp = DesignPoint('dp_error', sys_arch, m)
@@ -113,6 +164,8 @@ def main():
     
     test_request_builder()
     test_complete_workload()
+    test_request_builder_preserves_tensor_byte_metadata()
+    test_generic_request_schema_declares_supported_modes_and_tensor_sizes()
     test_error_handling()
     
     print("\n" + "=" * 70)

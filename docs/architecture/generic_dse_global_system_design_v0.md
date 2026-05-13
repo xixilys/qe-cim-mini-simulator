@@ -10,7 +10,7 @@
 
 系统必须同时满足 3 个约束：
 
-- **Domain-neutral：** core schema 不依赖 QE 专用字段。QE 只是 `dft_qe` reference adapter。
+- **Domain-neutral + vertical proof：** core schema 不依赖 DFT/QE 或任何单一应用字段；当前用 DFT→FPGA 作为主证明 reference profile/importer，其他 workload 通过同一合同扩展。
 - **Evidence-backed：** candidate、prediction、simulation、claim 必须分层，不能把低保真预测写成最终结论。
 - **Replayable：** Step1、Step2、Step3 的关键 artifacts 必须落盘，后续步骤不得依赖隐藏 Python 进程状态。
 
@@ -21,7 +21,7 @@
 │                      Generic DSE System                      │
 ├─────────────────────────────────────────────────────────────┤
 │ Step1: Workload Layer                                        │
-│   adapters -> WorkloadPackage -> ComputeGraph -> lowering    │
+│   profiles/importers -> WorkloadPackage -> ComputeGraph -> lowering │
 ├─────────────────────────────────────────────────────────────┤
 │ Step2: Architecture and Mapping Layer                        │
 │   architecture catalog -> DesignPoint -> mapping candidates   │
@@ -48,7 +48,7 @@ Debug/System Test Layer
 
 | 模块 | 输入 | 输出 | 不能做的事 |
 | --- | --- | --- | --- |
-| Workload adapter | domain source、trace、外部 IR | `WorkloadPackage`、`ComputeGraph` | 不能修改 core schema 来适配单一领域。 |
+| Workload profile/importer | domain source、trace、外部 IR | `WorkloadPackage`、`ComputeGraph` | 不能修改 core schema 来适配单一领域。 |
 | Graph lowering | source graph、workflow metadata | executable graph 或诊断报告 | 不能伪造 full-workload coverage。 |
 | Architecture catalog | family、component、binding、constraints | architecture instance | 不能把无 binding 架构写成 trusted candidate。 |
 | Mapping/search | executable graph、architecture、policy | candidate、screening、promotion decision | 不能输出 final winner。 |
@@ -67,7 +67,7 @@ Step1 把领域输入转换为可审计 artifacts：
 - `graph_lowering_report.json`
 - 可选 `executable_graph.json`
 
-Step1 的核心验收标准是：后续流程可以只读这些 artifacts，而不依赖 adapter 进程内状态。
+Step1 的核心验收标准是：后续流程可以只读这些 artifacts，而不依赖 importer 进程内状态。
 
 ### 4.2 Step2：Architecture and mapping
 
@@ -162,7 +162,7 @@ Debug evidence 只有通过 repeatability、provenance、claim validation 和 ad
 
 | 能力 | 状态 | 说明 |
 | --- | --- | --- |
-| Generic workload adapter | 已实现部分 | 包含 `generic_json` 和 `dft_qe` reference path。 |
+| Generic workload profile/importer | 已实现部分 | 包含 `generic_json` 和 optional QE reference importer path。 |
 | Step2 mapping handoff | 已实现部分 | 已有 persisted artifacts 和 promotion boundary。 |
 | Step3 evidence flow | 已实现部分 | 已有 full-flow evidence writer 和 report/claim validation。 |
 | L3 SystemC backend | 已实现部分 | 可生成 timing/resource evidence。 |

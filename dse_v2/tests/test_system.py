@@ -1,63 +1,111 @@
 #!/usr/bin/env python3
 
+import importlib
+import importlib.metadata
 import sys
+import warnings
 from pathlib import Path
 
-def test_imports():
-    print("Testing imports...")
-    
-    try:
-        import numpy as np
-        print(f"  ✓ numpy {np.__version__}")
-    except ImportError as e:
-        print(f"  ✗ numpy: {e}")
-        return False
-    
-    try:
-        import pandas as pd
-        print(f"  ✓ pandas {pd.__version__}")
-    except ImportError as e:
-        print(f"  ✗ pandas: {e}")
-        return False
-    
-    try:
-        import torch
-        print(f"  ✓ torch {torch.__version__}")
-    except ImportError as e:
-        print(f"  ✗ torch: {e}")
-        return False
-    
-    try:
-        import botorch
-        print(f"  ✓ botorch {botorch.__version__}")
-    except ImportError as e:
-        print(f"  ✗ botorch: {e}")
-        return False
-    
-    try:
-        import ax
-        print(f"  ✓ ax {ax.__version__}")
-    except ImportError as e:
-        print(f"  ✗ ax: {e}")
-        return False
-    
-    return True
+import pytest
 
-def test_project_structure():
+REQUIRED_IMPORTS = [
+    ("numpy", "numpy", "numpy"),
+    ("pandas", "pandas", "pandas"),
+    ("scipy", "scipy", "scipy"),
+    ("torch", "torch", "torch"),
+    ("botorch", "botorch", "botorch"),
+    ("ax-platform", "ax", "ax-platform"),
+    ("gpytorch", "gpytorch", "gpytorch"),
+    ("matplotlib", "matplotlib", "matplotlib"),
+    ("seaborn", "seaborn", "seaborn"),
+    ("plotly", "plotly", "plotly"),
+    ("wandb", "wandb", "wandb"),
+    ("pyyaml", "yaml", "pyyaml"),
+    ("jsonschema", "jsonschema", "jsonschema"),
+    ("tqdm", "tqdm", "tqdm"),
+    ("pytest", "pytest", "pytest"),
+    ("black", "black", "black"),
+    ("flake8", "flake8", "flake8"),
+    ("mypy", "mypy", "mypy"),
+    ("jupyter", "jupyter", "jupyter"),
+    ("ipywidgets", "ipywidgets", "ipywidgets"),
+]
+
+
+def dependency_report(report=True):
+    print("Testing imports...")
+    rows = []
+    
+    for label, module_name, distribution_name in REQUIRED_IMPORTS:
+        row = {
+            "label": label,
+            "module": module_name,
+            "distribution": distribution_name,
+            "installed": False,
+            "imported": False,
+            "version": "unknown",
+            "error": "",
+        }
+        try:
+            row["version"] = importlib.metadata.version(distribution_name)
+            row["installed"] = True
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", category=DeprecationWarning)
+                importlib.import_module(module_name)
+            row["imported"] = True
+            if report:
+                print(f"  ✓ {label} {row['version']}")
+        except (ImportError, importlib.metadata.PackageNotFoundError) as e:
+            row["error"] = str(e)
+            if report:
+                print(f"  ✗ {label}: {e}")
+        rows.append(row)
+    
+    return rows
+
+
+def check_imports():
+    return all(row["installed"] and row["imported"] for row in dependency_report())
+
+def test_imports():
+    rows = dependency_report()
+    failed = [row for row in rows if not row["installed"] or not row["imported"]]
+    if failed:
+        details = "\n".join(
+            f"- {row['label']} (module={row['module']}, dist={row['distribution']}): {row['error']}"
+            for row in failed
+        )
+        pytest.fail(
+            "dse_v2 dependency probe failed; install the declared environment with:\n"
+            "  python3 -m pip install --user --break-system-packages -r dse_v2/requirements.txt\n"
+            f"Missing or non-importable dependencies:\n{details}"
+        )
+
+def check_project_structure():
     print("\nTesting project structure...")
+    project_root = Path(__file__).resolve().parents[1]
     
     required_dirs = [
-        'workloads',
+        'architecture',
+        'backends',
+        'core',
+        'core/workload',
+        'interfaces',
+        'reference_workloads',
         'design_space',
+        'dse',
+        'evidence',
+        'mapping',
         'models',
-        'optimization',
-        'results',
+        'promotion',
+        'reporting',
         'scripts',
+        'tests',
     ]
     
     all_exist = True
     for dir_name in required_dirs:
-        dir_path = Path(dir_name)
+        dir_path = project_root / dir_name
         if dir_path.exists():
             print(f"  ✓ {dir_name}/")
         else:
@@ -66,12 +114,15 @@ def test_project_structure():
     
     return all_exist
 
-def test_fast_model():
+def test_project_structure():
+    assert check_project_structure()
+
+def check_fast_model():
     print("\nTesting fast performance model...")
     
     try:
         sys.path.append(str(Path.cwd()))
-        from models.fast.performance_model import FastPerformanceModel
+        from dse_v2.models.fast.performance_model import FastPerformanceModel
         
         fpga_specs = {
             'peak_gflops': 1300,
@@ -87,13 +138,13 @@ def test_fast_model():
             'pipeline_depth': 4,
             'parallel_units': 4,
             'dataflow_pattern': 'streaming',
-            'tile_npw': 1024,
-            'tile_nkb': 64,
-            'tile_m': 16,
+            'tile_problem_size': 1024,
+            'tile_feature_size': 64,
+            'tile_batch_size': 16,
             'intermediate_buffer_kb': 256,
         }
         
-        workload = {'npw': 2945, 'nkb': 144, 'm': 16}
+        workload = {'problem_size': 4096, 'feature_size': 256, 'batch_size': 16}
         
         result = model.evaluate_design_point(design_point, workload)
         
@@ -107,15 +158,18 @@ def test_fast_model():
         print(f"  ✗ Model test failed: {e}")
         return False
 
+def test_fast_model():
+    assert check_fast_model()
+
 def main():
     print("=" * 60)
     print("DSE v2 System Test")
     print("=" * 60)
     
     tests = [
-        ("Imports", test_imports),
-        ("Project Structure", test_project_structure),
-        ("Fast Performance Model", test_fast_model),
+        ("Imports", check_imports),
+        ("Project Structure", check_project_structure),
+        ("Fast Performance Model", check_fast_model),
     ]
     
     results = []

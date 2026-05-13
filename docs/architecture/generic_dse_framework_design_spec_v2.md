@@ -36,6 +36,7 @@ trusted final analysis report with claim-to-evidence links
 4. **Mapping 是算法问题**：系统必须搜索 workload node、tensor、memory、schedule、fallback 到硬件资源的映射，而不是只手写固定 mapping。
 5. **Evidence-backed final report**：最终报告里的每条可信 claim 都必须指向 evidence id、输出文件、run manifest 和 replay metadata。
 6. **完整仿真硬门槛**：最终检查必须看到完整 SystemC 或 gem5+SystemC full-flow 仿真证据；smoke 只能用于 bring-up 诊断，不能被包装、重命名或混入为完成证据。
+7. **通用核心 + DFT 主证明场景**：core schema 保持多 workload 可扩展；当前用 DFT→FPGA reference vertical slice 证明 workload characterization、FPGA mapping/dataflow、memory/runtime、gem5 software-visible evidence 和 claim/reporting 的完整闭环。
 
 ---
 
@@ -55,7 +56,7 @@ trusted final analysis report with claim-to-evidence links
 8. 达到收敛或预算耗尽。
 9. 输出最终分析报告。
 
-其中第 5 步必须是真正的 full-flow simulation：standalone SystemC 至少要跑所选 `WorkloadPackage` 声明的完整工作负载或经声明的等价端到端工作流；gem5+SystemC 必须通过真实 L4 descriptor/request/SystemC/completion proof。当前 DFT/QE SCF shell 只是一个 adapter 示例。任何 smoke-only、fixed-timing、MMIO bring-up、driver hello、legacy B3 smoke 或等价诊断路径都不满足“完整仿真”定义。
+其中第 5 步必须是真正的 full-flow simulation：standalone SystemC 至少要跑所选 `WorkloadPackage` 声明的完整工作负载或经声明的等价端到端工作流；gem5 L4 必须通过真实 descriptor/request/decode/microarchitecture execution/completion proof。DFT→FPGA 可以作为当前主证明 reference profile/importer，但只有在其 DFT config、graph coverage、FPGA deployment、runtime/interface 和 evidence artifacts 完整时，才满足完整仿真定义。任何 smoke-only、fixed-timing、MMIO bring-up、driver hello、legacy B3 smoke 或等价诊断路径都不满足“完整仿真”定义。
 
 ### 1.2 不完整状态
 
@@ -76,7 +77,7 @@ trusted final analysis report with claim-to-evidence links
 
 ### 2.1 研究对象
 
-本 DSE 系统的研究对象是**任意可表达为计算图的工作负载在异构系统上的设计空间探索**，不是 QE-only 工作流。顶层输入 SHALL 是 domain-neutral 的 `WorkloadPackage` / `ComputeGraph`，可由不同 domain adapter 生成或导入：
+本 DSE 系统的研究对象是**任意可表达为计算图的工作负载在异构系统上的设计空间探索**，不是 QE-only 工作流。当前工程和论文主线以 DFT→FPGA 作为第一条完整证明场景，但顶层输入仍 SHALL 是 domain-neutral 的 `WorkloadPackage` / `ComputeGraph`，可由不同 workload profile/importer 生成或导入：
 
 ```text
 source workload
@@ -86,7 +87,7 @@ source workload
   ├── graph analytics / sparse linear algebra graph
   ├── database / vector-search pipeline
   └── user-defined scientific computation graph
-        ↓ adapter / importer
+        ↓ profile / importer
 WorkloadPackage + ComputeGraph + provenance
 ```
 
@@ -96,16 +97,16 @@ WorkloadPackage + ComputeGraph + provenance
 Host + FPGA + Chip/CIM + optional CPU/GPU/ASIC/distributed baselines
 ```
 
-当前 QE SCF/subspace diagonalization shell 只是第一个验证 adapter 和 pilot workload，用于证明 generic DSE pipeline、SystemC/gem5+SystemC evidence、claim gate 与反馈闭环可以跑通。QE 节点名（如 `h_psi`、`diagonalize`）不得成为 core IR、generic mapping search 或 final-report schema 的必需字段。
+DFT/QE SCF/subspace diagonalization shell 是当前主证明 reference profile/importer 和回归 fixture，用于证明 generic DSE pipeline、SystemC/gem5+SystemC evidence、claim gate 与反馈闭环可以在真实科学计算配置上跑通。DFT/QE 节点名或参数（如 `h_psi`、`diagonalize`、`npw`、`nbands`、`nfft`）不得成为 core IR、generic mapping search 或 final-report schema 的必需字段。
 
 ### 2.2 当前设计约束
 
 - Core workload IR 必须保持 domain-neutral：任意 workload 只要能提供 nodes、edges、tensor/resource metadata、cost hints 或 cost-model binding，就能进入 DSE。
-- Domain adapter 可以提供专用 metadata、calibration、mapping policy 和 report metric，但这些能力必须通过 adapter/plugin 注册，不能写死在 core pipeline。
-- 当前 QE adapter 的约束仍然有效：generalized Hermitian eigensolver 是 QE pilot 主路径，`S_sub` 不能被忽略，complex FP64 GEMM 是关键算力底座。
+- Workload profile/importer 可以提供专用 metadata、calibration、mapping policy 和 report metric，但这些能力必须通过 profile/importer 注册，不能写死在 core pipeline。
+- DFT reference profile/importer 的领域约束只适用于 reference lane；不得传播为 core 默认规则。
 - 当前本地 architecture catalog 不完整，必须支持后续补充。
 - 不得把 `/Users/xixilys/project/qe-7.5` 作为修改目标。
-- 新 QE trace 生成不是本设计定稿的目标；优先使用现有 evidence。
+- 新 vendor-specific DFT trace 生成不是本设计定稿的硬门槛；优先使用可复现 DFT config / synthetic reference fixture / 现有 evidence 闭合主证明链。
 
 ---
 
@@ -209,15 +210,18 @@ summary is a partial result, not a complete architecture recommendation.
 WorkloadPackage:
   schema_version: string
   workload_id: string
-  workload_family: string          # e.g. dft_qe, ml_tensor, stencil, sparse_la, graph_analytics, database_pipeline, custom
+  workload_family: string          # e.g. ml_tensor, stencil, sparse_la, graph_analytics, database_pipeline, custom
   source:
     kind: trace | generated | hand_authored | imported_graph | external_ir
     path: optional string
     provenance: string
     generator: optional string
-  adapter:
-    adapter_id: string             # e.g. generic_json, dft_qe, ml_onnx, custom_python
-    adapter_version: string
+  profile:
+    profile_id: string             # e.g. sparse_la, ml_tensor, dynamic_custom
+    profile_version: string
+  importer:
+    importer_id: string            # e.g. generic_json, ml_onnx, matrix_market, custom_python
+    importer_version: string
     claim_boundary: string
   graph: ComputeGraph
   constraints:
@@ -228,25 +232,25 @@ WorkloadPackage:
   calibration:
     datasets: list[map[string, any]]
     confidence: optional string
-  domain_metadata: map[string, any] # adapter-owned opaque metadata; never required by core DSE
+  domain_metadata: map[string, any] # profile/importer-owned opaque metadata; never required by core DSE
 ```
 
 Requirement:
 
-- Workload metadata SHALL preserve source, units, adapter identity, generator/provenance, and domain attributes.
+- Workload metadata SHALL preserve source, units, profile/importer identity, generator/provenance, and domain attributes.
 - Core DSE SHALL consume only generic fields: graph nodes, edges, tensor specs, operator strings, cost estimates or cost-model bindings, constraints, and mapping policy hooks.
-- Domain-specific metadata such as QE `npw`, `nkb`, `nbands`, `nfft`, k-point/spin, ML batch shape, sparse matrix format, or database query shape SHALL remain adapter-owned attributes, not core IR requirements.
-- Every workload adapter SHALL declare its claim boundary: full workload, reduced workload, synthetic regression, imported trace, or diagnostic-only. Reduced/diagnostic workloads SHALL NOT satisfy full-flow final checks.
+- Domain-specific metadata such as QE `npw`, `nkb`, `nbands`, `nfft`, k-point/spin, ML batch shape, sparse matrix format, or database query shape SHALL remain profile/importer-owned attributes, not core IR requirements.
+- Every workload profile/importer SHALL declare its claim boundary: full workload, reduced workload, synthetic regression, imported trace, or diagnostic-only. Reduced/diagnostic workloads SHALL NOT satisfy full-flow final checks.
 
 ### 4.1.1 Generic ComputeGraph model
 
 `ComputeGraph` SHALL be a domain-neutral computation graph, not a QE-specific or DAG-only workload shell. It must support:
 
-- open `op_type` strings and opaque adapter attributes rather than fixed operator enums;
+- open `op_type` strings and opaque profile/importer attributes rather than fixed operator enums;
 - typed nodes with tensor/resource/cost-model metadata;
 - typed edges for data, control, state, streaming, resource, and ordering dependencies;
 - hierarchical subgraphs or regions for loop bodies, pipeline stages, fused kernels, and call-like reusable graph fragments;
-- declared iteration/feedback constructs with bounds, convergence criteria, trace-derived trip counts, or adapter-provided summary models;
+- declared iteration/feedback constructs with bounds, convergence criteria, trace-derived trip counts, or importer-provided summary models;
 - explicit source/sink, stateful side-effect, and external I/O annotations when those affect scheduling or correctness claims.
 
 The core validator SHALL reject only ambiguous graph semantics, not every non-DAG
@@ -257,21 +261,20 @@ the workflow SHALL produce a normalized executable graph or task graph whose
 ordering, iteration policy, approximations, and unsupported constructs are
 recorded in `graph_lowering_report.json`.
 
-### 4.1.2 Workload adapter registry
+### 4.1.2 Workload profile/importer registry
 
-The framework SHALL route workload ingestion through an adapter registry rather than hardcoded workload branches. Minimum adapter interface:
+The framework SHALL route workload ingestion through separate profile and importer registries rather than hardcoded workload branches. Minimum importer interface:
 
 ```yaml
-WorkloadAdapter:
-  adapter_id: string
+WorkloadImporter:
+  importer_id: string
   supported_source_kinds: list[string]
-  emit_workload_package(source, parameters) -> WorkloadPackage
+  compatible_profiles: list[string]
+  import_workload(source, profile, parameters) -> WorkloadPackage
   validate_workload_package(package) -> validation_report
-  default_mapping_policies(package) -> list[MappingPolicy]
-  domain_report_metrics(package, result) -> map[string, any]
 ```
 
-Built-in adapters MAY include `generic_json` and `dft_qe`, but adding `ml_onnx`, `stencil`, `sparse_la`, or user-defined adapters SHALL NOT require changing core IR classes, generic simulator request schema, report validator, or mapping-search core.
+Built-in importers MAY include `generic_json` plus optional reference importers, but adding `ml_onnx`, `stencil`, `sparse_la`, or user-defined importers SHALL NOT require changing core IR classes, generic simulator request schema, report validator, or mapping-search core.
 
 ### 4.1.3 Workload-family workflow contract
 
@@ -279,22 +282,25 @@ Every workload family SHALL be reviewed through the same top-level DSE workflow:
 
 ```text
 source artifact / trace / graph
-  → WorkloadAdapter.emit_workload_package()
+  → resolve WorkloadProfile
+  → WorkloadImporter.import_workload()
   → WorkloadPackage validation
   → ComputeGraph validation
   → graph lowering / executable-view generation
   → architecture catalog filtering
   → legality matrix + mapping search
   → SystemC or gem5+SystemC full-flow simulation
-  → adapter-domain validation where available
+  → profile/importer-domain validation where available
   → evidence export + final claim validation
 ```
 
-The workflow is generic, but each adapter SHALL declare the family-specific
+The workflow is generic, but each profile SHALL declare the family-specific
 items needed by the generic stages:
 
 ```yaml
-WorkloadWorkflow:
+WorkloadProfile:
+  profile_id: string
+  profile_version: string
   workload_family: string
   accepted_sources: list[string]
   graph_pattern: dag | hierarchical | bounded_loop | streaming | dynamic_summary | custom
@@ -308,39 +314,39 @@ WorkloadWorkflow:
   final_claim_boundary: full_workload | reduced | synthetic | trace_only | diagnostic_only
 ```
 
-Coverage is adapter-owned, not globally QE-owned:
+Coverage is profile-owned, not globally DFT/QE-owned:
 
-- `dft_qe` SHALL use its adapter-declared SCF phase coverage (`h_psi`, `s_psi`, reduced builds, diagonalization, rotation, refresh/residual, density/mixing/effective-potential nodes when present).
-- Non-QE adapters SHALL use explicit `required_coverage` when provided.
-- If a non-QE adapter does not provide explicit coverage, the default full-workload coverage SHALL be the lowered executable graph nodes or regions.
+- `dft_fpga_reference` / `dft_qe_reference` MAY use profile-declared DFT/SCF phase coverage (`fft`, `gemm`, `reduction`, `eigensolver_shell`, `host_fpga_transfer`, or QE-like `h_psi`, `s_psi`, diagonalization/rotation/refresh/residual/density phases when present).
+- Non-reference profiles SHALL use explicit `required_coverage` when provided.
+- If a profile does not provide explicit coverage, the default full-workload coverage SHALL be the lowered executable graph nodes or regions.
 - Missing coverage blocks trusted full-workload claims regardless of simulator exit code.
 
 The following table is the required family workflow baseline for later Step2+
-implementation. A new adapter may specialize these rows, but it must still emit
+implementation. A new profile/importer may specialize these rows, but it must still emit
 `WorkloadPackage`, `ComputeGraph`, `graph_lowering_report.json`, mapping artifacts,
 simulation artifacts, and claim-gated final report evidence.
 
 | Workload family | Accepted sources | Graph / lowering workflow | Mapping workflow | Simulation evidence | Domain validation / final claim boundary |
 | --- | --- | --- | --- | --- | --- |
-| `ml_tensor` | ONNX-like graph, framework export, hand-authored tensor graph, generic JSON | Mostly DAG tensor operators; preserve shapes, dtype/layout, batch/sequence dimensions; bounded dynamic axes require declared summaries; unsupported dynamic control is non-final | host baseline, GPU/tensor accelerator, FPGA systolic, CIM/near-memory for eligible ops, memory-placement variants | executable node events, tensor data movement, utilization, precision policy, `workload_package.json`, `graph_lowering_report.json` | Timing/resource claims are allowed from SystemC/gem5+SystemC; accuracy, numerical tolerance, or model-output equivalence requires adapter reference-output evidence |
-| `sparse_la` | MatrixMarket/CSR/CSC/COO/block-sparse descriptors, solver trace, generic sparse JSON | SpMV, gather/scatter, reduction, preconditioner and solver loops; sparse format and nnz metadata remain adapter-owned; bounded solver loops may be summarized | CPU baseline, FPGA sparse pipeline, memory-rich/HBM, near-memory/CIM for gather/reduce where legal | sparse tensor/index byte movement, node/loop coverage, memory pressure, irregular-access summaries | Residual convergence, solver correctness, and reference-vector equivalence require adapter residual/reference evidence |
-| `stencil_streaming` | stencil DSL, structured-grid config, FFT/signal pipeline, streaming operator graph | grid/halo/tile metadata; time-step loops or streaming feedback edges require bounds, convergence, trace distribution, or summary model; lower by unroll/summary/backend-native stream | streaming-heavy, FPGA pipeline, HBM tile-buffer, overlap DMA/compute, low-power variants | per-stage events, buffer/data movement, tile/halo traffic, summarized recurrence coverage | PDE/signal numerical error, conservation, or output equivalence requires adapter validation; unbounded streams are diagnostic only |
-| `graph_analytics` | graph format plus algorithm config, traversal trace, GNN/message-passing graph | frontier/traversal/update/reduction nodes; loops declare iteration/convergence/trace distribution; graph format metadata stays adapter-owned | CPU baseline, memory-rich, graph accelerator/FPGA, near-memory frontier/reduction seeds | frontier/update/reduction event coverage, edge/vertex traffic, irregular memory summaries | Traversal/result equivalence, PageRank/SSSP/CC convergence, or GNN output quality requires adapter validation |
-| `database_vector_search` | query plan, vector index config, relational/vector-search pipeline, synthetic benchmark config | scan/filter/join/aggregate/top-k/distance/search nodes; selectivity/cardinality/index metadata preserved as domain metadata | CPU baseline, GPU distance compute, FPGA filter/top-k, memory-rich/index-resident variants | query-stage timing, index/data movement, selectivity/cardinality assumptions, top-k stage coverage | Query-result equivalence, recall/precision, freshness, or transaction semantics require adapter validation; timing-only reports must say correctness unclaimed |
-| `dft_qe` | generated QE SCF shell, trace/dump-derived graph, hand-authored QE workload | generic ComputeGraph with QE metadata under adapter domain fields; full SCF or explicitly reduced; SCF coverage is adapter-required coverage | host baseline, FPGA operator sweep, hardware diagonalization, all-operator offload, CIM-heavy/fallback seeds | SCF phase events, tensor/data movement, Ozaki/eigensolver related timing where modeled, numerical reference checks | QE FP64 residual/density/eigenvector/physics correctness requires DFT adapter evidence; reduced shells are non-final |
-| `dynamic_custom` | custom JSON graph, Python/DSL export, trace-summary workload | arbitrary generic nodes/edges/regions; dynamic control, recursion, or stateful behavior must declare bounds, convergence, trace distribution, summary model, or backend-native support | generic host/capability-greedy, adapter-declared seeds only if legality is expressible | executable-view events or explicit unsupported diagnostics; source-to-executable mapping required | Domain correctness is unavailable unless the adapter supplies validator artifacts; unsupported dynamics block trusted claims |
+| `ml_tensor` | ONNX-like graph, framework export, hand-authored tensor graph, generic JSON | Mostly DAG tensor operators; preserve shapes, dtype/layout, batch/sequence dimensions; bounded dynamic axes require declared summaries; unsupported dynamic control is non-final | host baseline, GPU/tensor accelerator, FPGA systolic, CIM/near-memory for eligible ops, memory-placement variants | executable node events, tensor data movement, utilization, precision policy, `workload_package.json`, `graph_lowering_report.json` | Timing/resource claims are allowed from SystemC/gem5+SystemC; accuracy, numerical tolerance, or model-output equivalence requires profile/importer reference-output evidence |
+| `sparse_la` | MatrixMarket/CSR/CSC/COO/block-sparse descriptors, solver trace, generic sparse JSON | SpMV, gather/scatter, reduction, preconditioner and solver loops; sparse format and nnz metadata remain importer-owned; bounded solver loops may be summarized | CPU baseline, FPGA sparse pipeline, memory-rich/HBM, near-memory/CIM for gather/reduce where legal | sparse tensor/index byte movement, node/loop coverage, memory pressure, irregular-access summaries | Residual convergence, solver correctness, and reference-vector equivalence require profile/importer residual/reference evidence |
+| `stencil_streaming` | stencil DSL, structured-grid config, FFT/signal pipeline, streaming operator graph | grid/halo/tile metadata; time-step loops or streaming feedback edges require bounds, convergence, trace distribution, or summary model; lower by unroll/summary/backend-native stream | streaming-heavy, FPGA pipeline, HBM tile-buffer, overlap DMA/compute, low-power variants | per-stage events, buffer/data movement, tile/halo traffic, summarized recurrence coverage | PDE/signal numerical error, conservation, or output equivalence requires profile/importer validation; unbounded streams are diagnostic only |
+| `graph_analytics` | graph format plus algorithm config, traversal trace, GNN/message-passing graph | frontier/traversal/update/reduction nodes; loops declare iteration/convergence/trace distribution; graph format metadata stays importer-owned | CPU baseline, memory-rich, graph accelerator/FPGA, near-memory frontier/reduction seeds | frontier/update/reduction event coverage, edge/vertex traffic, irregular memory summaries | Traversal/result equivalence, PageRank/SSSP/CC convergence, or GNN output quality requires profile/importer validation |
+| `database_vector_search` | query plan, vector index config, relational/vector-search pipeline, synthetic benchmark config | scan/filter/join/aggregate/top-k/distance/search nodes; selectivity/cardinality/index metadata preserved as domain metadata | CPU baseline, GPU distance compute, FPGA filter/top-k, memory-rich/index-resident variants | query-stage timing, index/data movement, selectivity/cardinality assumptions, top-k stage coverage | Query-result equivalence, recall/precision, freshness, or transaction semantics require profile/importer validation; timing-only reports must say correctness unclaimed |
+| `dynamic_custom` | custom JSON graph, Python/DSL export, trace-summary workload | arbitrary generic nodes/edges/regions; dynamic control, recursion, or stateful behavior must declare bounds, convergence, trace distribution, summary model, or backend-native support | generic host/capability-greedy, profile-declared seeds only if legality is expressible | executable-view events or explicit unsupported diagnostics; source-to-executable mapping required | Domain correctness is unavailable unless the profile/importer supplies validator artifacts; unsupported dynamics block trusted claims |
+| `dft_fpga_reference` / `dft_qe_reference` | DFT config, generated QE-like SCF reference fixture, or declared trace summary | generic ComputeGraph with DFT metadata under profile/importer domain fields; covers FFT, GEMM, reduction, eigensolver shell, SCF-loop summary, host-FPGA transfer; reduced shells must be explicitly diagnostic | FPGA deployment search, host baseline, FFT/GEMM/reduction/eigensolver mapping seeds, dataflow/memory/runtime/interface co-design | DFT region events, tensor/data movement, host-FPGA transfer, descriptor/runtime traces, numerical reference checks where modeled | DFT FP64 residual/density/eigenvector/physics correctness requires profile reference evidence; timing/resource/co-design claims are scoped to the declared DFT config set |
 
 ### 4.1.4 Workload workflow acceptance gates
 
 A workload family is accepted for later DSE stages only if all of the following are true:
 
-1. `WorkloadPackage.validate()` passes and includes adapter id/version, source provenance, claim boundary, and graph payload.
+1. `WorkloadPackage.validate()` passes and includes profile/importer id/version, source provenance, claim boundary, and graph payload.
 2. `ComputeGraph.validate()` passes, including structured errors for missing nodes, invalid tensors, and unannotated cycles.
 3. `graph_lowering_report.json` is `lowered` and records unsupported constructs, approximations, and source-to-executable mapping.
 4. Required coverage resolves to source or executable graph entities.
 5. Mapping search can construct a legality matrix over generic node ids/op types and architecture capabilities.
 6. SystemC or gem5+SystemC evidence includes every required coverage item for full-workload claims.
-7. The final report separates generic timing/resource validation from adapter-domain correctness validation.
+7. The final report separates generic timing/resource validation from profile/importer-domain correctness validation.
 8. Reduced, sampled, trace-only, synthetic, smoke, or diagnostic workloads remain visible but cannot satisfy trusted final completion or winner claims.
 
 
@@ -359,15 +365,15 @@ Step2 SHALL consume the following artifacts and fields from Step1:
 
 | Step1 artifact / field | Required Step2 use |
 |---|---|
-| `workload_package.json` | workload id, workload family, adapter id/version, source provenance, claim boundary, domain metadata boundary |
-| `workload_graph.json` | source graph ids, generic nodes, edges, tensors, regions, cost hints, opaque adapter metadata |
+| `workload_package.json` | workload id, workload family, profile/importer id/version, source provenance, claim boundary, domain metadata boundary |
+| `workload_graph.json` | source graph ids, generic nodes, edges, tensors, regions, cost hints, opaque profile/importer metadata |
 | `graph_lowering_report.json` | lowering status, full-workload eligibility, required coverage, unsupported constructs, approximations, source-to-executable map |
 | `executable_graph.json` or executable view in lowering report | legal mapping target graph for architecture resources and backend requests |
 | workflow metadata | default mapping policies, required coverage, domain-validation boundary, unavailable domain metrics |
 | required coverage | coverage ids later required in SystemC/gem5+SystemC evidence |
 
-Step2 SHALL NOT require QE fields such as `npw`, `nkb`, `h_psi`, `diagonalize`,
-or any other domain-specific term unless the selected workload adapter explicitly
+Step2 SHALL NOT require DFT/QE fields such as `npw`, `nkb`, `nbands`, `nfft`, `h_psi`, `diagonalize`,
+or any other domain-specific term unless the selected workload profile/importer explicitly
 emits those terms as generic graph node ids or workflow metadata.
 
 #### Step2 output contract
@@ -405,7 +411,7 @@ Step2 is accepted for later simulation only if all of the following are true:
 3. Architecture validation checks duplicate ids, unit consistency, required component fields, operator/precision support, memory capacity, communication routes, power/area/cost budgets, fallback compatibility, and simulation-binding coverage.
 4. Each selected mapping references only executable graph nodes or declared summarized regions and legal architecture targets or explicit host fallback.
 5. The legality matrix contains rejection reasons for every illegal node/resource pair considered by the search.
-6. Mapping seeds are labeled as core-generic or adapter/workflow-owned; DFT/QE seeds are not global defaults for non-QE workflows.
+6. Mapping seeds are labeled as core-generic or profile/workflow-owned; DFT reference seeds are not global defaults for non-DFT workflows.
 7. Candidate lifecycle states and transition reasons are persisted for generated, screened, promoted, blocked, rejected, simulated, finalist, or selected candidates.
 8. Low-fidelity screening results are marked candidate-generation evidence only.
 9. Promotion decisions include backend target, evidence mode, required coverage, budget impact, and reason.
@@ -419,7 +425,7 @@ Reviewers should audit Step2 in this order:
 2. Inspect catalog families and binding labels; verify legacy/reference families are not the only candidates.
 3. Check architecture validation status and structured rejection reasons.
 4. Check mapping legality matrix before reviewing selected mappings.
-5. Check seed ownership and ensure workflow-specific seeds remain adapter scoped.
+5. Check seed ownership and ensure workflow-specific seeds remain profile scoped.
 6. Check candidate lifecycle records for disappearing or silently rewritten candidates.
 7. Check promotion budget and required coverage before any SystemC/gem5+SystemC run.
 8. Confirm final reports keep Step2 predicted/candidate outputs separate from Step3+ trusted simulation evidence.
@@ -445,7 +451,7 @@ Step3 SHALL treat the following Step2 artifacts as the reviewable handoff:
 |---|---|
 | `step2_status.json` | Confirms Step2 lifecycle state and selected ids |
 | `step2_artifact_validation.json` | Records prior reference/legality checks; Step3 reruns equivalent checks before simulation |
-| `workload_package.json` | Reconstructs adapter identity, workload family, claim boundary, and required coverage |
+| `workload_package.json` | Reconstructs profile/importer identity, workload family, claim boundary, and required coverage |
 | `workload_graph.json` | Preserves source graph and domain-neutral audit view |
 | `graph_lowering_report.json` | Confirms lowering status, full-workload eligibility, unsupported constructs, and source-to-executable mapping |
 | `executable_graph.json` | Supplies the backend-executable graph used for mapping and simulation |
@@ -455,7 +461,7 @@ Step3 SHALL treat the following Step2 artifacts as the reviewable handoff:
 | `mapping.json` | Supplies legacy or compact selected mapping when present |
 | `mapping_promotion_decision.json` | Confirms backend/evidence-mode promotion and records why simulation is allowed or blocked |
 | `mapping_legality_matrix.json` | Preserves legal/illegal node-resource decisions |
-| `mapping_seed_set.json` | Preserves generic and adapter/workflow seed ownership |
+| `mapping_seed_set.json` | Preserves generic and profile/workflow seed ownership |
 | `mapping_candidate_records.json` | Preserves search lifecycle and rejection/promote reasons |
 | `mapping_selected_record.json` | Supplies the selected mapping and any legality violations |
 | `mapping_simulation_samples.json` | Supplies sample queue/history for feedback linkage |
@@ -516,8 +522,8 @@ Reviewers should audit Step3 in this order:
 1. Confirm `step2_input/` contains the Step2 handoff artifacts used to rebuild the request.
 2. Inspect `step3_status.json` before trusting any simulator output.
 3. Verify `simulation_request.json` uses the executable graph, selected mapping, architecture binding, and workflow coverage from Step2 artifacts.
-4. For non-QE workloads, confirm the request/report do not require QE-only fields or phases.
-5. For DFT/QE, confirm QE coverage and seeds remain adapter/workflow metadata and are not global defaults.
+4. For non-DFT workloads, confirm the request/report do not require DFT/QE-only fields or phases.
+5. For the DFT reference profile, confirm DFT coverage and seeds remain profile/workflow metadata and are not global defaults.
 6. Inspect `simulation_result.json`, `numerical_validation.json`, `verdict.json`, and `claim_validation.json` together; simulator success alone is insufficient.
 7. Confirm smoke, diagnostic, prototype, fixed-timing, predicted-only, candidate-only, and missing-binding paths are blocked or downgraded before any trusted claim.
 8. Confirm a single trusted Step3 pilot is reported as feasibility evidence only, not as a globally converged best architecture unless comparable trusted samples and convergence evidence exist.
@@ -682,7 +688,7 @@ communication route, buffer pressure, gem5/SystemC binding availability
 If the source `ComputeGraph` contains loops, feedback edges, dynamic control,
 hierarchical regions, or streaming state, mapping search operates on the
 normalized executable view emitted by graph lowering while preserving links back
-to the original graph ids and adapter claim boundary.
+to the original graph ids and profile/importer claim boundary.
 
 ### 5.2 Legality matrix
 
@@ -704,7 +710,7 @@ Reasons include:
 
 ### 5.3 Seed mappings
 
-Initial seed mappings SHALL include generic baseline policies plus optional adapter-provided policies:
+Initial seed mappings SHALL include generic baseline policies plus optional profile/importer-provided policies:
 
 | Seed | Description | Owner |
 |---|---|---|
@@ -717,9 +723,9 @@ Initial seed mappings SHALL include generic baseline policies plus optional adap
 | `batch` | prioritize high-throughput batch kernels and lower control overhead | core |
 | `fallback-mixed` | unsupported/high-risk ops fallback to host with recorded reasons | core |
 | `debug-observable` | maximize probes and traceability | core |
-| adapter-specific seeds | e.g. DFT/QE hardware diagonalization, ML convolution-heavy, sparse SpMV-heavy | workload adapter |
+| profile/importer-specific seeds | e.g. QE reference diagonalization, ML convolution-heavy, sparse SpMV-heavy | workload profile/importer |
 
-Adapter-specific seeds SHALL be labeled with `adapter_id`, `policy_id`, and claim boundary. The generic mapping core SHALL treat them as policy suggestions over generic node ids/op types; it SHALL NOT contain hardcoded QE node names such as `h_psi`, `s_psi`, or `diagonalize`.
+Profile/importer-specific seeds SHALL be labeled with `profile_id`, `importer_id`, `policy_id`, and claim boundary. The generic mapping core SHALL treat them as policy suggestions over generic node ids/op types; it SHALL NOT contain hardcoded QE node names such as `h_psi`, `s_psi`, or `diagonalize`.
 
 ### 5.4 Search operators
 
@@ -967,7 +973,7 @@ For any full-flow workload run, the minimum trusted SystemC evidence set is:
 `numerical_validation.json` is a scoped timing-level numeric reference check for
 the generic simulator outputs; it does not by itself claim domain-specific
 correctness such as QE FP64 physics, ML model accuracy, sparse solver residuals,
-or database query equivalence unless the corresponding workload adapter supplies
+or database query equivalence unless the corresponding workload profile/importer supplies
 separate validation evidence. gem5 logs are required only for a gem5+SystemC run
 and MUST be replaced by explicit blocker evidence otherwise.
 
@@ -1100,7 +1106,7 @@ Detailed matrix: `docs/architecture/generic_dse_openspec_traceability_matrix_v2.
 | `accelerator-system-description` | §4.2–§4.4 Architecture catalog, families, DesignPoint |
 | `multi-fidelity-dse-evaluation` | §6 Screening and feedback loop, §6.4 convergence |
 | `generic-simulation-backend` | §7 gem5+SystemC role, §8 evidence contract |
-| `dft-qe-workload-adapter` | §2 QE as one domain adapter, §4.1.2 adapter registry, §9 domain reporting |
+| `dft-qe-workload-adapter` | Historical capability name; current contract treats DFT/QE as the primary reference vertical slice while keeping it profile/importer-scoped, §4.1.2 profile/importer registry, §9 domain reporting |
 | `end-to-end-dse-workflow` | §1, §3, §5, §8, §9 |
 | `step3-simulation-evidence-workflow` | §4.1.6 Step3 simulation/evidence audit contract, §8 evidence contract, §9 final report gates |
 
@@ -1122,9 +1128,9 @@ This phasing matches `openspec/changes/enhance-generic-dse-framework-spec/tasks.
 
 Implementation evidence update (2026-05-09):
 
-- P0/P1 L4 closure is implemented for the GenericAccel descriptor/request/SystemC/completion path, with a trusted post-feedback run at `runs/dse/l4_full_flow_real_post_feedback_20260509_164657`.
+- P0/P1 L4 evidence is implemented for the GenericAccel descriptor/request/decode/microarchitecture/completion path, with a trusted post-feedback run at `runs/dse/l4_full_flow_real_post_feedback_20260509_164657`.
 - P4/P5 feedback/reporting is implemented for bounded multi-candidate SystemC feedback runs, with convergence/budget evidence at `runs/dse/feedback_convergence_20260509_164625`.
-- Both evidence lanes keep the same claim boundary: generic timing-level numerical validation passes, but domain-specific correctness such as QE FP64 residual/density/eigenvector physics correctness is not claimed without adapter evidence.
+- Both evidence lanes keep the same claim boundary: generic timing-level numerical validation passes, but domain-specific correctness such as DFT/QE FP64 residual/density/eigenvector physics correctness is not claimed without profile/importer evidence.
 
 ---
 
@@ -1135,18 +1141,18 @@ goal claims a complete architecture recommendation:
 
 | Topic | Decision needed | Default if undecided |
 |---|---|---|
-| Architecture family priorities | Which families should be simulated first beyond `balanced-generic-systemc-v0`: CPU-only, Host+FPGA minimal, Host+FPGA+CIM, diag-heavy, streaming-heavy, memory-rich, low-power, debug, or custom | Cover at least one baseline, one balanced, and one stress family; do not privilege legacy four-cluster as the only default |
-| First gem5+SystemC pilot | Resolved for the current generic descriptor/request/SystemC/completion path using the DFT/QE adapter pilot at `runs/dse/l4_full_flow_real_post_feedback_20260509_164657`; future discussion is whether to require L4 for every finalist or only selected audit samples | Treat L4 as trusted only when `gem5_l4_proof.json` passes; otherwise retain untrusted labels for that sample |
+| Architecture family priorities | Which families should be simulated first beyond `balanced-generic-systemc-v0`: CPU-only, Host+FPGA minimal, Host+FPGA+CIM, diag-heavy, streaming-heavy, memory-rich, low-power, debug, or custom | Cover at least one baseline, one balanced, and one stress family; do not reintroduce historical fixed-pipeline templates as the default |
+| First gem5+SystemC pilot | Resolved for the current generic descriptor/request/decode/microarchitecture/completion path using the DFT/QE reference profile/importer pilot at `runs/dse/l4_full_flow_real_post_feedback_20260509_164657`; future discussion is how many DFT→FPGA finalists require L4 and how to sample other workload families | Treat L4 as trusted only when `gem5_l4_proof.json` passes; otherwise retain untrusted labels for that sample |
 | Evidence verbosity defaults | Whether top-K finalists should default to `debug` or `forensic` evidence mode | Use `debug` for finalists; reserve `forensic` for publication/user-selected audit runs |
 | Mapping-search budget | Number of promoted candidates per feedback round, total SystemC/gem5+SystemC samples, and top-K stability threshold | Current bounded pilot uses two trusted SystemC samples and reports budget exhaustion as a limitation, not convergence |
 | Convergence definition | Whether trusted frontier stability, top-K stability, hypervolume improvement, absolute improvement, uncertainty reduction, or family coverage gates stop the run | Record explicit stop reason in `convergence_status.json` |
-| Required domain metrics | Which adapter-specific metrics are mandatory per workload family: DFT/QE phase timings, ML accuracy/throughput, sparse residuals, graph traversal quality, database query correctness, unavailable labels | Include generic latency/energy/data movement plus adapter-declared unavailable-metric labels at minimum |
+| Required domain metrics | Which profile/importer-specific metrics are mandatory per workload family: DFT reference phase timings / transfer metrics / residual-related correctness evidence where modeled, ML accuracy/throughput, sparse residuals, graph traversal quality, database query correctness, unavailable labels | Include generic latency/energy/data movement plus profile-declared unavailable-metric labels at minimum |
 
 ## 13. Future `/goal` split
 
 Future implementation should be split into separate bounded goals:
 
-1. **P0/P1 full-flow evidence goal**: close or explicitly block the L4 gem5+SystemC descriptor/completion path; harden summary/debug/forensic evidence artifacts and claim gating.
+1. **P0/P1 full-flow evidence goal**: extend or explicitly block the L4 gem5 GenericAccel descriptor/decode/microarchitecture/completion path; harden summary/debug/forensic evidence artifacts and claim gating.
 2. **P2/P3 catalog and mapping goal**: extend architecture catalog families, validation, DesignPoint generation, legality matrix, seeded beam/local mapping search, and persisted mapping artifacts.
 3. **P4/P5 feedback and report goal**: implement multi-candidate feedback updates, convergence/budget reporting, final report generation, and machine-checkable claim validation.
 4. **Validation/archive goal**: run build/tests/OpenSpec validation, verify protected-path compliance, record remaining limitations, and archive only after evidence matches every OpenSpec scenario.

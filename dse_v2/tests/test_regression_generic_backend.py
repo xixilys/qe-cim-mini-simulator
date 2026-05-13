@@ -102,7 +102,7 @@ def run_simulation(request):
         return json.load(f)
 
 
-def test_architecture_differentiation():
+def check_architecture_differentiation():
     """Test that different accelerators produce different latencies."""
     print("Testing architecture differentiation...")
     
@@ -148,7 +148,12 @@ def test_architecture_differentiation():
     return True
 
 
-def test_parser_node_count():
+def test_architecture_differentiation():
+    """Pytest wrapper for architecture differentiation regression."""
+    assert check_architecture_differentiation()
+
+
+def check_parser_node_count():
     """Test that parser correctly counts nodes."""
     print("Testing parser node count...")
     
@@ -186,15 +191,29 @@ def test_parser_node_count():
     return True
 
 
+def test_parser_node_count():
+    """Pytest wrapper for parser node count regression."""
+    assert check_parser_node_count()
+
+
+def test_invalid_schema_version_is_rejected():
+    request = create_test_request("gpu", 1000)
+    request["schema_version"] = "gsim.request.v0"
+
+    assert run_simulation(request) is None
+
+
 if __name__ == "__main__":
     print("Running Generic SystemC Backend Regression Tests\n")
     
-    test1 = test_architecture_differentiation()
+    test1 = check_architecture_differentiation()
     print()
-    test2 = test_parser_node_count()
+    test2 = check_parser_node_count()
+    print()
+    test3 = test_invalid_schema_version_is_rejected() is None
     print()
     
-    if test1 and test2:
+    if test1 and test2 and test3:
         print("All regression tests passed!")
     else:
         print("Some tests failed!")

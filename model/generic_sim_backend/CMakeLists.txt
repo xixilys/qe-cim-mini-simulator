@@ -20,6 +20,7 @@ endif()
 
 # Include directories
 include_directories(${CMAKE_SOURCE_DIR}/include)
+include_directories(${CMAKE_SOURCE_DIR}/include/microarchitecture)
 
 # Source files
 set(GSIM_SOURCES
@@ -37,7 +38,13 @@ add_executable(generic_sim
 # Tests
 if(GSIM_BUILD_TESTS)
     enable_testing()
-    # add_subdirectory(tests)  # TODO: Create tests directory
+    add_executable(test_microarchitecture_simulators
+        tests/test_microarchitecture_simulators.cpp
+    )
+    target_include_directories(test_microarchitecture_simulators PRIVATE
+        ${CMAKE_SOURCE_DIR}/include
+    )
+    add_test(NAME microarchitecture_simulators COMMAND test_microarchitecture_simulators)
 endif()
 
 # Install

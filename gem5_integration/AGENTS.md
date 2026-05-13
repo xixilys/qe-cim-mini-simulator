@@ -1,93 +1,27 @@
-# AGENTS Guide - gem5 Integration
+# AGENTS Guide - gem5_integration/
 
-## Purpose
+## Scope
 
-gem5 + SystemC co-simulation platform for CPU-FPGA heterogeneous system validation. Provides full-system simulation where gem5 models the CPU executing QE, and SystemC models the FPGA accelerator with 4-Cluster pipeline.
+This directory owns the generic gem5 L4 path for DSE evidence.  The mainline device is `src/dev/generic_accel/`.
 
-**Key Capabilities:**
-- gem5 CPU simulation with QE offload hooks
-- SystemC FPGA accelerator model (TLM-2.0)
-- CPU-FPGA communication via PCIe/DMA simulation
-- End-to-end performance evaluation for c_bands offloading
+## Active files
 
-## Directory Structure
+- `src/dev/generic_accel/` — GenericAccel SimObject implementation.
+- `configs/generic_accel_l4_test.py` — L4 config.
+- `test_programs/generic_accel/generic_accel_l4_driver.c` — guest driver.
 
-```
-gem5_integration/
-├── src/dev/fpga/              # gem5 FPGA device model
-│   ├── fpga_accelerator.hh    # Device header
-│   ├── fpga_accelerator.cc    # Device implementation
-│   ├── FPGAAccelerator.py     # Python configuration
-│   └── SConscript             # Build config
-├── configs/fpga/              # gem5 system configurations
-│   └── qe_fpga_system.py      # QE+FPGA system config
-├── systemc_model/             # SystemC TLM model
-│   ├── include/               # Headers (gem5_tlm_target, bridge)
-│   ├── src/                   # Implementation
-│   └── CMakeLists.txt         # CMake build
-├── qe_integration/            # QE code hooks
-│   ├── fpga_offload.h/.c      # C offload API
-│   ├── fpga_offload_module.f90 # Fortran interface
-│   ├── c_bands_fpga.patch     # QE patch
-│   └── Makefile               # Build script
-├── docker/                    # Docker environment
-├── docs/                      # Integration docs
-├── scripts/                   # Helper scripts
-└── m5out*/                    # Simulation outputs
-```
+## Rules
 
-## Build Systems
+- Do not revive legacy app-specific offload hooks without an explicit scoped request.
+- Keep logs and `m5out*` outputs out of git.
+- L4 claims must be evidence-gated: descriptor read, request decode, in-gem5 microarchitecture execution, completion writeback, and guest status must all be observable.
+- If gem5 or the driver binary is missing, return blocked evidence rather than a synthetic pass.
 
-- **gem5**: SCons (`scons build/X86/gem5.opt`)
-- **SystemC model**: CMake
-- **QE integration**: Makefile
-- **Docker**: `docker-compose.yml`
+## Validation
 
-## Quick Start
+For Python/config changes:
 
 ```bash
-# Build SystemC model
-cd gem5_integration/systemc_model
-mkdir build && cd build
-cmake .. -DCMAKE_PREFIX_PATH=/opt/systemc-2.3.3
-make -j4
-
-# Run standalone test
-./gem5_systemc_standalone
-
-# Build QE integration
-cd ../qe_integration
-make
+python3 -m py_compile gem5_integration/configs/generic_accel_l4_test.py
+python3 -m compileall gem5_integration/src/dev/generic_accel
 ```
-
-## Key Files
-
-- `src/dev/fpga/fpga_accelerator.cc` - gem5 FPGA device
-- `systemc_model/src/dft_hybrid_system_gem5.cpp` - SystemC accelerator
-- `configs/fpga/qe_fpga_system.py` - System configuration
-- `qe_integration/fpga_offload.c` - QE offload driver
-
-## Integration Points
-
-- **With model/**: SystemC model reuses `model/qe_band_solver_model/` architecture
-- **With soft/qe-7.5/**: QE patch applied to workspace copy
-- **With docs/**: Architecture specs in `docs/architecture/`
-
-## Critical Rules
-
-- Do not modify system gem5 installation; use vendored tree
-- QE patch targets `soft/qe-7.5/` only
-- Simulation outputs (m5out*) are ephemeral; archive important results
-- Docker environment is optional but recommended for reproducibility
-
-## Documentation
-
-- Architecture: `docs/overview/gem5_systemc_cosim_architecture_v1.md`
-- Roadmap: `docs/overview/gem5_systemc_implementation_roadmap.md`
-- API: `qe_integration/fpga_offload.h`
-
-## Next Steps
-
-- For SystemC model: see `model/qe_band_solver_model/AGENTS.md`
-- For QE workspace: see `soft/qe-7.5/` (instrumented copy)
-- For architecture: see `docs/architecture/AGENTS.md`

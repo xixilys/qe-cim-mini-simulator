@@ -4,17 +4,18 @@
 
 This document records the Task 3 review outcome for the generic DSE team run and
 specifies the implemented final-report surface for generic WorkloadPackage /
-ComputeGraph evidence runs. The current runnable pilot uses the DFT/QE adapter,
-but the reporting contract is not QE-specific.
+ComputeGraph evidence runs. The current runnable pilot is profile/importer
+driven; QE is only an optional reference profile/importer, not the default core
+path.
 It complements `omx/team-generic-dse-run-cli-manager.md` by documenting how the
 current code avoids overclaiming while still producing auditable report artifacts.
 
 ## Current implementation status
 
-- `dse_v2/scripts/dse/run_full_flow_pilot.py` currently runs the DFT/QE adapter
-  vertical slice through the generic SystemC timing backend when `generic_sim`
-  is built. Future workload adapters must enter through the same generic
-  WorkloadPackage / ComputeGraph contract.
+- `dse_v2/scripts/dse/run_full_flow_pilot.py` resolves a workload profile and
+  importer, then runs the resulting generic WorkloadPackage through the generic
+  SystemC timing backend when `generic_sim` is built. Optional reference
+  importers enter through the same WorkloadPackage / ComputeGraph contract.
 - `dse_v2/evidence/full_flow.py` writes the core evidence contract: manifest,
   verdict, design point, architecture, mapping, workload graph, simulation
   request/result, phase/resource/data summaries, logs, and gem5+SystemC blocker
@@ -34,8 +35,8 @@ current code avoids overclaiming while still producing auditable report artifact
 
 1. `run_metadata` — run id, backend, evidence mode, replay commands, and trust
    flag from `verdict.json`.
-2. `workload` — workload package/graph id, graph size, adapter id, graph
-   lowering status, full-workload coverage requirements, and any missing
+2. `workload` — workload package/graph id, graph size, profile/importer id,
+   graph lowering status, full-workload coverage requirements, and any missing
    coverage.
 3. `architecture_catalog_scope` — architecture id/family/status and whether the
    instance is eligible for trusted final ranking.
@@ -86,16 +87,18 @@ Run the full-flow pilot and produce report artifacts:
 
 ```bash
 python3 dse_v2/scripts/dse/run_full_flow_pilot.py \
-  --workload qe_scf_shell \
+  --profile sparse_la \
+  --importer generic_json \
+  --generator sparse_spmv \
   --backend systemc \
   --evidence-mode debug \
-  --out runs/dse/qe_scf_shell_systemc
+  --out runs/dse/sparse_la_systemc
 ```
 
 Regenerate report artifacts for an existing run directory:
 
 ```bash
-python3 -m dse_v2.reporting.final_report runs/dse/qe_scf_shell_systemc
+python3 -m dse_v2.reporting.final_report runs/dse/sparse_la_systemc
 ```
 
 Run targeted report validation tests:
@@ -108,16 +111,22 @@ Run a bounded multi-candidate feedback/convergence pilot:
 
 ```bash
 python3 dse_v2/scripts/dse/run_full_flow_pilot.py \
+  --profile sparse_la \
+  --importer generic_json \
+  --generator sparse_spmv \
   --backend systemc \
   --evidence-mode debug \
   --feedback-samples 2 \
   --out runs/dse/feedback_convergence_<timestamp>
 ```
 
-Run the real gem5+SystemC L4 transport/timing proof:
+Run the real gem5 GenericAccel L4 microarchitecture/timing proof:
 
 ```bash
 python3 dse_v2/scripts/dse/run_full_flow_pilot.py \
+  --profile sparse_la \
+  --importer generic_json \
+  --generator sparse_spmv \
   --backend gem5_systemc \
   --gem5-real-l4 \
   --evidence-mode debug \
@@ -127,12 +136,11 @@ python3 dse_v2/scripts/dse/run_full_flow_pilot.py \
 ## Review notes and remaining blockers
 
 - The current standalone SystemC path may be trusted for per-run timing evidence
-  only when all required full-workload coverage checks for the selected adapter
-  are present and the simulator exits 0. Coverage checks are adapter-declared:
-  for the current DFT/QE pilot adapter they are the required QE SCF phases, but
-  other adapters must declare their own full-workload graph/region coverage.
-- The gem5+SystemC descriptor/completion path is trusted only for runs with a
-  passing `gem5_l4_proof.json`; stub or missing-proof attempts remain blocked.
+  only when all required full-workload coverage checks for the selected profile
+  are present and the simulator exits 0. Coverage checks are profile-declared
+  or derived from the lowered executable graph.
+- The gem5 GenericAccel descriptor/decode/microarchitecture/completion path is trusted only for runs with a
+  passing `gem5_l4_proof.json`; missing-proof attempts remain blocked.
 - Multi-candidate feedback runs now record `mapping_simulation_samples.json`,
   `mapping_feedback_state.json`, and `convergence_status.json`; budget
   exhaustion is reported as a limitation rather than convergence.

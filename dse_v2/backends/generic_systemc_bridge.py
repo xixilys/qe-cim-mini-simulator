@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Generic SystemC Simulation Backend - Python bridge.
+"""Generic SystemC simulation backend Python bridge.
 
-Replaces QE-specific systemc_backend.py with a generic backend
-that can simulate any accelerator type and workload.
+This backend sends domain-neutral workload packages and compute graphs to the
+generic simulator path used by the DSE evidence flow.
 """
 
 from __future__ import annotations
@@ -15,6 +15,9 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 from dse_v2.core.ir.compute_graph import ComputeGraph
+from dse_v2.core.workload.lowering import lower_compute_graph
+from dse_v2.core.workload.package import WorkloadPackage, package_from_graph
+from dse_v2.core.workload.workflows import required_coverage_from_workflow
 from dse_v2.dse.orchestrator import DesignPoint
 
 
@@ -45,6 +48,7 @@ class GenericSystemCBackend:
         self,
         design_point: DesignPoint,
         compute_graph: ComputeGraph,
+        workload_package: Optional[WorkloadPackage] = None,
     ) -> Dict[str, Any]:
         """Evaluate design point using generic SystemC simulation."""
         if not self.executable_path.exists():
@@ -54,7 +58,7 @@ class GenericSystemCBackend:
             )
         
         try:
-            run = self.run_simulation(design_point, compute_graph, timeout=300)
+            run = self.run_simulation(design_point, compute_graph, workload_package=workload_package, timeout=300)
             
             if run["returncode"] != 0:
                 return self._error_result(
@@ -79,37 +83,11 @@ class GenericSystemCBackend:
         self,
         design_point: DesignPoint,
         compute_graph: ComputeGraph,
+        workload_package: Optional[WorkloadPackage] = None,
         output_dir: Optional[Path] = None,
         timeout: int = 300,
     ) -> Dict[str, Any]:
         """Run the simulator and return raw artifacts for evidence capture."""
-        if self.mode == "gem5_systemc_blocked":
-            from dse_v2.backends.gem5_systemc_adapter import Gem5SystemCClosureAdapter
-
-            workspace = Path(output_dir) if output_dir else self.workspace
-            adapter = Gem5SystemCClosureAdapter(self)
-            verdict = adapter.emit_blocked_verdict(
-                design_point=design_point,
-                compute_graph=compute_graph,
-                output_dir=workspace,
-            )
-            request_path = workspace / "simulation_request.json"
-            result_path = workspace / "simulation_result.json"
-            result = json.loads(result_path.read_text(encoding="utf-8"))
-            return {
-                "run_id": design_point.design_point_id,
-                "returncode": 2,
-                "stdout": "",
-                "stderr": "gem5+SystemC path blocked/prototype; see verdict.json and gem5.log",
-                "request": json.loads(request_path.read_text(encoding="utf-8")),
-                "result": result,
-                "request_path": request_path,
-                "result_path": result_path,
-                "trace_path": None,
-                "cmd": [],
-                "verdict": verdict,
-            }
-
         if not self.executable_path.exists():
             return {
                 "run_id": design_point.design_point_id,
@@ -132,7 +110,7 @@ class GenericSystemCBackend:
         result_path = workspace / "simulation_result.raw.json"
         trace_path = workspace / "simulation_trace.json"
         
-        request = self._build_request(design_point, compute_graph, output_dir=workspace)
+        request = self._build_request(design_point, compute_graph, workload_package=workload_package, output_dir=workspace)
         with open(request_path, "w") as f:
             json.dump(request, f, indent=2)
         
@@ -171,14 +149,38 @@ class GenericSystemCBackend:
         self,
         design_point: DesignPoint,
         compute_graph: ComputeGraph,
+        workload_package: Optional[WorkloadPackage] = None,
         output_dir: Optional[Path] = None,
     ) -> Dict[str, Any]:
         """Convert DesignPoint + ComputeGraph to simulation request."""
         output_dir = Path(output_dir) if output_dir else self.workspace
+        step2_config = dict(design_point.config or {})
+        step2_graph_lowering = step2_config.get("graph_lowering", {}) if isinstance(step2_config.get("graph_lowering", {}), dict) else {}
         
+        workload_package = workload_package or package_from_graph(
+            compute_graph,
+            workload_id=compute_graph.graph_id,
+            workload_family=str(compute_graph.metadata.get("workload_family", "dynamic_custom")),
+            profile_id=str(compute_graph.metadata.get("profile_id", compute_graph.metadata.get("workload_family", "dynamic_custom"))),
+            importer_id=str(compute_graph.metadata.get("importer_id", "direct_graph")),
+            claim_boundary=str(compute_graph.metadata.get("claim_boundary", "full_workload")),
+            source_kind="generated",
+        )
+        lowering = lower_compute_graph(compute_graph, workload_package)
+        executable_graph = lowering.executable_graph or compute_graph
+        workflow = workload_package.resolved_workflow()
+        required_coverage = required_coverage_from_workflow(
+            workload_package.workload_family,
+            workflow,
+            compute_graph.nodes.keys(),
+            lowering.report.get("topological_order", []),
+        )
+        if step2_config.get("required_coverage"):
+            required_coverage = [str(item) for item in step2_config.get("required_coverage", [])]
+
         # Build workload nodes
         nodes = {}
-        for node_id, node in compute_graph.nodes.items():
+        for node_id, node in executable_graph.nodes.items():
             nodes[node_id] = {
                 "op_type": node.op_type,
                 "inputs": node.inputs,
@@ -190,15 +192,21 @@ class GenericSystemCBackend:
         
         # Build edges
         edges = []
-        for edge in compute_graph.edges:
+        for edge in executable_graph.edges:
             edge_data = {
                 "source": edge.source_node,
                 "target": edge.target_node,
+                "source_node": edge.source_node,
+                "target_node": edge.target_node,
                 "tensor_name": edge.tensor_name,
+                "edge_kind": edge.edge_kind,
+                "attributes": edge.attributes,
             }
             if edge.tensor_spec:
                 edge_data["tensor_shape"] = list(edge.tensor_spec.shape)
                 edge_data["tensor_dtype"] = edge.tensor_spec.dtype
+                edge_data["element_size"] = edge.tensor_spec.element_size_bytes()
+                edge_data["size_bytes"] = edge.tensor_spec.size_bytes()
             edges.append(edge_data)
         
         # Build architecture
@@ -241,11 +249,46 @@ class GenericSystemCBackend:
             "schema_version": "gsim.request.v1",
             "run_id": design_point.design_point_id,
             "mode": self.mode,
+            "design_point": {
+                "design_point_id": design_point.design_point_id,
+                "workload_id": step2_config.get("workload_id", workload_package.workload_id),
+                "architecture_id": step2_config.get("architecture_id", design_point.system_architecture.system_id),
+                "mapping_id": step2_config.get("mapping_id"),
+                "selected_candidate_id": step2_config.get("selected_candidate_id"),
+                "scheduling_policy": design_point.scheduling_policy,
+                "precision_policy": step2_config.get("precision_policy", {"default": "FP64"}),
+                "fallback_policy": step2_config.get("fallback_policy", {"unsupported_ops": "host_fallback_visible"}),
+                "objective_directions": step2_config.get("objective_directions", {}),
+                "output_config": step2_config.get("output_config", {}),
+                "replay_metadata": step2_config.get("replay_metadata", {}),
+            },
+            "step2_handoff": {
+                "present": bool(step2_config.get("step") == "step2_architecture_mapping"),
+                "source_graph_id": step2_config.get("source_graph_id", compute_graph.graph_id),
+                "executable_graph_id": step2_config.get("executable_graph_id", executable_graph.graph_id),
+                "source_to_executable_nodes": step2_graph_lowering.get("source_to_executable_nodes", lowering.report.get("source_to_executable_nodes", {})),
+                "required_mapping_artifacts": (step2_config.get("output_config", {}) or {}).get("required_mapping_artifacts", []),
+                "claim_boundary": step2_config.get("claim_boundary", workload_package.claim_boundary),
+            },
             "workload": {
-                "graph_id": compute_graph.graph_id,
+                "graph_id": executable_graph.graph_id,
+                "source_graph_id": compute_graph.graph_id,
                 "nodes": nodes,
                 "edges": edges,
-                "metadata": compute_graph.metadata,
+                "metadata": executable_graph.metadata,
+                "graph_lowering": lowering.report,
+                "workload_package": {
+                    "schema_version": workload_package.schema_version,
+                    "workload_id": workload_package.workload_id,
+                    "workload_family": workload_package.workload_family,
+                    "profile": dict(workload_package.resolved_profile()),
+                    "importer": dict(workload_package.importer),
+                    "source": dict(workload_package.source),
+                    "claim_boundary": workload_package.claim_boundary,
+                },
+                "workflow": workflow,
+                "required_coverage": required_coverage,
+                "source_to_executable_nodes": step2_graph_lowering.get("source_to_executable_nodes", lowering.report.get("source_to_executable_nodes", {})),
             },
             "architecture": {
                 "host": {

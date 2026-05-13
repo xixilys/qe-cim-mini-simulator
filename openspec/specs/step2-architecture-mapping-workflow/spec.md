@@ -4,7 +4,7 @@
 Define the Step2 architecture and mapping workflow contract that governs how the DSE pipeline consumes validated Step1 workload artifacts, constructs architecture candidates, assembles DesignPoint records, builds legality matrices, generates seed mappings, persists candidate lifecycle artifacts, and promotes candidates to Step3 simulation. Step2 SHALL NOT create final trusted conclusions without Step3 evidence.
 ## Requirements
 ### Requirement: Step2 consumes the Step1 generic workload handoff
-Step2 SHALL begin only from validated Step1 artifacts: `workload_package.json`, source `workload_graph.json`, `graph_lowering_report.json`, optional `executable_graph.json`, workflow metadata, required coverage, and source-to-executable node or region mapping. Step2 SHALL consume generic graph nodes, edges, tensor specs, cost hints, workflow mapping-policy hooks, and claim-boundary metadata; it SHALL NOT require QE-specific fields or adapter-private state.
+Step2 SHALL begin only from validated Step1 artifacts: `workload_package.json`, source `workload_graph.json`, `graph_lowering_report.json`, optional `executable_graph.json`, workflow metadata, required coverage, and source-to-executable node or region mapping. Step2 SHALL consume generic graph nodes, edges, tensor specs, cost hints, workflow mapping-policy hooks, and claim-boundary metadata; it SHALL NOT require QE-specific fields or profile/importer-private state.
 
 #### Scenario: Non-QE Step1 output enters Step2
 - **WHEN** Step1 emits a lowered ML, sparse, stencil, graph analytics, database/vector-search, or custom workload package
@@ -34,7 +34,7 @@ Step2 SHALL support an orchestration mode that accepts a Step1 workload handoff 
 
 #### Scenario: Step2 architecture screening does not depend on Step1 private state
 - **WHEN** Step1 internals change while the serialized `WorkloadPackage`, graph, lowering report, workflow metadata, and claim-boundary fields remain valid
-- **THEN** Step2 architecture screening can be rerun from those generic artifacts without adapter-private callbacks or hidden Python process state
+- **THEN** Step2 architecture screening can be rerun from those generic artifacts without profile/importer-private callbacks or hidden Python process state
 
 ### Requirement: Step2 assembles complete DesignPoint records
 Step2 SHALL assemble DesignPoint records that bind workload id, architecture instance id, selected mapping, data-placement policy, scheduling policy, precision policy, fallback policy, simulation config, evidence/output config, random seed, objective directions, and replay metadata. Hidden process state SHALL NOT be required to replay a promoted candidate.
@@ -59,11 +59,11 @@ Step2 SHALL construct `mapping_legality_matrix.json` before selecting mappings. 
 - **THEN** the legality matrix and selected mapping record identify the fallback target and reason rather than silently treating it as accelerator execution
 
 ### Requirement: Step2 seed mappings are generic and workflow-aware
-Step2 SHALL generate seed mappings from core generic policies and optional workload workflow policies. Core seeds SHALL include host baseline, capability-greedy, memory-locality, communication-aware, all-offload, streaming, batch, fallback-mixed, and debug-observable where applicable. Adapter or workflow seeds SHALL be labeled with adapter id or workload family and SHALL operate over generic node ids/op types rather than hardcoded core-domain node names.
+Step2 SHALL generate seed mappings from core generic policies and optional workload workflow policies. Core seeds SHALL include host baseline, capability-greedy, memory-locality, communication-aware, all-offload, streaming, batch, fallback-mixed, and debug-observable where applicable. Profile/workflow seeds SHALL be labeled with importer id or workload family and SHALL operate over generic node ids/op types rather than hardcoded core-domain node names.
 
-#### Scenario: DFT/QE seed is adapter scoped
+#### Scenario: DFT/QE seed is profile scoped
 - **WHEN** a DFT/QE workflow supplies a hardware-diagonalization or operator-sweep seed
-- **THEN** Step2 records it as adapter/workflow-owned metadata and SHALL NOT expose it as a global default for non-QE workloads
+- **THEN** Step2 records it as profile/workflow-owned metadata and SHALL NOT expose it as a global default for non-QE workloads
 
 #### Scenario: Non-QE workflow seed uses generic operators
 - **WHEN** a sparse, stencil, graph analytics, ML/tensor, database/vector-search, or custom workflow supplies default mapping policies
@@ -113,7 +113,7 @@ Step2 SHALL build legality matrices, seed mappings, candidate records, selected 
 - **WHEN** Step2 consumes a sparse linear algebra workload package and executable graph
 - **THEN** legality and selected mapping artifacts reference sparse generic op types, tensor sizes, and workflow policies without requiring `h_psi`, `s_psi`, or `diagonalize`
 
-#### Scenario: Adapter seed remains scoped
-- **WHEN** a workload adapter supplies domain-specific seed policies
-- **THEN** Step2 records the adapter id or workload family for those seeds and applies them only to compatible workload packages
+#### Scenario: Profile seed remains scoped
+- **WHEN** a workload importer supplies domain-specific seed policies
+- **THEN** Step2 records the importer id or workload family for those seeds and applies them only to compatible workload packages
 

@@ -1,0 +1,46 @@
+{
+  "template_id": "near_memory_streaming_fabric_v1",
+  "template_version": "v1",
+  "description": "Near-memory streaming/dataflow candidate for sparse, stencil, graph, and vector-search workloads. Workload-specific semantics must be supplied by profiles/importers.",
+  "compute_resources": [
+    {
+      "resource_id": "host",
+      "resource_type": "host_cpu",
+      "clock_mhz": 2800,
+      "supported_ops": ["control", "generic"],
+      "memory_capacity_mb": 65536
+    },
+    {
+      "resource_id": "nm-0",
+      "resource_type": "near_memory",
+      "clock_mhz": 600,
+      "supported_ops": ["dma_load", "gather", "scatter", "spmv", "frontier_expand", "predicate_filter", "reduction"],
+      "memory_capacity_mb": 16384
+    },
+    {
+      "resource_id": "fpga-stream-0",
+      "resource_type": "fpga",
+      "clock_mhz": 300,
+      "supported_ops": ["stencil", "fft", "streaming_pipeline", "topk", "aggregation"],
+      "memory_capacity_mb": 4096
+    }
+  ],
+  "memory_system": {
+    "host_memory_gb": 128,
+    "hbm_stacks": 4,
+    "scratchpad_mb": 1024,
+    "coherency_model": "streaming_explicit"
+  },
+  "interconnect": {
+    "topology": "hbm_noc",
+    "bandwidth_gbps": 512,
+    "latency_ns": 250
+  },
+  "mapping_policy_hints": ["memory-locality", "near-memory-reduction", "streaming", "debug-observable"],
+  "fidelity_targets": ["l1_analytical", "l2_tlm", "l3_systemc"],
+  "claim_boundary": "template_only",
+  "metadata": {
+    "status": "active_generic_template",
+    "domain_assumptions": []
+  }
+}

@@ -1,72 +1,26 @@
 {
   "project": {
-    "name": "DSE v2",
+    "name": "Generic DSE / TLM / SystemC / gem5 exploration stack",
     "version": "2.0.0",
-    "description": "Host+FPGA Design Space Exploration with Bayesian Optimization",
-    "created": "2026-04-22",
-    "status": "active"
+    "status": "active",
+    "description": "Domain-neutral design-space exploration for heterogeneous accelerator systems. Application-specific historical assets are removed from the active working tree and are not the mainline."
   },
-  "architecture": {
-    "layers": ["host", "fpga"],
-    "chip_layer": false,
-    "description": "Simplified two-layer architecture focusing on Host-FPGA co-optimization"
+  "mainline_scope": [
+    "generic workload profiles and importers",
+    "architecture mapping and design-space exploration",
+    "multi-fidelity L1/L2/L3/L4 evaluation",
+    "SystemC generic simulator evidence",
+    "gem5 GenericAccel integration evidence"
+  ],
+  "removed_legacy_scope": {
+    "policy": "restore only explicitly needed reference artifacts from history; do not reintroduce as core DSE assumptions"
   },
-  "methodology": {
-    "optimization": "bayesian",
-    "framework": "BoTorch + Ax",
-    "fidelity_levels": ["fast", "mid", "high"],
-    "objectives": ["time_to_convergence", "energy_to_convergence"]
-  },
-  "fpga_target": {
-    "vendor": "Xilinx",
-    "family": "Alveo",
-    "model": "U250",
-    "specs": {
-      "peak_gflops_fp64": 1300,
-      "memory_bw_gbs": 77,
-      "pcie_gen": 3,
-      "pcie_lanes": 16,
-      "bram_kb": 34000,
-      "dsp_count": 12288
-    }
-  },
-  "workloads": {
-    "existing": ["Si", "graphene", "Fe", "C6H6", "Au", "SiC32", "H2"],
-    "planned": ["GaN", "GaAs", "MoS2", "hBN", "TiO2", "ZnO"],
-    "categories": ["semiconductors", "2d_materials", "transition_metal_oxides", "organic_molecules"]
-  },
-  "design_space": {
-    "categorical_params": 7,
-    "integer_params": 8,
-    "total_configurations": "~10M",
-    "search_method": "bayesian_optimization"
-  },
-  "timeline": {
-    "week1": {
-      "focus": "Workload expansion",
-      "tasks": ["Analyze existing", "Define new matrix", "Run QE cases", "Extract traces"]
-    },
-    "week2": {
-      "focus": "Design space definition",
-      "tasks": ["Define parameters", "Implement fast model", "Validate model"]
-    },
-    "week3": {
-      "focus": "Bayesian Optimization",
-      "tasks": ["Implement BO engine", "Run optimization", "Generate Pareto frontier"]
-    },
-    "week4": {
-      "focus": "Validation and reporting",
-      "tasks": ["High-fidelity validation", "Generate reports", "Documentation"]
-    }
-  },
-  "paths": {
-    "workloads": "workloads/",
-    "design_space": "design_space/",
-    "models": "models/",
-    "optimization": "optimization/",
-    "results": "results/",
-    "scripts": "scripts/",
-    "docs": "docs/",
-    "tests": "tests/"
+  "active_paths": {
+    "workload_core": "dse_v2/core/workload/",
+    "architecture_catalog": "dse_v2/architecture/",
+    "mapping": "dse_v2/mapping/",
+    "evidence": "dse_v2/evidence/",
+    "systemc_backend": "model/generic_sim_backend/",
+    "gem5_l4": "gem5_integration/src/dev/generic_accel/"
   }
 }

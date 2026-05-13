@@ -9,7 +9,8 @@ class GenericAccel(BasicPioDevice):
     cxx_header = 'dev/generic_accel/generic_accel.hh'
     cxx_class = 'gem5::GenericAccel'
 
-    pio_addr = Param.Addr(0x10000000, "MMIO base address")
+    # Inherit BasicPioDevice.pio_addr.  Do not redeclare it here: doing so
+    # creates a duplicate generated param and leaves the C++ base pioAddr at 0.
     pio_size = Param.Addr(0x10000, "MMIO region size")
     
     dma_buffer_size = Param.MemorySize('16MB', "DMA buffer size")

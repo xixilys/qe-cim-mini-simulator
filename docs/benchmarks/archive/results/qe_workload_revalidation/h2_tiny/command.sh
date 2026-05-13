@@ -1,4 +1,0 @@
-#!/bin/sh
-set -eu
-cd '/Volumes/remote/phd/year_2/project/dft加速'
-OMP_NUM_THREADS=1 QE_HPSI_TRACE_FILE='/Volumes/remote/phd/year_2/project/dft加速/docs/benchmarks/results/qe_workload_revalidation/h2_tiny/hpsi_trace.csv' QE_BANDSOLVER_TRACE_FILE='/Volumes/remote/phd/year_2/project/dft加速/docs/benchmarks/results/qe_workload_revalidation/h2_tiny/bandsolver_trace.csv' QE_SUBSPACE_TRACE_FILE='/Volumes/remote/phd/year_2/project/dft加速/docs/benchmarks/results/qe_workload_revalidation/h2_tiny/subspace_trace.csv' QE_SUBSPACE_MIN_N=0 '/Volumes/remote/phd/year_2/project/dft加速/soft/qe-7.5/build_subspace_trace/bin/pw.x' -in '/Volumes/remote/phd/year_2/project/dft加速/docs/qe_inputs/h2_tiny_gamma.in' > '/Volumes/remote/phd/year_2/project/dft加速/docs/benchmarks/results/qe_workload_revalidation/h2_tiny/stdout.out' 2>&1

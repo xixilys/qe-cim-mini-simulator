@@ -92,16 +92,22 @@ class TLMEvaluator:
         """Extract workload parameters from compute graph."""
         metadata = compute_graph.metadata
         
-        # Get dimensions from metadata or estimate from nodes
-        npw = metadata.get("npw", 2945)
-        nkb = metadata.get("nkb", 144)
-        m = metadata.get("m", 16)
-        iterations = metadata.get("iterations", 10)
+        # Get generic dimensions from metadata or estimate from nodes.
+        problem_size = metadata.get("problem_size")
+        feature_size = metadata.get("feature_size")
+        batch_size = metadata.get("batch_size")
+        if problem_size is None or feature_size is None or batch_size is None:
+            total_flops = sum(max(0.0, float(node.estimated_flops)) for node in compute_graph.nodes.values())
+            total_bytes = sum(max(0.0, float(node.estimated_memory_bytes)) for node in compute_graph.nodes.values())
+            problem_size = int(max(1.0, (total_flops / max(total_bytes, 1.0)) * 1024.0))
+            feature_size = int(max(16.0, len(compute_graph.nodes) * 64.0))
+            batch_size = int(max(1.0, len(compute_graph.nodes)))
+        iterations = metadata.get("iterations", metadata.get("total_iterations", 10))
         
         return {
-            "npw": npw,
-            "nkb": nkb,
-            "m": m,
+            "problem_size": problem_size,
+            "feature_size": feature_size,
+            "batch_size": batch_size,
             "iterations": iterations,
             "total_iterations": iterations,
         }

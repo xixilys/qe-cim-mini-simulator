@@ -6,7 +6,7 @@ import math
 from dataclasses import dataclass
 from typing import Any, Dict, Mapping
 
-from interfaces.types import DesignPoint, EvaluationResult, LayerResult, ResourceLimits
+from dse_v2.interfaces.types import DesignPoint, EvaluationResult, LayerResult, ResourceLimits
 
 from .family_models import (
     F1PipelineModel,
@@ -188,10 +188,10 @@ class FastPerformanceModel:
         return max(5.0, 24.0 * (1.0 - confidence))
 
     def _throughput_gops(self, time_s: float, workload: Mapping[str, Any]) -> float:
-        npw = max(1.0, float(workload.get('npw', 2945)))
-        nkb = max(1.0, float(workload.get('nkb', 144)))
-        m = max(1.0, float(workload.get('m', 16)))
-        ops = (5.0 * npw * math.log2(max(2.0, npw)) * m) + (2.0 * npw * nkb * m)
+        problem_size = max(1.0, float(workload.get('problem_size', 4096)))
+        feature_size = max(1.0, float(workload.get('feature_size', 256)))
+        batch_size = max(1.0, float(workload.get('batch_size', 16)))
+        ops = (5.0 * problem_size * math.log2(max(2.0, problem_size)) * batch_size) + (2.0 * problem_size * feature_size * batch_size)
         return ops / max(time_s, 1e-12) / 1.0e9
 
     def _promotion_score(self, estimate: FamilyEstimate) -> float:
@@ -202,7 +202,7 @@ class FastPerformanceModel:
         return max(0.0, min(1.0, score))
 
     # compatibility helpers used by older scripts
-    def estimate_h_psi_time(self, design_point: Mapping[str, Any], workload: Mapping[str, Any]) -> float:
+    def estimate_compute_time(self, design_point: Mapping[str, Any], workload: Mapping[str, Any]) -> float:
         return self.evaluate_design_point(design_point, workload).metrics['time_s']
 
     def estimate_energy(self, design_point: Mapping[str, Any], time: float) -> float:
@@ -215,7 +215,7 @@ class FastPerformanceModel:
         return 0.0
 
     def check_constraints(self, design_point: Mapping[str, Any]) -> Dict[str, bool]:
-        result = self.evaluate_design_point(design_point, {'npw': 2945, 'nkb': 144, 'm': 16})
+        result = self.evaluate_design_point(design_point, {'problem_size': 4096, 'feature_size': 256, 'batch_size': 16})
         return {
             'dsp_ok': result.resource_utilization.get('dsp_utilization', 0.0) <= 1.0,
             'bram_ok': result.resource_utilization.get('bram_utilization', 0.0) <= 1.0,

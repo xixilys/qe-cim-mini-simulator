@@ -39,9 +39,9 @@ class PythonTLM:
 
     def run_episode(self, design_point: Mapping[str, Any], workload: Mapping[str, Any]) -> Layer2Output:
         params = self._system_params(design_point)
-        npw = float(workload.get('npw', 2945))
-        nkb = float(workload.get('nkb', 144))
-        m = float(workload.get('m', 16))
+        problem_size = float(workload.get('problem_size', 4096))
+        feature_size = float(workload.get('feature_size', 256))
+        batch_size = float(workload.get('batch_size', 16))
         iterations = float(workload.get('iterations', workload.get('total_iterations', 1)))
 
         gemm_tiles = max(1.0, float(params.get('n_gemm_tiles', params.get('parallel_units', 4))))
@@ -52,49 +52,49 @@ class PythonTLM:
         pcie_bw_gbps = float(params.get('pcie_bw_gbps', design_point.get('pcie_bw_gbps', self.pcie_bw_gbps)))
         dram_bw_gbps = float(params.get('dram_bw_gbps', design_point.get('dram_bw_gbps', self.dram_bw_gbps)))
 
-        h_psi_flops = 2.0 * npw * nkb * m * iterations
-        cdiaghg_flops = nkb * nkb * max(m, 1.0) * iterations
+        dense_compute_flops = 2.0 * problem_size * feature_size * batch_size * iterations
+        solver_flops = feature_size * feature_size * max(batch_size, 1.0) * iterations
 
-        h_psi_compute_ms = self._compute_time_ms(h_psi_flops, gemm_tiles, 88.0)
-        h_psi_transfer_ms = self._transaction_time_ms(
-            bytes_count=(npw * m + npw * nkb) * 16.0 * iterations,
+        dense_compute_ms = self._compute_time_ms(dense_compute_flops, gemm_tiles, 88.0)
+        dense_transfer_ms = self._transaction_time_ms(
+            bytes_count=(problem_size * batch_size + problem_size * feature_size) * 16.0 * iterations,
             bandwidth_gbps=dram_bw_gbps,
             transaction_bytes=max(64.0, local_mem_kb * 1024.0 / 2.0),
             latency_us=0.55,
         )
 
-        cdiaghg_compute_ms = self._compute_time_ms(cdiaghg_flops, eigen_tiles, 36.0)
-        cdiaghg_transfer_ms = self._transaction_time_ms(
-            bytes_count=(nkb * nkb + nkb * m) * 16.0 * iterations,
+        solver_compute_ms = self._compute_time_ms(solver_flops, eigen_tiles, 36.0)
+        solver_transfer_ms = self._transaction_time_ms(
+            bytes_count=(feature_size * feature_size + feature_size * batch_size) * 16.0 * iterations,
             bandwidth_gbps=dram_bw_gbps,
             transaction_bytes=max(32.0, local_mem_kb * 1024.0 / 4.0),
             latency_us=0.7,
         )
 
         host_device_transfer_ms = self._transaction_time_ms(
-            bytes_count=(npw * nkb + npw * m) * 16.0,
+            bytes_count=(problem_size * feature_size + problem_size * batch_size) * 16.0,
             bandwidth_gbps=pcie_bw_gbps,
             transaction_bytes=4096.0,
             latency_us=1.4,
         )
 
         timing_scale = FAMILY_TIMING_SCALE.get(family, 1.0)
-        h_psi_compute_ms *= timing_scale
-        h_psi_transfer_ms *= timing_scale
-        cdiaghg_compute_ms *= timing_scale
-        cdiaghg_transfer_ms *= timing_scale
+        dense_compute_ms *= timing_scale
+        dense_transfer_ms *= timing_scale
+        solver_compute_ms *= timing_scale
+        solver_transfer_ms *= timing_scale
         host_device_transfer_ms *= timing_scale
 
         mapping_penalty = self._mapping_penalty(params)
         dataflow_speedup = self._dataflow_speedup(params)
 
-        latency_ms = (h_psi_compute_ms + h_psi_transfer_ms + cdiaghg_compute_ms + cdiaghg_transfer_ms + host_device_transfer_ms)
+        latency_ms = (dense_compute_ms + dense_transfer_ms + solver_compute_ms + solver_transfer_ms + host_device_transfer_ms)
         latency_ms *= (1.0 + mapping_penalty)
         latency_ms *= (1.0 - dataflow_speedup)
 
         power_w = 17.5 + 2.6 * gemm_tiles + 3.1 * eigen_tiles + 0.0018 * local_mem_kb + 0.02 * latency_ms
         area_mm2 = 18.0 + 2.2 * gemm_tiles + 3.0 * eigen_tiles + 0.0014 * local_mem_kb
-        total_ops = h_psi_flops + cdiaghg_flops
+        total_ops = dense_compute_flops + solver_flops
         throughput_gops = total_ops / max(latency_ms, 1.0e-9) / 1.0e6
         energy_efficiency = throughput_gops / max(power_w, 1.0e-9)
 
@@ -130,8 +130,8 @@ class PythonTLM:
                 'area_mm2': area_mm2,
                 'energy_efficiency_gops_per_w': energy_efficiency,
                 'accuracy_vs_reference': accuracy_vs_reference,
-                'h_psi_latency_ms': h_psi_compute_ms + h_psi_transfer_ms,
-                'cdiaghg_latency_ms': cdiaghg_compute_ms + cdiaghg_transfer_ms,
+                'dense_compute_latency_ms': dense_compute_ms + dense_transfer_ms,
+                'solver_latency_ms': solver_compute_ms + solver_transfer_ms,
                 'data_transfer_ms': host_device_transfer_ms,
             },
             uncertainty={'confidence_level': confidence, 'mape_percent': mape_percent, 'sample_size': int(max(1, round(iterations)))},
@@ -195,9 +195,9 @@ class PythonTLM:
         if not mapping:
             return 0.0
         penalty = 0.0
-        phases = ['operator_sweep', 'reduced_build', 'diag', 'refresh']
+        phases = ['compute', 'transform', 'solve', 'update']
         for phase in phases:
-            target = mapping.get(phase, 'cluster_a')
+            target = mapping.get(phase, 'accel_compute')
             if target == 'cpu':
                 penalty += 0.15
             elif target == 'auto':

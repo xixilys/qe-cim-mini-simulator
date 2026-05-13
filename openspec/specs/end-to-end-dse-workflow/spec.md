@@ -21,9 +21,9 @@ The end-to-end workflow SHALL define stable stage boundaries for workload ingest
 - **WHEN** workload ingestion completes
 - **THEN** it emits a WorkloadPackage and workload graph artifact consumed by architecture/mapping stages without hidden in-memory-only state
 
-#### Scenario: Workload ingestion is adapter-based
+#### Scenario: Workload ingestion is profile/importer-based
 - **WHEN** a user selects a supported workload family
-- **THEN** an adapter emits a domain-neutral WorkloadPackage/ComputeGraph pair with adapter identity, source provenance, claim boundary, and optional domain metadata
+- **THEN** an importer emits a domain-neutral WorkloadPackage/ComputeGraph pair with profile/importer identity, source provenance, claim boundary, and optional domain metadata
 
 #### Scenario: Arbitrary computation graph is normalized before mapping
 - **WHEN** the emitted ComputeGraph contains loops, control-flow regions, streaming feedback, hierarchical subgraphs, or stateful nodes
@@ -45,7 +45,7 @@ The system SHALL support an extensible architecture catalog with architecture fa
 - **THEN** the workflow may screen it analytically but labels it ineligible for final trusted ranking
 
 ### Requirement: Mapping search is algorithmic and constraint-aware
-The system SHALL search mapping choices algorithmically using legality matrices, generic seed mappings, adapter-provided mapping policies, pruning, local or beam search, and SystemC-gated finalist evaluation. Manual fixed mappings MAY be used as baselines but SHALL NOT be the only mapping strategy. Core mapping search SHALL reason over generic node ids, op types, tensor sizes, resource capabilities, and policy hooks rather than hardcoded QE node names.
+The system SHALL search mapping choices algorithmically using legality matrices, generic seed mappings, profile/importer-provided mapping policies, pruning, local or beam search, and SystemC-gated finalist evaluation. Manual fixed mappings MAY be used as baselines but SHALL NOT be the only mapping strategy. Core mapping search SHALL reason over generic node ids, op types, tensor sizes, resource capabilities, and policy hooks rather than hardcoded QE node names.
 
 #### Scenario: Legality matrix filters invalid placements
 - **WHEN** a workload operator is unsupported by a hardware resource or violates memory/precision constraints
@@ -55,9 +55,9 @@ The system SHALL search mapping choices algorithmically using legality matrices,
 - **WHEN** the mapping optimizer evaluates candidate mappings under the same architecture and workload
 - **THEN** it can produce ranked alternatives with differences in latency, data movement, utilization, or constraint satisfaction
 
-#### Scenario: Adapter policy augments generic seeds
-- **WHEN** a workload adapter supplies domain-specific seed policies
-- **THEN** mapping search records the adapter policy id and treats the seed as a suggestion over generic ComputeGraph nodes, while preserving legality and final simulation gates
+#### Scenario: Profile policy augments generic seeds
+- **WHEN** a workload importer supplies domain-specific seed policies
+- **THEN** mapping search records the profile policy id and treats the seed as a suggestion over generic ComputeGraph nodes, while preserving legality and final simulation gates
 
 #### Scenario: Mapping search uses lowered executable graph
 - **WHEN** a source ComputeGraph has declared loops, regions, dynamic control, or streaming recurrences
@@ -172,7 +172,7 @@ The architecture catalog SHALL separate reusable architecture families from conc
 
 #### Scenario: Initial catalog includes multiple extensible families
 - **WHEN** the seed architecture catalog is loaded
-- **THEN** it includes at least ten architecture families covering CPU-only baseline, Host+FPGA minimal, Host+FPGA+CIM, diag-heavy, streaming-heavy, memory-rich, low-power, balanced, debug, future-custom, and legacy reference classes
+- **THEN** it includes at least ten architecture families covering CPU-only baseline, Host+FPGA minimal, Host+FPGA+CIM, solver-heavy, streaming-heavy, memory-rich, low-power, balanced, debug, and future-custom classes
 
 #### Scenario: Legacy four-cluster template is reference-only
 - **WHEN** the historical four-cluster architecture appears in the catalog
@@ -266,9 +266,9 @@ The end-to-end DSE workflow SHALL support broad workload analysis outputs from a
 - **WHEN** an ML/tensor, sparse, stencil, graph analytics, database/vector-search, or custom workload has valid workload analysis output, mapping, and backend binding
 - **THEN** the full DSE run produces the same classes of artifacts as a QE run: workload package, graph, lowering report, mapping artifacts, simulation request/result, verdict, claim validation, final report, and manifest
 
-#### Scenario: End-to-end report names adapter boundary
+#### Scenario: End-to-end report names profile/importer boundary
 - **WHEN** the final report summarizes a completed run
-- **THEN** it identifies the workload family, adapter id/version, generic timing/resource claims, adapter-domain validation status, and limitations without implying that QE is the default workload model
+- **THEN** it identifies the workload family, importer id/version, generic timing/resource claims, profile/importer-domain validation status, and limitations without implying that QE is the default workload model
 
 ### Requirement: End-to-end gem5 L4 runs export proof and verdict artifacts
 The end-to-end DSE workflow SHALL export `gem5_l4_proof.json`, raw gem5/SystemC logs, descriptor/request artifacts, completion artifacts, `verdict.json`, `mapping_simulation_samples.json`, and `claim_validation.json` for every real `gem5_systemc --gem5-real-l4` run that reaches the evidence stage.

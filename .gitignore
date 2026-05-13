@@ -12,6 +12,7 @@ model/ozaki_subspace_model/bin/
 model/ozaki_subspace_model/build/
 model/ozaki_subspace_model/logs/
 model/qe_band_solver_model/build/
+model/qe_band_solver_model/build-clangd/
 model/qe_band_solver_model/build-systemc/
 
 soft/
@@ -30,6 +31,7 @@ full_transcription.txt
 
 model/ozaki_subspace_model/docs/.DS_Store
 .omx/
+/omx/
 tmp/
 
 # Local gem5/SystemC integration build, cache, and run artifacts
@@ -56,6 +58,7 @@ gem5_integration/qe_test_program/qe_fpga_benchmark
 gem5_integration/qe_test_program/qe_fpga_benchmark_static
 gem5_integration/qe_test_program/test_qe_offload_minimal
 gem5_integration/test_programs/hello.x86
+gem5_integration/test_programs/generic_accel/generic_accel_l4_driver
 
 # Local agent/tool scratch state and generated result bundles
 .sisyphus/

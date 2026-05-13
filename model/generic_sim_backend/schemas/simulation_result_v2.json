@@ -1,0 +1,94 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://dse-framework.org/schemas/simulation_result_v2.json",
+  "title": "Generic Simulation Result v2",
+  "description": "Heterogeneous hardware simulation result with detailed microarchitecture breakdown",
+  "type": "object",
+  "required": ["schema_version", "run_id", "status", "metrics"],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "gsim.result.v2"
+    },
+    "run_id": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["passed", "failed", "timeout", "error"]
+    },
+    "error_message": {
+      "type": "string"
+    },
+    "metrics": {
+      "type": "object",
+      "properties": {
+        "latency_ms": {"type": "number"},
+        "host_time_ms": {"type": "number"},
+        "device_time_ms": {"type": "number"},
+        "dma_time_ms": {"type": "number"},
+        "throughput_gops": {"type": "number"},
+        "power_w": {"type": "number"},
+        "energy_j": {"type": "number"},
+        "area_mm2": {"type": "number"},
+        "total_data_movement_mb": {"type": "number"}
+      }
+    },
+    "resource_utilization": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "compute_percent": {"type": "number"},
+          "memory_percent": {"type": "number"},
+          "bandwidth_percent": {"type": "number"}
+        }
+      }
+    },
+    "microarchitecture_details": {
+      "type": "object",
+      "description": "Per-accelerator microarchitecture execution details",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "accel_type": {"type": "string"},
+          "compute_cycles": {"type": "number"},
+          "dma_cycles": {"type": "number"},
+          "stall_cycles": {"type": "number"},
+          "memory_accesses": {"type": "number"},
+          "pipeline_utilization": {"type": "number"},
+          "array_utilization": {"type": "number"},
+          "power_breakdown": {
+            "type": "object",
+            "properties": {
+              "compute_w": {"type": "number"},
+              "memory_w": {"type": "number"},
+              "interconnect_w": {"type": "number"}
+            }
+          }
+        }
+      }
+    },
+    "events": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "node_id": {"type": "string"},
+          "device": {"type": "string"},
+          "start_ns": {"type": "number"},
+          "end_ns": {"type": "number"},
+          "op_type": {"type": "string"}
+        }
+      }
+    },
+    "uncertainty": {
+      "type": "object",
+      "properties": {
+        "fidelity_level": {"type": "string"},
+        "confidence_level": {"type": "number"},
+        "mape_percent": {"type": "number"}
+      }
+    }
+  }
+}

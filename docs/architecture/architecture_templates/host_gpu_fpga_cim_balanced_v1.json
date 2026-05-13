@@ -1,0 +1,53 @@
+{
+  "template_id": "host_gpu_fpga_cim_balanced_v1",
+  "template_version": "v1",
+  "description": "Balanced heterogeneous host + GPU + FPGA + CIM candidate for generic workload DSE. It is not tied to any application-specific phase decomposition.",
+  "compute_resources": [
+    {
+      "resource_id": "host",
+      "resource_type": "host_cpu",
+      "clock_mhz": 3000,
+      "supported_ops": ["control", "scalar", "generic"],
+      "memory_capacity_mb": 65536
+    },
+    {
+      "resource_id": "gpu-0",
+      "resource_type": "gpu",
+      "clock_mhz": 1400,
+      "supported_ops": ["gemm", "batched_gemm", "conv2d", "fft", "distance_compute", "reduction"],
+      "memory_capacity_mb": 40960
+    },
+    {
+      "resource_id": "fpga-0",
+      "resource_type": "fpga",
+      "clock_mhz": 250,
+      "supported_ops": ["dma_load", "spmv", "stencil", "topk", "predicate_filter", "streaming_pipeline"],
+      "memory_capacity_mb": 8192
+    },
+    {
+      "resource_id": "cim-0",
+      "resource_type": "cim",
+      "clock_mhz": 500,
+      "supported_ops": ["elementwise", "reduction", "near_memory_accumulate"],
+      "memory_capacity_mb": 512
+    }
+  ],
+  "memory_system": {
+    "host_memory_gb": 128,
+    "hbm_stacks": 2,
+    "scratchpad_mb": 512,
+    "coherency_model": "explicit_dma"
+  },
+  "interconnect": {
+    "topology": "pcie_mesh",
+    "bandwidth_gbps": 128,
+    "latency_ns": 1000
+  },
+  "mapping_policy_hints": ["host-baseline", "capability-greedy", "memory-locality", "communication-aware"],
+  "fidelity_targets": ["l1_analytical", "l2_tlm", "l3_systemc", "l4_gem5_systemc"],
+  "claim_boundary": "simulation_candidate",
+  "metadata": {
+    "status": "active_generic_template",
+    "domain_assumptions": []
+  }
+}

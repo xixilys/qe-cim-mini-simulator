@@ -1,0 +1,223 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://dse-framework.org/schemas/simulation_request_v2.json",
+  "title": "Generic Simulation Request v2",
+  "description": "Heterogeneous hardware simulation request with microarchitecture details",
+  "type": "object",
+  "required": ["schema_version", "run_id", "mode", "workload", "architecture"],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "gsim.request.v2",
+      "description": "Schema version identifier"
+    },
+    "run_id": {
+      "type": "string",
+      "description": "Unique run identifier"
+    },
+    "mode": {
+      "type": "string",
+      "enum": ["standalone_systemc", "gem5_cosim", "gem5_systemc_blocked", "analytical"],
+      "description": "Simulation execution mode"
+    },
+    "workload": {
+      "type": "object",
+      "required": ["graph_id", "nodes"],
+      "properties": {
+        "graph_id": {
+          "type": "string"
+        },
+        "nodes": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "required": ["op_type", "estimated_flops", "estimated_memory_bytes"],
+            "properties": {
+              "op_type": {
+                "type": "string",
+                "enum": ["gemm", "fft", "eigen", "reduction", "elementwise", "transfer", "generic_op"]
+              },
+              "inputs": {
+                "type": "array",
+                "items": {"type": "string"}
+              },
+              "outputs": {
+                "type": "array",
+                "items": {"type": "string"}
+              },
+              "estimated_flops": {
+                "type": "number",
+                "minimum": 0
+              },
+              "estimated_memory_bytes": {
+                "type": "number",
+                "minimum": 0
+              },
+              "attributes": {
+                "type": "object",
+                "description": "Operation-specific parameters"
+              }
+            }
+          }
+        },
+        "edges": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["source", "target", "tensor_name"],
+            "properties": {
+              "source": {"type": "string"},
+              "target": {"type": "string"},
+              "tensor_name": {"type": "string"},
+              "tensor_shape": {
+                "type": "array",
+                "items": {"type": "integer"}
+              },
+              "tensor_dtype": {
+                "type": "string",
+                "enum": ["FP64", "FP32", "FP16", "INT8"]
+              }
+            }
+          }
+        },
+        "metadata": {
+          "type": "object"
+        }
+      }
+    },
+    "architecture": {
+      "type": "object",
+      "required": ["host", "accelerators"],
+      "properties": {
+        "host": {
+          "type": "object",
+          "required": ["cpu_model", "clock_mhz"],
+          "properties": {
+            "cpu_model": {"type": "string"},
+            "clock_mhz": {"type": "number"},
+            "memory_bw_gbps": {"type": "number"},
+            "cores": {"type": "integer"}
+          }
+        },
+        "interconnect": {
+          "type": "object",
+          "properties": {
+            "type": {"type": "string", "enum": ["pcie", "nvlink", "cxl", "custom"]},
+            "bandwidth_gbps": {"type": "number"},
+            "latency_ns": {"type": "number"}
+          }
+        },
+        "accelerators": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["accel_id", "accel_type", "clock_mhz"],
+            "properties": {
+              "accel_id": {"type": "string"},
+              "accel_type": {
+                "type": "string",
+                "enum": ["FPGA", "CIM", "GPU", "ASIC", "CPU"]
+              },
+              "clock_mhz": {"type": "number"},
+              "local_memory_kb": {"type": "number"},
+              "power": {
+                "type": "object",
+                "properties": {
+                  "static_w": {"type": "number"},
+                  "max_w": {"type": "number"}
+                }
+              },
+              "capabilities": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "object",
+                  "properties": {
+                    "peak_gops": {"type": "number"},
+                    "efficiency": {"type": "number"}
+                  }
+                }
+              },
+              "microarchitecture": {
+                "type": "object",
+                "description": "Hardware-specific microarchitecture parameters",
+                "properties": {
+                  "fpga": {
+                    "type": "object",
+                    "description": "FPGA-specific parameters",
+                    "properties": {
+                      "array_size": {"type": "integer", "description": "Systolic array dimension (e.g., 16, 32)"},
+                      "local_sram_kb": {"type": "integer", "description": "Local SRAM size in KB"},
+                      "dma_channels": {"type": "integer", "description": "DMA channel count"}
+                    }
+                  },
+                  "cim": {
+                    "type": "object",
+                    "description": "CIM-specific parameters",
+                    "properties": {
+                      "crossbar_rows": {"type": "integer", "description": "Crossbar row count"},
+                      "crossbar_cols": {"type": "integer", "description": "Crossbar column count"},
+                      "adc_resolution": {"type": "integer", "description": "ADC bit resolution"},
+                      "dac_resolution": {"type": "integer", "description": "DAC bit resolution"},
+                      "peripheral_digital_units": {"type": "integer", "description": "Number of peripheral digital units"}
+                    }
+                  },
+                  "gpu": {
+                    "type": "object",
+                    "description": "GPU-specific parameters",
+                    "properties": {
+                      "sm_count": {"type": "integer", "description": "SM (Streaming Multiprocessor) count"},
+                      "shared_memory_kb": {"type": "integer", "description": "Shared memory per SM in KB"},
+                      "warp_size": {"type": "integer", "description": "Warp size (e.g., 32)"},
+                      "max_warps_per_sm": {"type": "integer", "description": "Maximum warps per SM"}
+                    }
+                  },
+                  "asic": {
+                    "type": "object",
+                    "description": "ASIC-specific parameters",
+                    "properties": {
+                      "pipeline_stages": {"type": "integer", "description": "Pipeline depth"},
+                      "custom_dims": {
+                        "type": "array",
+                        "items": {"type": "integer"},
+                        "description": "Custom datapath dimensions"
+                      },
+                      "vector_width": {"type": "integer", "description": "Vector processing width"}
+                    }
+                  },
+                  "common": {
+                    "type": "object",
+                    "description": "Common parameters across all accelerator types",
+                    "properties": {
+                      "memory_ports": {"type": "integer", "description": "Number of memory ports"},
+                      "memory_bandwidth_gbps": {"type": "number", "description": "Memory bandwidth in GB/s"}
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "mapping": {
+      "type": "object",
+      "additionalProperties": {"type": "string"},
+      "description": "node_id -> accel_id mapping"
+    },
+    "scheduling": {
+      "type": "object",
+      "properties": {
+        "policy": {"type": "string", "enum": ["static", "dynamic", "pipeline"]},
+        "allow_overlap_dma_compute": {"type": "boolean"},
+        "double_buffer": {"type": "boolean"}
+      }
+    },
+    "output": {
+      "type": "object",
+      "properties": {
+        "result_json": {"type": "string"},
+        "trace_json": {"type": "string"}
+      }
+    }
+  }
+}

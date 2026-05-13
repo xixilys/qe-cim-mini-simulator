@@ -1,0 +1,28 @@
+{
+  "schema_version": "generic.design_space.v1",
+  "description": "Domain-neutral heterogeneous accelerator design-space seed for DSE/TLM/SystemC/gem5 iteration.",
+  "categorical_params": {
+    "architecture_family": ["host_only", "host_gpu", "host_fpga", "host_gpu_fpga", "host_fpga_cim", "distributed_heterogeneous"],
+    "interconnect": ["pcie", "nvlink", "cxl", "custom_noc"],
+    "mapping_policy": ["host_baseline", "capability_greedy", "memory_locality", "communication_aware", "all_offload", "streaming", "batch", "debug_observable"],
+    "scheduling_policy": ["static", "dynamic", "pipeline"],
+    "precision_policy": ["fp64", "fp32", "mixed", "int8"]
+  },
+  "integer_params": {
+    "accelerator_count": {"min": 0, "max": 8},
+    "pipeline_depth": {"min": 1, "max": 8},
+    "local_memory_kb": {"values": [64, 128, 256, 512, 1024, 2048, 4096]},
+    "dma_channels": {"values": [1, 2, 4, 8]},
+    "noc_ports": {"values": [1, 2, 4, 8]}
+  },
+  "constraints": [
+    {"type": "resource", "name": "power_w", "max": 300.0},
+    {"type": "resource", "name": "area_mm2", "max": 1200.0},
+    {"type": "evidence", "name": "claim_boundary", "allowed": ["diagnostic", "full_workload"]}
+  ],
+  "objectives": [
+    {"name": "latency_ms", "minimize": true},
+    {"name": "energy_j", "minimize": true},
+    {"name": "evidence_confidence", "minimize": false}
+  ]
+}

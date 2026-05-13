@@ -1,9 +1,0 @@
-QE_BENCH threads=1
-QE_GEMM shape=3072x256x64 median_s=0.000323000 gflops=311.651057
-QE_GEMM shape=2048x512x256 median_s=0.001998000 gflops=268.704165
-QE_FFT size=64^3 threads=1 median_s=0.001183000 points_per_sec=221592553.049441
-QE_FFT size=96^3 threads=1 median_s=0.005798000 points_per_sec=152593307.315460
-QE_FFT size=128^3 threads=1 median_s=0.014787000 points_per_sec=141824034.414989
-QE_DIAG size=256 median_s=0.003354000
-QE_DIAG size=512 median_s=0.016112000
-QE_DIAG size=768 median_s=0.043295000
