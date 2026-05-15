@@ -1061,7 +1061,7 @@ void GenericAccel::processCommand()
             (!sidecarPayload.empty() || useSystemC || !systemcExecutable.empty() || (desc.flags & GsimFlagSidecarDispatch)) ? "true" : "false",
             static_cast<unsigned long long>(sidecarPayload.size()),
             useSystemC ? "true" : "false",
-            systemcExecutable,
+            systemcExecutable.c_str(),
             (desc.flags & GsimFlagSidecarDispatch) ? "true" : "false");
     DPRINTF(GenericAccel,
             "extension_payload_trace observed=%s bytes=%llu qe_hook=%s flag=%s\n",
