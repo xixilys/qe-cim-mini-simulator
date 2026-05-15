@@ -1153,6 +1153,42 @@ def build_freeze_gate_verdict(
             {"id": "missing_required_taxonomy_entries", "missing": missing}
         )
 
+    unpredeclared_taxonomy_ids: list[str] = []
+    illegal_candidate_ids: list[str] = []
+    for candidate in subset.get("candidates", []) or []:
+        if not isinstance(candidate, Mapping):
+            continue
+        candidate_id = str(candidate.get("candidate_id", "unknown_candidate"))
+        if candidate.get("legal") is not True:
+            illegal_candidate_ids.append(candidate_id)
+        identity = candidate.get("identity", {})
+        if not isinstance(identity, Mapping):
+            continue
+        layers = identity.get("identity_layers", {})
+        if not isinstance(layers, Mapping):
+            continue
+        architecture = layers.get("architecture_parameters", {})
+        if not isinstance(architecture, Mapping):
+            continue
+        taxonomy_id = str(architecture.get("taxonomy_id", ""))
+        if taxonomy_id and taxonomy_id not in REQUIRED_TAXONOMY_IDS:
+            unpredeclared_taxonomy_ids.append(taxonomy_id)
+
+    if unpredeclared_taxonomy_ids:
+        blockers.append(
+            {
+                "id": "unpredeclared_release_taxonomy",
+                "taxonomy_ids": sorted(set(unpredeclared_taxonomy_ids)),
+            }
+        )
+    if illegal_candidate_ids:
+        blockers.append(
+            {
+                "id": "illegal_candidate_in_release_subset",
+                "candidate_ids": sorted(set(illegal_candidate_ids)),
+            }
+        )
+
     selection_kind = str(policy.get("selection_kind", ""))
     if selection_kind in BANNED_COMPLETION_SUBSETS:
         blockers.append(
