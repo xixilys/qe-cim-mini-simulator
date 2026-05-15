@@ -1122,6 +1122,7 @@ def build_release_subset_manifest(
     seed_rows: Sequence[Mapping[str, str]] | None = None,
 ) -> Dict[str, Any]:
     rows = list(seed_rows or default_release_seed_rows())
+    seed_rows_hash = stable_json_hash(rows)
     candidates: list[Dict[str, Any]] = []
     for seed in rows:
         identity_layers = _identity_from_seed(seed)
@@ -1164,6 +1165,27 @@ def build_release_subset_manifest(
             for candidate in candidates
         ],
         "stable_id_status": "emitted_after_all_identity_layers_present",
+        "generation_provenance": {
+            "source": "predeclared_release_v1_seed_rows",
+            "seed_rows_hash": seed_rows_hash,
+            "legality_constraints_hash": build_legality_constraints_manifest()[
+                "constraints_hash"
+            ],
+            "candidate_order": [
+                candidate["candidate_id"] for candidate in candidates
+            ],
+            "workload_facts_used_only_before_freeze": True,
+            "post_freeze_row_removal_allowed": False,
+        },
+        "deterministic_replay": _deterministic_replay_metadata(
+            artifact_name="release_subset_manifest.json",
+            builder="build_release_subset_manifest",
+            inputs={
+                "seed_rows_hash": seed_rows_hash,
+                "identity_layers": list(IDENTITY_LAYER_KEYS),
+                "non_identity_fields": list(NON_IDENTITY_FIELDS),
+            },
+        ),
         "claim_boundary": "release subset identity manifest only; closure evidence is tracked downstream",
     }
     payload["release_subset_hash"] = _stable_hash_without(
@@ -1196,6 +1218,18 @@ def build_candidate_generation_report(
         "excluded_from_identity": list(NON_IDENTITY_FIELDS),
         "stable_candidate_ids_emitted": all_have_layers,
         "candidate_id_rule": "design-only five-layer stable hash; evaluation matrix metadata excluded",
+        "provenance": {
+            "release_subset_hash": subset.get("release_subset_hash"),
+            "candidate_ids": [
+                str(candidate.get("candidate_id")) for candidate in candidates
+            ],
+            "candidate_record_hashes": [
+                str(candidate.get("record_hash")) for candidate in candidates
+            ],
+            "deterministic_replay_hash": (
+                subset.get("deterministic_replay", {}) or {}
+            ).get("replay_hash"),
+        },
     }
     payload["report_hash"] = _stable_hash_without(payload, "report_hash")
     return payload
@@ -1259,8 +1293,29 @@ def build_legality_pruning_report(
             "over_budget",
             "blocked",
         ],
+        "provenance": {
+            "release_subset_hash": subset.get("release_subset_hash"),
+            "legality_constraints_hash": build_legality_constraints_manifest()[
+                "constraints_hash"
+            ],
+            "pruning_phase": "pre_freeze_only",
+            "post_freeze_row_removal_allowed": False,
+        },
         "claim_boundary": "pruning explains pre-freeze release universe only; it is not completion evidence",
     }
+    payload["report_hash"] = _stable_hash_without(payload, "report_hash")
+    return payload
+
+
+def build_release_pruning_rationale_report(
+    release_subset: Mapping[str, Any] | None = None,
+) -> Dict[str, Any]:
+    """Alias the legality-pruning report under the PRD-required artifact name."""
+    payload = dict(build_legality_pruning_report(release_subset))
+    payload["schema_version"] = (
+        "dse.codesign.complete_dse.release_pruning_rationale_report.v1"
+    )
+    payload["artifact_alias_for"] = "legality_pruning_report.json"
     payload["report_hash"] = _stable_hash_without(payload, "report_hash")
     return payload
 
@@ -1467,6 +1522,31 @@ def build_freeze_gate_verdict(
         "legal_candidate_count": legal_count,
         "research_to_release_ratio": ratio,
         "blockers": blockers,
+        "freeze_inputs": {
+            "release_subset_hash": subset.get("release_subset_hash"),
+            "budget_hash": budget_payload.get("budget_hash"),
+            "research_space_hash": research_payload.get("manifest_hash"),
+            "selection_policy_hash": stable_json_hash(policy),
+        },
+        "provenance": {
+            "predeclared_release_subset": True,
+            "all_candidates_classified_before_freeze": not illegal_candidate_ids,
+            "post_hoc_top_k_or_fixed_list": bool(
+                selection_kind in BANNED_COMPLETION_SUBSETS
+                or policy.get("fixed_candidate_only") is True
+            ),
+            "workload_or_evidence_axes_in_identity_allowed": False,
+        },
+        "deterministic_replay": _deterministic_replay_metadata(
+            artifact_name="freeze_gate_verdict.json",
+            builder="build_freeze_gate_verdict",
+            inputs={
+                "release_subset_hash": subset.get("release_subset_hash"),
+                "budget_hash": budget_payload.get("budget_hash"),
+                "research_space_hash": research_payload.get("manifest_hash"),
+                "selection_policy_hash": stable_json_hash(policy),
+            },
+        ),
         "hard_completion_rule_preserved": not blockers,
         "top_k_or_representative_completion_allowed": False,
         "claim_boundary": "freeze gate only; deliverable_complete still requires downstream L4 matrix closure",
@@ -1520,6 +1600,7 @@ def build_architecture_search_space() -> Dict[str, Any]:
         "runtime_schedule_space": build_runtime_schedule_space(),
         "legality_constraints": build_legality_constraints_manifest(),
         "research_space_manifest": build_research_space_manifest(),
+        "workload_architecture_prior_report": build_workload_architecture_prior_report(),
         "architecture_prior_seed_manifest": build_architecture_prior_seed_manifest(),
         "release_subset_manifest": release_subset,
         "candidate_generation_report": build_candidate_generation_report(
@@ -1528,6 +1609,10 @@ def build_architecture_search_space() -> Dict[str, Any]:
         "legality_pruning_report": build_legality_pruning_report(
             release_subset
         ),
+        "release_pruning_rationale_report": build_release_pruning_rationale_report(
+            release_subset
+        ),
+        "schedule_legality_report": build_schedule_legality_report(),
         "release_cardinality_budget": build_release_cardinality_budget(),
         "release_l4_runtime_cost_report": build_release_l4_runtime_cost_report(
             release_subset
@@ -1560,6 +1645,14 @@ def validate_architecture_search_space(
             subset if isinstance(subset, Mapping) else {}
         ),
         "freeze_gate_passed": freeze.get("status") == "passed",
+        "workload_prior_report_passed": search_space.get(
+            "workload_architecture_prior_report", {}
+        ).get("status")
+        == "passed",
+        "schedule_legality_report_passed": search_space.get(
+            "schedule_legality_report", {}
+        ).get("status")
+        == "passed",
         "no_completion_claim": search_space.get("claim_boundary", "").endswith(
             "no trusted speedup or completion claim"
         ),
@@ -1594,6 +1687,9 @@ def artifact_bundle() -> Dict[str, Dict[str, Any]]:
         "research_space_manifest.json": search_space[
             "research_space_manifest"
         ],
+        "workload_architecture_prior_report.json": search_space[
+            "workload_architecture_prior_report"
+        ],
         "architecture_prior_seed_manifest.json": search_space[
             "architecture_prior_seed_manifest"
         ],
@@ -1605,6 +1701,12 @@ def artifact_bundle() -> Dict[str, Dict[str, Any]]:
         ],
         "legality_pruning_report.json": search_space[
             "legality_pruning_report"
+        ],
+        "release_pruning_rationale_report.json": search_space[
+            "release_pruning_rationale_report"
+        ],
+        "schedule_legality_report.json": search_space[
+            "schedule_legality_report"
         ],
         "release_cardinality_budget.json": search_space[
             "release_cardinality_budget"
