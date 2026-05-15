@@ -8,10 +8,30 @@ extern "C" {
 #endif
 
 #define OFFLOAD_COMMAND_DESCRIPTOR_VERSION 0x00000001u
+#define OFFLOAD_GSIM_MAGIC 0x4753494du
+#define OFFLOAD_GSIM_DESCRIPTOR_VERSION 0x00000001u
+#define OFFLOAD_GSIM_LEGACY_COMMAND_DESCRIPTOR_BYTES 48u
 
 enum offload_opcode {
     OFFLOAD_OPCODE_GENERIC_WORKLOAD = 1,
     OFFLOAD_OPCODE_EXTENSION_DEFINED = 0x80000000u,
+};
+
+enum offload_gsim_command_type {
+    OFFLOAD_GSIM_COMMAND_TYPE_GRAPH = 1,
+    OFFLOAD_GSIM_COMMAND_TYPE_OP = 2,
+    OFFLOAD_GSIM_COMMAND_TYPE_DMA = 3,
+};
+
+enum offload_gsim_descriptor_flag {
+    OFFLOAD_GSIM_DESCRIPTOR_FLAG_REQUEST_JSON = 1u << 0,
+    OFFLOAD_GSIM_DESCRIPTOR_FLAG_RESULT_JSON = 1u << 1,
+    OFFLOAD_GSIM_DESCRIPTOR_FLAG_COMPLETION_DESC = 1u << 2,
+    OFFLOAD_GSIM_DESCRIPTOR_FLAG_EXTENSION_PAYLOAD = 1u << 3,
+    OFFLOAD_GSIM_DESCRIPTOR_FLAG_CANDIDATE_IDENTITY = 1u << 4,
+    OFFLOAD_GSIM_DESCRIPTOR_FLAG_COMPILE_SCHEDULE = 1u << 5,
+    OFFLOAD_GSIM_DESCRIPTOR_FLAG_RUNTIME_SCHEDULE = 1u << 6,
+    OFFLOAD_GSIM_DESCRIPTOR_FLAG_SIDECAR_DISPATCH = 1u << 7,
 };
 
 enum offload_control_policy {
@@ -84,6 +104,45 @@ typedef struct offload_runtime_metrics {
     uint64_t host_wait_cycles;
     uint64_t device_busy_cycles;
 } offload_runtime_metrics;
+
+/*
+ * Software-visible gem5 GenericAccel command ABI.
+ *
+ * The first 48 bytes intentionally match the legacy GSIM descriptor consumed by
+ * existing gem5 runs.  Fields after workspace_size are optional extension
+ * pointers.  A device must treat absent extension fields as zero when
+ * cmd_desc_size is OFFLOAD_GSIM_LEGACY_COMMAND_DESCRIPTOR_BYTES.
+ */
+#pragma pack(push, 1)
+typedef struct offload_gsim_command_descriptor {
+    uint32_t magic;
+    uint32_t version;
+    uint32_t type;
+    uint32_t flags;
+    uint64_t request_addr;
+    uint64_t result_addr;
+    uint64_t workspace_addr;
+    uint64_t workspace_size;
+    uint64_t extension_payload_addr;
+    uint64_t extension_payload_bytes;
+    uint64_t candidate_identity_addr;
+    uint64_t candidate_identity_bytes;
+    uint64_t compile_schedule_addr;
+    uint64_t compile_schedule_bytes;
+    uint64_t runtime_schedule_addr;
+    uint64_t runtime_schedule_bytes;
+    uint64_t sidecar_dispatch_addr;
+    uint64_t sidecar_dispatch_bytes;
+} offload_gsim_command_descriptor;
+
+typedef struct offload_gsim_completion_descriptor {
+    uint32_t magic;
+    uint32_t status;
+    uint64_t result_addr;
+    uint64_t cycles;
+    uint32_t error_code;
+} offload_gsim_completion_descriptor;
+#pragma pack(pop)
 
 static inline offload_command_descriptor offload_command_descriptor_default(void) {
     offload_command_descriptor desc;
