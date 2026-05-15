@@ -3,6 +3,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "../../../runtime_api/command_descriptor.h"
+
 /*
  * Keep the accelerator MMIO window outside the 512 MiB SE-mode DRAM range.
  * The gem5 config maps this virtual window to the GenericAccel PIO range.
@@ -26,26 +28,15 @@
 #define RESULT_BYTES (1UL << 20)
 #define WORK_BYTES 0x240000UL
 #define POLL_LIMIT 100000000
-#define GSIM_MAGIC 0x4753494DU
 
-struct CommandDescriptor {
-    uint32_t magic;
-    uint32_t version;
-    uint32_t type;
-    uint32_t flags;
-    uint64_t request_addr;
-    uint64_t result_addr;
-    uint64_t workspace_addr;
-    uint64_t workspace_size;
-} __attribute__((packed));
-
-struct CompletionDescriptor {
-    uint32_t magic;
-    uint32_t status;
-    uint64_t result_addr;
-    uint64_t cycles;
-    uint32_t error_code;
-} __attribute__((packed));
+#define GSIM_DRIVER_FLAGS \
+    (OFFLOAD_GSIM_DESCRIPTOR_FLAG_REQUEST_JSON | \
+     OFFLOAD_GSIM_DESCRIPTOR_FLAG_RESULT_JSON | \
+     OFFLOAD_GSIM_DESCRIPTOR_FLAG_COMPLETION_DESC | \
+     OFFLOAD_GSIM_DESCRIPTOR_FLAG_CANDIDATE_IDENTITY | \
+     OFFLOAD_GSIM_DESCRIPTOR_FLAG_COMPILE_SCHEDULE | \
+     OFFLOAD_GSIM_DESCRIPTOR_FLAG_RUNTIME_SCHEDULE | \
+     OFFLOAD_GSIM_DESCRIPTOR_FLAG_SIDECAR_DISPATCH)
 
 static void mmio_write32(uintptr_t offset, uint32_t value) {
     volatile uint32_t *reg = (volatile uint32_t *)(MMIO_BASE + offset);
@@ -83,23 +74,42 @@ int main(int argc, char **argv) {
         return 2;
     }
 
-    struct CommandDescriptor *desc = (struct CommandDescriptor *)WORK_BASE;
+    offload_gsim_command_descriptor *desc = (offload_gsim_command_descriptor *)WORK_BASE;
     char *request = (char *)(WORK_BASE + REQUEST_OFFSET);
-    struct CompletionDescriptor *completion = (struct CompletionDescriptor *)(WORK_BASE + COMPLETION_OFFSET);
+    offload_gsim_completion_descriptor *completion =
+        (offload_gsim_completion_descriptor *)(WORK_BASE + COMPLETION_OFFSET);
     char *result = (char *)(WORK_BASE + RESULT_OFFSET);
 
     memset((void *)WORK_BASE, 0, WORK_BYTES);
     int rc = load_request(argv[1], request, REQUEST_BYTES);
     if (rc != 0) return rc;
 
-    desc->magic = GSIM_MAGIC;
-    desc->version = 1;
-    desc->type = 1;
-    desc->flags = 0x7;
+    size_t request_len = strlen(request) + 1;
+
+    desc->magic = OFFLOAD_GSIM_MAGIC;
+    desc->version = OFFLOAD_GSIM_DESCRIPTOR_VERSION;
+    desc->type = OFFLOAD_GSIM_COMMAND_TYPE_GRAPH;
+    desc->flags = GSIM_DRIVER_FLAGS;
     desc->request_addr = (uint64_t)(uintptr_t)request;
     desc->result_addr = (uint64_t)(uintptr_t)result;
     desc->workspace_addr = WORK_BASE;
     desc->workspace_size = REQUEST_BYTES;
+    /*
+     * Optional V1 extension lanes are intentionally generic.  The JSON request
+     * carries candidate identity, compile/runtime schedules, QE adapter payloads,
+     * and sidecar-dispatch metadata through extension/plugin boundaries without
+     * hard-coding application fields into this C ABI.
+     */
+    desc->extension_payload_addr = (uint64_t)(uintptr_t)request;
+    desc->extension_payload_bytes = (uint64_t)request_len;
+    desc->candidate_identity_addr = (uint64_t)(uintptr_t)request;
+    desc->candidate_identity_bytes = (uint64_t)request_len;
+    desc->compile_schedule_addr = (uint64_t)(uintptr_t)request;
+    desc->compile_schedule_bytes = (uint64_t)request_len;
+    desc->runtime_schedule_addr = (uint64_t)(uintptr_t)request;
+    desc->runtime_schedule_bytes = (uint64_t)request_len;
+    desc->sidecar_dispatch_addr = (uint64_t)(uintptr_t)request;
+    desc->sidecar_dispatch_bytes = (uint64_t)request_len;
 
     mmio_write32(REG_CMD_DESC_ADDR_LO, (uint32_t)((uintptr_t)desc & 0xffffffffU));
     mmio_write32(REG_CMD_DESC_ADDR_HI, (uint32_t)(((uint64_t)(uintptr_t)desc) >> 32));
@@ -124,7 +134,7 @@ int main(int argc, char **argv) {
     printf("result_prefix=%.160s\n", result);
 
     if (status != 1 || error_code != 0) return 3;
-    if (completion->magic != GSIM_MAGIC || completion->status != 0) return 4;
+    if (completion->magic != OFFLOAD_GSIM_MAGIC || completion->status != 0) return 4;
     if (strstr(result, "\"status\": \"passed\"") == NULL && strstr(result, "\"status\":\"passed\"") == NULL) {
         return 5;
     }
