@@ -137,6 +137,38 @@ def _forbidden_identity_field_paths(value: Any, *, prefix: str = "") -> list[str
     return paths
 
 
+def _deterministic_replay_metadata(
+    *,
+    artifact_name: str,
+    builder: str,
+    inputs: Mapping[str, Any],
+) -> Dict[str, Any]:
+    """Describe how a generated release artifact can be rebuilt deterministically."""
+    input_hash = stable_json_hash(inputs)
+    payload = {
+        "schema_version": "dse.codesign.complete_dse.deterministic_replay.v1",
+        "artifact_name": artifact_name,
+        "builder": builder,
+        "input_hash": input_hash,
+        "stable_hash_function": "sha256(json.dumps(sort_keys=True,separators=(',', ':')))",
+        "replay_command": [
+            "python3",
+            "dse_v2/scripts/dse/build_complete_dse_search_space_artifacts.py",
+            "--out",
+            "<output_dir>",
+        ],
+        "deterministic_ordering": [
+            "identity_layer_order",
+            "default_release_seed_rows",
+            "candidate_id",
+            "artifact file name",
+        ],
+        "claim_boundary": "replay metadata proves deterministic artifact regeneration only",
+    }
+    payload["replay_hash"] = _stable_hash_without(payload, "replay_hash")
+    return payload
+
+
 def _indexed_by_id(
     rows: Iterable[Mapping[str, Any]], key: str = "id"
 ) -> Dict[str, Mapping[str, Any]]:
@@ -165,7 +197,24 @@ def canonical_candidate_identity(
             f"missing candidate identity layers: {', '.join(missing)}"
         )
 
+    unexpected = sorted(set(identity_layers) - set(IDENTITY_LAYER_KEYS))
+    unexpected_non_identity = [
+        field for field in unexpected if field in NON_IDENTITY_FIELDS
+    ]
+    unexpected_design = [
+        field for field in unexpected if field not in NON_IDENTITY_FIELDS
+    ]
+    if unexpected_design:
+        raise ValueError(
+            f"unknown candidate identity layers: {', '.join(unexpected_design)}"
+        )
+
     forbidden = sorted(set(_forbidden_identity_field_paths(identity_layers)))
+    forbidden.extend(
+        field
+        for field in unexpected_non_identity
+        if field not in forbidden
+    )
     if forbidden:
         raise ValueError(
             f"non-identity fields supplied as identity layers: {', '.join(forbidden)}"
@@ -767,6 +816,74 @@ def build_workload_architecture_prior_report() -> Dict[str, Any]:
         "workload_facts_affect_post_freeze_pruning": False,
         "allowed_use": "pre_freeze_seed_and_pruning_rationale_only",
         "claim_boundary": "architecture priors are not Top-K selection or completion evidence",
+    }
+    payload["report_hash"] = _stable_hash_without(payload, "report_hash")
+    return payload
+
+
+def build_schedule_legality_report() -> Dict[str, Any]:
+    """Classify algorithm/mapping/compile/runtime schedule legality per seed."""
+    indices = _space_indices()
+    rows: list[Dict[str, Any]] = []
+    for seed in default_release_seed_rows():
+        taxonomy_id = seed["taxonomy_id"]
+        identity_layers = _identity_from_seed(seed)
+        legal, reasons = classify_candidate_legality(identity_layers)
+        axis_checks = {
+            "algorithm": taxonomy_id
+            in indices["algorithm"][seed["algorithm_id"]][
+                "compatible_taxonomy_ids"
+            ],
+            "mapping": taxonomy_id
+            in indices["mapping"][seed["mapping_id"]]["compatible_taxonomy_ids"],
+            "compile_time_schedule": taxonomy_id
+            in indices["compile"][seed["compile_schedule_id"]][
+                "compatible_taxonomy_ids"
+            ],
+            "runtime_scheduling": taxonomy_id
+            in indices["runtime"][seed["runtime_schedule_id"]][
+                "compatible_taxonomy_ids"
+            ],
+        }
+        rows.append(
+            {
+                "taxonomy_id": taxonomy_id,
+                "algorithm_id": seed["algorithm_id"],
+                "mapping_id": seed["mapping_id"],
+                "compile_schedule_id": seed["compile_schedule_id"],
+                "runtime_schedule_id": seed["runtime_schedule_id"],
+                "axis_checks": axis_checks,
+                "legal": legal,
+                "reasons": reasons,
+                "candidate_id": complete_dse_candidate_id(identity_layers)
+                if legal
+                else None,
+                "claim_boundary": "schedule legality only; not performance evidence",
+            }
+        )
+    payload = {
+        "schema_version": "dse.codesign.complete_dse.schedule_legality_report.v1",
+        "status": "passed"
+        if rows and all(row["legal"] for row in rows)
+        else "failed",
+        "release_id": RELEASE_ID,
+        "rows": rows,
+        "summary": {
+            "row_count": len(rows),
+            "all_algorithm_bindings_legal": all(
+                row["axis_checks"]["algorithm"] for row in rows
+            ),
+            "all_mapping_bindings_legal": all(
+                row["axis_checks"]["mapping"] for row in rows
+            ),
+            "all_compile_schedule_bindings_legal": all(
+                row["axis_checks"]["compile_time_schedule"] for row in rows
+            ),
+            "all_runtime_schedule_bindings_legal": all(
+                row["axis_checks"]["runtime_scheduling"] for row in rows
+            ),
+        },
+        "claim_boundary": "axis legality report only; downstream L4 closure is separate",
     }
     payload["report_hash"] = _stable_hash_without(payload, "report_hash")
     return payload
