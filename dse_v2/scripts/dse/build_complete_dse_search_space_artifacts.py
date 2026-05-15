@@ -12,9 +12,9 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from dse_v2.codesign.complete_dse_search_space import (
+from dse_v2.codesign.complete_dse_search_space import (  # noqa: E402
     write_complete_dse_search_space_artifacts,
-)  # noqa: E402
+)
 
 
 def main() -> None:

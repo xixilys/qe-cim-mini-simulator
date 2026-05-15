@@ -1,0 +1,132 @@
+#!/usr/bin/env python3
+"""Release-v1 taxonomy and legality tests for complete DSE."""
+
+from __future__ import annotations
+
+import copy
+
+from dse_v2.codesign.complete_dse_search_space import (
+    REQUIRED_BASE_FAMILIES,
+    REQUIRED_HYBRID_TEMPLATES,
+    build_architecture_taxonomy_manifest,
+    build_freeze_gate_verdict,
+    build_hybrid_template_manifest,
+    build_legality_pruning_report,
+    build_release_subset_manifest,
+    classify_candidate_legality,
+)
+
+
+def test_release_taxonomy_contains_required_base_families_and_finite_hybrids():
+    taxonomy = build_architecture_taxonomy_manifest()
+    entries = {entry["id"]: entry for entry in taxonomy["entries"]}
+
+    assert set(REQUIRED_BASE_FAMILIES).issubset(entries)
+    assert set(REQUIRED_HYBRID_TEMPLATES).issubset(entries)
+    assert taxonomy["arbitrary_base_family_cross_product_allowed"] is False
+    for family_id in REQUIRED_BASE_FAMILIES:
+        assert entries[family_id]["kind"] == "base_family"
+        assert entries[family_id]["release_v1_status"] == "required"
+    for template_id in REQUIRED_HYBRID_TEMPLATES:
+        assert entries[template_id]["kind"] == "hybrid_template"
+        assert (
+            entries[template_id]["release_v1_status"]
+            == "required_finite_hybrid"
+        )
+        assert entries[template_id]["arbitrary_cross_product"] is False
+
+    hybrids = build_hybrid_template_manifest()
+    assert [row["id"] for row in hybrids["templates"]] == list(
+        REQUIRED_HYBRID_TEMPLATES
+    )
+
+
+def test_release_subset_has_one_legal_candidate_per_required_taxonomy_entry():
+    manifest = build_release_subset_manifest()
+    included = set(manifest["included_taxonomy_ids"])
+
+    assert manifest["finite"] is True
+    assert manifest["predeclared"] is True
+    assert manifest["candidate_count"] == len(REQUIRED_BASE_FAMILIES) + len(
+        REQUIRED_HYBRID_TEMPLATES
+    )
+    assert manifest["legal_candidate_count"] == manifest["candidate_count"]
+    assert set(REQUIRED_BASE_FAMILIES).issubset(included)
+    assert set(REQUIRED_HYBRID_TEMPLATES).issubset(included)
+    assert len(manifest["legal_candidate_ids"]) == len(
+        set(manifest["legal_candidate_ids"])
+    )
+    assert manifest["stable_id_status"] == (
+        "emitted_after_all_identity_layers_present"
+    )
+
+
+def test_legality_rejects_ad_hoc_hybrid_and_incompatible_schedule_bindings():
+    manifest = build_release_subset_manifest()
+    layers = copy.deepcopy(
+        manifest["candidates"][0]["identity"]["identity_layers"]
+    )
+
+    layers["architecture_parameters"] = {
+        "taxonomy_id": "streaming_pipeline+spatial_pe_array",
+        "kind": "ad_hoc_composite",
+        "compute_organization": "unlisted composite",
+        "release_v1_status": "not_predeclared",
+    }
+    legal, reasons = classify_candidate_legality(layers)
+    assert legal is False
+    assert any("arbitrary base-family" in reason for reason in reasons)
+
+    incompatible = copy.deepcopy(
+        manifest["candidates"][0]["identity"]["identity_layers"]
+    )
+    incompatible["runtime_scheduling_parameters"] = {
+        "runtime_schedule_id": "multi_engine_work_stealing",
+        "queue_policy": "work_stealing_ready_queue",
+        "engine_assignment": "kernel_class_affinity",
+    }
+    legal, reasons = classify_candidate_legality(incompatible)
+    assert legal is False
+    assert any("runtime schedule" in reason for reason in reasons)
+
+
+def test_pruning_report_classifies_pruned_rows_with_stable_reasons():
+    report = build_legality_pruning_report()
+
+    assert report["status"] == "passed"
+    assert report["all_pruned_rows_have_stable_reason"] is True
+    assert {row["classification"] for row in report["pruned_rows"]}.issubset(
+        {"illegal", "research_only", "over_budget", "blocked"}
+    )
+    assert any(
+        row["classification"] == "illegal" for row in report["pruned_rows"]
+    )
+    assert report["claim_boundary"].startswith("pruning explains pre-freeze")
+
+
+def test_freeze_gate_rejects_missing_required_taxonomy_entries():
+    manifest = copy.deepcopy(build_release_subset_manifest())
+    manifest["candidates"] = [
+        row
+        for row in manifest["candidates"]
+        if row["identity"]["identity_layers"]["architecture_parameters"][
+            "taxonomy_id"
+        ]
+        != "pipeline_task_overlap"
+    ]
+    manifest["included_taxonomy_ids"] = [
+        row["identity"]["identity_layers"]["architecture_parameters"][
+            "taxonomy_id"
+        ]
+        for row in manifest["candidates"]
+    ]
+    manifest["candidate_count"] = len(manifest["candidates"])
+    manifest["legal_candidate_count"] = len(manifest["candidates"])
+
+    verdict = build_freeze_gate_verdict(manifest)
+
+    assert verdict["status"] == "blocked"
+    assert any(
+        blocker["id"] == "missing_required_taxonomy_entries"
+        for blocker in verdict["blockers"]
+    )
