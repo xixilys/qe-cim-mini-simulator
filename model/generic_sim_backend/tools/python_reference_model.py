@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, MutableMapping, Optional, Sequence, Tuple
 
 SUPPORTED_OPS = {
+    "placeholder",
     "gemm",
     "fft",
     "eigen",
@@ -26,6 +27,15 @@ SUPPORTED_OPS = {
     "elementwise",
     "transfer",
     "generic_op",
+    "input",
+    "output",
+    "copy",
+    "relu",
+    "activation",
+    "add",
+    "multiply",
+    "softmax",
+    "normalize",
 }
 
 DTYPE_BYTES = {
