@@ -19,7 +19,9 @@ from dse_v2.codesign.complete_dse_search_space import (
 
 def _first_identity_layers():
     manifest = build_release_subset_manifest()
-    return copy.deepcopy(manifest["candidates"][0]["identity"]["identity_layers"])
+    return copy.deepcopy(
+        manifest["candidates"][0]["identity"]["identity_layers"]
+    )
 
 
 def test_candidate_identity_contains_exactly_five_design_only_layers():
@@ -35,23 +37,39 @@ def test_candidate_identity_contains_exactly_five_design_only_layers():
 def test_candidate_id_is_deterministic_and_order_insensitive_inside_layers():
     layers = _first_identity_layers()
     reversed_layer_keys = {
-        layer: {key: layers[layer][key] for key in reversed(list(layers[layer].keys()))}
+        layer: {
+            key: layers[layer][key]
+            for key in reversed(list(layers[layer].keys()))
+        }
         for layer in reversed(list(layers.keys()))
     }
 
-    assert complete_dse_candidate_id(layers) == complete_dse_candidate_id(reversed_layer_keys)
-    assert canonical_candidate_identity(reversed_layer_keys)["identity_layers"] == canonical_candidate_identity(layers)["identity_layers"]
+    assert complete_dse_candidate_id(layers) == complete_dse_candidate_id(
+        reversed_layer_keys
+    )
+    assert (
+        canonical_candidate_identity(reversed_layer_keys)["identity_layers"]
+        == canonical_candidate_identity(layers)["identity_layers"]
+    )
 
 
 def test_compile_and_runtime_schedule_changes_affect_candidate_id():
     layers = _first_identity_layers()
     compile_changed = copy.deepcopy(layers)
-    compile_changed["compile_time_schedule_parameters"]["tiling"] = "different_tile"
+    compile_changed["compile_time_schedule_parameters"][
+        "tiling"
+    ] = "different_tile"
     runtime_changed = copy.deepcopy(layers)
-    runtime_changed["runtime_scheduling_parameters"]["queue_policy"] = "different_queue"
+    runtime_changed["runtime_scheduling_parameters"][
+        "queue_policy"
+    ] = "different_queue"
 
-    assert complete_dse_candidate_id(compile_changed) != complete_dse_candidate_id(layers)
-    assert complete_dse_candidate_id(runtime_changed) != complete_dse_candidate_id(layers)
+    assert complete_dse_candidate_id(
+        compile_changed
+    ) != complete_dse_candidate_id(layers)
+    assert complete_dse_candidate_id(
+        runtime_changed
+    ) != complete_dse_candidate_id(layers)
 
 
 def test_evaluation_context_does_not_affect_candidate_id():
