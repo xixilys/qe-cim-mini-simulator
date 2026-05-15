@@ -1005,7 +1005,7 @@ def build_legality_pruning_report(
         },
     }
     _, arbitrary_reasons = classify_candidate_legality(arbitrary_identity)
-    pruned_rows = [
+    pruned_rows: list[Dict[str, Any]] = [
         {
             "classification": "illegal",
             "candidate_like_payload": illegal_probe_identity,
@@ -1218,9 +1218,9 @@ def build_freeze_gate_verdict(
 
 
 def build_architecture_prior_seed_manifest() -> Dict[str, Any]:
-    seeds = []
+    seeds: list[Dict[str, Any]] = []
     for seed in default_release_seed_rows():
-        row = dict(seed)
+        row: Dict[str, Any] = dict(seed)
         row.update(
             {
                 "seed_status": "pre_freeze_release_seed",
