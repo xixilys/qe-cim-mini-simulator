@@ -10,6 +10,7 @@
     "status",
     "input_request",
     "model_invocation",
+    "design_axes",
     "claim_boundary",
     "timing_reference",
     "numerical_validation"
@@ -38,6 +39,41 @@
         "request_path": {"type": "string"},
         "result_path": {"type": "string"},
         "trace_path": {"type": ["string", "null"]}
+      }
+    },
+    "design_axes": {
+      "type": "object",
+      "required": ["architecture", "mapping", "scheduling"],
+      "properties": {
+        "architecture": {
+          "type": "object",
+          "required": ["accelerator_count", "accelerator_types"],
+          "properties": {
+            "architecture_id": {"type": ["string", "null"]},
+            "accelerator_count": {"type": "integer", "minimum": 0},
+            "accelerator_types": {"type": "array", "items": {"type": "string"}},
+            "host_cores": {"type": ["integer", "null"]},
+            "interconnect_type": {"type": ["string", "null"]}
+          }
+        },
+        "mapping": {
+          "type": "object",
+          "required": ["mapped_node_count", "devices"],
+          "properties": {
+            "mapping_id": {"type": ["string", "null"]},
+            "mapped_node_count": {"type": "integer", "minimum": 0},
+            "devices": {"type": "array", "items": {"type": "string"}}
+          }
+        },
+        "scheduling": {
+          "type": "object",
+          "required": ["policy", "allow_overlap_dma_compute", "double_buffer"],
+          "properties": {
+            "policy": {"type": "string"},
+            "allow_overlap_dma_compute": {"type": "boolean"},
+            "double_buffer": {"type": "boolean"}
+          }
+        }
       }
     },
     "claim_boundary": {

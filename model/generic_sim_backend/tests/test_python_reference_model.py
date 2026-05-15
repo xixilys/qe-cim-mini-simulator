@@ -63,6 +63,9 @@ class PythonReferenceModelContractTest(unittest.TestCase):
         self.assertEqual(result["input_request"]["schema_version"], "gsim.request.v1")
         self.assertEqual(result["input_request"]["node_count"], len(request["workload"]["nodes"]))
         self.assertEqual(result["model_invocation"]["accepted_payload_source"], "generic_systemc_request")
+        self.assertEqual(result["design_axes"]["architecture"]["accelerator_count"], 2)
+        self.assertEqual(result["design_axes"]["mapping"]["mapped_node_count"], len(mapping))
+        self.assertEqual(result["design_axes"]["scheduling"]["policy"], request["scheduling"]["policy"])
 
         claim_boundary = result["claim_boundary"]
         self.assertEqual(claim_boundary["claim"], "model_contract_and_projection_only")

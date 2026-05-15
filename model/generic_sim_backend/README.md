@@ -74,8 +74,11 @@ python3 model/generic_sim_backend/tools/python_reference_model.py \
 ```
 
 Output is described by
-`schemas/systemc_python_model_contract_v1.json`.  The contract intentionally
-marks its claim boundary as `model_contract_and_projection_only`:
+`schemas/systemc_python_model_contract_v1.json`.  Each result records the
+architecture, mapping, and scheduling axes accepted from the same simulator
+request so downstream L4/gem5 flows can correlate model evidence with the
+candidate payload.  The contract intentionally marks its claim boundary as
+`model_contract_and_projection_only`:
 
 - `trusted_speedup: false`
 - `trusted_qe_correctness: false`

@@ -186,6 +186,33 @@ def _accelerator_table(architecture: Mapping[str, Any]) -> Dict[str, Mapping[str
     return table
 
 
+def _design_axes_summary(request: Mapping[str, Any]) -> Dict[str, Any]:
+    architecture = request.get("architecture", {}) if isinstance(request.get("architecture", {}), Mapping) else {}
+    design_point = request.get("design_point", {}) if isinstance(request.get("design_point", {}), Mapping) else {}
+    mapping = request.get("mapping", {}) if isinstance(request.get("mapping", {}), Mapping) else {}
+    scheduling = request.get("scheduling", {}) if isinstance(request.get("scheduling", {}), Mapping) else {}
+    accelerators = [accel for accel in architecture.get("accelerators", []) or [] if isinstance(accel, Mapping)]
+    return {
+        "architecture": {
+            "architecture_id": design_point.get("architecture_id"),
+            "accelerator_count": len(accelerators),
+            "accelerator_types": sorted({str(accel.get("accel_type", "unknown")).lower() for accel in accelerators}),
+            "host_cores": architecture.get("host", {}).get("cores") if isinstance(architecture.get("host", {}), Mapping) else None,
+            "interconnect_type": architecture.get("interconnect", {}).get("type") if isinstance(architecture.get("interconnect", {}), Mapping) else None,
+        },
+        "mapping": {
+            "mapping_id": design_point.get("mapping_id"),
+            "mapped_node_count": len(mapping),
+            "devices": sorted({str(device) for device in mapping.values()}),
+        },
+        "scheduling": {
+            "policy": scheduling.get("policy", "static"),
+            "allow_overlap_dma_compute": bool(scheduling.get("allow_overlap_dma_compute", True)),
+            "double_buffer": bool(scheduling.get("double_buffer", True)),
+        },
+    }
+
+
 def _peak_gops_for(accel: Mapping[str, Any], op_type: str) -> float:
     capabilities = accel.get("capabilities", {}) if isinstance(accel.get("capabilities", {}), Mapping) else {}
     capability = capabilities.get(op_type) or capabilities.get("generic_op") or {}
@@ -316,6 +343,7 @@ def evaluate_request(request: Mapping[str, Any], invocation: Optional[Mapping[st
             "edge_count": len(edges),
         },
         "model_invocation": dict(invocation or {}),
+        "design_axes": _design_axes_summary(request),
         "claim_boundary": {
             "fidelity_level": "L3_python_reference_sidecar",
             "claim": "model_contract_and_projection_only",
