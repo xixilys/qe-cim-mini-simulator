@@ -109,6 +109,34 @@ def _as_dict(value: Any, *, field_name: str) -> Dict[str, Any]:
     return {str(key): value[key] for key in sorted(value)}
 
 
+def _forbidden_identity_field_paths(value: Any, *, prefix: str = "") -> list[str]:
+    """Return paths where evaluation/workload metadata contaminates identity.
+
+    Candidate identity is allowed to contain only design semantics.  The old
+    seven-axis release slice used evidence/promotion metadata as an axis; the
+    complete-DSE identity contract rejects those fields even when they are
+    nested inside an otherwise valid identity layer.
+    """
+    paths: list[str] = []
+    if isinstance(value, Mapping):
+        for key, child in value.items():
+            key_text = str(key)
+            path = f"{prefix}.{key_text}" if prefix else key_text
+            if key_text in NON_IDENTITY_FIELDS:
+                paths.append(path)
+            paths.extend(_forbidden_identity_field_paths(child, prefix=path))
+    elif isinstance(value, Sequence) and not isinstance(
+        value, (str, bytes, bytearray)
+    ):
+        for index, child in enumerate(value):
+            paths.extend(
+                _forbidden_identity_field_paths(
+                    child, prefix=f"{prefix}[{index}]"
+                )
+            )
+    return paths
+
+
 def _indexed_by_id(
     rows: Iterable[Mapping[str, Any]], key: str = "id"
 ) -> Dict[str, Mapping[str, Any]]:
@@ -137,7 +165,7 @@ def canonical_candidate_identity(
             f"missing candidate identity layers: {', '.join(missing)}"
         )
 
-    forbidden = sorted(set(identity_layers).intersection(NON_IDENTITY_FIELDS))
+    forbidden = sorted(set(_forbidden_identity_field_paths(identity_layers)))
     if forbidden:
         raise ValueError(
             f"non-identity fields supplied as identity layers: {', '.join(forbidden)}"
@@ -664,6 +692,83 @@ def build_legality_constraints_manifest() -> Dict[str, Any]:
     payload["constraints_hash"] = _stable_hash_without(
         payload, "constraints_hash"
     )
+    return payload
+
+
+def build_workload_architecture_prior_report() -> Dict[str, Any]:
+    """Describe pre-freeze QE workload priors without making workload an axis."""
+    seed_rows: list[Dict[str, Any]] = []
+    feature_map = {
+        "streaming_pipeline": [
+            "fft_grid_stream",
+            "rho_accumulation",
+            "producer_consumer_density_update",
+        ],
+        "simd_vector": [
+            "band_residual_update",
+            "mix_rho_vector_reduction",
+            "contiguous_band_iteration",
+        ],
+        "spatial_pe_array": [
+            "h_psi_s_psi_dense_blocks",
+            "subspace_diagonalization",
+            "band_block_linear_algebra",
+        ],
+        "task_parallel_engines": [
+            "heterogeneous_kernel_graph",
+            "independent_qe_kernel_classes",
+            "host_fallback_per_kernel",
+        ],
+        "pipeline_simd_fused": [
+            "mixed_fft_vector_update_flow",
+            "streamed_density_plus_residual_path",
+        ],
+        "pipeline_spatial_array": [
+            "streaming_frontend_plus_dense_block_backend",
+            "fft_to_hpsi_pipeline",
+        ],
+        "task_parallel_simd": [
+            "task_graph_with_vector_residuals",
+            "multi_kernel_vector_update_overlap",
+        ],
+        "task_parallel_spatial_array": [
+            "task_graph_with_dense_subspace_kernels",
+            "mixed_engine_hpsi_spsi_overlap",
+        ],
+        "pipeline_task_overlap": [
+            "pipeline_stages_overlapped_with_qe_task_windows",
+            "producer_consumer_task_queue",
+        ],
+    }
+    for seed in default_release_seed_rows():
+        taxonomy_id = seed["taxonomy_id"]
+        seed_rows.append(
+            {
+                "taxonomy_id": taxonomy_id,
+                "seed": dict(seed),
+                "qe_workload_features": feature_map[taxonomy_id],
+                "prior_rule": "pre_freeze_seed_only",
+                "may_remove_frozen_rows": False,
+                "candidate_identity_participation": False,
+                "claim_boundary": (
+                    "workload facts justify pre-freeze seed inclusion; "
+                    "candidate identity remains design-only"
+                ),
+            }
+        )
+    payload = {
+        "schema_version": "dse.codesign.complete_dse.workload_architecture_prior_report.v1",
+        "status": "passed",
+        "release_id": RELEASE_ID,
+        "source_workload_suite": "qe_mainflow_release_v1_reference_facts",
+        "seed_rows": seed_rows,
+        "seed_row_count": len(seed_rows),
+        "workload_facts_affect_identity": False,
+        "workload_facts_affect_post_freeze_pruning": False,
+        "allowed_use": "pre_freeze_seed_and_pruning_rationale_only",
+        "claim_boundary": "architecture priors are not Top-K selection or completion evidence",
+    }
+    payload["report_hash"] = _stable_hash_without(payload, "report_hash")
     return payload
 
 
