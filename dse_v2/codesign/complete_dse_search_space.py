@@ -109,6 +109,66 @@ def _as_dict(value: Any, *, field_name: str) -> Dict[str, Any]:
     return {str(key): value[key] for key in sorted(value)}
 
 
+def _forbidden_identity_field_paths(value: Any, *, prefix: str = "") -> list[str]:
+    """Return paths where evaluation/workload metadata contaminates identity.
+
+    Candidate identity is allowed to contain only design semantics.  The old
+    seven-axis release slice used evidence/promotion metadata as an axis; the
+    complete-DSE identity contract rejects those fields even when they are
+    nested inside an otherwise valid identity layer.
+    """
+    paths: list[str] = []
+    if isinstance(value, Mapping):
+        for key, child in value.items():
+            key_text = str(key)
+            path = f"{prefix}.{key_text}" if prefix else key_text
+            if key_text in NON_IDENTITY_FIELDS:
+                paths.append(path)
+            paths.extend(_forbidden_identity_field_paths(child, prefix=path))
+    elif isinstance(value, Sequence) and not isinstance(
+        value, (str, bytes, bytearray)
+    ):
+        for index, child in enumerate(value):
+            paths.extend(
+                _forbidden_identity_field_paths(
+                    child, prefix=f"{prefix}[{index}]"
+                )
+            )
+    return paths
+
+
+def _deterministic_replay_metadata(
+    *,
+    artifact_name: str,
+    builder: str,
+    inputs: Mapping[str, Any],
+) -> Dict[str, Any]:
+    """Describe how a generated release artifact can be rebuilt deterministically."""
+    input_hash = stable_json_hash(inputs)
+    payload = {
+        "schema_version": "dse.codesign.complete_dse.deterministic_replay.v1",
+        "artifact_name": artifact_name,
+        "builder": builder,
+        "input_hash": input_hash,
+        "stable_hash_function": "sha256(json.dumps(sort_keys=True,separators=(',', ':')))",
+        "replay_command": [
+            "python3",
+            "dse_v2/scripts/dse/build_complete_dse_search_space_artifacts.py",
+            "--out",
+            "<output_dir>",
+        ],
+        "deterministic_ordering": [
+            "identity_layer_order",
+            "default_release_seed_rows",
+            "candidate_id",
+            "artifact file name",
+        ],
+        "claim_boundary": "replay metadata proves deterministic artifact regeneration only",
+    }
+    payload["replay_hash"] = _stable_hash_without(payload, "replay_hash")
+    return payload
+
+
 def _indexed_by_id(
     rows: Iterable[Mapping[str, Any]], key: str = "id"
 ) -> Dict[str, Mapping[str, Any]]:
@@ -137,7 +197,24 @@ def canonical_candidate_identity(
             f"missing candidate identity layers: {', '.join(missing)}"
         )
 
-    forbidden = sorted(set(identity_layers).intersection(NON_IDENTITY_FIELDS))
+    unexpected = sorted(set(identity_layers) - set(IDENTITY_LAYER_KEYS))
+    unexpected_non_identity = [
+        field for field in unexpected if field in NON_IDENTITY_FIELDS
+    ]
+    unexpected_design = [
+        field for field in unexpected if field not in NON_IDENTITY_FIELDS
+    ]
+    if unexpected_design:
+        raise ValueError(
+            f"unknown candidate identity layers: {', '.join(unexpected_design)}"
+        )
+
+    forbidden = sorted(set(_forbidden_identity_field_paths(identity_layers)))
+    forbidden.extend(
+        field
+        for field in unexpected_non_identity
+        if field not in forbidden
+    )
     if forbidden:
         raise ValueError(
             f"non-identity fields supplied as identity layers: {', '.join(forbidden)}"
@@ -667,6 +744,151 @@ def build_legality_constraints_manifest() -> Dict[str, Any]:
     return payload
 
 
+def build_workload_architecture_prior_report() -> Dict[str, Any]:
+    """Describe pre-freeze QE workload priors without making workload an axis."""
+    seed_rows: list[Dict[str, Any]] = []
+    feature_map = {
+        "streaming_pipeline": [
+            "fft_grid_stream",
+            "rho_accumulation",
+            "producer_consumer_density_update",
+        ],
+        "simd_vector": [
+            "band_residual_update",
+            "mix_rho_vector_reduction",
+            "contiguous_band_iteration",
+        ],
+        "spatial_pe_array": [
+            "h_psi_s_psi_dense_blocks",
+            "subspace_diagonalization",
+            "band_block_linear_algebra",
+        ],
+        "task_parallel_engines": [
+            "heterogeneous_kernel_graph",
+            "independent_qe_kernel_classes",
+            "host_fallback_per_kernel",
+        ],
+        "pipeline_simd_fused": [
+            "mixed_fft_vector_update_flow",
+            "streamed_density_plus_residual_path",
+        ],
+        "pipeline_spatial_array": [
+            "streaming_frontend_plus_dense_block_backend",
+            "fft_to_hpsi_pipeline",
+        ],
+        "task_parallel_simd": [
+            "task_graph_with_vector_residuals",
+            "multi_kernel_vector_update_overlap",
+        ],
+        "task_parallel_spatial_array": [
+            "task_graph_with_dense_subspace_kernels",
+            "mixed_engine_hpsi_spsi_overlap",
+        ],
+        "pipeline_task_overlap": [
+            "pipeline_stages_overlapped_with_qe_task_windows",
+            "producer_consumer_task_queue",
+        ],
+    }
+    for seed in default_release_seed_rows():
+        taxonomy_id = seed["taxonomy_id"]
+        seed_rows.append(
+            {
+                "taxonomy_id": taxonomy_id,
+                "seed": dict(seed),
+                "qe_workload_features": feature_map[taxonomy_id],
+                "prior_rule": "pre_freeze_seed_only",
+                "may_remove_frozen_rows": False,
+                "candidate_identity_participation": False,
+                "claim_boundary": (
+                    "workload facts justify pre-freeze seed inclusion; "
+                    "candidate identity remains design-only"
+                ),
+            }
+        )
+    payload = {
+        "schema_version": "dse.codesign.complete_dse.workload_architecture_prior_report.v1",
+        "status": "passed",
+        "release_id": RELEASE_ID,
+        "source_workload_suite": "qe_mainflow_release_v1_reference_facts",
+        "seed_rows": seed_rows,
+        "seed_row_count": len(seed_rows),
+        "workload_facts_affect_identity": False,
+        "workload_facts_affect_post_freeze_pruning": False,
+        "allowed_use": "pre_freeze_seed_and_pruning_rationale_only",
+        "claim_boundary": "architecture priors are not Top-K selection or completion evidence",
+    }
+    payload["report_hash"] = _stable_hash_without(payload, "report_hash")
+    return payload
+
+
+def build_schedule_legality_report() -> Dict[str, Any]:
+    """Classify algorithm/mapping/compile/runtime schedule legality per seed."""
+    indices = _space_indices()
+    rows: list[Dict[str, Any]] = []
+    for seed in default_release_seed_rows():
+        taxonomy_id = seed["taxonomy_id"]
+        identity_layers = _identity_from_seed(seed)
+        legal, reasons = classify_candidate_legality(identity_layers)
+        axis_checks = {
+            "algorithm": taxonomy_id
+            in indices["algorithm"][seed["algorithm_id"]][
+                "compatible_taxonomy_ids"
+            ],
+            "mapping": taxonomy_id
+            in indices["mapping"][seed["mapping_id"]]["compatible_taxonomy_ids"],
+            "compile_time_schedule": taxonomy_id
+            in indices["compile"][seed["compile_schedule_id"]][
+                "compatible_taxonomy_ids"
+            ],
+            "runtime_scheduling": taxonomy_id
+            in indices["runtime"][seed["runtime_schedule_id"]][
+                "compatible_taxonomy_ids"
+            ],
+        }
+        rows.append(
+            {
+                "taxonomy_id": taxonomy_id,
+                "algorithm_id": seed["algorithm_id"],
+                "mapping_id": seed["mapping_id"],
+                "compile_schedule_id": seed["compile_schedule_id"],
+                "runtime_schedule_id": seed["runtime_schedule_id"],
+                "axis_checks": axis_checks,
+                "legal": legal,
+                "reasons": reasons,
+                "candidate_id": complete_dse_candidate_id(identity_layers)
+                if legal
+                else None,
+                "claim_boundary": "schedule legality only; not performance evidence",
+            }
+        )
+    payload = {
+        "schema_version": "dse.codesign.complete_dse.schedule_legality_report.v1",
+        "status": "passed"
+        if rows and all(row["legal"] for row in rows)
+        else "failed",
+        "release_id": RELEASE_ID,
+        "rows": rows,
+        "summary": {
+            "row_count": len(rows),
+            "all_algorithm_bindings_legal": all(
+                row["axis_checks"]["algorithm"] for row in rows
+            ),
+            "all_mapping_bindings_legal": all(
+                row["axis_checks"]["mapping"] for row in rows
+            ),
+            "all_compile_schedule_bindings_legal": all(
+                row["axis_checks"]["compile_time_schedule"] for row in rows
+            ),
+            "all_runtime_schedule_bindings_legal": all(
+                row["axis_checks"]["runtime_scheduling"] for row in rows
+            ),
+        },
+        "claim_boundary": "axis legality report only; downstream L4 closure is separate",
+    }
+    payload["report_hash"] = _stable_hash_without(payload, "report_hash")
+    return payload
+
+
 def _space_indices() -> Dict[str, Dict[str, Mapping[str, Any]]]:
     taxonomy = build_architecture_taxonomy_manifest()
     algorithms = build_algorithm_family_manifest()
@@ -900,6 +1122,7 @@ def build_release_subset_manifest(
     seed_rows: Sequence[Mapping[str, str]] | None = None,
 ) -> Dict[str, Any]:
     rows = list(seed_rows or default_release_seed_rows())
+    seed_rows_hash = stable_json_hash(rows)
     candidates: list[Dict[str, Any]] = []
     for seed in rows:
         identity_layers = _identity_from_seed(seed)
@@ -942,6 +1165,27 @@ def build_release_subset_manifest(
             for candidate in candidates
         ],
         "stable_id_status": "emitted_after_all_identity_layers_present",
+        "generation_provenance": {
+            "source": "predeclared_release_v1_seed_rows",
+            "seed_rows_hash": seed_rows_hash,
+            "legality_constraints_hash": build_legality_constraints_manifest()[
+                "constraints_hash"
+            ],
+            "candidate_order": [
+                candidate["candidate_id"] for candidate in candidates
+            ],
+            "workload_facts_used_only_before_freeze": True,
+            "post_freeze_row_removal_allowed": False,
+        },
+        "deterministic_replay": _deterministic_replay_metadata(
+            artifact_name="release_subset_manifest.json",
+            builder="build_release_subset_manifest",
+            inputs={
+                "seed_rows_hash": seed_rows_hash,
+                "identity_layers": list(IDENTITY_LAYER_KEYS),
+                "non_identity_fields": list(NON_IDENTITY_FIELDS),
+            },
+        ),
         "claim_boundary": "release subset identity manifest only; closure evidence is tracked downstream",
     }
     payload["release_subset_hash"] = _stable_hash_without(
@@ -974,6 +1218,18 @@ def build_candidate_generation_report(
         "excluded_from_identity": list(NON_IDENTITY_FIELDS),
         "stable_candidate_ids_emitted": all_have_layers,
         "candidate_id_rule": "design-only five-layer stable hash; evaluation matrix metadata excluded",
+        "provenance": {
+            "release_subset_hash": subset.get("release_subset_hash"),
+            "candidate_ids": [
+                str(candidate.get("candidate_id")) for candidate in candidates
+            ],
+            "candidate_record_hashes": [
+                str(candidate.get("record_hash")) for candidate in candidates
+            ],
+            "deterministic_replay_hash": (
+                subset.get("deterministic_replay", {}) or {}
+            ).get("replay_hash"),
+        },
     }
     payload["report_hash"] = _stable_hash_without(payload, "report_hash")
     return payload
@@ -1037,8 +1293,29 @@ def build_legality_pruning_report(
             "over_budget",
             "blocked",
         ],
+        "provenance": {
+            "release_subset_hash": subset.get("release_subset_hash"),
+            "legality_constraints_hash": build_legality_constraints_manifest()[
+                "constraints_hash"
+            ],
+            "pruning_phase": "pre_freeze_only",
+            "post_freeze_row_removal_allowed": False,
+        },
         "claim_boundary": "pruning explains pre-freeze release universe only; it is not completion evidence",
     }
+    payload["report_hash"] = _stable_hash_without(payload, "report_hash")
+    return payload
+
+
+def build_release_pruning_rationale_report(
+    release_subset: Mapping[str, Any] | None = None,
+) -> Dict[str, Any]:
+    """Alias the legality-pruning report under the PRD-required artifact name."""
+    payload = dict(build_legality_pruning_report(release_subset))
+    payload["schema_version"] = (
+        "dse.codesign.complete_dse.release_pruning_rationale_report.v1"
+    )
+    payload["artifact_alias_for"] = "legality_pruning_report.json"
     payload["report_hash"] = _stable_hash_without(payload, "report_hash")
     return payload
 
@@ -1245,6 +1522,31 @@ def build_freeze_gate_verdict(
         "legal_candidate_count": legal_count,
         "research_to_release_ratio": ratio,
         "blockers": blockers,
+        "freeze_inputs": {
+            "release_subset_hash": subset.get("release_subset_hash"),
+            "budget_hash": budget_payload.get("budget_hash"),
+            "research_space_hash": research_payload.get("manifest_hash"),
+            "selection_policy_hash": stable_json_hash(policy),
+        },
+        "provenance": {
+            "predeclared_release_subset": True,
+            "all_candidates_classified_before_freeze": not illegal_candidate_ids,
+            "post_hoc_top_k_or_fixed_list": bool(
+                selection_kind in BANNED_COMPLETION_SUBSETS
+                or policy.get("fixed_candidate_only") is True
+            ),
+            "workload_or_evidence_axes_in_identity_allowed": False,
+        },
+        "deterministic_replay": _deterministic_replay_metadata(
+            artifact_name="freeze_gate_verdict.json",
+            builder="build_freeze_gate_verdict",
+            inputs={
+                "release_subset_hash": subset.get("release_subset_hash"),
+                "budget_hash": budget_payload.get("budget_hash"),
+                "research_space_hash": research_payload.get("manifest_hash"),
+                "selection_policy_hash": stable_json_hash(policy),
+            },
+        ),
         "hard_completion_rule_preserved": not blockers,
         "top_k_or_representative_completion_allowed": False,
         "claim_boundary": "freeze gate only; deliverable_complete still requires downstream L4 matrix closure",
@@ -1298,6 +1600,7 @@ def build_architecture_search_space() -> Dict[str, Any]:
         "runtime_schedule_space": build_runtime_schedule_space(),
         "legality_constraints": build_legality_constraints_manifest(),
         "research_space_manifest": build_research_space_manifest(),
+        "workload_architecture_prior_report": build_workload_architecture_prior_report(),
         "architecture_prior_seed_manifest": build_architecture_prior_seed_manifest(),
         "release_subset_manifest": release_subset,
         "candidate_generation_report": build_candidate_generation_report(
@@ -1306,6 +1609,10 @@ def build_architecture_search_space() -> Dict[str, Any]:
         "legality_pruning_report": build_legality_pruning_report(
             release_subset
         ),
+        "release_pruning_rationale_report": build_release_pruning_rationale_report(
+            release_subset
+        ),
+        "schedule_legality_report": build_schedule_legality_report(),
         "release_cardinality_budget": build_release_cardinality_budget(),
         "release_l4_runtime_cost_report": build_release_l4_runtime_cost_report(
             release_subset
@@ -1338,6 +1645,14 @@ def validate_architecture_search_space(
             subset if isinstance(subset, Mapping) else {}
         ),
         "freeze_gate_passed": freeze.get("status") == "passed",
+        "workload_prior_report_passed": search_space.get(
+            "workload_architecture_prior_report", {}
+        ).get("status")
+        == "passed",
+        "schedule_legality_report_passed": search_space.get(
+            "schedule_legality_report", {}
+        ).get("status")
+        == "passed",
         "no_completion_claim": search_space.get("claim_boundary", "").endswith(
             "no trusted speedup or completion claim"
         ),
@@ -1372,6 +1687,9 @@ def artifact_bundle() -> Dict[str, Dict[str, Any]]:
         "research_space_manifest.json": search_space[
             "research_space_manifest"
         ],
+        "workload_architecture_prior_report.json": search_space[
+            "workload_architecture_prior_report"
+        ],
         "architecture_prior_seed_manifest.json": search_space[
             "architecture_prior_seed_manifest"
         ],
@@ -1383,6 +1701,12 @@ def artifact_bundle() -> Dict[str, Dict[str, Any]]:
         ],
         "legality_pruning_report.json": search_space[
             "legality_pruning_report"
+        ],
+        "release_pruning_rationale_report.json": search_space[
+            "release_pruning_rationale_report"
+        ],
+        "schedule_legality_report.json": search_space[
+            "schedule_legality_report"
         ],
         "release_cardinality_budget.json": search_space[
             "release_cardinality_budget"

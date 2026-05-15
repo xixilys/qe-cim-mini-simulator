@@ -92,6 +92,17 @@ def test_freeze_gate_rejects_top_k_representative_and_fixed_candidate_downgrades
 
 def test_freeze_gate_rejects_release_subset_that_is_more_than_5_percent_of_research_space():
     subset = build_release_subset_manifest()
+    boundary_research = build_research_space_manifest()
+    boundary_research["estimated_broad_candidate_count"] = (
+        subset["legal_candidate_count"] / 0.05
+    )
+    boundary = build_freeze_gate_verdict(
+        subset,
+        research_space=boundary_research,
+    )
+    assert boundary["status"] == "passed"
+    assert boundary["research_to_release_ratio"] == 0.05
+
     tiny_research = build_research_space_manifest()
     tiny_research["estimated_broad_candidate_count"] = 10
 

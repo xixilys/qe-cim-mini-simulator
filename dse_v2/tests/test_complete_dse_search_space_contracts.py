@@ -12,6 +12,8 @@ from dse_v2.codesign.complete_dse_search_space import (
     IDENTITY_LAYER_KEYS,
     NON_IDENTITY_FIELDS,
     build_architecture_search_space,
+    build_freeze_gate_verdict,
+    build_release_subset_manifest,
     build_search_space_schema,
     validate_architecture_search_space,
     write_complete_dse_search_space_artifacts,
@@ -71,6 +73,18 @@ def test_architecture_search_space_bundle_is_valid_but_not_completion_evidence()
         ]
         is True
     )
+    assert (
+        search_space["workload_architecture_prior_report"][
+            "workload_facts_affect_identity"
+        ]
+        is False
+    )
+    assert (
+        search_space["schedule_legality_report"]["summary"][
+            "all_runtime_schedule_bindings_legal"
+        ]
+        is True
+    )
     assert search_space["candidate_generation_report"][
         "excluded_from_identity"
     ] == list(NON_IDENTITY_FIELDS)
@@ -92,8 +106,11 @@ def test_artifact_writer_and_cli_emit_machine_readable_foundation_files(
     for name in [
         "search_space_schema.json",
         "architecture_search_space.json",
+        "workload_architecture_prior_report.json",
         "release_subset_manifest.json",
         "candidate_generation_report.json",
+        "release_pruning_rationale_report.json",
+        "schedule_legality_report.json",
         "freeze_gate_verdict.json",
         "validation_report.json",
         "status.json",
@@ -126,3 +143,47 @@ def test_artifact_writer_and_cli_emit_machine_readable_foundation_files(
     assert cli_status["status"] == "passed"
     assert (cli_out / "architecture_search_space.json").exists()
     assert (cli_out / "status.json").exists()
+
+
+def test_release_subset_and_freeze_gate_are_deterministically_replayable(
+    tmp_path,
+):
+    first_subset = build_release_subset_manifest()
+    second_subset = build_release_subset_manifest()
+    assert first_subset["release_subset_hash"] == second_subset[
+        "release_subset_hash"
+    ]
+    assert first_subset["deterministic_replay"]["replay_hash"] == second_subset[
+        "deterministic_replay"
+    ]["replay_hash"]
+    assert first_subset["generation_provenance"]["candidate_order"] == [
+        candidate["candidate_id"] for candidate in first_subset["candidates"]
+    ]
+
+    verdict = build_freeze_gate_verdict(first_subset)
+    assert verdict["status"] == "passed"
+    assert verdict["freeze_inputs"]["release_subset_hash"] == first_subset[
+        "release_subset_hash"
+    ]
+    assert verdict["provenance"] == {
+        "predeclared_release_subset": True,
+        "all_candidates_classified_before_freeze": True,
+        "post_hoc_top_k_or_fixed_list": False,
+        "workload_or_evidence_axes_in_identity_allowed": False,
+    }
+    assert verdict["deterministic_replay"]["artifact_name"] == (
+        "freeze_gate_verdict.json"
+    )
+
+    first_dir = tmp_path / "first"
+    second_dir = tmp_path / "second"
+    write_complete_dse_search_space_artifacts(first_dir)
+    write_complete_dse_search_space_artifacts(second_dir)
+    for name in [
+        "release_subset_manifest.json",
+        "freeze_gate_verdict.json",
+        "architecture_search_space.json",
+    ]:
+        assert json.loads((first_dir / name).read_text()) == json.loads(
+            (second_dir / name).read_text()
+        )

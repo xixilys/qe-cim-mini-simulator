@@ -118,3 +118,22 @@ def test_missing_or_contaminated_identity_layers_block_stable_id_emission():
     contaminated["workload_case_id"] = {"id": "qe_scf_small"}
     with pytest.raises(ValueError, match="non-identity fields"):
         complete_dse_candidate_id(contaminated)
+
+    nested_workload = copy.deepcopy(layers)
+    nested_workload["architecture_parameters"][
+        "workload_case_id"
+    ] = "qe_relax_small"
+    with pytest.raises(ValueError, match="architecture_parameters.workload_case_id"):
+        complete_dse_candidate_id(nested_workload)
+
+    nested_evidence = copy.deepcopy(layers)
+    nested_evidence["runtime_scheduling_parameters"][
+        "evidence_fidelity"
+    ] = "L4"
+    with pytest.raises(ValueError, match="runtime_scheduling_parameters.evidence_fidelity"):
+        complete_dse_candidate_id(nested_evidence)
+
+    unknown_axis = copy.deepcopy(layers)
+    unknown_axis["manual_legality_axis"] = {"status": "force_legal"}
+    with pytest.raises(ValueError, match="unknown candidate identity layers"):
+        complete_dse_candidate_id(unknown_axis)
