@@ -49,6 +49,8 @@ private:
     static constexpr Addr REG_COMP_ERROR_CODE = 0x300C;
     static constexpr Addr REG_METRIC_CYCLES = 0x4000;
     static constexpr Addr REG_METRIC_OPS = 0x4004;
+    static constexpr Addr REG_METRIC_BYTES_READ = 0x4008;
+    static constexpr Addr REG_METRIC_BYTES_WRITTEN = 0x400C;
     
     // Device state
     uint32_t control_reg = 0;
@@ -70,6 +72,8 @@ private:
     // Metrics
     uint64_t metric_cycles = 0;
     uint64_t metric_ops = 0;
+    uint64_t metric_bytes_read = 0;
+    uint64_t metric_bytes_written = 0;
     
     // Configuration
     const float clockMhz;

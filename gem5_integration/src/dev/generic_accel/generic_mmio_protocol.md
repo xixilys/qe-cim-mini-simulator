@@ -64,8 +64,38 @@ struct CommandDescriptor {
     uint64_t result_addr;   // Address for simulation result JSON
     uint64_t workspace_addr;// Address of workspace memory
     uint64_t workspace_size;
+    // Optional V1 extension fields.  Descriptors may stop after workspace_size
+    // for legacy 48-byte requests; extended descriptors expose schedule and
+    // sidecar payloads without adding application-specific ABI fields.
+    uint64_t extension_payload_addr;
+    uint64_t extension_payload_bytes;
+    uint64_t candidate_identity_addr;
+    uint64_t candidate_identity_bytes;
+    uint64_t compile_schedule_addr;
+    uint64_t compile_schedule_bytes;
+    uint64_t runtime_schedule_addr;
+    uint64_t runtime_schedule_bytes;
+    uint64_t sidecar_dispatch_addr;
+    uint64_t sidecar_dispatch_bytes;
 };
 ```
+
+### Descriptor flags
+
+| Bit | Name | Meaning |
+|-----|------|---------|
+| 0 | `REQUEST_JSON` | `request_addr` points at the simulation request JSON. |
+| 1 | `RESULT_JSON` | `result_addr` points at the result JSON buffer. |
+| 2 | `COMPLETION_DESC` | Completion descriptor writeback is expected. |
+| 3 | `EXTENSION_PAYLOAD` | Generic plugin/adapter extension payload is present. |
+| 4 | `CANDIDATE_IDENTITY` | Candidate identity payload is present. |
+| 5 | `COMPILE_SCHEDULE` | Compile-time schedule payload is present. |
+| 6 | `RUNTIME_SCHEDULE` | Runtime scheduling payload is present. |
+| 7 | `SIDECAR_DISPATCH` | SystemC/Python sidecar dispatch metadata is present. |
+
+Candidate identity, schedule, QE offload, and sidecar model details remain JSON
+payloads.  The C/gem5 ABI only records generic pointer/size pairs so QE or
+other workload-specific semantics do not become mandatory core fields.
 
 ## Completion Descriptor Format
 
@@ -105,6 +135,19 @@ contract. A run is trusted only when the log proves all of these events:
    the scheduled micro-ops from the device path.
 4. `completion_writeback`: the result JSON and completion descriptor were
    written back to guest-visible memory.
+
+The extended feasibility-spike path also logs these observability markers when
+the corresponding descriptor flags or JSON payloads are present:
+
+- `candidate_identity_trace`
+- `compile_schedule_trace`
+- `runtime_schedule_trace`
+- `sidecar_dispatch_trace`
+- `extension_payload_trace`
+
+These markers are integration evidence for `vertical_slice_only` rows.  They do
+not by themselves prove numerical correctness, trusted speedup, or release
+closure.
 
 If any item is missing, the correct result is a blocked verdict, not an
 L4-complete claim.

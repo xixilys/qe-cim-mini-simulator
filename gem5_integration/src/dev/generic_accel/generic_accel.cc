@@ -938,6 +938,8 @@ Tick GenericAccel::read(PacketPtr pkt)
       case REG_COMP_ERROR_CODE: pkt->setLE<uint32_t>(comp_error_code); break;
       case REG_METRIC_CYCLES: pkt->setLE<uint64_t>(metric_cycles); break;
       case REG_METRIC_OPS: pkt->setLE<uint64_t>(metric_ops); break;
+      case REG_METRIC_BYTES_READ: pkt->setLE<uint64_t>(metric_bytes_read); break;
+      case REG_METRIC_BYTES_WRITTEN: pkt->setLE<uint64_t>(metric_bytes_written); break;
       default: pkt->setLE<uint32_t>(0); break;
     }
 
@@ -997,7 +999,7 @@ void GenericAccel::processCommand()
             static_cast<unsigned long long>(cmdAddr), UarchEngine);
 
     CommandDescriptor desc{};
-    if (cmdAddr == 0 || cmd_desc_size < sizeof(CommandDescriptor)) {
+    if (cmdAddr == 0 || cmd_desc_size < LegacyCommandDescriptorBytes) {
         comp_error_code = GsimErrorDescriptor;
         DPRINTF(GenericAccel, "descriptor_read verified=false reason=invalid_address_or_size addr=0x%llx size=%u\n",
                 static_cast<unsigned long long>(cmdAddr), cmd_desc_size);
@@ -1006,7 +1008,8 @@ void GenericAccel::processCommand()
         return;
     }
 
-    sys->physProxy.readBlob(cmdAddr, &desc, sizeof(desc));
+    const size_t descriptorBytes = std::min<size_t>(cmd_desc_size, sizeof(desc));
+    sys->physProxy.readBlob(cmdAddr, &desc, descriptorBytes);
     if (desc.magic != GsimMagic || desc.version != 1) {
         comp_error_code = GsimErrorDescriptor;
         DPRINTF(GenericAccel, "descriptor_read verified=false reason=bad_magic_or_version magic=0x%x version=%u\n",
@@ -1019,11 +1022,56 @@ void GenericAccel::processCommand()
     pendingResultAddr = desc.result_addr;
     const size_t payloadBytes = std::min<size_t>(desc.workspace_size ? static_cast<size_t>(desc.workspace_size) : 65536, MaxJsonBytes);
     const std::string requestJson = readGuestCString(sys, desc.request_addr, payloadBytes);
-    DPRINTF(GenericAccel, "descriptor_read verified=true addr=0x%llx request_addr=0x%llx result_addr=0x%llx request_bytes=%llu\n",
+    const bool hasExtensions = descriptorBytes > LegacyCommandDescriptorBytes;
+    const std::string candidatePayload = readOptionalGuestCString(sys, desc.candidate_identity_addr,
+                                                                  desc.candidate_identity_bytes);
+    const std::string compilePayload = readOptionalGuestCString(sys, desc.compile_schedule_addr,
+                                                                desc.compile_schedule_bytes);
+    const std::string runtimePayload = readOptionalGuestCString(sys, desc.runtime_schedule_addr,
+                                                                desc.runtime_schedule_bytes);
+    const std::string sidecarPayload = readOptionalGuestCString(sys, desc.sidecar_dispatch_addr,
+                                                                desc.sidecar_dispatch_bytes);
+    const std::string extensionPayload = readOptionalGuestCString(sys, desc.extension_payload_addr,
+                                                                  desc.extension_payload_bytes);
+    DPRINTF(GenericAccel, "descriptor_read verified=true addr=0x%llx request_addr=0x%llx result_addr=0x%llx request_bytes=%llu descriptor_bytes=%llu flags=0x%x extension_fields=%s\n",
             static_cast<unsigned long long>(cmdAddr),
             static_cast<unsigned long long>(desc.request_addr),
             static_cast<unsigned long long>(desc.result_addr),
-            static_cast<unsigned long long>(requestJson.size()));
+            static_cast<unsigned long long>(requestJson.size()),
+            static_cast<unsigned long long>(descriptorBytes),
+            desc.flags,
+            hasExtensions ? "true" : "false");
+    DPRINTF(GenericAccel,
+            "candidate_identity_trace observed=%s bytes=%llu flag=%s\n",
+            (!candidatePayload.empty() || (desc.flags & GsimFlagCandidateIdentity)) ? "true" : "false",
+            static_cast<unsigned long long>(candidatePayload.size()),
+            (desc.flags & GsimFlagCandidateIdentity) ? "true" : "false");
+    DPRINTF(GenericAccel,
+            "compile_schedule_trace observed=%s bytes=%llu flag=%s\n",
+            (!compilePayload.empty() || (desc.flags & GsimFlagCompileSchedule)) ? "true" : "false",
+            static_cast<unsigned long long>(compilePayload.size()),
+            (desc.flags & GsimFlagCompileSchedule) ? "true" : "false");
+    DPRINTF(GenericAccel,
+            "runtime_schedule_trace observed=%s bytes=%llu flag=%s\n",
+            (!runtimePayload.empty() || (desc.flags & GsimFlagRuntimeSchedule)) ? "true" : "false",
+            static_cast<unsigned long long>(runtimePayload.size()),
+            (desc.flags & GsimFlagRuntimeSchedule) ? "true" : "false");
+    DPRINTF(GenericAccel,
+            "sidecar_dispatch_trace observed=%s bytes=%llu use_systemc=%s executable=%s flag=%s\n",
+            (!sidecarPayload.empty() || useSystemC || !systemcExecutable.empty() || (desc.flags & GsimFlagSidecarDispatch)) ? "true" : "false",
+            static_cast<unsigned long long>(sidecarPayload.size()),
+            useSystemC ? "true" : "false",
+            systemcExecutable,
+            (desc.flags & GsimFlagSidecarDispatch) ? "true" : "false");
+    DPRINTF(GenericAccel,
+            "extension_payload_trace observed=%s bytes=%llu qe_hook=%s flag=%s\n",
+            (!extensionPayload.empty() || (desc.flags & GsimFlagExtensionPayload)) ? "true" : "false",
+            static_cast<unsigned long long>(extensionPayload.size()),
+            (extensionPayload.find("qe_offload") != std::string::npos || requestJson.find("qe_offload") != std::string::npos) ? "true" : "false",
+            (desc.flags & GsimFlagExtensionPayload) ? "true" : "false");
+    metric_bytes_read += static_cast<uint64_t>(requestJson.size() + candidatePayload.size() +
+                                               compilePayload.size() + runtimePayload.size() +
+                                               sidecarPayload.size() + extensionPayload.size());
 
     try {
         ScheduleBuildResult scheduleResult = buildSchedule(requestJson, curTick(), clockMhz, peakGops, staticPower, dynamicPower);
@@ -1108,6 +1156,7 @@ void GenericAccel::completeCommand()
 
     if (pendingResultAddr != 0 && !pendingResultJson.empty()) {
         sys->physProxy.writeBlob(pendingResultAddr, pendingResultJson.c_str(), pendingResultJson.size() + 1);
+        metric_bytes_written += static_cast<uint64_t>(pendingResultJson.size() + 1);
     }
 
     if (pendingCompletionAddr != 0) {
@@ -1118,6 +1167,7 @@ void GenericAccel::completeCommand()
         completion.cycles = pendingCycles;
         completion.error_code = comp_error_code;
         sys->physProxy.writeBlob(pendingCompletionAddr, &completion, sizeof(completion));
+        metric_bytes_written += static_cast<uint64_t>(sizeof(completion));
     }
 
     DPRINTF(GenericAccel, "completion_writeback verified=%s result_addr=0x%llx completion_addr=0x%llx result_bytes=%llu cycles=%llu error_code=%u\n",
