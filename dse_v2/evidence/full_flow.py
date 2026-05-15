@@ -908,6 +908,109 @@ def claim_can_be_trusted(claim: Mapping[str, Any], verdict: Optional[Mapping[str
     return True
 
 
+def _parse_gem5_stats_file(path: Path) -> Dict[str, float]:
+    """Parse scalar numeric counters from gem5's m5out stats.txt."""
+    if not path.exists():
+        return {}
+    metrics: Dict[str, float] = {}
+    for raw_line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+        line = raw_line.split("#", 1)[0].strip()
+        if not line or line.startswith("----------"):
+            continue
+        parts = line.split()
+        if len(parts) < 2:
+            continue
+        try:
+            value = float(parts[1])
+        except ValueError:
+            continue
+        if math.isfinite(value):
+            metrics[parts[0]] = value
+    return metrics
+
+
+def classify_gem5_l4_non_smoke(
+    gem5_log: Optional[str],
+    sim_result: Mapping[str, Any],
+) -> Dict[str, Any]:
+    """Classify whether gem5 GenericAccel evidence is more than smoke/descriptor-only.
+
+    Descriptor ingestion and completion markers are necessary but not sufficient:
+    completion eligibility also requires decoded request execution plus non-zero
+    accelerator-side activity in the L4 result.
+    """
+    log = gem5_log or ""
+    summary = sim_result.get("microarchitecture_summary", {}) if isinstance(sim_result.get("microarchitecture_summary", {}), Mapping) else {}
+    engine = str(sim_result.get("execution_engine") or summary.get("engine") or "")
+    events = [event for event in sim_result.get("events", []) or [] if isinstance(event, Mapping)]
+    accelerator_events = [
+        event for event in events
+        if str(event.get("device", "host")) not in {"", "host", "cpu", "host-0"}
+    ]
+
+    def _positive_number(value: Any) -> bool:
+        try:
+            return float(value) > 0.0
+        except (TypeError, ValueError):
+            return False
+
+    checks = {
+        "descriptor_read_verified": "descriptor_read verified=true" in log,
+        "request_decode_verified": "uarch_request_decode verified=true" in log,
+        "microarchitecture_execute_verified": "microarchitecture_execute verified=true" in log,
+        "result_status_passed": sim_result.get("status") == "passed",
+        "accelerator_event_count": len(accelerator_events),
+        "microarchitecture_summary_present": bool(summary),
+        "generic_accel_engine": engine == "gem5_generic_accel_microarchitecture_v1",
+        "micro_op_count_positive": _positive_number(summary.get("micro_op_count")),
+        "total_cycles_positive": _positive_number(summary.get("total_cycles")),
+    }
+    engine_activity = bool(
+        checks["generic_accel_engine"]
+        and checks["micro_op_count_positive"]
+        and checks["total_cycles_positive"]
+    )
+    if not checks["descriptor_read_verified"]:
+        classification = "not_observed"
+        reasons = ["descriptor_read marker is absent"]
+    elif not checks["request_decode_verified"] and not checks["microarchitecture_execute_verified"]:
+        classification = "descriptor_only"
+        reasons = ["descriptor/completion markers without in-gem5 request decode or microarchitecture execution are descriptor-only evidence"]
+    elif not accelerator_events and not engine_activity:
+        classification = "smoke_or_host_only"
+        reasons = ["L4 result contains no non-host GenericAccel activity events"]
+    elif checks["microarchitecture_summary_present"] and (not checks["micro_op_count_positive"] or not checks["total_cycles_positive"]):
+        classification = "smoke_or_zero_activity"
+        reasons = ["L4 microarchitecture summary has zero or missing micro-op/cycle counts"]
+    elif not checks["result_status_passed"]:
+        classification = "failed_l4_result"
+        reasons = ["L4 result JSON did not pass"]
+    elif checks["request_decode_verified"] and checks["microarchitecture_execute_verified"]:
+        classification = "non_smoke"
+        reasons = []
+    else:
+        classification = "incomplete_l4_execution"
+        reasons = ["request decode and microarchitecture execution markers must both be present"]
+
+    return {
+        "schema_version": "dse.gem5_l4_non_smoke_classification.v1",
+        "classification": classification,
+        "completion_eligible": classification == "non_smoke",
+        "checks": checks,
+        "accelerator_devices": sorted({
+            str(event.get("device"))
+            for event in accelerator_events
+            if event.get("device")
+        }),
+        "reasons": reasons,
+        "claim_boundary": (
+            "Non-smoke L4 completion requires descriptor ingestion, request decode, "
+            "in-gem5 microarchitecture execution, a passed L4 result, and non-zero "
+            "accelerator-side activity; descriptor-only or smoke/host-only evidence is rejected."
+        ),
+    }
+
+
 def build_gem5_l4_proof(
     gem5_log: Optional[str],
     gem5_stdout: Optional[str],
@@ -923,8 +1026,40 @@ def build_gem5_l4_proof(
     """
     log = gem5_log or ""
     stdout = gem5_stdout or ""
+    artifact_sources = dict(source_artifacts or {})
     request_decode_verified = "uarch_request_decode verified=true" in log
     microarchitecture_execute_verified = "microarchitecture_execute verified=true" in log
+    summary = sim_result.get("microarchitecture_summary", {}) if isinstance(sim_result.get("microarchitecture_summary", {}), Mapping) else {}
+    events = [event for event in sim_result.get("events", []) or [] if isinstance(event, Mapping)]
+    accelerator_events = [
+        event for event in events
+        if str(event.get("device", "host")) not in {"", "host", "cpu", "host-0"}
+    ]
+
+    def _artifact_exists(key: str) -> bool:
+        value = artifact_sources.get(key)
+        return bool(value) and Path(str(value)).exists()
+
+    def _positive_number(value: Any) -> bool:
+        try:
+            return float(value) > 0.0
+        except (TypeError, ValueError):
+            return False
+
+    require_stats_config = bool(artifact_sources.get("require_gem5_stats_config", False))
+    required_stats = ["simTicks", "finalTick", "simInsts", "simOps", "system.cpu.numCycles"]
+    stats_path_value = artifact_sources.get("gem5_stats")
+    stats_metrics = _parse_gem5_stats_file(Path(str(stats_path_value))) if stats_path_value else {}
+    stats_missing = [name for name in required_stats if name not in stats_metrics]
+    stats_nonpositive = [name for name in required_stats if name in stats_metrics and not _positive_number(stats_metrics[name])]
+    stats_semantics_present = not stats_missing and not stats_nonpositive
+    nonzero_activity = bool(
+        accelerator_events
+        and _positive_number(summary.get("micro_op_count"))
+        and _positive_number(summary.get("total_cycles"))
+        and microarchitecture_execute_verified
+    )
+    non_smoke_classification = classify_gem5_l4_non_smoke(log, sim_result)
     checks = {
         "descriptor_read_verified": "descriptor_read verified=true" in log,
         "request_decode_verified": request_decode_verified,
@@ -940,7 +1075,15 @@ def build_gem5_l4_proof(
             or "completion_magic=0x4753494D completion_status=0" in stdout
         ),
         "result_status_passed": sim_result.get("status") == "passed",
+        "non_smoke_l4_activity": bool(non_smoke_classification.get("completion_eligible", False)),
     }
+    if require_stats_config:
+        checks.update({
+            "stats_txt_present": _artifact_exists("gem5_stats"),
+            "stats_semantics_present": stats_semantics_present,
+            "config_present": _artifact_exists("gem5_config_ini") or _artifact_exists("gem5_config_json"),
+            "nonzero_accelerator_activity": nonzero_activity,
+        })
     required = [
         ("descriptor_read_verified", "gem5.log must contain descriptor_read verified=true"),
         ("request_decode_verified", "gem5.log must contain uarch_request_decode verified=true"),
@@ -949,9 +1092,16 @@ def build_gem5_l4_proof(
         ("driver_status_verified", "driver stdout must contain generic_accel_l4_status=1 error_code=0"),
         ("driver_completion_descriptor_verified", "driver stdout must show GSIM completion descriptor status 0"),
         ("result_status_passed", "L4 result JSON must have status=passed"),
+        ("non_smoke_l4_activity", "L4 evidence must classify as non-smoke GenericAccel activity; descriptor-only or smoke/host-only evidence is not completion evidence"),
     ]
+    if require_stats_config:
+        required.extend([
+            ("stats_txt_present", "gem5 m5out stats.txt must be preserved in the evidence directory"),
+            ("stats_semantics_present", "gem5 m5out stats.txt must contain positive simTicks/finalTick/simInsts/simOps/system.cpu.numCycles counters"),
+            ("config_present", "gem5 m5out config.ini or config.json must be preserved in the evidence directory"),
+            ("nonzero_accelerator_activity", "L4 result must contain non-zero GenericAccel activity on at least one accelerator device"),
+        ])
     missing = [detail for key, detail in required if not checks[key]]
-    artifact_sources = dict(source_artifacts or {})
     artifact_sources.setdefault("gem5_log", "gem5.log")
     artifact_sources.setdefault("gem5_stdout", "systemc_stdout.log")
     artifact_sources.setdefault("gem5_stderr", "systemc_stderr.log")
@@ -969,7 +1119,14 @@ def build_gem5_l4_proof(
         "fallback_from_gem5": fallback_from_gem5,
         "required_checks": [key for key, _ in required],
         "checks": checks,
+        "non_smoke_classification": non_smoke_classification,
         "missing_evidence": missing,
+        "gem5_stats_summary": {
+            "required_fields": required_stats,
+            "parsed_required_fields": {name: stats_metrics.get(name) for name in required_stats if name in stats_metrics},
+            "missing_fields": stats_missing,
+            "nonpositive_fields": stats_nonpositive,
+        } if require_stats_config else {},
         "source_artifacts": artifact_sources,
         "claim_boundary": (
             "L4 gem5 GenericAccel is trusted only when guest descriptor submission, "
@@ -1475,6 +1632,10 @@ def write_full_flow_evidence(
             "gem5.log",
             "gem5_command_descriptor.json",
             "gem5_completion_descriptor.json",
+            "stats.txt",
+            "config.ini",
+            "config.json",
+            "gem5_activity_summary.json",
             "simulation_trace.json",
         ] + CODESIGN_STEP2_ARTIFACTS + CODESIGN_L4_EVIDENCE_ARTIFACTS,
     }
@@ -1493,7 +1654,15 @@ def write_full_flow_evidence(
     ))
     if (run_dir / "executable_graph.json").exists():
         artifact_paths.append("executable_graph.json")
-    for optional_path in ["gem5.log", "gem5_command_descriptor.json", "gem5_completion_descriptor.json"]:
+    for optional_path in [
+        "gem5.log",
+        "gem5_command_descriptor.json",
+        "gem5_completion_descriptor.json",
+        "stats.txt",
+        "config.ini",
+        "config.json",
+        "gem5_activity_summary.json",
+    ]:
         if (run_dir / optional_path).exists() or (optional_path == "gem5.log" and gem5_log is not None):
             artifact_paths.append(optional_path)
 

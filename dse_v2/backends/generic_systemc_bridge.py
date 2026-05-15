@@ -245,7 +245,7 @@ class GenericSystemCBackend:
                 "latency_ns": ic.latency_us * 1000,
             }
         
-        return {
+        request = {
             "schema_version": "gsim.request.v1",
             "run_id": design_point.design_point_id,
             "mode": self.mode,
@@ -310,6 +310,76 @@ class GenericSystemCBackend:
                 "result_json": str(output_dir / "simulation_result.raw.json"),
                 "trace_json": str(output_dir / "simulation_trace.json"),
             },
+        }
+        request["candidate_translation"] = self._candidate_translation_metadata(
+            design_point=design_point,
+            workload_package=workload_package,
+            executable_graph=executable_graph,
+        )
+        return request
+
+    def _candidate_translation_metadata(
+        self,
+        *,
+        design_point: DesignPoint,
+        workload_package: WorkloadPackage,
+        executable_graph: ComputeGraph,
+    ) -> Dict[str, Any]:
+        """Describe the replayable Step2-candidate to SystemC-request mapping."""
+        step2_config = dict(design_point.config or {})
+        simulation_config = (
+            step2_config.get("simulation_config", {})
+            if isinstance(step2_config.get("simulation_config", {}), dict)
+            else {}
+        )
+        replay_metadata = (
+            step2_config.get("replay_metadata", {})
+            if isinstance(step2_config.get("replay_metadata", {}), dict)
+            else {}
+        )
+        return {
+            "schema_version": "dse.step3.candidate_to_systemc_request.v1",
+            "translator": "dse_v2.backends.generic_systemc_bridge.GenericSystemCBackend._build_request",
+            "source": "design_point_config" if step2_config else "direct_design_point",
+            "source_step": step2_config.get("step"),
+            "step2_handoff_present": bool(step2_config.get("step") == "step2_architecture_mapping"),
+            "request_schema_version": "gsim.request.v1",
+            "backend_mode": self.mode,
+            "candidate_id": step2_config.get("selected_candidate_id") or step2_config.get("candidate_id") or design_point.design_point_id,
+            "design_point_id": design_point.design_point_id,
+            "workload_id": step2_config.get("workload_id", workload_package.workload_id),
+            "workload_family": step2_config.get("workload_family", workload_package.workload_family),
+            "architecture_id": step2_config.get("architecture_id", design_point.system_architecture.system_id),
+            "mapping_id": step2_config.get("mapping_id"),
+            "source_graph_id": step2_config.get("source_graph_id", workload_package.graph.graph_id),
+            "executable_graph_id": step2_config.get("executable_graph_id", executable_graph.graph_id),
+            "claim_boundary": step2_config.get("claim_boundary", workload_package.claim_boundary),
+            "required_coverage_source": "design_point_config" if step2_config.get("required_coverage") else "workflow_lowering",
+            "simulation_config": {
+                "backend": simulation_config.get("backend", "systemc" if self.mode == "standalone_systemc" else self.mode),
+                "mode": simulation_config.get("mode", self.mode),
+                "step3_request_builder": simulation_config.get(
+                    "step3_request_builder",
+                    "dse_v2.backends.generic_systemc_bridge.GenericSystemCBackend._build_request",
+                ),
+            },
+            "replay_artifacts": {
+                "design_point": "design_point.json" if step2_config else None,
+                "workload_package": replay_metadata.get("workload_package"),
+                "source_graph": replay_metadata.get("source_graph"),
+                "executable_graph": replay_metadata.get("executable_graph"),
+                "mapping_selected_record": replay_metadata.get("mapping_selected_record"),
+                "graph_lowering": (
+                    step2_config.get("graph_lowering", {}).get("artifact")
+                    if isinstance(step2_config.get("graph_lowering", {}), dict)
+                    else None
+                ),
+            },
+            "trusted_final_claim": False,
+            "claim_boundary_note": (
+                "This records a deterministic SystemC request translation for the selected "
+                "candidate; trusted final ranking still requires Step3 evidence and later gates."
+            ),
         }
     
     def _normalize_result(self, sim_result: Dict[str, Any]) -> Dict[str, Any]:

@@ -165,6 +165,39 @@ def _binding_payloads(catalog: ArchitectureCatalog, instance: ArchitectureInstan
     return payloads
 
 
+def _step3_searchability(
+    *,
+    selected_binding: Mapping[str, Any],
+    catalog_has_errors: bool,
+    instance: ArchitectureInstance,
+) -> Tuple[bool, List[Dict[str, Any]]]:
+    """Return whether Step3 can produce a timing sample without making final claims."""
+
+    blockers: List[Dict[str, Any]] = []
+    if catalog_has_errors:
+        blockers.append({
+            "reason_id": "catalog_validation_error",
+            "detail": "catalog validation errors block replayable Step3 timing",
+        })
+    if not instance.components:
+        blockers.append({
+            "reason_id": "no_concrete_components",
+            "detail": "architecture has no concrete component set to translate into a timing request",
+        })
+    if not selected_binding:
+        blockers.append({
+            "reason_id": "missing_step3_binding",
+            "detail": "selected backend binding is absent from the architecture instance",
+        })
+    elif not selected_binding.get("trusted_eligible", False):
+        blockers.append({
+            "reason_id": "untrusted_step3_binding",
+            "backend": selected_binding.get("backend"),
+            "detail": selected_binding.get("unavailable_reason") or "selected backend binding is not implemented for timing samples",
+        })
+    return not blockers, blockers
+
+
 def build_architecture_artifact(
     catalog: ArchitectureCatalog,
     instance: ArchitectureInstance,
@@ -180,6 +213,11 @@ def build_architecture_artifact(
     catalog_trusted = instance.trusted_final_eligible(catalog.simulation_bindings)
     selected_binding = binding_payloads.get(backend, {})
     selected_binding_trusted = bool(selected_binding.get("trusted_eligible", False))
+    step3_searchable, step3_blockers = _step3_searchability(
+        selected_binding=selected_binding,
+        catalog_has_errors=catalog_has_errors,
+        instance=instance,
+    )
     full_workload_eligible = bool(lowering.report.get("full_workload_eligible", False)) and workload_package.is_full_workload()
     diagnostic_boundary = workload_package.claim_boundary in DIAGNOSTIC_CLAIM_BOUNDARIES
 
@@ -230,11 +268,15 @@ def build_architecture_artifact(
             "messages": catalog_messages,
             "catalog_trusted_final_eligible": catalog_trusted,
             "selected_binding_trusted_eligible": selected_binding_trusted,
+            "step3_searchable": step3_searchable,
+            "step3_search_blockers": step3_blockers,
             "full_workload_eligible": full_workload_eligible,
             "diagnostic_boundary": diagnostic_boundary,
         },
         "status": ArchitectureStatus.TRUSTED_FINAL_ELIGIBLE if trusted_final_eligible else ArchitectureStatus.CANDIDATE_ONLY,
         "trusted_final_eligible": trusted_final_eligible,
+        "step3_searchable": step3_searchable,
+        "step3_search_blockers": step3_blockers,
         "candidate_only_reasons": reasons,
     }
 
@@ -254,6 +296,8 @@ def _component_peak_flops(component_type_id: str, precision: str) -> float:
 def _op_efficiency(component_type_id: str, op_type: str) -> float:
     if op_type in {"gemm", "batched_gemm", "conv2d", "attention"}:
         return 0.90 if component_type_id in {"gpu_sm", "fpga_fabric", "cim_array"} else 0.55
+    if op_type in {"sparse_matmul", "spmm"}:
+        return 0.70 if component_type_id in {"fpga_fabric", "gpu_sm"} else 0.35
     if op_type in {"fft", "stencil", "stream"}:
         return 0.80 if component_type_id == "fpga_fabric" else 0.55
     if op_type in {"eigen", "eigensolver", "diagonalize"}:
@@ -574,9 +618,12 @@ def _candidate_hint_phase_groups(candidate_hints: Optional[Mapping[str, Any]]) -
     if phase_groups is None:
         annotations = candidate_hints.get("annotations", {})
         if isinstance(annotations, Mapping):
-            dft_annotations = annotations.get("dft", {})
-            if isinstance(dft_annotations, Mapping):
-                phase_groups = dft_annotations.get("phase_groups")
+            for annotation in annotations.values():
+                if not isinstance(annotation, Mapping):
+                    continue
+                phase_groups = annotation.get("phase_groups")
+                if isinstance(phase_groups, list):
+                    break
     return list(phase_groups) if isinstance(phase_groups, list) else []
 
 
@@ -1137,15 +1184,36 @@ def _promotion_decision(
 ) -> Dict[str, Any]:
     selected_legal = not selected_record.get("violations")
     architecture_trusted = bool(architecture_artifact.get("trusted_final_eligible", False))
+    architecture_searchable = bool(architecture_artifact.get("step3_searchable", architecture_trusted))
+    full_workload_eligible = bool((architecture_artifact.get("validation", {}) or {}).get("full_workload_eligible", False))
+    diagnostic_boundary = bool((architecture_artifact.get("validation", {}) or {}).get("diagnostic_boundary", False))
     low_fidelity_passed = True if low_fidelity_summary is None else bool(low_fidelity_summary.get("passed", False))
     review_flags = _candidate_hint_review_flags(candidate_hints)
     hard_review_flags = _hard_review_flags(candidate_hints, review_flags)
     review_required = bool((candidate_hints or {}).get("review_required", False) or review_flags) if isinstance(candidate_hints, Mapping) else False
-    base_promoted = selected_legal and architecture_trusted and low_fidelity_passed
+    base_promoted = selected_legal and architecture_searchable and full_workload_eligible and not diagnostic_boundary and low_fidelity_passed
     promoted = base_promoted and not hard_review_flags
     reasons: List[Dict[str, Any]] = []
     if not selected_legal:
         reasons.append({"reason_id": "illegal_selected_mapping", "violations": list(selected_record.get("violations", []) or [])})
+    if not architecture_searchable:
+        reasons.extend(list(architecture_artifact.get("step3_search_blockers", []) or []))
+    if architecture_searchable and not architecture_trusted:
+        reasons.append({
+            "reason_id": "architecture_searchable_but_not_final_trusted",
+            "detail": "implemented timing binding permits Step3 search, but final trust remains gated by Step3/Step4 evidence and catalog status",
+            "candidate_only_reasons": list(architecture_artifact.get("candidate_only_reasons", []) or []),
+        })
+    if not full_workload_eligible:
+        reasons.append({
+            "reason_id": "workload_not_full_eligible",
+            "detail": "Step3 search is blocked because Step1 did not produce a full-workload eligible executable graph",
+        })
+    if diagnostic_boundary:
+        reasons.append({
+            "reason_id": "diagnostic_claim_boundary",
+            "detail": "diagnostic/smoke/reduced claim boundaries do not enter Step3 scheduling",
+        })
     if not architecture_trusted:
         reasons.extend(list(architecture_artifact.get("candidate_only_reasons", []) or []))
     if not low_fidelity_passed:
@@ -1183,6 +1251,8 @@ def _promotion_decision(
         "backend": backend,
         "evidence_mode": evidence_mode,
         "promoted_for_simulation": promoted,
+        "step3_searchable": architecture_searchable,
+        "trusted_final_eligible_before_step3": architecture_trusted,
         "review_flags": review_flags,
         "review_required": review_required,
         "review_status": "blocked_by_review_gate" if hard_review_flags else ("review_required" if review_required else "not_required"),
@@ -1412,6 +1482,14 @@ def build_architecture_candidate_set(
     for instance in sorted(catalog.instances.values(), key=lambda item: item.architecture_id):
         selected = instance.architecture_id == selected_architecture_id
         candidate_reason = instance.candidate_only_reason(catalog.simulation_bindings)
+        instance_messages = _validation_messages(catalog, instance.architecture_id)
+        instance_has_errors = any(message.get("severity") == "error" for message in instance_messages)
+        selected_binding = _binding_payloads(catalog, instance).get(backend, {})
+        step3_searchable, step3_blockers = _step3_searchability(
+            selected_binding=selected_binding,
+            catalog_has_errors=instance_has_errors,
+            instance=instance,
+        )
         reasons: List[Dict[str, Any]] = []
         if candidate_reason:
             reasons.append({"reason_id": "architecture_candidate_only", "detail": candidate_reason})
@@ -1427,6 +1505,9 @@ def build_architecture_candidate_set(
             "selected_mapping_candidate_id": selected_record.get("candidate_id") if selected else None,
             "promoted_for_simulation": bool(promotion_decision.get("promoted_for_simulation", False)) if selected else False,
             "catalog_trusted_final_eligible": bool(instance.trusted_final_eligible(catalog.simulation_bindings)),
+            "step3_searchable": step3_searchable,
+            "step3_search_blockers": step3_blockers,
+            "step4_eligible": bool("gem5_systemc" in instance.simulation_bindings and step3_searchable),
             "candidate_only": bool(candidate_reason),
             "candidate_only_reasons": reasons,
             "ranking": {
@@ -1509,6 +1590,9 @@ def build_step3_simulation_queue(
         "review_flags": [dict(flag) for flag in review_flags],
         "review_required": review_required,
         "promoted_for_simulation": promoted,
+        "step3_searchable": bool(architecture_artifact.get("step3_searchable", False)),
+        "trusted_final_eligible_before_step3": bool(architecture_artifact.get("trusted_final_eligible", False)),
+        "step3_search_blockers": list(architecture_artifact.get("step3_search_blockers", []) or []),
         "queue_state": queue_state,
         "blocked_reasons": _queue_blocked_reasons(
             queue_state=queue_state,
@@ -1520,6 +1604,14 @@ def build_step3_simulation_queue(
         "l4_required_reason": str(co_design.get("l4_required_reason") or ""),
         "promotion_decision_artifact": "mapping_promotion_decision.json",
         "mapping_selected_record_artifact": "mapping_selected_record.json",
+        "claim_status": "legacy_pilot_only",
+        "retention_policy": "legacy_pilot_regression_only",
+        "release_completion_eligible": False,
+        "blocked_claims": ["step2_full_dse_complete", "deliverable_complete"],
+        "claim_boundary": (
+            "Selected-entry queues and local regression tests are pilot/replay evidence only; "
+            "they cannot establish Step2 full-DSE completion."
+        ),
         "trusted_final_claim": False,
     }
     return {
@@ -1529,6 +1621,14 @@ def build_step3_simulation_queue(
         "workload_family": workload_package.workload_family,
         "backend": backend,
         "entry_count": 1,
+        "claim_status": "legacy_pilot_only",
+        "retention_policy": "legacy_pilot_regression_only",
+        "release_completion_eligible": False,
+        "blocked_claims": ["step2_full_dse_complete", "deliverable_complete"],
+        "claim_boundary": (
+            "Selected-entry queues and local regression tests are pilot/replay evidence only; "
+            "they cannot establish Step2 full-DSE completion."
+        ),
         "trusted_final_claim": False,
         "top_k_queue_deferred": True,
         "entries": [entry],
@@ -1557,6 +1657,9 @@ def _screening_architecture_candidate_set(
             "selected_mapping_candidate_id": record.get("selected_candidate_id"),
             "design_point_id": record.get("design_point_id"),
             "promoted_for_simulation": bool(record.get("promoted_for_simulation", False)),
+            "step3_searchable": bool(record.get("step3_searchable", False)),
+            "step3_search_blockers": list(record.get("step3_search_blockers", []) or []),
+            "step4_eligible": bool(record.get("step4_eligible", False)),
             "candidate_only_reasons": list(record.get("candidate_only_reasons", []) or []),
             "artifact_validation_valid": bool(record.get("artifact_validation_valid", False)),
             "policy_added": False,
@@ -1598,6 +1701,14 @@ def _screening_step3_queue(
             entry = dict(raw_entry)
             entry["architecture_run_dir"] = record.get("run_dir")
             entry["queue_entry_id"] = f"screening::{entry.get('architecture_id')}::{entry.get('mapping_candidate_id')}"
+            entry["claim_status"] = "legacy_pilot_only"
+            entry["retention_policy"] = "legacy_pilot_regression_only"
+            entry["release_completion_eligible"] = False
+            entry["blocked_claims"] = ["step2_full_dse_complete", "deliverable_complete"]
+            entry["claim_boundary"] = (
+                "Selected-entry queues and local regression tests are pilot/replay evidence only; "
+                "they cannot establish Step2 full-DSE completion."
+            )
             entries.append(entry)
     return {
         "schema_version": "dse.step3.simulation_queue.v1",
@@ -1606,6 +1717,14 @@ def _screening_step3_queue(
         "workload_family": workload_package.workload_family,
         "backend": backend,
         "entry_count": len(entries),
+        "claim_status": "legacy_pilot_only",
+        "retention_policy": "legacy_pilot_regression_only",
+        "release_completion_eligible": False,
+        "blocked_claims": ["step2_full_dse_complete", "deliverable_complete"],
+        "claim_boundary": (
+            "Selected-entry queues and local regression tests are pilot/replay evidence only; "
+            "they cannot establish Step2 full-DSE completion."
+        ),
         "trusted_final_claim": False,
         "top_k_queue_deferred": True,
         "entries": entries,
@@ -1960,21 +2079,159 @@ def _merge_policy_hints(hints: Sequence[Step2CandidateHints]) -> Optional[Dict[s
     if not matched:
         return None
     payloads = [hint.to_dict() for hint in matched]
+    policy_ids = [str(payload["policy_id"]) for payload in payloads]
+    domain_keys = sorted({str(payload["domain_key"]) for payload in payloads})
     review_flags = sorted({flag for payload in payloads for flag in payload.get("review_flags", [])})
     hard_block_flags = sorted({flag for payload in payloads for flag in payload.get("hard_block_flags", [])})
     review_required_flags = sorted({flag for payload in payloads for flag in payload.get("review_required_flags", [])})
-    return {
+
+    def _merged_list(key: str) -> List[Dict[str, Any]]:
+        values: List[Dict[str, Any]] = []
+        for payload in payloads:
+            for item in payload.get(key, []) or []:
+                if isinstance(item, Mapping):
+                    values.append(dict(item))
+        return values
+
+    node_target_preferences: Dict[str, List[str]] = {}
+    for payload in payloads:
+        raw_preferences = payload.get("node_target_preferences", {})
+        if not isinstance(raw_preferences, Mapping):
+            continue
+        for node_id, preferences in raw_preferences.items():
+            existing = node_target_preferences.setdefault(str(node_id), [])
+            for target in _string_list(preferences):
+                if target not in existing:
+                    existing.append(target)
+
+    merged: Dict[str, Any] = {
         "schema_version": "dse.step2.domain_policy_hints.v1",
+        "policy_id": policy_ids[0] if len(policy_ids) == 1 else "multi_domain_policy",
+        "domain_key": domain_keys[0] if len(domain_keys) == 1 else "multi_domain",
         "matched": True,
         "policies": payloads,
-        "policy_ids": [payload["policy_id"] for payload in payloads],
-        "domain_keys": sorted({payload["domain_key"] for payload in payloads}),
+        "policy_ids": policy_ids,
+        "domain_keys": domain_keys,
+        "domain_policy": {
+            "policy_id": policy_ids[0] if len(policy_ids) == 1 else "multi_domain_policy",
+            "domain_key": domain_keys[0] if len(domain_keys) == 1 else "multi_domain",
+            "matched": True,
+        },
         "review_flags": review_flags,
         "hard_block_flags": hard_block_flags,
         "review_required_flags": review_required_flags,
         "review_required": bool(review_flags or hard_block_flags or review_required_flags),
         "hard_blocked": bool(hard_block_flags),
+        "claim_boundary": "candidate_only",
         "trusted_final_claim": False,
+    }
+    for key in ("architecture_candidates", "architecture_preferences", "mapping_seeds"):
+        values = _merged_list(key)
+        if values:
+            merged[key] = values
+    if node_target_preferences:
+        merged["node_target_preferences"] = node_target_preferences
+
+    if len(payloads) == 1:
+        single = payloads[0]
+        for key in ("data_placement", "runtime_schedule", "descriptor_protocol", "memory_policy", "step3_queue", "annotations"):
+            value = single.get(key)
+            if isinstance(value, Mapping) and value:
+                merged[key] = dict(value)
+    else:
+        merged["annotations"] = {
+            "policy_annotations": {
+                str(payload.get("policy_id", index)): dict(payload.get("annotations", {}) or {})
+                for index, payload in enumerate(payloads)
+                if isinstance(payload.get("annotations"), Mapping) and payload.get("annotations")
+            }
+        }
+    return merged
+
+
+def _merge_candidate_hints(
+    candidate_hints: Optional[Mapping[str, Any]],
+    policy_hints: Sequence[Step2CandidateHints],
+) -> Optional[Dict[str, Any]]:
+    """Return the Step2 candidate-hint payload consumed by generic mapping.
+
+    ``candidate_hints`` is the legacy/direct injection path used by tests and
+    hand-authored callers.  Static domain policies use ``policy_hints``.  Keep
+    the direct payload shape intact when it is the only source so existing
+    consumers can still read fields such as ``policy_id`` at the top level.
+    """
+
+    direct_payload = dict(candidate_hints) if isinstance(candidate_hints, Mapping) and candidate_hints else None
+    policy_payload = _merge_policy_hints(policy_hints)
+    if direct_payload is None:
+        return policy_payload
+    direct_payload.setdefault("trusted_final_claim", False)
+    if policy_payload is None:
+        return direct_payload
+    merged = dict(direct_payload)
+    merged.setdefault("schema_version", str(direct_payload.get("schema_version") or "dse.step2.candidate_hints.v1"))
+    merged["policy_hints"] = policy_payload
+    if isinstance(policy_payload.get("node_target_preferences"), Mapping):
+        node_preferences = {
+            str(node_id): _string_list(preferences)
+            for node_id, preferences in (merged.get("node_target_preferences", {}) or {}).items()
+            if _string_list(preferences)
+        }
+        for node_id, preferences in policy_payload.get("node_target_preferences", {}).items():
+            existing = node_preferences.setdefault(str(node_id), [])
+            for target in _string_list(preferences):
+                if target not in existing:
+                    existing.append(target)
+        if node_preferences:
+            merged["node_target_preferences"] = node_preferences
+    for key in ("architecture_candidates", "architecture_preferences", "mapping_seeds"):
+        policy_values = [dict(item) for item in policy_payload.get(key, []) or [] if isinstance(item, Mapping)]
+        if policy_values:
+            direct_values = [dict(item) for item in merged.get(key, []) or [] if isinstance(item, Mapping)]
+            merged[key] = direct_values + policy_values
+    if isinstance(policy_payload.get("annotations"), Mapping):
+        annotations = dict(merged.get("annotations", {}) or {})
+        annotations.setdefault("policy_hints", dict(policy_payload.get("annotations", {})))
+        merged["annotations"] = annotations
+    merged["review_flags"] = sorted(set(_candidate_hint_review_flags(direct_payload)) | set(_candidate_hint_review_flags(policy_payload)))
+    merged["review_required"] = bool(direct_payload.get("review_required", False) or policy_payload.get("review_required", False) or merged["review_flags"])
+    merged["hard_block_flags"] = sorted(set(_string_list(direct_payload.get("hard_block_flags"))) | set(_string_list(policy_payload.get("hard_block_flags"))))
+    merged["trusted_final_claim"] = False
+    return merged
+
+
+def _domain_policy_status(
+    *,
+    enable_domain_policies: bool,
+    policy_hints_payload: Optional[Mapping[str, Any]],
+    candidate_hints_payload: Optional[Mapping[str, Any]],
+) -> Dict[str, Any]:
+    """Summarize optional policy participation without requiring a domain."""
+
+    direct_policy = _candidate_hint_domain_policy(candidate_hints_payload)
+    policy_ids = list(policy_hints_payload.get("policy_ids", [])) if isinstance(policy_hints_payload, Mapping) else []
+    if not policy_ids and direct_policy.get("policy_id"):
+        policy_ids = [str(direct_policy["policy_id"])]
+    review_required = bool(
+        (policy_hints_payload or {}).get("review_required", False)
+        if isinstance(policy_hints_payload, Mapping)
+        else False
+    ) or bool(
+        (candidate_hints_payload or {}).get("review_required", False)
+        if isinstance(candidate_hints_payload, Mapping)
+        else False
+    ) or bool(_candidate_hint_review_flags(candidate_hints_payload))
+    hard_blocked = bool(
+        (policy_hints_payload or {}).get("hard_blocked", False)
+        if isinstance(policy_hints_payload, Mapping)
+        else False
+    ) or bool(_hard_review_flags(candidate_hints_payload, _candidate_hint_review_flags(candidate_hints_payload)))
+    return {
+        "enabled": bool(enable_domain_policies or candidate_hints_payload),
+        "matched": bool(policy_ids or (policy_hints_payload or candidate_hints_payload)),
+        "policy_ids": policy_ids,
+        "review_required": review_required,
+        "hard_blocked": hard_blocked,
     }
 
 
@@ -2002,6 +2259,7 @@ def run_step2_architecture_mapping_workflow(
     step1_handoff_summary: Optional[Mapping[str, Any]] = None,
     domain_policy_registry: Optional[Step2DomainPolicyRegistry] = None,
     enable_domain_policies: bool = False,
+    candidate_hints: Optional[Mapping[str, Any]] = None,
 ) -> Step2WorkflowResult:
     """Run Step2 and optionally persist all architecture/mapping artifacts."""
     catalog = catalog or seed_generic_dse_architecture_catalog()
@@ -2038,6 +2296,7 @@ def run_step2_architecture_mapping_workflow(
         else []
     )
     policy_hints_payload = _merge_policy_hints(policy_hints)
+    candidate_hints_payload = _merge_candidate_hints(candidate_hints, policy_hints)
     if not validation.get("valid", False):
         return _blocked_result(
             status="blocked_invalid_workload_package",
@@ -2241,13 +2500,11 @@ def run_step2_architecture_mapping_workflow(
             "backend": backend,
             "required_coverage": list(lowering.report.get("required_coverage", [])),
             "step1_replay": dict(lowering.report.get("step2_replay", {})),
-            "domain_policy": {
-                "enabled": bool(enable_domain_policies),
-                "matched": bool(policy_hints_payload),
-                "policy_ids": list(policy_hints_payload.get("policy_ids", [])) if policy_hints_payload else [],
-                "review_required": bool(policy_hints_payload.get("review_required", False)) if policy_hints_payload else False,
-                "hard_blocked": bool(policy_hints_payload.get("hard_blocked", False)) if policy_hints_payload else False,
-            },
+            "domain_policy": _domain_policy_status(
+                enable_domain_policies=enable_domain_policies,
+                policy_hints_payload=policy_hints_payload,
+                candidate_hints_payload=candidate_hints_payload,
+            ),
             "low_fidelity_screening": {
                 "summary_artifact": "low_fidelity_screening_summary.json",
                 "passed": bool(low_fidelity_artifacts["low_fidelity_summary"].get("passed", False)),
@@ -2255,7 +2512,6 @@ def run_step2_architecture_mapping_workflow(
                 "low_fidelity_role": "candidate_generator_only",
                 "trusted_final_claim": False,
             },
-            "domain_policy": _candidate_hint_domain_policy(candidate_hints_payload),
             "review_flags": _candidate_hint_review_flags(candidate_hints_payload),
             "review_required": bool((promotion_decision or {}).get("review_required", False)),
             "review_status": (promotion_decision or {}).get("review_status", "not_required"),
@@ -2296,8 +2552,8 @@ def run_step2_architecture_mapping_workflow(
         artifacts["workload_characterization"] = dict(workload_characterization)
     if step1_handoff_summary is not None:
         artifacts["step1_handoff_summary"] = dict(step1_handoff_summary)
-    if policy_hints_payload is not None:
-        artifacts["domain_policy_hints"] = policy_hints_payload
+    if candidate_hints_payload is not None:
+        artifacts["domain_policy_hints"] = candidate_hints_payload
     artifacts["step2_artifact_validation"] = validate_step2_artifacts({
         **artifacts,
         "system_architecture": design_point.system_architecture.to_dict(),
@@ -2417,6 +2673,16 @@ def _architecture_screening_record(result: Step2WorkflowResult, run_dir: Path) -
         "mapping_id": promotion.get("mapping_id") or (result.design_point.config.get("mapping_id") if result.design_point else None),
         "selected_candidate_id": selected.get("candidate_id"),
         "promoted_for_simulation": bool(promotion.get("promoted_for_simulation", False)),
+        "step3_searchable": bool(architecture.get("step3_searchable", False)),
+        "step3_search_blockers": list(architecture.get("step3_search_blockers", []) or []),
+        "step4_eligible": bool(
+            architecture.get("step3_searchable", False)
+            and "gem5_systemc" in (
+                architecture.get("architecture_instance", {}).get("simulation_bindings", {})
+                if isinstance(architecture.get("architecture_instance", {}), Mapping)
+                else {}
+            )
+        ),
         "low_fidelity_screening_passed": bool(low_summary.get("passed", False)),
         "trusted_final_claim": False,
         "trusted_final_eligible_before_step3": False,

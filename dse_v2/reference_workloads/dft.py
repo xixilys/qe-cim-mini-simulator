@@ -22,6 +22,14 @@ from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence
 from dse_v2.core.ir.compute_graph import ComputeGraph, ComputeNode, DataEdge, GraphRegion, TensorSpec
 from dse_v2.core.workload.package import WorkloadPackage, package_from_graph
 from dse_v2.core.workload.profiles import WorkloadProfile
+from dse_v2.reference_workloads.dft_workflow import (
+    DftClaimEvidence,
+    DftHotspotClaim,
+    DftReviewGate,
+    DftStage,
+    DftStageDependency,
+    DftWorkflowSpec,
+)
 
 
 SOURCE_FACT_SCHEMA = "dse.dft.source_fact.v1"
@@ -38,6 +46,17 @@ SOURCE_TYPE_PRECEDENCE = {
 }
 
 OBSERVED_TIMING_SOURCE_TYPES = {"profile", "log"}
+MAIN_HOTSPOT_PHASE_IDS = {
+    "fft",
+    "h_psi",
+    "diagonalization",
+    "charge_density",
+    "mixing",
+    "augmentation",
+    "forces",
+    "stress",
+    "extension:quantum_chemistry:two_electron_integrals",
+}
 
 CANONICAL_PHASE_IDS = {
     "scf_iteration",
@@ -458,6 +477,7 @@ def dft_phase_reference_profile() -> WorkloadProfile:
         workload_family="dft",
         accepted_source_kinds=[
             "qe_pw_bundle",
+            "qe_workflow_bundle",
             "qe_pw_input",
             "qe_pw_log",
             "qe_pw_profile",
@@ -588,12 +608,474 @@ def domain_phase_summary_from_case(case: DftCase) -> Dict[str, Any]:
         ],
         "dominance_summary": {
             "dominant_phase_ids": [phase.phase_id for phase in case.phases if phase.dominance == "dominant"],
-            "dominance_rule": "dominant requires direct observed timing evidence from profile or log sources; generated and heuristic facts remain candidate only",
+            "dominance_rule": "domain_phase_summary dominant_phase_ids are observed profile/log timing facts only; static predicted/user-confirmed dominance claims, when present, live in domain_claim_summary",
         },
         "coverage_summary": case.coverage.to_dict(),
         "review_flags": sorted(set(case.review_flags)),
         "limitations": sorted(set(case.limitations + [NON_DECISION_NOTE])),
     }
+
+
+def dft_stage_from_case(
+    case: DftCase,
+    *,
+    stage_id: Optional[str] = None,
+    stage_type: Optional[str] = None,
+    source_program: Optional[str] = None,
+    coverage_level: str = "common_mode",
+) -> DftStage:
+    """Return a reviewable workflow stage view over a normalized DFT case."""
+    resolved_stage_type = stage_type or _stage_type_from_case(case)
+    resolved_stage_id = stage_id or f"stage_00_{_safe_id(source_program or case.source_program)}_{_safe_id(resolved_stage_type)}"
+    phase_skeleton = [
+        {
+            "phase_id": phase.phase_id,
+            "label": phase.label,
+            "kernel_count": len(phase.kernels),
+            "estimated_flops": float(sum(kernel.estimated_flops for kernel in phase.kernels)),
+            "estimated_memory_bytes": float(sum(kernel.estimated_memory_bytes for kernel in phase.kernels)),
+            "observed_time_seconds": float(phase.estimated_time_seconds) if phase.estimated_time_seconds is not None else None,
+            "evidence_level": phase.evidence_level,
+            "confidence": phase.confidence,
+            "dominance": phase.dominance,
+            "dominance_reason": phase.dominance_reason,
+            "source_fact_ids": list(phase.source_fact_ids),
+        }
+        for phase in case.phases
+    ]
+    return DftStage(
+        stage_id=resolved_stage_id,
+        stage_type=resolved_stage_type,
+        source_program=source_program or case.source_program,
+        calculation_kind=str(case.input_parameters.get("calculation", resolved_stage_type)),
+        phase_skeleton=phase_skeleton,
+        input_artifacts=_default_stage_inputs(resolved_stage_type),
+        output_artifacts=_default_stage_outputs(resolved_stage_type),
+        evidence=[
+            DftClaimEvidence(
+                evidence_level="source_fact_summary",
+                source_type="mixed",
+                confidence="medium",
+                source_fact_ids=[fact.fact_id for fact in case.source_facts],
+                description="stage reconstructed from normalized DFT source facts",
+            )
+        ],
+        source_facts=[fact.to_dict() for fact in case.source_facts],
+        review_flags=sorted(set(case.review_flags)),
+        coverage_level=coverage_level,
+        attributes={
+            "claim_boundary": case.claim_boundary,
+            "full_workload_reconstruction": case.coverage.full_workload_reconstruction,
+        },
+    )
+
+
+def dft_claims_from_case(
+    case: DftCase,
+    *,
+    stage_id: str,
+    static_dominance_margin: Optional[float] = None,
+    user_confirmed_dominance: Optional[Iterable[str] | str] = None,
+) -> tuple[List[DftHotspotClaim], List[DftReviewGate]]:
+    """Build strict observed/predicted/user-confirmed hotspot claims from a case."""
+    margin = float(static_dominance_margin if static_dominance_margin is not None else case.input_parameters.get("static_dominance_margin", 4.0))
+    confirmed = _confirmed_phase_set(user_confirmed_dominance if user_confirmed_dominance is not None else case.input_parameters.get("user_confirmed_dominance"))
+    claims: List[DftHotspotClaim] = []
+    review_gates: List[DftReviewGate] = []
+    phase_metrics = [
+        (phase, float(sum(kernel.estimated_flops for kernel in phase.kernels)), float(sum(kernel.estimated_memory_bytes for kernel in phase.kernels)))
+        for phase in case.phases
+        if phase.phase_id in MAIN_HOTSPOT_PHASE_IDS or phase.estimated_time_seconds is not None
+    ]
+    for phase, flops, memory_bytes in phase_metrics:
+        kernel = phase.kernels[0] if phase.kernels else _fallback_kernel_for_phase(phase.phase_id, case.input_parameters)
+        tensor_shapes = _tensor_shapes_for_kernel(kernel)
+        is_observed = phase.estimated_time_seconds is not None and phase.evidence_level.startswith("observed")
+        evidence_label = "observed" if is_observed else "predicted"
+        evidence_level = phase.evidence_level if is_observed else kernel.evidence_level
+        confidence = phase.confidence if is_observed else max(phase.confidence, kernel.confidence, key=_confidence_rank)
+        claim = DftHotspotClaim(
+            claim_id=f"{stage_id}:{phase.phase_id}:{evidence_label}:hotspot",
+            stage_id=stage_id,
+            phase_id=phase.phase_id,
+            kernel_kind=kernel.op_type,
+            claim_kind="hotspot",
+            evidence_label=evidence_label,
+            estimated_flops=flops,
+            estimated_memory_bytes=memory_bytes,
+            tensor_shapes=tensor_shapes,
+            complexity_terms=dict(kernel.dimensions),
+            evidence_level=evidence_level,
+            confidence=confidence,
+            source_fact_ids=list(set(phase.source_fact_ids + kernel.source_fact_ids)),
+            review_status="not_required" if is_observed else "needs_review",
+            reason="observed profile/log timing" if is_observed else "static kernel shape prediction from source facts or defaults",
+        )
+        claims.append(claim)
+        if phase.dominance == "dominant" and is_observed:
+            claims.append(DftHotspotClaim(
+                claim_id=f"{stage_id}:{phase.phase_id}:observed:dominance",
+                stage_id=stage_id,
+                phase_id=phase.phase_id,
+                kernel_kind=kernel.op_type,
+                claim_kind="dominance",
+                evidence_label="observed",
+                estimated_flops=flops,
+                estimated_memory_bytes=memory_bytes,
+                tensor_shapes=tensor_shapes,
+                complexity_terms=dict(kernel.dimensions),
+                evidence_level="observed_timing",
+                confidence=phase.confidence,
+                source_fact_ids=list(set(phase.source_fact_ids + kernel.source_fact_ids)),
+                review_status="not_required",
+                reason=phase.dominance_reason,
+            ))
+
+    if not any(claim.claim_kind == "dominance" and claim.evidence_label == "observed" for claim in claims):
+        predicted = _predicted_dominance_claim(stage_id, phase_metrics, margin)
+        if predicted is not None:
+            claims.append(predicted)
+            review_gates.append(DftReviewGate(
+                gate_id=f"{stage_id}:static_dominance_review",
+                reason="static dominance prediction requires user review before strong claim",
+                related_stage_ids=[stage_id],
+                related_phase_ids=[predicted.phase_id],
+                related_claim_ids=[predicted.claim_id],
+            ))
+
+    for phase_id in confirmed:
+        source = next((claim for claim in claims if claim.phase_id == phase_id and claim.claim_kind == "dominance"), None)
+        if source is not None:
+            claims.append(DftHotspotClaim(
+                claim_id=f"{stage_id}:{phase_id}:user_confirmed:dominance",
+                stage_id=stage_id,
+                phase_id=phase_id,
+                kernel_kind=source.kernel_kind,
+                claim_kind="dominance",
+                evidence_label="user_confirmed",
+                estimated_flops=source.estimated_flops,
+                estimated_memory_bytes=source.estimated_memory_bytes,
+                tensor_shapes=dict(source.tensor_shapes),
+                complexity_terms=dict(source.complexity_terms),
+                evidence_level="user_confirmed",
+                confidence="high",
+                source_fact_ids=list(source.source_fact_ids),
+                review_status="user_confirmed",
+                reason="user/domain expert confirmed static or observed dominance claim",
+                margin=source.margin,
+            ))
+
+    if case.conflicts:
+        review_gates.append(DftReviewGate(
+            gate_id=f"{stage_id}:source_fact_conflicts",
+            reason="source facts conflict; preserve all facts and require review",
+            severity="conflict",
+            related_stage_ids=[stage_id],
+            related_phase_ids=[phase.phase_id for phase in case.phases],
+        ))
+    return claims, review_gates
+
+
+def workflow_from_dft_case(
+    case: DftCase,
+    *,
+    workflow_id: Optional[str] = None,
+    stage_id: Optional[str] = None,
+    stage_type: Optional[str] = None,
+    source_software: Optional[str] = None,
+    coverage_level: str = "common_mode",
+) -> DftWorkflowSpec:
+    """Build a single-stage workflow spec from a DFT case."""
+    stage = dft_stage_from_case(
+        case,
+        stage_id=stage_id,
+        stage_type=stage_type,
+        source_program=source_software or case.source_program,
+        coverage_level=coverage_level,
+    )
+    claims, review_gates = dft_claims_from_case(case, stage_id=stage.stage_id)
+    return DftWorkflowSpec(
+        workflow_id=workflow_id or f"{case.case_id}_workflow",
+        workflow_family=case.workload_family,
+        source_software=source_software or case.source_program,
+        coverage_level=coverage_level,
+        stages=[stage],
+        dependencies=[],
+        hotspot_claims=claims,
+        review_gates=review_gates,
+        limitations=sorted(set(case.limitations)),
+        review_flags=sorted(set(case.review_flags + [gate.severity for gate in review_gates])),
+    )
+
+
+def domain_workflow_summary_from_case(case: DftCase) -> Dict[str, Any]:
+    return workflow_from_dft_case(case).workflow_summary()
+
+
+def domain_claim_summary_from_case(case: DftCase) -> Dict[str, Any]:
+    return workflow_from_dft_case(case).claim_summary()
+
+
+def build_dft_workflow_graph(workflow: DftWorkflowSpec, *, graph_id: Optional[str] = None) -> ComputeGraph:
+    """Emit a generic graph from a DFT workflow reconstruction."""
+    graph = ComputeGraph(
+        graph_id=graph_id or f"{_safe_id(workflow.workflow_id)}_graph",
+        metadata={
+            "workload_family": workflow.workflow_family,
+            "source_program": workflow.source_software,
+            "analysis_scope": "architecture_independent",
+            "domain_metadata_keys": ["dft"],
+            "non_decision_contract": NON_DECISION_NOTE,
+        },
+    )
+    claim_by_phase: Dict[tuple[str, str], List[DftHotspotClaim]] = {}
+    for claim in workflow.hotspot_claims:
+        if claim.claim_kind == "hotspot":
+            claim_by_phase.setdefault((claim.stage_id, claim.phase_id), []).append(claim)
+
+    for stage_index, stage in enumerate(workflow.stages):
+        stage_node_id = f"stage_{stage_index:02d}_{_safe_id(stage.stage_id)}"
+        graph.add_node(ComputeNode(
+            node_id=stage_node_id,
+            op_type="dft_workflow_stage",
+            outputs=[f"{stage_node_id}_token"],
+            output_specs={f"{stage_node_id}_token": _small_phase_token_spec()},
+            attributes={
+                "adapter:dft": {
+                    "stage_id": stage.stage_id,
+                    "stage_type": stage.stage_type,
+                    "source_program": stage.source_program,
+                    "coverage_level": stage.coverage_level,
+                    "analysis_scope": "architecture_independent",
+                }
+            },
+        ))
+        previous_phase_node: Optional[str] = None
+        for phase_index, phase in enumerate(stage.phase_skeleton):
+            phase_id = str(phase.get("phase_id", f"phase_{phase_index}"))
+            phase_node_id = f"{stage_node_id}_phase_{phase_index:02d}_{_safe_id(phase_id)}"
+            phase_claims = claim_by_phase.get((stage.stage_id, phase_id), [])
+            flops = float(sum(claim.estimated_flops for claim in phase_claims) or phase.get("estimated_flops", 0.0) or 0.0)
+            memory_bytes = float(sum(claim.estimated_memory_bytes for claim in phase_claims) or phase.get("estimated_memory_bytes", 0.0) or 0.0)
+            graph.add_node(ComputeNode(
+                node_id=phase_node_id,
+                op_type="dft_phase_skeleton",
+                inputs=[f"{stage_node_id}_token"],
+                outputs=[f"{phase_node_id}_out"],
+                input_specs={f"{stage_node_id}_token": _small_phase_token_spec()},
+                output_specs={f"{phase_node_id}_out": _small_phase_token_spec()},
+                estimated_flops=flops,
+                estimated_memory_bytes=memory_bytes,
+                attributes={
+                    "adapter:dft": {
+                        "stage_id": stage.stage_id,
+                        "phase_id": phase_id,
+                        "label": phase.get("label", phase_id),
+                        "evidence_level": phase.get("evidence_level", "unknown"),
+                        "confidence": phase.get("confidence", "unknown"),
+                        "analysis_scope": "architecture_independent",
+                    }
+                },
+            ))
+            source_for_edge = previous_phase_node or stage_node_id
+            graph.add_edge(DataEdge(
+                source_for_edge,
+                phase_node_id,
+                tensor_name=f"{source_for_edge}_to_{phase_node_id}",
+                tensor_spec=_small_phase_token_spec(),
+                edge_kind="data",
+                attributes={"adapter:dft": {"reason": "workflow dependency skeleton; not a selected execution ordering policy"}},
+            ))
+            previous_phase_node = phase_node_id
+            for claim_index, claim in enumerate(phase_claims):
+                kernel_node_id = f"{phase_node_id}_hotspot_{claim_index:02d}_{_safe_id(claim.kernel_kind)}"
+                graph.add_node(ComputeNode(
+                    node_id=kernel_node_id,
+                    op_type=claim.kernel_kind,
+                    inputs=[f"{phase_node_id}_out"],
+                    outputs=[f"{kernel_node_id}_out"],
+                    input_specs={f"{phase_node_id}_out": _small_phase_token_spec()},
+                    output_specs={f"{kernel_node_id}_out": _small_phase_token_spec()},
+                    estimated_flops=float(claim.estimated_flops),
+                    estimated_memory_bytes=float(claim.estimated_memory_bytes),
+                    attributes={
+                        "adapter:dft": {
+                            "stage_id": stage.stage_id,
+                            "phase_id": phase_id,
+                            "claim_id": claim.claim_id,
+                            "claim_kind": claim.claim_kind,
+                            "evidence_label": claim.evidence_label,
+                            "review_status": claim.review_status,
+                            "analysis_scope": "architecture_independent",
+                        }
+                    },
+                ))
+                graph.add_edge(DataEdge(
+                    phase_node_id,
+                    kernel_node_id,
+                    tensor_name=f"{phase_node_id}_to_{kernel_node_id}",
+                    tensor_spec=_small_phase_token_spec(),
+                    edge_kind="data",
+                    attributes={"adapter:dft": {"reason": "hotspot kernel expansion from evidence-labeled Step1 claim"}},
+                ))
+
+    stage_node_by_id = {
+        stage.stage_id: f"stage_{index:02d}_{_safe_id(stage.stage_id)}"
+        for index, stage in enumerate(workflow.stages)
+    }
+    for dependency in workflow.dependencies:
+        source = stage_node_by_id.get(dependency.source_stage_id)
+        target = stage_node_by_id.get(dependency.target_stage_id)
+        if source and target:
+            graph.add_edge(DataEdge(
+                source,
+                target,
+                tensor_name=f"{source}_to_{target}_artifact",
+                tensor_spec=_small_phase_token_spec(),
+                edge_kind="data",
+                attributes={
+                    "adapter:dft": {
+                        "dependency_kind": dependency.dependency_kind,
+                        "artifact_names": list(dependency.artifact_names),
+                        "reason": "stage artifact dependency; not a selected execution ordering policy",
+                    }
+                },
+            ))
+    return graph
+
+
+def _workflow_source_facts(workflow: DftWorkflowSpec) -> List[Dict[str, Any]]:
+    """Return de-duplicated source facts preserved by workflow stages."""
+
+    facts: List[Dict[str, Any]] = []
+    seen: set[str] = set()
+    for stage in workflow.stages:
+        for fact in stage.source_facts:
+            if not isinstance(fact, Mapping):
+                continue
+            fact_id = str(fact.get("fact_id") or "")
+            key = fact_id or json.dumps(fact, sort_keys=True, default=str)
+            if key in seen:
+                continue
+            seen.add(key)
+            facts.append(dict(fact))
+    return facts
+
+
+def _domain_phase_summary_from_workflow(workflow: DftWorkflowSpec) -> Dict[str, Any]:
+    """Return an aggregate phase summary for multi-stage DFT workflows."""
+
+    rows: List[Dict[str, Any]] = []
+    for stage in workflow.stages:
+        for phase in stage.phase_skeleton:
+            observed_time = phase.get("observed_time_seconds")
+            try:
+                observed_time_value = float(observed_time) if observed_time is not None else None
+            except (TypeError, ValueError):
+                observed_time_value = None
+            rows.append({
+                "stage_id": stage.stage_id,
+                "stage_type": stage.stage_type,
+                "phase_id": phase.get("phase_id"),
+                "label": phase.get("label", phase.get("phase_id")),
+                "kernel_count": int(phase.get("kernel_count", 0) or 0),
+                "estimated_flops": float(phase.get("estimated_flops", 0.0) or 0.0),
+                "estimated_memory_bytes": float(phase.get("estimated_memory_bytes", 0.0) or 0.0),
+                "observed_time_seconds": observed_time_value,
+                "observed_time_fraction": None,
+                "dominance": phase.get("dominance"),
+                "dominance_reason": phase.get("dominance_reason"),
+                "evidence_level": phase.get("evidence_level", "unknown"),
+                "confidence": phase.get("confidence", "unknown"),
+            })
+    total_observed = sum(float(row["observed_time_seconds"] or 0.0) for row in rows)
+    if total_observed:
+        for row in rows:
+            row["observed_time_fraction"] = float(row["observed_time_seconds"] or 0.0) / total_observed
+    dominant = [
+        row for row in rows
+        if row.get("dominance") == "dominant"
+    ]
+    return {
+        "schema_version": DFT_PHASE_SUMMARY_SCHEMA,
+        "analysis_scope": "architecture_independent",
+        "source_program": workflow.source_software,
+        "workflow_id": workflow.workflow_id,
+        "phase_count": len(rows),
+        "stage_count": len(workflow.stages),
+        "phase_summaries": rows,
+        "dominance_summary": {
+            "dominant_phase_ids": [str(row.get("phase_id")) for row in dominant if row.get("phase_id")],
+            "dominant_stage_phase_ids": [
+                f"{row.get('stage_id')}:{row.get('phase_id')}"
+                for row in dominant
+                if row.get("stage_id") and row.get("phase_id")
+            ],
+            "dominance_rule": "workflow domain_phase_summary aggregates per-stage observed profile/log timing facts only; static predicted/user-confirmed dominance claims, when present, live in domain_claim_summary",
+        },
+        "coverage_summary": {
+            "coverage_level": workflow.coverage_level,
+            "workflow_family": workflow.workflow_family,
+            "source_software": workflow.source_software,
+        },
+        "review_flags": sorted(set(workflow.review_flags)),
+        "limitations": sorted(set(workflow.limitations + [NON_DECISION_NOTE])),
+    }
+
+
+def package_from_dft_workflow(
+    workflow: DftWorkflowSpec,
+    *,
+    profile: Optional[WorkloadProfile | Mapping[str, Any]] = None,
+    graph_id: Optional[str] = None,
+    source_kind: str = "dft_workflow",
+    source_path: Optional[str] = None,
+    importer_id: str = "dft_workflow",
+    importer_version: str = "v1",
+    claim_boundary: str = "diagnostic",
+) -> WorkloadPackage:
+    """Wrap a normalized DFT workflow in the generic WorkloadPackage contract."""
+    graph = build_dft_workflow_graph(workflow, graph_id=graph_id)
+    profile_payload = profile.to_dict() if isinstance(profile, WorkloadProfile) else dict(profile or dft_phase_reference_profile().to_dict())
+    source_facts = _workflow_source_facts(workflow)
+    domain_metadata = {
+        "dft": {
+            "schema_version": "dse.dft.workflow_metadata.v1",
+            "workflow": workflow.to_dict(),
+            "source_facts": source_facts,
+            "source_facts_by_stage": {
+                stage.stage_id: [dict(fact) for fact in stage.source_facts]
+                for stage in workflow.stages
+            },
+            "source_program": workflow.source_software,
+            "claim_boundary": claim_boundary,
+            "review_flags": sorted(set(workflow.review_flags)),
+            "limitations": sorted(set(workflow.limitations)),
+            "non_decision_contract": {
+                "analysis_scope": "architecture_independent",
+                "note": NON_DECISION_NOTE,
+            },
+        },
+        "characterization": {
+            "domain_phase_summary": _domain_phase_summary_from_workflow(workflow),
+            "domain_workflow_summary": workflow.workflow_summary(),
+            "domain_claim_summary": workflow.claim_summary(),
+        },
+    }
+    return package_from_graph(
+        graph,
+        workload_id=workflow.workflow_id,
+        workload_family=workflow.workflow_family,
+        profile_id=str(profile_payload.get("profile_id", workflow.workflow_family)),
+        profile_version=str(profile_payload.get("profile_version", "v1")),
+        importer_id=importer_id,
+        importer_version=importer_version,
+        claim_boundary=claim_boundary,
+        source_kind=source_kind,
+        source_path=source_path,
+        domain_metadata=domain_metadata,
+        profile=profile_payload,
+    )
 
 
 def package_from_dft_case(
@@ -607,10 +1089,16 @@ def package_from_dft_case(
     """Wrap a DFT case graph in the generic WorkloadPackage contract."""
     graph = build_dft_phase_graph(case, graph_id=graph_id)
     profile_payload = profile.to_dict() if isinstance(profile, WorkloadProfile) else dict(profile or dft_phase_reference_profile().to_dict())
+    workflow = workflow_from_dft_case(case)
     domain_metadata = {
-        "dft": case.to_domain_metadata(),
+        "dft": {
+            **case.to_domain_metadata(),
+            "workflow": workflow.to_dict(),
+        },
         "characterization": {
             "domain_phase_summary": domain_phase_summary_from_case(case),
+            "domain_workflow_summary": workflow.workflow_summary(),
+            "domain_claim_summary": workflow.claim_summary(),
         },
     }
     return package_from_graph(
@@ -649,7 +1137,22 @@ def normalize_dft_case_from_facts(
     summaries = dict(merged["fact_summaries"])
     timing_facts = _phase_timing_facts(all_facts)
     input_parameters = _input_parameters_from_summaries(summaries)
-    input_parameters.update({key: value for key, value in parameters_payload.items() if key in {"npw", "nfft", "nbnd", "nkb", "m", "nproj"}})
+    input_parameters.update({
+        key: value
+        for key, value in parameters_payload.items()
+        if key in {
+            "npw",
+            "nfft",
+            "nbnd",
+            "nkb",
+            "m",
+            "nproj",
+            "static_dominance_margin",
+            "user_confirmed_dominance",
+            "stage_type",
+            "calculation",
+        }
+    })
 
     phases = _phases_from_facts_and_parameters(timing_facts, summaries, input_parameters)
     review_flags = set(merged.get("review_flags", [])) | set(generation_flags)
@@ -947,12 +1450,118 @@ def _fallback_kernel_for_phase(phase_id: str, parameters: Mapping[str, Any]) -> 
 
 def _default_phase_ids(summaries: Mapping[str, Any]) -> List[str]:
     calculation = str(_summary_value(summaries, "input.calculation", "scf")).lower()
+    if "bands" in calculation:
+        return ["setup", "diagonalization", "io"]
+    if "dos" in calculation:
+        return ["setup", "charge_density", "io"]
+    if "projwfc" in calculation or "projection" in calculation:
+        return ["setup", "augmentation", "io"]
+    if "phonon" in calculation or calculation in {"ph", "dfpt"}:
+        return ["setup", "h_psi", "fft", "diagonalization", "charge_density"]
     phases = ["setup", "h_psi", "diagonalization", "fft", "charge_density", "mixing"]
     if "relax" in calculation or "force" in calculation or "md" in calculation:
         phases.append("forces")
     if "vc" in calculation or "stress" in calculation:
         phases.append("stress")
     return phases
+
+
+def _stage_type_from_case(case: DftCase) -> str:
+    calculation = str(case.input_parameters.get("stage_type", case.input_parameters.get("calculation", ""))).lower().replace("-", "_")
+    if calculation:
+        if "vc" in calculation and "relax" in calculation:
+            return "vc_relax"
+        if "relax" in calculation:
+            return "relax"
+        if calculation in {"scf", "nscf", "bands", "dos", "projwfc", "phonon", "ph", "dfpt"}:
+            return "phonon" if calculation in {"ph", "dfpt"} else calculation
+    program = case.source_program.lower()
+    if "bands" in program:
+        return "bands"
+    if "dos" in program:
+        return "dos"
+    if "projwfc" in program:
+        return "projwfc"
+    if "ph" in program:
+        return "phonon"
+    return "scf"
+
+
+def _default_stage_inputs(stage_type: str) -> List[str]:
+    if stage_type in {"nscf", "bands", "dos", "projwfc", "phonon"}:
+        return ["charge_density", "wavefunctions"]
+    if stage_type in {"relax", "vc_relax"}:
+        return ["structure", "pseudopotentials"]
+    return ["structure", "pseudopotentials", "kpoints"]
+
+
+def _default_stage_outputs(stage_type: str) -> List[str]:
+    mapping = {
+        "scf": ["charge_density", "wavefunctions"],
+        "nscf": ["wavefunctions"],
+        "relax": ["relaxed_structure", "forces"],
+        "vc_relax": ["relaxed_structure", "stress"],
+        "bands": ["band_structure"],
+        "dos": ["density_of_states"],
+        "projwfc": ["projected_wavefunctions"],
+        "phonon": ["dynamical_matrices"],
+    }
+    return mapping.get(stage_type, ["stage_outputs"])
+
+
+def _tensor_shapes_for_kernel(kernel: DftKernelShape) -> Dict[str, Any]:
+    return {
+        "inputs": {name: list(spec.shape) for name, spec in kernel.input_tensors.items()},
+        "outputs": {name: list(spec.shape) for name, spec in kernel.output_tensors.items()},
+    }
+
+
+def _confirmed_phase_set(value: Any) -> set[str]:
+    if value is None:
+        return set()
+    if isinstance(value, str):
+        return {canonicalize_phase_id(item.strip()) for item in value.split(",") if item.strip()}
+    if isinstance(value, Iterable):
+        return {canonicalize_phase_id(str(item)) for item in value if str(item).strip()}
+    return set()
+
+
+def _predicted_dominance_claim(
+    stage_id: str,
+    phase_metrics: Sequence[tuple[DftPhase, float, float]],
+    margin: float,
+) -> Optional[DftHotspotClaim]:
+    ranked = sorted(
+        [item for item in phase_metrics if item[1] > 0],
+        key=lambda item: item[1],
+        reverse=True,
+    )
+    if not ranked:
+        return None
+    top_phase, top_flops, top_memory = ranked[0]
+    second_flops = ranked[1][1] if len(ranked) > 1 else 1.0
+    ratio = top_flops / max(1.0, second_flops)
+    if ratio < max(1.0, margin):
+        return None
+    kernel = top_phase.kernels[0] if top_phase.kernels else _fallback_kernel_for_phase(top_phase.phase_id, {})
+    return DftHotspotClaim(
+        claim_id=f"{stage_id}:{top_phase.phase_id}:predicted:dominance",
+        stage_id=stage_id,
+        phase_id=top_phase.phase_id,
+        kernel_kind=kernel.op_type,
+        claim_kind="dominance",
+        evidence_label="predicted",
+        estimated_flops=top_flops,
+        estimated_memory_bytes=top_memory,
+        tensor_shapes=_tensor_shapes_for_kernel(kernel),
+        complexity_terms={**dict(kernel.dimensions), "dominance_ratio": ratio},
+        evidence_level="static_complexity_model",
+        confidence="medium",
+        source_fact_ids=list(set(top_phase.source_fact_ids + kernel.source_fact_ids)),
+        review_status="needs_review",
+        reason="static complexity model exceeded configured dominance margin; user review required before strong claim",
+        margin=ratio,
+    )
 
 
 def _phase_timing_facts(facts: Sequence[SourceFact]) -> List[SourceFact]:

@@ -68,7 +68,11 @@ STEP3_EVIDENCE_ARTIFACTS = [
     "final_report.md",
     "artifact_manifest.json",
     "manifest.json",
-] + CODESIGN_L4_EVIDENCE_ARTIFACTS + CODESIGN_STEP2_ARTIFACTS + ["gem5_l4_proof.json", "gem5.log"]
+] + CODESIGN_L4_EVIDENCE_ARTIFACTS + CODESIGN_STEP2_ARTIFACTS + [
+    "generic_accel_command_descriptor.json",
+    "gem5_l4_proof.json",
+    "gem5.log",
+]
 
 
 @dataclass

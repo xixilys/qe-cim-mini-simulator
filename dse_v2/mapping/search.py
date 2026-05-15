@@ -312,9 +312,12 @@ def _hint_phase_groups(candidate_hints: Mapping[str, Any]) -> List[Any]:
     if phase_groups is None:
         annotations = candidate_hints.get("annotations", {})
         if isinstance(annotations, Mapping):
-            dft_annotations = annotations.get("dft", {})
-            if isinstance(dft_annotations, Mapping):
-                phase_groups = dft_annotations.get("phase_groups")
+            for annotation in annotations.values():
+                if not isinstance(annotation, Mapping):
+                    continue
+                phase_groups = annotation.get("phase_groups")
+                if isinstance(phase_groups, list):
+                    break
     if isinstance(phase_groups, list):
         return list(phase_groups)
     return []

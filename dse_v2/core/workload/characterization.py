@@ -476,7 +476,8 @@ def characterize_workload(
     }
     domain_characterization = package.domain_metadata.get("characterization")
     if isinstance(domain_characterization, Mapping):
-        domain_phase_summary = domain_characterization.get("domain_phase_summary")
-        if isinstance(domain_phase_summary, Mapping):
-            result["domain_phase_summary"] = dict(domain_phase_summary)
+        for key in ("domain_phase_summary", "domain_workflow_summary", "domain_claim_summary"):
+            summary = domain_characterization.get(key)
+            if isinstance(summary, Mapping):
+                result[key] = dict(summary)
     return result

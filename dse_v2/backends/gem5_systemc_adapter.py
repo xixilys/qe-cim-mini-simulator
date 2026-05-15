@@ -18,7 +18,7 @@ import shutil
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 from dse_v2.backends.generic_systemc_bridge import GenericSystemCBackend
 from dse_v2.core.ir.compute_graph import ComputeGraph
@@ -28,11 +28,37 @@ from dse_v2.dse.orchestrator import DesignPoint
 GSIM_MAGIC = 0x4753494D  # 'GSIM'
 GSIM_DESCRIPTOR_VERSION = 1
 GSIM_COMMAND_TYPE_GRAPH = 1
-GENERIC_ACCEL_SOURCE_FILES = ("GenericAccel.py", "generic_accel.cc", "generic_accel.hh")
+GENERIC_ACCEL_WORK_BASE = 0x08000000
+GENERIC_ACCEL_REQUEST_OFFSET = 0x1000
+GENERIC_ACCEL_COMPLETION_OFFSET = 0x110000
+GENERIC_ACCEL_RESULT_OFFSET = 0x120000
+GENERIC_ACCEL_WORKSPACE_SIZE = 1 << 20
+GENERIC_ACCEL_DESCRIPTOR_FLAGS = 0x7
+GENERIC_ACCEL_COMMAND_DESCRIPTOR_BYTES = 48
+GENERIC_ACCEL_SOURCE_FILES = ("GenericAccel.py", "generic_accel.cc", "generic_accel.hh", "SConscript")
+GENERIC_ACCEL_DEV_SCONSCRIPT_LINE = "SConscript('generic_accel/SConscript')"
 
 
 def _repo_root() -> Path:
     return Path(__file__).resolve().parents[2]
+
+
+def _resolve_gem5_root(gem5_binary: Path, root: Path) -> Path:
+    """Resolve the gem5 source root used for source sync/build.
+
+    The repository default remains ``gem5_integration/gem5``.  For local
+    non-vendored builds, callers may pass a binary under ``<gem5>/build/X86`` or
+    set ``GSIM_GEM5_ROOT``; this avoids requiring a repository-local gem5 source
+    checkout or an environment-specific tracked symlink.
+    """
+
+    env_root = os.environ.get("GSIM_GEM5_ROOT")
+    if env_root:
+        return Path(env_root)
+    binary = Path(gem5_binary)
+    if len(binary.parents) >= 3 and binary.parent.parent.name == "build":
+        return binary.parent.parent.parent
+    return root / "gem5_integration" / "gem5"
 
 
 def _write_json(path: Path, payload: Any) -> None:
@@ -45,9 +71,137 @@ def _write_text(path: Path, text: str) -> None:
     path.write_text(text, encoding="utf-8")
 
 
+def _copy_if_exists(source: Path, destination: Path) -> Optional[str]:
+    """Copy an optional gem5 artifact into the run directory.
+
+    Missing files are not synthesized.  The caller records the returned path
+    only when gem5 actually produced the artifact.
+    """
+
+    if not source.exists() or not source.is_file():
+        return None
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(source, destination)
+    return str(destination)
+
+
+def _gem5_activity_summary(result: Optional[Mapping[str, Any]], gem5_log: str) -> Dict[str, Any]:
+    """Summarize non-smoke accelerator activity from real L4 evidence."""
+
+    result_map: Mapping[str, Any] = result if isinstance(result, Mapping) else {}
+    summary = result_map.get("microarchitecture_summary", {})
+    if not isinstance(summary, Mapping):
+        summary = {}
+    events = [event for event in result_map.get("events", []) or [] if isinstance(event, Mapping)]
+    accelerator_events = [
+        event for event in events
+        if str(event.get("device", "host")) not in {"", "host", "cpu", "host-0"}
+    ]
+
+    def _positive_number(value: Any) -> bool:
+        try:
+            return float(value) > 0.0
+        except (TypeError, ValueError):
+            return False
+
+    activity = {
+        "schema_version": "dse.gem5_activity_summary.v1",
+        "execution_engine": result_map.get("execution_engine"),
+        "event_count": len(events),
+        "accelerator_event_count": len(accelerator_events),
+        "accelerator_devices": sorted({
+            str(event.get("device"))
+            for event in accelerator_events
+            if event.get("device")
+        }),
+        "micro_op_count": summary.get("micro_op_count"),
+        "total_cycles": summary.get("total_cycles"),
+        "total_flops": summary.get("total_flops"),
+        "descriptor_path_observed": "descriptor_read verified=true" in (gem5_log or ""),
+        "microarchitecture_execute_observed": "microarchitecture_execute verified=true" in (gem5_log or ""),
+    }
+    activity["nonzero_accelerator_activity"] = bool(
+        activity["accelerator_event_count"] > 0
+        and _positive_number(activity["micro_op_count"])
+        and _positive_number(activity["total_cycles"])
+        and activity["microarchitecture_execute_observed"]
+    )
+    return activity
+
+
 def _extract_token(pattern: str, text: str) -> Optional[str]:
     match = re.search(pattern, text, flags=re.MULTILINE)
     return match.group(1) if match else None
+
+
+def build_generic_accel_command_descriptor(
+    simulation_request: Mapping[str, Any],
+    *,
+    codesign_candidate: Optional[Mapping[str, Any]] = None,
+    descriptor_addr: int = GENERIC_ACCEL_WORK_BASE,
+    request_addr: int = GENERIC_ACCEL_WORK_BASE + GENERIC_ACCEL_REQUEST_OFFSET,
+    completion_addr: int = GENERIC_ACCEL_WORK_BASE + GENERIC_ACCEL_COMPLETION_OFFSET,
+    result_addr: int = GENERIC_ACCEL_WORK_BASE + GENERIC_ACCEL_RESULT_OFFSET,
+    workspace_addr: int = GENERIC_ACCEL_WORK_BASE,
+    workspace_size: int = GENERIC_ACCEL_WORKSPACE_SIZE,
+    flags: int = GENERIC_ACCEL_DESCRIPTOR_FLAGS,
+) -> Dict[str, Any]:
+    """Translate a GSIM request/candidate into the GenericAccel command descriptor."""
+    candidate_translation = (
+        simulation_request.get("candidate_translation", {})
+        if isinstance(simulation_request.get("candidate_translation", {}), Mapping)
+        else {}
+    )
+    candidate_payload = dict(codesign_candidate or {})
+    candidate_id = (
+        candidate_payload.get("codesign_candidate_id")
+        or candidate_payload.get("candidate_id")
+        or candidate_translation.get("candidate_id")
+        or simulation_request.get("run_id")
+    )
+    descriptor = {
+        "magic": f"0x{GSIM_MAGIC:08x}",
+        "version": GSIM_DESCRIPTOR_VERSION,
+        "type": GSIM_COMMAND_TYPE_GRAPH,
+        "flags": flags,
+        "request_addr": request_addr,
+        "result_addr": result_addr,
+        "workspace_addr": workspace_addr,
+        "workspace_size": workspace_size,
+    }
+    return {
+        "schema_version": "gsim.generic_accel_command_descriptor_translation.v1",
+        "translator": "dse_v2.backends.gem5_systemc_adapter.build_generic_accel_command_descriptor",
+        "candidate_id": str(candidate_id),
+        "request_run_id": str(simulation_request.get("run_id", "")),
+        "request_schema_version": str(simulation_request.get("schema_version", "")),
+        "request_mode": str(simulation_request.get("mode", "")),
+        "descriptor_addr": descriptor_addr,
+        "completion_addr": completion_addr,
+        "descriptor_size_bytes": GENERIC_ACCEL_COMMAND_DESCRIPTOR_BYTES,
+        "descriptor": descriptor,
+        "layout": {
+            "work_base": workspace_addr,
+            "request_offset": GENERIC_ACCEL_REQUEST_OFFSET,
+            "completion_offset": GENERIC_ACCEL_COMPLETION_OFFSET,
+            "result_offset": GENERIC_ACCEL_RESULT_OFFSET,
+            "request_payload": "JSON simulation_request payload at request_addr",
+            "result_payload": "JSON simulation_result payload at result_addr",
+            "completion_descriptor": "GSIM completion descriptor at completion_addr",
+        },
+        "generic_accel_contract": {
+            "driver_source": "gem5_integration/test_programs/generic_accel/generic_accel_l4_driver.c",
+            "device_sources": [f"gem5_integration/src/dev/generic_accel/{name}" for name in GENERIC_ACCEL_SOURCE_FILES],
+            "required_log_markers": [
+                "descriptor_read verified=true",
+                "uarch_request_decode verified=true",
+                "microarchitecture_execute verified=true",
+                "completion_writeback verified=true",
+            ],
+        },
+        "candidate_translation": dict(candidate_translation),
+        "trusted_final_claim": False,
+    }
 
 
 def _run_command(cmd: List[str], *, cwd: Path, timeout: int = 300) -> Tuple[bool, str]:
@@ -192,13 +346,40 @@ def _sync_generic_accel_sources(root: Path, gem5_root: Path) -> List[Dict[str, A
                 "active_path": str(active),
                 "vendored_path": str(vendored),
             })
+    top_sconscript = gem5_root / "src" / "SConscript"
+    top_text = top_sconscript.read_text(encoding="utf-8") if top_sconscript.exists() else ""
+    if "os.walk(base_dir" in top_text and "SConscript(os.path.join(root, 'SConscript')" in top_text:
+        return blockers
+
+    dev_sconscript = gem5_root / "src" / "dev" / "SConscript"
+    try:
+        if dev_sconscript.exists():
+            text = dev_sconscript.read_text(encoding="utf-8")
+            if "generic_accel/SConscript" not in text:
+                with dev_sconscript.open("a", encoding="utf-8") as fh:
+                    fh.write("\n# Local GenericAccel integration for DFT/DSE L4 evidence.\n")
+                    fh.write(GENERIC_ACCEL_DEV_SCONSCRIPT_LINE + "\n")
+        else:
+            blockers.append({
+                "id": "gem5_dev_sconscript_missing",
+                "status": "blocked",
+                "detail": f"gem5 dev SConscript is missing: {dev_sconscript}",
+                "path": str(dev_sconscript),
+            })
+    except OSError as exc:
+        blockers.append({
+            "id": "gem5_dev_sconscript_patch_failed",
+            "status": "blocked",
+            "detail": f"Could not add GenericAccel SConscript hook: {exc}",
+            "path": str(dev_sconscript),
+        })
     return blockers
 
 
 def _ensure_gem5(gem5_binary: Path, root: Path) -> Tuple[Path, List[Dict[str, Any]]]:
     """Ensure gem5.opt exists and is fresh for GenericAccel source changes."""
     gem5_binary = Path(gem5_binary)
-    gem5_root = root / "gem5_integration" / "gem5"
+    gem5_root = _resolve_gem5_root(gem5_binary, root)
     default_binary = gem5_root / "build" / "X86" / "gem5.opt"
     sync_blockers = _sync_generic_accel_sources(root, gem5_root) if gem5_root.exists() else []
     if sync_blockers:
@@ -301,6 +482,7 @@ def _local_l4_transport_result(
         "verified_in_gem5_log": True,
         "gem5_log_line": "descriptor_read verified=true",
         "fallback_blockers": blockers,
+        "planned_descriptor_translation": request.get("generic_accel_descriptor_translation", {}),
         "descriptor": {
             "magic": f"0x{GSIM_MAGIC:08x}",
             "version": GSIM_DESCRIPTOR_VERSION,
@@ -346,6 +528,7 @@ def _local_l4_transport_result(
             "gem5_log": str(output_dir / "gem5.log"),
             "gem5_stdout": str(output_dir / "gem5_stdout.txt"),
             "gem5_stderr": str(output_dir / "gem5_stderr.txt"),
+            "generic_accel_command_descriptor": str(output_dir / "generic_accel_command_descriptor.json"),
             "gem5_command_descriptor": str(output_dir / "gem5_command_descriptor.json"),
             "gem5_completion_descriptor": str(output_dir / "gem5_completion_descriptor.json"),
         },
@@ -406,8 +589,14 @@ def _missing_harness_result(
                 "gem5_log": None,
                 "gem5_stdout": None,
                 "gem5_stderr": None,
+                "generic_accel_command_descriptor": str(request_path.parent / "generic_accel_command_descriptor.json"),
                 "gem5_command_descriptor": None,
                 "gem5_completion_descriptor": None,
+                "gem5_stats": None,
+                "gem5_config_ini": None,
+                "gem5_config_json": None,
+                "gem5_activity_summary": None,
+                "require_gem5_stats_config": True,
             },
         },
     }
@@ -461,6 +650,9 @@ class Gem5SystemCClosureAdapter:
 
         request = self.bridge._build_request(design_point, compute_graph, workload_package=workload_package, output_dir=output_dir)
         request["mode"] = "gem5_cosim"
+        descriptor_translation = build_generic_accel_command_descriptor(request)
+        request["generic_accel_descriptor_translation"] = descriptor_translation
+        _write_json(output_dir / "generic_accel_command_descriptor.json", descriptor_translation)
         _write_json(request_path, request)
 
         cmd = [
@@ -514,6 +706,7 @@ class Gem5SystemCClosureAdapter:
                 "schema_version": "gsim.gem5_command_descriptor_observed.v1",
                 "source": "not observed; real L4 harness did not start",
                 "verified_in_gem5_log": False,
+                "planned_descriptor_translation": request.get("generic_accel_descriptor_translation", {}),
                 "blockers": blockers,
             })
             _write_json(output_dir / "gem5_completion_descriptor.json", {
@@ -547,6 +740,9 @@ class Gem5SystemCClosureAdapter:
         gem5_log_path = m5out / "gem5.log"
         gem5_log = gem5_log_path.read_text(encoding="utf-8") if gem5_log_path.exists() else ""
         _write_text(output_dir / "gem5.log", gem5_log)
+        stats_path = _copy_if_exists(m5out / "stats.txt", output_dir / "stats.txt")
+        config_ini_path = _copy_if_exists(m5out / "config.ini", output_dir / "config.ini")
+        config_json_path = _copy_if_exists(m5out / "config.json", output_dir / "config.json")
 
         result_path_token = _extract_token(r"result_path=(\S+)", gem5_log)
         raw_result_path = Path(result_path_token) if result_path_token else None
@@ -561,6 +757,8 @@ class Gem5SystemCClosureAdapter:
         if raw_result_path is not None and raw_result_path.exists():
             result = json.loads(raw_result_path.read_text(encoding="utf-8"))
             _write_json(result_copy, result)
+        activity_summary = _gem5_activity_summary(result, gem5_log)
+        _write_json(output_dir / "gem5_activity_summary.json", activity_summary)
 
         request_decode_verified = "uarch_request_decode verified=true" in gem5_log
         microarchitecture_execute_verified = "microarchitecture_execute verified=true" in gem5_log
@@ -573,6 +771,9 @@ class Gem5SystemCClosureAdapter:
             "driver_status_verified": "generic_accel_l4_status=1 error_code=0" in completed.stdout,
             "driver_completion_descriptor_verified": "completion_magic=0x4753494d completion_status=0" in completed.stdout,
             "result_status_passed": result is not None and result.get("status") == "passed",
+            "stats_txt_present": stats_path is not None,
+            "config_present": bool(config_ini_path or config_json_path),
+            "nonzero_accelerator_activity": bool(activity_summary.get("nonzero_accelerator_activity", False)),
             "transport_harness": "gem5_generic_accel_microarchitecture_v1",
             "fallback_from_gem5": False,
             "result_path": str(raw_result_path) if raw_result_path else None,
@@ -584,8 +785,14 @@ class Gem5SystemCClosureAdapter:
                 "gem5_log": str(output_dir / "gem5.log"),
                 "gem5_stdout": str(output_dir / "gem5_stdout.txt"),
                 "gem5_stderr": str(output_dir / "gem5_stderr.txt"),
+                "generic_accel_command_descriptor": str(output_dir / "generic_accel_command_descriptor.json"),
                 "gem5_command_descriptor": str(output_dir / "gem5_command_descriptor.json"),
                 "gem5_completion_descriptor": str(output_dir / "gem5_completion_descriptor.json"),
+                "gem5_stats": stats_path,
+                "gem5_config_ini": config_ini_path,
+                "gem5_config_json": config_json_path,
+                "gem5_activity_summary": str(output_dir / "gem5_activity_summary.json"),
+                "require_gem5_stats_config": True,
             },
         }
         _write_json(output_dir / "gem5_command_descriptor.json", {
@@ -594,6 +801,7 @@ class Gem5SystemCClosureAdapter:
             "transport_harness": "gem5_generic_accel_microarchitecture_v1",
             "verified_in_gem5_log": proof["descriptor_read_verified"],
             "gem5_log_line": "descriptor_read verified=true",
+            "planned_descriptor_translation": request.get("generic_accel_descriptor_translation", {}),
         })
         _write_json(output_dir / "gem5_completion_descriptor.json", {
             "schema_version": "gsim.gem5_completion_descriptor_observed.v1",
@@ -610,6 +818,9 @@ class Gem5SystemCClosureAdapter:
             proof["completion_writeback_verified"],
             proof["driver_status_verified"],
             proof["driver_completion_descriptor_verified"],
+            proof["stats_txt_present"],
+            proof["config_present"],
+            proof["nonzero_accelerator_activity"],
         ]
         returncode = 0 if (
             completed.returncode == 0
@@ -636,8 +847,10 @@ class Gem5SystemCClosureAdapter:
 
 
 __all__ = [
+    "GENERIC_ACCEL_COMMAND_DESCRIPTOR_BYTES",
     "GSIM_COMMAND_TYPE_GRAPH",
     "GSIM_DESCRIPTOR_VERSION",
     "GSIM_MAGIC",
     "Gem5SystemCClosureAdapter",
+    "build_generic_accel_command_descriptor",
 ]

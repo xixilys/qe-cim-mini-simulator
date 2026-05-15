@@ -15,10 +15,14 @@ from dse_v2.core.workload.profiles import WorkloadProfile
 from dse_v2.reference_workloads.dft import (
     SourceFact,
     canonicalize_phase_id,
+    dft_claims_from_case,
     dft_phase_reference_profile,
+    dft_stage_from_case,
     normalize_dft_case_from_facts,
     package_from_dft_case,
+    package_from_dft_workflow,
 )
+from dse_v2.reference_workloads.dft_workflow import DftStageDependency, DftWorkflowSpec
 
 
 QE_SCF_REQUIRED_COVERAGE = [
@@ -890,7 +894,7 @@ class DftQePwImporter(WorkloadImporter):
 
     importer_id = "dft_qe_pw"
     importer_version = "v1"
-    supported_source_kinds = ["qe_pw_bundle", "qe_pw_input", "qe_pw_log", "qe_pw_profile", "dft_config", "generated"]
+    supported_source_kinds = ["qe_pw_bundle", "qe_workflow_bundle", "qe_pw_input", "qe_pw_log", "qe_pw_profile", "dft_config", "generated"]
     compatible_profiles = ["dft_qe_pw_static", "dft"]
 
     def import_workload(
@@ -907,6 +911,17 @@ class DftQePwImporter(WorkloadImporter):
         case_id = str(parameters.get("case_id", parameters.get("workload_id", parameters.get("graph_id", "qe_pw_static_case"))))
         source_kind = str(parameters.get("source_kind", "qe_pw_bundle"))
         run_id = str(parameters.get("run_id")) if parameters.get("run_id") is not None else None
+
+        if self._is_workflow_bundle(source, source_kind):
+            return self._import_workflow_bundle(
+                source,
+                profile_payload=profile_payload,
+                parameters=parameters,
+                source_kind=source_kind,
+                case_id=case_id,
+                claim_boundary=claim_boundary,
+                run_id=run_id,
+            )
 
         if hasattr(source, "to_dict") and getattr(source, "schema_version", "") == "dse.dft.case.v1":
             case = source
@@ -929,6 +944,181 @@ class DftQePwImporter(WorkloadImporter):
         )
         package.importer["importer_version"] = self.importer_version
         return package
+
+    def _is_workflow_bundle(self, source: Any, source_kind: str) -> bool:
+        if source_kind == "qe_workflow_bundle":
+            return True
+        if not isinstance(source, Mapping):
+            return False
+        stages = source.get("stages")
+        return isinstance(stages, Sequence) and not isinstance(stages, (str, bytes))
+
+    def _import_workflow_bundle(
+        self,
+        source: Any,
+        *,
+        profile_payload: Mapping[str, Any],
+        parameters: Mapping[str, Any],
+        source_kind: str,
+        case_id: str,
+        claim_boundary: str,
+        run_id: Optional[str],
+    ) -> WorkloadPackage:
+        stages_payload = list(source.get("stages", []) if isinstance(source, Mapping) else [])
+        if not stages_payload:
+            stages_payload = [{"program": "pw.x", "input": source}]
+        stages = []
+        dependencies = []
+        claims = []
+        review_gates = []
+        limitations = [
+            "QE workflow bundle reconstruction is a Step1 source-fact skeleton; it does not claim QE numerical correctness.",
+        ]
+        review_flags = []
+        previous_stage_id: Optional[str] = None
+        for index, stage_source in enumerate(stages_payload):
+            stage_map = dict(stage_source or {}) if isinstance(stage_source, Mapping) else {"input": stage_source}
+            program = str(stage_map.get("program", "pw.x"))
+            stage_type = _infer_qe_stage_type(program, stage_map)
+            stage_id = str(stage_map.get("stage_id", f"stage_{index:02d}_{_safe_stage_id(program)}_{stage_type}"))
+            stage_run_id = str(stage_map.get("run_id", run_id or stage_id))
+            stage_parameters = dict(parameters)
+            stage_parameters.update(dict(stage_map.get("parameters", {}) or {}))
+            stage_parameters["stage_type"] = stage_type
+            stage_parameters["calculation"] = stage_type
+            facts = self._collect_stage_facts(stage_map, stage_parameters, program=program, stage_type=stage_type, run_id=stage_run_id)
+            stage_case = normalize_qe_dft_case(
+                facts,
+                case_id=f"{case_id}_{stage_id}",
+                profile_id=str(profile_payload.get("profile_id", "dft_qe_pw_static")),
+                importer_id=self.importer_id,
+                claim_boundary=claim_boundary,
+                parameters=stage_parameters,
+            )
+            coverage_level = "common_mode" if stage_type in {"scf", "nscf", "relax", "vc_relax", "bands", "dos", "projwfc"} else "experimental"
+            if stage_type == "phonon":
+                coverage_level = str(stage_map.get("coverage_level", "experimental"))
+            if stage_type == "unknown":
+                coverage_level = "unsupported"
+                review_flags.append("unsupported_qe_stage")
+                limitations.append(f"unsupported QE workflow stage: {program}")
+            stage = dft_stage_from_case(
+                stage_case,
+                stage_id=stage_id,
+                stage_type=stage_type,
+                source_program=program,
+                coverage_level=coverage_level,
+            )
+            stages.append(stage)
+            stage_claims, stage_review_gates = dft_claims_from_case(
+                stage_case,
+                stage_id=stage_id,
+                static_dominance_margin=_float_or_none(stage_parameters.get("static_dominance_margin")),
+                user_confirmed_dominance=stage_parameters.get("user_confirmed_dominance"),
+            )
+            claims.extend(stage_claims)
+            review_gates.extend(stage_review_gates)
+            review_flags.extend(stage_case.review_flags)
+            if previous_stage_id is not None:
+                dependencies.append(DftStageDependency(
+                    source_stage_id=previous_stage_id,
+                    target_stage_id=stage_id,
+                    artifact_names=_default_qe_dependency_artifacts(stage_type),
+                    dependency_kind="stage_artifact_dependency",
+                ))
+            previous_stage_id = stage_id
+
+        workflow = DftWorkflowSpec(
+            workflow_id=case_id,
+            workflow_family="dft",
+            source_software="qe",
+            coverage_level=_workflow_coverage_level(stages),
+            stages=stages,
+            dependencies=dependencies,
+            hotspot_claims=claims,
+            review_gates=review_gates,
+            limitations=limitations,
+            review_flags=sorted(set(review_flags + [gate.severity for gate in review_gates])),
+        )
+        package = package_from_dft_workflow(
+            workflow,
+            profile=profile_payload,
+            graph_id=str(parameters.get("graph_id", f"{case_id}_graph")),
+            source_kind=source_kind,
+            source_path=parameters.get("source_path"),
+            importer_id=self.importer_id,
+            importer_version=self.importer_version,
+            claim_boundary=claim_boundary,
+        )
+        return package
+
+    def _collect_stage_facts(
+        self,
+        stage_map: Mapping[str, Any],
+        parameters: Mapping[str, Any],
+        *,
+        program: str,
+        stage_type: str,
+        run_id: Optional[str],
+    ) -> List[SourceFact]:
+        facts: List[SourceFact] = []
+        if "facts" in stage_map:
+            for item in stage_map.get("facts", []) or []:
+                facts.append(item if isinstance(item, SourceFact) else SourceFact.from_dict(item))
+        input_source = _first_present(stage_map, "pw_input", "input", "input_text")
+        log_source = _first_present(stage_map, "pw_log", "log", "log_text", "stdout")
+        profile_source = _first_present(stage_map, "profile", "profile_text", "profile_json", "timing")
+        if input_source is not None and program.lower() == "pw.x":
+            facts.extend(parse_qe_pw_input(input_source, source_path=_source_path_hint(stage_map, "input_path", "pw_input_path"), run_id=run_id))
+        if log_source is not None:
+            facts.extend(parse_qe_pw_log(log_source, source_path=_source_path_hint(stage_map, "log_path", "pw_log_path"), run_id=run_id))
+        if profile_source is not None:
+            facts.extend(parse_qe_profile(profile_source, source_path=_source_path_hint(stage_map, "profile_path"), run_id=run_id))
+        for key, content_keys, parser in [
+            ("input_path", ("input", "pw_input", "input_text"), parse_qe_pw_input),
+            ("pw_input_path", ("input", "pw_input", "input_text"), parse_qe_pw_input),
+            ("log_path", ("log", "pw_log", "log_text", "stdout"), parse_qe_pw_log),
+            ("pw_log_path", ("log", "pw_log", "log_text", "stdout"), parse_qe_pw_log),
+            ("profile_path", ("profile", "profile_text", "profile_json", "timing"), parse_qe_profile),
+        ]:
+            if stage_map.get(key) and not any(stage_map.get(content_key) is not None for content_key in content_keys):
+                facts.extend(parser(str(stage_map[key]), source_path=str(stage_map[key]), run_id=run_id))
+        facts.append(_fact(
+            "input.program",
+            program,
+            source_type="input",
+            source_path=_source_path_hint(stage_map, "input_path", "pw_input_path"),
+            evidence_level="declared_input",
+            confidence="medium",
+            raw_excerpt=f"program={program}",
+            run_id=run_id,
+        ))
+        if not any(fact.field == "input.calculation" for fact in facts):
+            facts.append(_fact(
+                "input.calculation",
+                stage_type,
+                source_type="input",
+                source_path=_source_path_hint(stage_map, "input_path", "pw_input_path"),
+                evidence_level="declared_input",
+                confidence="medium",
+                raw_excerpt=f"stage_type={stage_type}",
+                run_id=run_id,
+            ))
+        for key in ["npw", "nfft", "nbnd", "kpoint_count", "nat", "ntyp"]:
+            if key in parameters:
+                field = "dimension.kpoint_count" if key == "kpoint_count" else f"dimension.{key}"
+                facts.append(_fact(
+                    field,
+                    int(parameters[key]),
+                    unit="count",
+                    source_type="generated",
+                    source_path=parameters.get("source_path"),
+                    evidence_level="caller_parameter",
+                    confidence="medium",
+                    raw_excerpt=f"parameter.{key}",
+                    run_id=run_id,
+                ))
+        return facts
 
     def _collect_facts(
         self,
@@ -1012,3 +1202,75 @@ def _source_path_hint(mapping: Mapping[str, Any], *keys: str) -> Optional[str]:
         if mapping.get(key):
             return str(mapping[key])
     return None
+
+
+def _infer_qe_stage_type(program: str, stage: Mapping[str, Any]) -> str:
+    if stage.get("stage_type"):
+        return _normalize_stage_type(str(stage["stage_type"]))
+    if stage.get("calculation"):
+        return _normalize_stage_type(str(stage["calculation"]))
+    program_lower = program.lower()
+    if "bands" in program_lower:
+        return "bands"
+    if "dos" in program_lower:
+        return "dos"
+    if "projwfc" in program_lower:
+        return "projwfc"
+    if program_lower.startswith("ph"):
+        return "phonon"
+    input_source = _first_present(stage, "pw_input", "input", "input_text")
+    if input_source is not None:
+        try:
+            for fact in parse_qe_pw_input(input_source):
+                if fact.field == "input.calculation":
+                    return _normalize_stage_type(str(fact.value))
+        except Exception:
+            pass
+    return "scf" if program_lower == "pw.x" else "unknown"
+
+
+def _normalize_stage_type(value: str) -> str:
+    normalized = str(value).strip().strip("'\"").lower().replace("-", "_")
+    if normalized == "vc_relax":
+        return "vc_relax"
+    if normalized in {"scf", "nscf", "relax", "bands", "dos", "projwfc", "phonon"}:
+        return normalized
+    if normalized in {"ph", "dfpt"}:
+        return "phonon"
+    if "vc" in normalized and "relax" in normalized:
+        return "vc_relax"
+    if "relax" in normalized:
+        return "relax"
+    return normalized or "unknown"
+
+
+def _safe_stage_id(value: str) -> str:
+    return re.sub(r"[^A-Za-z0-9_]+", "_", str(value)).strip("_") or "stage"
+
+
+def _default_qe_dependency_artifacts(stage_type: str) -> List[str]:
+    if stage_type in {"nscf", "bands", "dos", "projwfc"}:
+        return ["charge_density", "wavefunctions"]
+    if stage_type == "phonon":
+        return ["charge_density", "wavefunctions", "dynamical_matrices"]
+    return ["qe_stage_artifact"]
+
+
+def _workflow_coverage_level(stages: Sequence[Any]) -> str:
+    levels = {getattr(stage, "coverage_level", "recognized") for stage in stages}
+    if "unsupported" in levels:
+        return "unsupported"
+    if "experimental" in levels:
+        return "experimental"
+    if "common_mode" in levels:
+        return "common_mode"
+    return "recognized"
+
+
+def _float_or_none(value: Any) -> Optional[float]:
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except Exception:
+        return None

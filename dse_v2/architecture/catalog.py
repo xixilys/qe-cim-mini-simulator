@@ -283,6 +283,14 @@ class ArchitectureInstance:
             return "legacy/reference architecture; available for comparison only"
         if self.status == ArchitectureStatus.CANDIDATE_ONLY:
             return "architecture status is candidate-only"
+        has_implemented_binding = any(
+            binding_id in bindings and bindings[binding_id].is_trusted_eligible()
+            for binding_id in self.simulation_bindings.values()
+        )
+        if self.status not in {ArchitectureStatus.IMPLEMENTED, ArchitectureStatus.TRUSTED_FINAL_ELIGIBLE}:
+            if has_implemented_binding:
+                return f"architecture status is {self.status}; Step3-searchable but not trusted-final-eligible before run evidence"
+            return "no implemented SystemC/gem5+SystemC binding is attached"
         if not self.trusted_final_eligible(bindings):
             return "no implemented SystemC/gem5+SystemC binding is attached"
         return None
@@ -569,9 +577,9 @@ def seed_generic_dse_architecture_catalog() -> ArchitectureCatalog:
     catalog = ArchitectureCatalog(version="generic-dse-architecture-catalog-v0")
 
     for component_type in [
-        ComponentType("host_cpu", "host", "CPU host/control component", ["control", "fallback", "elementwise", "reduction", "fft"], ["FP64", "FP32"]),
-        ComponentType("fpga_fabric", "accelerator", "Reconfigurable FPGA fabric", ["gemm", "fft", "stencil", "reduction", "elementwise", "eigen"], ["FP64", "FP32", "INT8"]),
-        ComponentType("gpu_sm", "accelerator", "GPU streaming multiprocessor fabric", ["gemm", "fft", "stencil", "elementwise", "reduction", "eigen"], ["FP64", "FP32", "FP16"]),
+        ComponentType("host_cpu", "host", "CPU host/control component", ["control", "fallback", "elementwise", "reduction", "fft", "gemm", "batched_gemm", "eigen"], ["FP64", "FP32"]),
+        ComponentType("fpga_fabric", "accelerator", "Reconfigurable FPGA fabric", ["gemm", "batched_gemm", "fft", "stencil", "reduction", "elementwise", "eigen", "stream", "sparse_matmul"], ["FP64", "FP32", "INT8"]),
+        ComponentType("gpu_sm", "accelerator", "GPU streaming multiprocessor fabric", ["gemm", "batched_gemm", "fft", "stencil", "elementwise", "reduction", "eigen", "sparse_matmul"], ["FP64", "FP32", "FP16"]),
         ComponentType("cim_array", "accelerator", "Compute-in-memory array", ["gemm", "elementwise", "vector_add", "reduction"], ["FP64", "FP32", "INT8"]),
         ComponentType("asic_block", "accelerator", "Fixed-function ASIC block", ["gemm", "reduction", "eigen", "elementwise"], ["FP64", "FP32"]),
         ComponentType("hbm_memory", "memory", "High-bandwidth memory stack", [], ["bytes"]),
@@ -593,7 +601,7 @@ def seed_generic_dse_architecture_catalog() -> ArchitectureCatalog:
         status=ArchitectureStatus.IMPLEMENTED,
         adapter="dse_v2.backends.generic_systemc_bridge.GenericSystemCBackend",
         executable="model/generic_sim_backend/build/generic_sim",
-        supported_ops=["gemm", "fft", "stencil", "reduction", "elementwise", "eigen", "vector_add", "control", "fallback", "dma", "stream"],
+        supported_ops=["gemm", "batched_gemm", "fft", "stencil", "reduction", "elementwise", "eigen", "vector_add", "control", "fallback", "dma", "stream", "sparse_matmul"],
         required_artifacts=required_artifacts,
         notes=["Timing-level generic SystemC backend; evidence still required per design point."],
     ))
@@ -602,7 +610,7 @@ def seed_generic_dse_architecture_catalog() -> ArchitectureCatalog:
         backend="gem5_systemc",
         status=ArchitectureStatus.IMPLEMENTED,
         adapter="gem5_integration GenericAccel descriptor/request/microarchitecture bridge",
-        supported_ops=["gemm", "fft", "stencil", "reduction", "elementwise", "eigen", "vector_add", "dma", "stream"],
+        supported_ops=["gemm", "batched_gemm", "fft", "stencil", "reduction", "elementwise", "eigen", "vector_add", "dma", "stream", "sparse_matmul"],
         required_artifacts=required_artifacts + ["gem5.log", "gem5_l4_proof.json", "completion_proof.json"],
         notes=[
             "Trusted only when descriptor_read, uarch_request_decode, microarchitecture_execute, completion_writeback, and guest completion proof pass.",
@@ -657,6 +665,200 @@ def seed_generic_dse_architecture_catalog() -> ArchitectureCatalog:
         constraints=ConstraintSet(max_power_w=500.0, min_memory_bytes=int(64 * 1024**3), required_routes=[("host-0", "fpga-0")], required_ops=["gemm", "fft", "reduction", "elementwise"]),
         simulation_bindings={"systemc": "standalone_generic_systemc_v1"},
         status=ArchitectureStatus.PROTOTYPE,
+    ))
+
+    catalog.add_instance(ArchitectureInstance(
+        architecture_id="dft-cpu-baseline-v0",
+        family_id="cpu-only-baseline",
+        parameters={"replicas": 1, "clock_mhz": 2000.0, "evidence_mode": "summary"},
+        components=[
+            _component(
+                "host-0",
+                "host_cpu",
+                "control_host_cpu_baseline",
+                status=ArchitectureStatus.IMPLEMENTED,
+                ops=["control", "fallback", "gemm", "batched_gemm", "fft", "reduction", "elementwise", "eigen"],
+                memory_gb=512,
+                bandwidth_gbps=100,
+                power_w=180,
+                attributes={
+                    "architecture_family_role": "DFT CPU-only reference for all host-visible phases",
+                    "source_refs": ["S01", "S03", "S04", "S05", "S06"],
+                    "evidence_level": "software_semantics_known",
+                },
+            ),
+        ],
+        memory_hierarchy={"levels": ["host_dram"], "total_capacity_bytes": int(512 * 1024**3)},
+        interconnect_topology={"type": "host_internal", "bandwidth_gbps": 100.0, "latency_us": 0.2},
+        constraints=ConstraintSet(max_power_w=250.0, min_memory_bytes=int(128 * 1024**3), required_ops=["gemm", "batched_gemm", "fft", "reduction", "elementwise", "eigen"]),
+        simulation_bindings={"systemc": "standalone_generic_systemc_v1"},
+        status=ArchitectureStatus.PROTOTYPE,
+        notes=[
+            "DFT research taxonomy instance; source refs are recorded in docs/architecture/dft_architecture_family_research.md.",
+            "Step3-searchable baseline only; final CPU performance requires calibrated host measurements.",
+        ],
+    ))
+
+    catalog.add_instance(ArchitectureInstance(
+        architecture_id="dft-fpga-hbm-streaming-v0",
+        family_id="streaming-heavy",
+        parameters={"replicas": 1, "clock_mhz": 300.0, "evidence_mode": "summary"},
+        components=[
+            _component("host-0", "host_cpu", "control_host", status=ArchitectureStatus.IMPLEMENTED, ops=["control", "fallback", "elementwise", "reduction"], memory_gb=256, bandwidth_gbps=100, power_w=140, connected_to=["fpga-0"]),
+            _component(
+                "fpga-0",
+                "fpga_fabric",
+                "dft_streaming_fft_density_reduction",
+                ops=["fft", "stencil", "stream", "reduction", "elementwise", "gemm", "batched_gemm"],
+                memory_gb=32,
+                bandwidth_gbps=460,
+                power_w=230,
+                area_mm2=900,
+                connected_to=["host-0", "hbm-0"],
+                attributes={
+                    "source_refs": ["S13", "S15", "S16", "S17", "S19", "S20", "S22"],
+                    "matched_phase_groups": ["fft_grid_density", "mixing_reduction", "hybrid_exchange"],
+                    "step3_model_assumption": "streaming/HBM benefit is represented by component bandwidth and op efficiency; HBM bank conflicts are not explicit",
+                },
+            ),
+            _component("hbm-0", "hbm_memory", "shared_hbm", ops=[], memory_gb=64, bandwidth_gbps=920, power_w=30, area_mm2=80, connected_to=["fpga-0"], attributes={"source_refs": ["S15", "S16", "S17"]}),
+        ],
+        memory_hierarchy={"levels": ["host_dram", "fpga_hbm", "fpga_stream_buffers"], "total_capacity_bytes": int((256 + 64) * 1024**3)},
+        interconnect_topology={"type": "pcie_hbm_streaming", "bandwidth_gbps": 96.0, "latency_us": 1.5},
+        constraints=ConstraintSet(max_power_w=450.0, max_area_mm2=1200.0, min_memory_bytes=int(96 * 1024**3), required_routes=[("host-0", "fpga-0"), ("fpga-0", "hbm-0")], required_ops=["fft", "stream", "reduction", "elementwise"]),
+        simulation_bindings={"systemc": "standalone_generic_systemc_v1"},
+        status=ArchitectureStatus.PROTOTYPE,
+        notes=[
+            "DFT-specific FPGA/HBM streaming template from external source taxonomy.",
+            "Step3-searchable with generic timing; 3D FFT corner-turn and HBM pseudo-channel conflicts remain limitations.",
+        ],
+    ))
+
+    catalog.add_instance(ArchitectureInstance(
+        architecture_id="dft-fpga-fft-grid-v0",
+        family_id="streaming-heavy",
+        parameters={"replicas": 1, "clock_mhz": 280.0, "evidence_mode": "summary"},
+        components=[
+            _component("host-0", "host_cpu", "control_host", status=ArchitectureStatus.IMPLEMENTED, ops=["control", "fallback", "elementwise", "reduction"], memory_gb=256, bandwidth_gbps=100, power_w=140, connected_to=["fpga-0"]),
+            _component(
+                "fpga-0",
+                "fpga_fabric",
+                "dft_fft_grid_pipeline",
+                ops=["fft", "stencil", "stream", "reduction", "elementwise"],
+                memory_gb=24,
+                bandwidth_gbps=720,
+                power_w=210,
+                area_mm2=820,
+                connected_to=["host-0", "hbm-0"],
+                attributes={
+                    "source_refs": ["S17", "S19", "S20", "S25"],
+                    "matched_phase_groups": ["fft_grid_density"],
+                    "step3_model_assumption": "FFT/grid specialization is represented by high bandwidth and FFT/stencil op support",
+                },
+            ),
+            _component("hbm-0", "hbm_memory", "fft_grid_hbm", ops=[], memory_gb=64, bandwidth_gbps=920, power_w=30, area_mm2=80, connected_to=["fpga-0"]),
+        ],
+        memory_hierarchy={"levels": ["host_dram", "fpga_hbm", "fft_transpose_buffers"], "total_capacity_bytes": int((256 + 64) * 1024**3)},
+        interconnect_topology={"type": "pcie_hbm_fft_grid", "bandwidth_gbps": 96.0, "latency_us": 1.5},
+        constraints=ConstraintSet(max_power_w=420.0, max_area_mm2=1150.0, min_memory_bytes=int(96 * 1024**3), required_routes=[("host-0", "fpga-0"), ("fpga-0", "hbm-0")], required_ops=["fft", "stencil", "stream", "reduction"]),
+        simulation_bindings={"systemc": "standalone_generic_systemc_v1"},
+        status=ArchitectureStatus.PROTOTYPE,
+        notes=[
+            "DFT FFT/grid-heavy architecture instance; keeps corner-turn/transpose as a documented Step3 simplification.",
+        ],
+    ))
+
+    catalog.add_instance(ArchitectureInstance(
+        architecture_id="dft-fpga-systolic-gemm-v0",
+        family_id="host-fpga-minimal",
+        parameters={"replicas": 1, "clock_mhz": 300.0, "evidence_mode": "summary"},
+        components=[
+            _component("host-0", "host_cpu", "control_host", status=ArchitectureStatus.IMPLEMENTED, ops=["control", "fallback", "elementwise", "reduction"], memory_gb=256, bandwidth_gbps=100, power_w=140, connected_to=["fpga-0"]),
+            _component(
+                "fpga-0",
+                "fpga_fabric",
+                "dft_systolic_gemm_batched",
+                ops=["gemm", "batched_gemm", "reduction", "elementwise", "stream"],
+                memory_gb=32,
+                bandwidth_gbps=460,
+                power_w=245,
+                area_mm2=950,
+                connected_to=["host-0", "hbm-0"],
+                attributes={
+                    "source_refs": ["S09", "S10", "S21", "S22", "S23"],
+                    "matched_phase_groups": ["dense_linear_algebra", "hybrid_exchange"],
+                    "step3_model_assumption": "systolic reuse is represented by GEMM/batched_GEMM efficiency; tile scheduling is not RTL-accurate",
+                },
+            ),
+            _component("hbm-0", "hbm_memory", "gemm_tiles_hbm", ops=[], memory_gb=32, bandwidth_gbps=460, power_w=25, area_mm2=80, connected_to=["fpga-0"]),
+        ],
+        memory_hierarchy={"levels": ["host_dram", "fpga_hbm", "systolic_tile_buffers"], "total_capacity_bytes": int((256 + 32) * 1024**3)},
+        interconnect_topology={"type": "pcie_systolic_hbm", "bandwidth_gbps": 80.0, "latency_us": 1.5},
+        constraints=ConstraintSet(max_power_w=450.0, max_area_mm2=1250.0, min_memory_bytes=int(64 * 1024**3), required_routes=[("host-0", "fpga-0"), ("fpga-0", "hbm-0")], required_ops=["gemm", "batched_gemm", "reduction", "elementwise"]),
+        simulation_bindings={"systemc": "standalone_generic_systemc_v1"},
+        status=ArchitectureStatus.PROTOTYPE,
+        notes=[
+            "DFT dense-linear-algebra FPGA candidate from external systolic/GEMM evidence.",
+            "Step3-searchable; exact tile sizes and initiation intervals require future HLS/RTL evidence.",
+        ],
+    ))
+
+    catalog.add_instance(ArchitectureInstance(
+        architecture_id="dft-fpga-gpu-diag-hybrid-v0",
+        family_id="diag-heavy",
+        parameters={"replicas": 1, "clock_mhz": 300.0, "evidence_mode": "summary"},
+        components=[
+            _component("host-0", "host_cpu", "control_host", status=ArchitectureStatus.IMPLEMENTED, ops=["control", "fallback", "elementwise", "reduction"], memory_gb=512, bandwidth_gbps=100, power_w=180, connected_to=["gpu-0", "fpga-0"]),
+            _component("gpu-0", "gpu_sm", "dft_diagonalization_dense_gpu", ops=["gemm", "batched_gemm", "fft", "reduction", "elementwise", "eigen", "sparse_matmul"], memory_gb=80, bandwidth_gbps=2000, power_w=300, area_mm2=826, connected_to=["host-0", "fpga-0"], attributes={"source_refs": ["S03", "S04", "S05", "S06", "S26"], "matched_phase_groups": ["diagonalization", "dense_linear_algebra"]}),
+            _component("fpga-0", "fpga_fabric", "dft_streaming_sidecar", ops=["fft", "stream", "reduction", "elementwise", "gemm", "batched_gemm"], memory_gb=32, bandwidth_gbps=460, power_w=225, area_mm2=900, connected_to=["host-0", "gpu-0", "hbm-0"], attributes={"source_refs": ["S13", "S15", "S17"], "matched_phase_groups": ["fft_grid_density", "mixing_reduction"]}),
+            _component("hbm-0", "hbm_memory", "fpga_side_hbm", ops=[], memory_gb=64, bandwidth_gbps=920, power_w=30, area_mm2=80, connected_to=["fpga-0"]),
+        ],
+        memory_hierarchy={"levels": ["host_dram", "gpu_hbm", "fpga_hbm"], "total_capacity_bytes": int((512 + 80 + 64) * 1024**3)},
+        interconnect_topology={"type": "pcie_cxl_gpu_fpga", "bandwidth_gbps": 128.0, "latency_us": 1.0},
+        constraints=ConstraintSet(max_power_w=850.0, max_area_mm2=2200.0, min_memory_bytes=int(128 * 1024**3), required_routes=[("host-0", "gpu-0"), ("host-0", "fpga-0"), ("fpga-0", "hbm-0")], required_ops=["gemm", "batched_gemm", "fft", "reduction", "elementwise", "eigen"]),
+        simulation_bindings={"systemc": "standalone_generic_systemc_v1", "gem5_systemc": "gem5_systemc_descriptor_path_v1"},
+        status=ArchitectureStatus.PROTOTYPE,
+        notes=[
+            "DFT diagonalization/dense-linear-algebra hybrid candidate; Step4 sampling can exercise the generic descriptor path, but final hardware claims still require measured evidence.",
+        ],
+    ))
+
+    catalog.add_instance(ArchitectureInstance(
+        architecture_id="dft-memory-rich-hbm-v0",
+        family_id="memory-rich",
+        parameters={"replicas": 1, "clock_mhz": 280.0, "evidence_mode": "summary"},
+        components=[
+            _component("host-0", "host_cpu", "control_host", status=ArchitectureStatus.IMPLEMENTED, ops=["control", "fallback", "elementwise", "reduction"], memory_gb=512, bandwidth_gbps=100, power_w=180, connected_to=["fpga-0"]),
+            _component("fpga-0", "fpga_fabric", "dft_memory_rich_compute", ops=["fft", "stream", "stencil", "reduction", "elementwise", "gemm", "batched_gemm", "sparse_matmul"], memory_gb=48, bandwidth_gbps=920, power_w=260, area_mm2=1100, connected_to=["host-0", "hbm-0", "hbm-1"], attributes={"source_refs": ["S15", "S16", "S17", "S18", "S24", "S25"], "matched_phase_groups": ["fft_grid_density", "mixing_reduction", "dense_linear_algebra"]}),
+            _component("hbm-0", "hbm_memory", "hbm_bank_group_0", ops=[], memory_gb=64, bandwidth_gbps=920, power_w=30, area_mm2=80, connected_to=["fpga-0"]),
+            _component("hbm-1", "hbm_memory", "hbm_bank_group_1", ops=[], memory_gb=64, bandwidth_gbps=920, power_w=30, area_mm2=80, connected_to=["fpga-0"]),
+        ],
+        memory_hierarchy={"levels": ["host_dram", "fpga_hbm_group0", "fpga_hbm_group1", "fpga_local"], "total_capacity_bytes": int((512 + 64 + 64 + 48) * 1024**3)},
+        interconnect_topology={"type": "pcie_multi_hbm", "bandwidth_gbps": 128.0, "latency_us": 1.2},
+        constraints=ConstraintSet(max_power_w=600.0, max_area_mm2=1500.0, min_memory_bytes=int(192 * 1024**3), required_routes=[("host-0", "fpga-0"), ("fpga-0", "hbm-0"), ("fpga-0", "hbm-1")], required_ops=["fft", "stream", "reduction", "elementwise", "sparse_matmul"]),
+        simulation_bindings={"systemc": "standalone_generic_systemc_v1"},
+        status=ArchitectureStatus.PROTOTYPE,
+        notes=[
+            "Memory-rich DFT/HBM candidate; Step3 can compare timing with high-bandwidth memory but not bank conflict detail.",
+        ],
+    ))
+
+    catalog.add_instance(ArchitectureInstance(
+        architecture_id="dft-low-power-fpga-v0",
+        family_id="low-power",
+        parameters={"replicas": 1, "clock_mhz": 180.0, "evidence_mode": "summary"},
+        components=[
+            _component("host-0", "host_cpu", "control_host", status=ArchitectureStatus.IMPLEMENTED, ops=["control", "fallback", "elementwise", "reduction"], memory_gb=128, bandwidth_gbps=80, power_w=95, connected_to=["fpga-0"]),
+            _component("fpga-0", "fpga_fabric", "dft_low_power_offload", ops=["gemm", "batched_gemm", "fft", "reduction", "elementwise", "stream"], memory_gb=16, bandwidth_gbps=220, power_w=75, area_mm2=520, connected_to=["host-0"], attributes={"source_refs": ["S11", "S15", "S22", "S23"], "matched_phase_groups": ["fft_grid_density", "dense_linear_algebra", "mixing_reduction"], "step3_model_assumption": "lower clock/power approximates an energy-constrained FPGA template"}),
+        ],
+        memory_hierarchy={"levels": ["host_dram", "fpga_local"], "total_capacity_bytes": int((128 + 16) * 1024**3)},
+        interconnect_topology={"type": "pcie_low_power", "bandwidth_gbps": 48.0, "latency_us": 2.0},
+        constraints=ConstraintSet(max_power_w=220.0, max_area_mm2=700.0, min_memory_bytes=int(64 * 1024**3), required_routes=[("host-0", "fpga-0")], required_ops=["gemm", "batched_gemm", "fft", "reduction", "elementwise"]),
+        simulation_bindings={"systemc": "standalone_generic_systemc_v1"},
+        status=ArchitectureStatus.PROTOTYPE,
+        notes=[
+            "Low-power FPGA DFT candidate; useful as an energy bound in Step3, not a DVFS/thermal model.",
+        ],
     ))
 
     catalog.add_instance(ArchitectureInstance(

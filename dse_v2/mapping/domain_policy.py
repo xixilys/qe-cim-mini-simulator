@@ -62,8 +62,8 @@ class Step2CandidateHints:
 
     The payload is deliberately generic at the top level: mappings use generic
     node ids and resource target ids/types.  Domain-specific detail must remain
-    optional and namespaced under ``annotations`` (for example
-    ``annotations["dft"]``).
+    optional and namespaced under ``annotations`` by the emitting policy's
+    ``domain_key``.
     """
 
     policy_id: str

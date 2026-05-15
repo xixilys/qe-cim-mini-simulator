@@ -62,6 +62,15 @@ def test_sparse_step1_step2_step3_full_flow_evidence_without_qe_fields(tmp_path)
     assert request["step2_handoff"]["present"] is True
     assert request["design_point"]["mapping_id"]
     assert request["mapping"] == _load(step2_dir / "design_point.json")["task_mapping"]
+    selected_record = _load(step2_dir / "mapping_selected_record.json")
+    translation = request["candidate_translation"]
+    assert translation["schema_version"] == "dse.step3.candidate_to_systemc_request.v1"
+    assert translation["translator"] == "dse_v2.backends.generic_systemc_bridge.GenericSystemCBackend._build_request"
+    assert translation["step2_handoff_present"] is True
+    assert translation["candidate_id"] == selected_record["candidate_id"]
+    assert translation["request_schema_version"] == request["schema_version"]
+    assert translation["replay_artifacts"]["workload_package"] == "workload_package.json"
+    assert translation["trusted_final_claim"] is False
     request_text = json.dumps(request)
     assert all(token not in request_text for token in QE_ONLY_TOKENS)
     for artifact in STEP2_INPUT_ARTIFACTS:
@@ -112,6 +121,9 @@ def test_gem5_systemc_step3_blocks_when_real_l4_config_is_missing(tmp_path):
     )
 
     codesign_verdict = _load(step3_dir / "codesign_verdict.json")
+    request = _load(step3_dir / "simulation_request.json")
+    descriptor = _load(step3_dir / "generic_accel_command_descriptor.json")
+    observed_descriptor = _load(step3_dir / "gem5_command_descriptor.json")
     l4_trace = _load(step3_dir / "l4_execution_trace.json")
     completion = _load(step3_dir / "completion_proof.json")
     proof = _load(step3_dir / "gem5_l4_proof.json")
@@ -120,6 +132,20 @@ def test_gem5_systemc_step3_blocks_when_real_l4_config_is_missing(tmp_path):
 
     assert step3.status == "simulation_completed_untrusted"
     assert step3.trusted_for_final_ranking is False
+    assert descriptor["schema_version"] == "gsim.generic_accel_command_descriptor_translation.v1"
+    assert descriptor["translator"] == "dse_v2.backends.gem5_systemc_adapter.build_generic_accel_command_descriptor"
+    assert descriptor["request_schema_version"] == "gsim.request.v1"
+    assert descriptor["request_mode"] == "gem5_cosim"
+    assert descriptor["descriptor"]["magic"] == "0x4753494d"
+    assert descriptor["descriptor"]["version"] == 1
+    assert descriptor["descriptor"]["type"] == 1
+    assert descriptor["descriptor"]["request_addr"] == 0x08001000
+    assert descriptor["descriptor"]["result_addr"] == 0x08120000
+    assert descriptor["completion_addr"] == 0x08110000
+    assert descriptor["trusted_final_claim"] is False
+    assert request["generic_accel_descriptor_translation"] == descriptor
+    assert observed_descriptor["planned_descriptor_translation"] == descriptor
+    assert step3.artifact_paths["generic_accel_command_descriptor"] == "generic_accel_command_descriptor.json"
     assert codesign_verdict["status"] == "blocked"
     assert codesign_verdict["trusted_for_codesign_ranking"] is False
     assert codesign_verdict["blocked_claims"]

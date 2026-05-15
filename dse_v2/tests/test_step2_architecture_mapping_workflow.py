@@ -8,6 +8,7 @@ import importlib
 import sys
 from pathlib import Path
 
+from dse_v2.architecture.catalog import seed_generic_dse_architecture_catalog
 from dse_v2.backends.generic_systemc_bridge import GenericSystemCBackend
 from dse_v2.core.ir.compute_graph import ComputeGraph, ComputeNode, DataEdge, TensorSpec
 from dse_v2.core.workload import (
@@ -31,6 +32,7 @@ from dse_v2.mapping.step2_workflow import (
     STEP2_REQUIRED_MAPPING_ARTIFACTS,
     load_step2_design_point,
     run_step2_architecture_screening_workflow,
+    run_step2_architecture_mapping_workflow_from_step1,
     run_step2_architecture_mapping_workflow,
     validate_step2_artifacts,
 )
@@ -47,6 +49,16 @@ REPRESENTATIVE_BUILDERS = {
 
 
 QE_PHASE_NAMES = {"h_psi", "s_psi", "diagonalize", "mix_rho", "veff"}
+
+DFT_RESEARCH_ARCHITECTURE_IDS = [
+    "dft-cpu-baseline-v0",
+    "dft-fpga-hbm-streaming-v0",
+    "dft-fpga-fft-grid-v0",
+    "dft-fpga-systolic-gemm-v0",
+    "dft-fpga-gpu-diag-hybrid-v0",
+    "dft-memory-rich-hbm-v0",
+    "dft-low-power-fpga-v0",
+]
 
 
 def _load_json(path: Path):
@@ -188,10 +200,12 @@ class _RecordingPhasePolicy:
 
     def build_hints(self, policy_input, catalog, architecture_id):
         phase_summary = (policy_input.workload_characterization or {}).get("domain_phase_summary", {})
+        graph = policy_input.executable_graph or policy_input.source_graph
+        node_ids = list(graph.nodes)
         return Step2CandidateHints(
             policy_id=self.policy_id,
             domain_key=self.domain_key,
-            node_target_preferences={},
+            node_target_preferences={node_ids[0]: ["fpga", "host"]} if node_ids else {},
             mapping_seeds=[{
                 "seed_name": f"policy:{self.policy_id}:noop",
                 "description": "test policy emits replayable no-op hints",
@@ -336,11 +350,15 @@ def test_step2_domain_policy_registry_selects_without_dft_required_fields(tmp_pa
     )
 
     hints = _load_json(tmp_path / "domain_policy_hints.json")
+    selected = _load_json(tmp_path / "mapping_selected_record.json")
     assert result.status == "ready_for_step3_simulation"
     assert package.domain_metadata == {}
+    assert hints["policy_id"] == policy.policy_id
     assert hints["policy_ids"] == [policy.policy_id]
+    assert hints["node_target_preferences"]
     assert hints["policies"][0]["domain_key"] == "phase_test"
     assert hints["policies"][0]["trusted_final_claim"] is False
+    assert selected["domain_policy"]["policy_id"] == policy.policy_id
     assert policy.inputs[-1].summary_dict()["domain_metadata_keys"] == []
 
 
@@ -624,10 +642,27 @@ def test_step2_downgrades_missing_binding_and_diagnostic_claim_boundary(tmp_path
     unbound_queue = _load_json(tmp_path / "unbound" / "step3_simulation_queue.json")
     diagnostic_queue = _load_json(tmp_path / "diagnostic" / "step3_simulation_queue.json")
     assert unbound_queue["queue_mode"] == "selected-entry-only"
+    assert unbound_queue["claim_status"] == "legacy_pilot_only"
+    assert unbound_queue["retention_policy"] == "legacy_pilot_regression_only"
+    assert unbound_queue["release_completion_eligible"] is False
+    assert unbound_queue["blocked_claims"] == ["step2_full_dse_complete", "deliverable_complete"]
+    assert "cannot establish Step2 full-DSE completion" in unbound_queue["claim_boundary"]
     assert unbound_queue["entries"][0]["queue_state"] == "blocked_not_promoted"
+    assert unbound_queue["entries"][0]["claim_status"] == "legacy_pilot_only"
+    assert unbound_queue["entries"][0]["retention_policy"] == "legacy_pilot_regression_only"
+    assert unbound_queue["entries"][0]["release_completion_eligible"] is False
+    assert unbound_queue["entries"][0]["blocked_claims"] == ["step2_full_dse_complete", "deliverable_complete"]
     assert unbound_queue["entries"][0]["promoted_for_simulation"] is False
     assert unbound_queue["entries"][0]["trusted_final_claim"] is False
+    assert diagnostic_queue["claim_status"] == "legacy_pilot_only"
+    assert diagnostic_queue["retention_policy"] == "legacy_pilot_regression_only"
+    assert diagnostic_queue["release_completion_eligible"] is False
+    assert diagnostic_queue["blocked_claims"] == ["step2_full_dse_complete", "deliverable_complete"]
     assert diagnostic_queue["entries"][0]["queue_state"] == "blocked_claim_boundary"
+    assert diagnostic_queue["entries"][0]["claim_status"] == "legacy_pilot_only"
+    assert diagnostic_queue["entries"][0]["retention_policy"] == "legacy_pilot_regression_only"
+    assert diagnostic_queue["entries"][0]["release_completion_eligible"] is False
+    assert diagnostic_queue["entries"][0]["blocked_claims"] == ["step2_full_dse_complete", "deliverable_complete"]
     assert diagnostic_queue["entries"][0]["promoted_for_simulation"] is False
     assert any(reason["reason_id"] == "diagnostic_claim_boundary" for reason in diagnostic_queue["entries"][0]["blocked_reasons"])
 
@@ -682,8 +717,19 @@ def test_step2_screens_multiple_architectures_without_breaking_step3_handoff(tmp
     assert screening_candidate_set["policy_scope"] == "architecture_screening"
     assert screening_candidate_set["candidate_count"] == 2
     assert screening_queue["queue_mode"] == "selected-entry-only"
+    assert screening_queue["claim_status"] == "legacy_pilot_only"
+    assert screening_queue["retention_policy"] == "legacy_pilot_regression_only"
+    assert screening_queue["release_completion_eligible"] is False
+    assert screening_queue["blocked_claims"] == ["step2_full_dse_complete", "deliverable_complete"]
+    assert "cannot establish Step2 full-DSE completion" in screening_queue["claim_boundary"]
     assert screening_queue["entry_count"] == 2
     assert {entry["architecture_id"] for entry in screening_queue["entries"]} == {"balanced-generic-systemc-v0", "future-custom-candidate-v0"}
+    assert {entry["claim_status"] for entry in screening_queue["entries"]} == {"legacy_pilot_only"}
+    assert {entry["retention_policy"] for entry in screening_queue["entries"]} == {"legacy_pilot_regression_only"}
+    assert {entry["release_completion_eligible"] for entry in screening_queue["entries"]} == {False}
+    assert {tuple(entry["blocked_claims"]) for entry in screening_queue["entries"]} == {
+        ("step2_full_dse_complete", "deliverable_complete")
+    }
     assert {entry["queue_state"] for entry in screening_queue["entries"]} == {"scheduled_for_simulation", "blocked_not_promoted"}
     assert set(by_architecture) == {"balanced-generic-systemc-v0", "future-custom-candidate-v0"}
     assert by_architecture["balanced-generic-systemc-v0"]["step2_status"] == "ready_for_step3_simulation"
@@ -697,3 +743,37 @@ def test_step2_screens_multiple_architectures_without_breaking_step3_handoff(tmp
     _, _, _, request = _roundtrip_backend_request(balanced_dir)
     assert request["step2_handoff"]["present"] is True
     assert request["design_point"]["architecture_id"] == "balanced-generic-systemc-v0"
+
+
+def test_dft_research_architecture_instances_are_cataloged_and_step3_searchable(tmp_path):
+    catalog = seed_generic_dse_architecture_catalog()
+    validation = catalog.validate()
+    errors = [message.to_dict() for message in validation if message.severity == "error"]
+
+    assert errors == []
+    assert set(DFT_RESEARCH_ARCHITECTURE_IDS).issubset(catalog.instances)
+    for architecture_id in DFT_RESEARCH_ARCHITECTURE_IDS:
+        instance = catalog.instances[architecture_id]
+        assert instance.simulation_bindings.get("systemc") == "standalone_generic_systemc_v1"
+        assert instance.components
+        assert instance.notes
+
+    package = create_qe_reference_package({"npw": 64, "nkb": 16, "m": 4, "nfft": 1024})
+    result = run_step2_architecture_screening_workflow(
+        package,
+        architecture_ids=DFT_RESEARCH_ARCHITECTURE_IDS,
+        output_dir=tmp_path,
+    )
+    screening_queue = _load_json(tmp_path / "step3_simulation_queue.json")
+    screening_candidate_set = _load_json(tmp_path / "architecture_candidate_set.json")
+    records = result.artifacts["architecture_screening_records"]["records"]
+
+    assert result.status == "architecture_screening_completed"
+    assert screening_candidate_set["candidate_count"] == len(DFT_RESEARCH_ARCHITECTURE_IDS)
+    assert screening_queue["entry_count"] == len(DFT_RESEARCH_ARCHITECTURE_IDS)
+    assert {entry["architecture_id"] for entry in screening_queue["entries"]} == set(DFT_RESEARCH_ARCHITECTURE_IDS)
+    assert {entry["queue_state"] for entry in screening_queue["entries"]} == {"scheduled_for_simulation"}
+    assert all(record["step3_searchable"] is True for record in records)
+    assert all(record["promoted_for_simulation"] is True for record in records)
+    assert all(record["candidate_only_reasons"] for record in records)
+    assert all("Step3-searchable" in record["candidate_only_reasons"][0]["detail"] for record in records)

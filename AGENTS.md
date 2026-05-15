@@ -47,6 +47,52 @@ For Python DSE edits, run the smallest relevant `dse_v2/tests` target, then `pyt
 - Expect a dirty working tree.  Do not revert unrelated user changes.
 - Avoid committing generated caches, local simulator builds, gem5 m5out directories, and scratch `tmp*/` outputs.
 
+## Anti-downgrade completion discipline
+
+Do not silently downgrade broad architecture/research/system goals into a
+small vertical slice and call it complete.
+
+- Always distinguish **vertical slice**, **MVP**, and **deliverable-complete**
+  status in progress and final reports.
+- Passing tests, green manifests, or runnable demos are evidence only; they are
+  not sufficient proof that the requested system is complete.
+- Before claiming completion, build a prompt-to-artifact checklist that maps
+  every explicit requirement and core semantic requirement to concrete files,
+  artifacts, reports, tests, or command output.
+- If any core requirement is missing, partial, weakly verified, or only covered
+  by a fixed/manual placeholder, report **partial** and continue or state the
+  blocker.  Do not mark a goal complete.
+- Do not treat hard-coded fixed candidates as a real search system when the
+  user asked for architecture/search/design-space exploration.  Fixed instances
+  may be seeds or a vertical slice, but they are not completion by themselves.
+- For Step2 architecture-search work, real completion requires, unless the user
+  explicitly narrows scope:
+  - architecture family/search-space definitions;
+  - parameterized candidate generation;
+  - workload-aware screening/pruning;
+  - generated candidate records with parameters and provenance;
+  - explicit promotion/blocker reasons;
+  - replayable artifacts such as `architecture_search_space.json`,
+    `architecture_candidate_generation_report.json`, and
+    `architecture_screening_report.json` when applicable.
+- Keep Step boundaries precise:
+  - Step1 describes workload facts/summaries/hints only.
+  - Step2 owns architecture candidate generation, architecture screening,
+    mapping/co-design candidate generation, and promotion decisions.
+  - Step3 evaluates Step2-promoted candidates with timing simulation.
+  - Step4 provides higher-confidence gem5/closure evidence.
+- Use precise eligibility names: prefer `step2_screenable`,
+  `step3_evaluable`, `simulation_eligible`, and `simulation_blockers` over
+  ambiguous terms such as `step3_searchable`.
+- For large architecture or DSE tasks, run an adversarial self-audit before
+  finalizing: ask whether the result is only a shallow vertical slice, whether
+  placeholders are being presented as search, and whether tests actually cover
+  the user's real objective.  Use delegated verifier/critic review only when
+  permitted by the active orchestration rules.
+- If the user's real objective is broader than the written acceptance checklist,
+  do not exploit the checklist minimum.  Surface the gap and keep the completion
+  status honest.
+
 ## Style
 
 - Python: 4 spaces, standard library first, explicit error returns for CLI scripts.

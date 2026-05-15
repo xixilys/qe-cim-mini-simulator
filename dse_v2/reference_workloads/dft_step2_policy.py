@@ -20,12 +20,59 @@ DFT_DOMAIN_KEY = "dft"
 DFT_HARD_REVIEW_FLAGS = {"project_critical_conflict", "segmentation_uncertain"}
 DFT_SOFT_REVIEW_FLAGS = {"insufficient_evidence", "important_input_parameter"}
 
+DFT_ARCHITECTURE_FAMILIES: List[Dict[str, Any]] = [
+    {
+        "architecture_id": "dft-cpu-baseline-v0",
+        "candidate_role": "CPU-only DFT baseline and host-visible fallback reference",
+        "phase_groups": ["generic_dft_safe_op", "extension_or_unknown"],
+        "source_refs": ["S01", "S03", "S04", "S05", "S06"],
+    },
+    {
+        "architecture_id": "dft-fpga-hbm-streaming-v0",
+        "candidate_role": "FPGA/HBM streaming candidate for FFT, density, grid, reductions, and bandwidth-heavy kernels",
+        "phase_groups": ["fft_grid_density", "mixing_reduction", "hybrid_exchange", "projector_augmentation"],
+        "source_refs": ["S13", "S15", "S16", "S17", "S19", "S20", "S22"],
+    },
+    {
+        "architecture_id": "dft-fpga-fft-grid-v0",
+        "candidate_role": "FPGA FFT/grid pipeline candidate for reciprocal/real-space transforms and density grids",
+        "phase_groups": ["fft_grid_density"],
+        "source_refs": ["S17", "S19", "S20", "S25"],
+    },
+    {
+        "architecture_id": "dft-fpga-systolic-gemm-v0",
+        "candidate_role": "FPGA systolic GEMM/batched-GEMM candidate for h_psi, subspace rotation, and hybrid-exchange blocks",
+        "phase_groups": ["dense_linear_algebra", "hybrid_exchange"],
+        "source_refs": ["S09", "S10", "S21", "S22", "S23"],
+    },
+    {
+        "architecture_id": "dft-fpga-gpu-diag-hybrid-v0",
+        "candidate_role": "GPU+FPGA hybrid candidate for diagonalization/dense phases with FPGA streaming sidecar",
+        "phase_groups": ["diagonalization", "dense_linear_algebra", "fft_grid_density"],
+        "source_refs": ["S03", "S04", "S05", "S06", "S13", "S26"],
+    },
+    {
+        "architecture_id": "dft-memory-rich-hbm-v0",
+        "candidate_role": "Memory-rich HBM candidate for FFT/grid/reduction/sparse or block-matrix phases",
+        "phase_groups": ["fft_grid_density", "mixing_reduction", "dense_linear_algebra", "projector_augmentation"],
+        "source_refs": ["S15", "S16", "S17", "S18", "S24", "S25"],
+    },
+    {
+        "architecture_id": "dft-low-power-fpga-v0",
+        "candidate_role": "Energy-constrained FPGA candidate for smaller FFT/GEMM/reduction workloads",
+        "phase_groups": ["fft_grid_density", "dense_linear_algebra", "mixing_reduction"],
+        "source_refs": ["S11", "S15", "S22", "S23"],
+    },
+]
+
 _SAFE_GENERIC_OP_PREFERENCES: Dict[str, List[str]] = {
     "gemm": ["gpu", "fpga", "host"],
     "batched_gemm": ["gpu", "fpga", "host"],
     "fft": ["fpga", "gpu", "host"],
     "eigen": ["gpu", "fpga", "host"],
     "eigensolver": ["gpu", "fpga", "host"],
+    "sparse_matmul": ["fpga", "gpu", "host"],
+    "spmm": ["fpga", "gpu", "host"],
     "reduction": ["fpga", "gpu", "cim", "host"],
     "elementwise": ["gpu", "fpga", "cim", "host"],
     "dma_load": ["fpga", "gpu", "host"],
@@ -58,6 +105,10 @@ def _domain_phase_summary(policy_input: Step2PolicyInput) -> Dict[str, Any]:
     summary = characterization.get("domain_phase_summary")
     if isinstance(summary, Mapping):
         return dict(summary)
+    dft_metadata = _dft_metadata(policy_input)
+    summary = dft_metadata.get("domain_phase_summary")
+    if isinstance(summary, Mapping):
+        return dict(summary)
     domain_characterization = _as_mapping(policy_input.workload_package.domain_metadata.get("characterization"))
     summary = domain_characterization.get("domain_phase_summary")
     return dict(summary) if isinstance(summary, Mapping) else {}
@@ -81,6 +132,36 @@ def _phase_records(metadata: Mapping[str, Any], summary: Mapping[str, Any]) -> D
     for phase in metadata.get("phases", []) or []:
         if isinstance(phase, Mapping) and phase.get("phase_id"):
             phases[str(phase["phase_id"])] = dict(phase)
+    workflow = _as_mapping(metadata.get("workflow"))
+    for stage in workflow.get("stages", []) or []:
+        if not isinstance(stage, Mapping):
+            continue
+        for phase in stage.get("phase_skeleton", []) or []:
+            if not isinstance(phase, Mapping) or not phase.get("phase_id"):
+                continue
+            phase_id = str(phase["phase_id"])
+            existing = dict(phases.get(phase_id, {}))
+            merged = dict(phase)
+            merged.setdefault("stage_ids", [])
+            stage_ids = list(merged.get("stage_ids", []) or [])
+            if stage.get("stage_id") and stage.get("stage_id") not in stage_ids:
+                stage_ids.append(stage.get("stage_id"))
+            merged["stage_ids"] = stage_ids
+            merged.setdefault("workflow_stage_type", stage.get("stage_type"))
+            existing.update({k: v for k, v in merged.items() if v is not None})
+            phases[phase_id] = existing
+    for claim in workflow.get("hotspot_claims", []) or []:
+        if not isinstance(claim, Mapping) or not claim.get("phase_id"):
+            continue
+        phase_id = str(claim["phase_id"])
+        existing = dict(phases.get(phase_id, {}))
+        if claim.get("claim_kind") in {"hotspot", "dominance"}:
+            existing.setdefault("phase_id", phase_id)
+            existing.setdefault("kernel_kind", claim.get("kernel_kind"))
+            existing.setdefault("evidence_level", claim.get("evidence_level"))
+            if claim.get("claim_kind") == "dominance":
+                existing["dominance"] = "dominant"
+        phases[phase_id] = existing
     for phase in summary.get("phase_summaries", []) or []:
         if isinstance(phase, Mapping) and phase.get("phase_id"):
             existing = dict(phases.get(str(phase["phase_id"]), {}))
@@ -94,6 +175,12 @@ def _phase_group(phase_id: str, op_type: str) -> str:
     op = op_type.lower()
     if phase.startswith("unknown:") or phase.startswith("extension:"):
         return "extension_or_unknown"
+    if "exx" in phase or "exact_exchange" in phase or "hybrid" in phase or "fock" in phase:
+        return "hybrid_exchange"
+    if "uspp" in phase or "ultrasoft" in phase or "beta" in phase or "augmentation" in phase:
+        return "projector_augmentation"
+    if "nonlocal" in phase or "nloc" in phase or "projector" in phase:
+        return "projector_augmentation"
     if phase in {"h_psi", "s_psi", "v_psi", "subspace_rotation", "rotate_wfc"} or op in {"gemm", "batched_gemm"}:
         return "dense_linear_algebra"
     if "fft" in phase or "density" in phase or "rho" in phase or "grid" in phase or op == "fft":
@@ -109,6 +196,10 @@ def _phase_group(phase_id: str, op_type: str) -> str:
 
 def _preferences_for(phase_group: str, op_type: str) -> Tuple[List[str], bool, str]:
     op = op_type.lower()
+    if phase_group == "hybrid_exchange":
+        return ["fpga", "gpu", "host"], False, "hybrid/exact-exchange phase can seed tiled streaming FPGA/GPU candidates"
+    if phase_group == "projector_augmentation":
+        return ["fpga", "gpu", "host"], False, "projector/augmentation phase can seed bandwidth-aware FPGA/GPU candidates"
     if phase_group == "dense_linear_algebra":
         return ["fpga", "gpu", "host"], False, "dense linear algebra phase can seed FPGA/GPU candidates"
     if phase_group == "fft_grid_density":
@@ -118,7 +209,7 @@ def _preferences_for(phase_group: str, op_type: str) -> Tuple[List[str], bool, s
     if phase_group == "mixing_reduction":
         return ["fpga", "gpu", "cim", "host"], False, "mixing/reduction phase can seed reduction-friendly candidates"
     if phase_group == "extension_or_unknown" and op in _SAFE_GENERIC_OP_PREFERENCES:
-        return list(_SAFE_GENERIC_OP_PREFERENCES[op]), True, "extension/unknown phase constrained to generic op-type preferences"
+        return list(_SAFE_GENERIC_OP_PREFERENCES[op]), False, "extension/unknown phase safely mapped by generic op-type preferences"
     if phase_group == "extension_or_unknown":
         return ["host"], True, "extension/unknown phase remains host-visible until reviewed"
     if op in _SAFE_GENERIC_OP_PREFERENCES:
@@ -131,7 +222,9 @@ def _review_flags(metadata: Mapping[str, Any], summary: Mapping[str, Any]) -> Li
     coverage = _as_mapping(metadata.get("coverage"))
     flags.update(str(flag) for flag in coverage.get("review_flags", []) or [])
     flags.update(str(flag) for flag in summary.get("review_flags", []) or [])
-    for conflict in metadata.get("conflicts", []) or []:
+    summary_coverage = _as_mapping(summary.get("coverage_summary"))
+    flags.update(str(flag) for flag in summary_coverage.get("review_flags", []) or [])
+    for conflict in list(metadata.get("conflicts", []) or []) + list(summary.get("conflicts", []) or []):
         if isinstance(conflict, Mapping):
             flags.update(str(flag) for flag in conflict.get("review_flags", []) or [])
     return sorted(flags)
@@ -166,6 +259,67 @@ def _phase_group_summary(hints: Sequence[_DftNodeHint]) -> Dict[str, List[str]]:
         if hint.phase_id not in groups[hint.phase_group]:
             groups[hint.phase_group].append(hint.phase_id)
     return {group: sorted(values) for group, values in groups.items()}
+
+
+def _catalog_step3_searchable(catalog: ArchitectureCatalog, architecture_id: str) -> Tuple[bool, List[str]]:
+    instance = catalog.instances.get(architecture_id)
+    if instance is None:
+        return False, ["architecture instance is absent from the active catalog"]
+    if not instance.components:
+        return False, ["architecture has no concrete component set"]
+    binding_id = instance.simulation_bindings.get("systemc")
+    if not binding_id:
+        return False, ["systemc binding is absent"]
+    binding = catalog.simulation_bindings.get(binding_id)
+    if binding is None:
+        return False, [f"systemc binding {binding_id!r} is absent from catalog"]
+    if not binding.is_trusted_eligible():
+        return False, [binding.unavailable_reason or "systemc binding is not implemented for timing samples"]
+    return True, []
+
+
+def _dft_architecture_candidates(
+    catalog: ArchitectureCatalog,
+    phase_groups: Mapping[str, Sequence[str]],
+) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    observed_groups = set(str(group) for group in phase_groups)
+    candidates: List[Dict[str, Any]] = []
+    preferences: List[Dict[str, Any]] = []
+    for family in DFT_ARCHITECTURE_FAMILIES:
+        architecture_id = str(family["architecture_id"])
+        step3_searchable, blockers = _catalog_step3_searchable(catalog, architecture_id)
+        matched_groups = sorted(observed_groups & set(str(group) for group in family.get("phase_groups", []) or []))
+        candidate = {
+            "architecture_id": architecture_id,
+            "candidate_role": family["candidate_role"],
+            "matched_phase_groups": matched_groups,
+            "source_refs": list(family.get("source_refs", []) or []),
+            "step3_searchable": step3_searchable,
+            "candidate_only": not step3_searchable,
+            "step3_blockers": blockers,
+            "trusted_final_claim": False,
+        }
+        candidates.append(candidate)
+        score = len(matched_groups)
+        if architecture_id == "dft-cpu-baseline-v0":
+            score = max(score, 1)
+        if score or step3_searchable:
+            preferences.append({
+                "architecture_id": architecture_id,
+                "preference_score": float(score) + (0.25 if step3_searchable else 0.0),
+                "matched_phase_groups": matched_groups,
+                "reason": (
+                    "matches observed DFT phase groups and is Step3-searchable"
+                    if matched_groups and step3_searchable
+                    else "kept as Step3-searchable baseline/fallback candidate"
+                    if step3_searchable
+                    else "candidate retained but Step3-blocked until blockers are resolved"
+                ),
+                "step3_searchable": step3_searchable,
+                "trusted_final_claim": False,
+            })
+    preferences.sort(key=lambda item: (-float(item.get("preference_score", 0.0)), str(item.get("architecture_id"))))
+    return candidates, preferences
 
 
 def _dominant_phase_ids(summary: Mapping[str, Any], phases: Mapping[str, Mapping[str, Any]]) -> List[str]:
@@ -205,12 +359,18 @@ class DftStep2ReferencePolicy:
         phases = _phase_records(metadata, summary)
         node_hints = _node_hints(policy_input, phases)
         review_flags = _review_flags(metadata, summary)
-        if any(hint.phase_group == "extension_or_unknown" for hint in node_hints):
-            review_flags = sorted(set(review_flags) | {"segmentation_uncertain"})
         hard_flags = sorted(set(review_flags) & DFT_HARD_REVIEW_FLAGS)
         soft_flags = sorted(set(review_flags) & DFT_SOFT_REVIEW_FLAGS)
         dominant = _dominant_phase_ids(summary, phases)
         phase_groups = _phase_group_summary(node_hints)
+        architecture_candidates, architecture_preferences = _dft_architecture_candidates(catalog, phase_groups)
+        architecture_preferences.insert(0, {
+            "architecture_id": architecture_id,
+            "preference_score": 0.5,
+            "reason": "currently selected architecture remains in consideration; DFT policy adds research-derived candidate preferences",
+            "step3_searchable": bool(_catalog_step3_searchable(catalog, architecture_id)[0]),
+            "trusted_final_claim": False,
+        })
         node_preferences = {hint.node_id: list(hint.preferences) for hint in node_hints}
         candidate_only_nodes = [hint.node_id for hint in node_hints if hint.candidate_only]
         priority_reasons = [
@@ -222,27 +382,8 @@ class DftStep2ReferencePolicy:
             policy_id=self.policy_id,
             domain_key=self.domain_key,
             matched=True,
-            architecture_candidates=[
-                {
-                    "architecture_id": "dft-fpga-hbm-streaming-v0",
-                    "candidate_role": "FPGA/HBM/host-oriented candidate for FFT, density, grid, and reductions",
-                    "candidate_only": True,
-                    "trusted_final_claim": False,
-                },
-                {
-                    "architecture_id": "dft-fpga-diag-hybrid-v0",
-                    "candidate_role": "FPGA+GPU hybrid candidate for diagonalization and dense phases",
-                    "candidate_only": True,
-                    "trusted_final_claim": False,
-                },
-            ],
-            architecture_preferences=[
-                {
-                    "architecture_id": architecture_id,
-                    "reason": "selected architecture remains generic; DFT policy only adds optional candidate hints",
-                    "trusted_final_claim": False,
-                }
-            ],
+            architecture_candidates=architecture_candidates,
+            architecture_preferences=architecture_preferences,
             node_target_preferences=node_preferences,
             mapping_seeds=[
                 {
@@ -326,6 +467,7 @@ class DftStep2ReferencePolicy:
                     "conflicts": list(metadata.get("conflicts", []) or []),
                     "limitations": sorted(set(list(metadata.get("limitations", []) or []) + list(summary.get("limitations", []) or []))),
                     "policy_scope": "candidate_generation_only_no_step2_final_claim",
+                    "architecture_taxonomy_doc": "docs/architecture/dft_architecture_family_research.md",
                 }
             },
             trusted_final_claim=False,
@@ -345,6 +487,7 @@ def dft_step2_policy_registry() -> Step2DomainPolicyRegistry:
 
 __all__ = [
     "DFT_DOMAIN_KEY",
+    "DFT_ARCHITECTURE_FAMILIES",
     "DFT_HARD_REVIEW_FLAGS",
     "DFT_SOFT_REVIEW_FLAGS",
     "DFT_STEP2_POLICY_ID",

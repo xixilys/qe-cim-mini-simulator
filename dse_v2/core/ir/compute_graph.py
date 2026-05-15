@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Level 3 Compute Graph IR: domain-neutral workload graph.
 
-The graph is intentionally not QE-specific and not DAG-only.  It can carry
+The graph is intentionally not tied to one workload family and not DAG-only.  It can carry
 ordinary dataflow DAGs, hierarchical regions, declared loop/feedback edges,
 streaming/state/control dependencies, and opaque adapter metadata.  Execution
 backends consume a lowered executable view produced by the workload lowering
@@ -509,4 +509,3 @@ def create_gemm_graph(graph_id: str = "gemm_example") -> ComputeGraph:
     graph.add_edge(DataEdge("B", "gemm", "B"))
     graph.add_edge(DataEdge("gemm", "bias", "C"))
     return graph
-

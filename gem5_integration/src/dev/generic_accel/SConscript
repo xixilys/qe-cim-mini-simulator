@@ -1,6 +1,6 @@
 Import('*')
 
-SimObject('GenericAccel.py')
+SimObject('GenericAccel.py', sim_objects=['GenericAccel'])
 Source('generic_accel.cc')
 
 DebugFlag('GenericAccel')

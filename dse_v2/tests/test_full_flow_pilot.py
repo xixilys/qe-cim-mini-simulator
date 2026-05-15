@@ -12,12 +12,14 @@ from pathlib import Path
 import dse_v2.backends.gem5_systemc_adapter as gem5_adapter_module
 from dse_v2.backends.generic_systemc_bridge import GenericSystemCBackend
 from dse_v2.backends.gem5_systemc_adapter import Gem5SystemCClosureAdapter
+from dse_v2.codesign.artifacts import build_codesign_l4_evidence, build_default_codesign_artifacts
 from dse_v2.core.workload import create_sparse_spmv_graph, package_from_graph
 from dse_v2.reference_workloads.dft_qe import QE_SCF_REQUIRED_COVERAGE, create_qe_reference_package
 from dse_v2.dse.orchestrator import DesignPoint
 from dse_v2.evidence.full_flow import (
     REQUIRED_EVIDENCE_FILES,
     build_gem5_l4_proof,
+    classify_gem5_l4_non_smoke,
     claim_can_be_trusted,
     write_full_flow_evidence,
 )
@@ -386,7 +388,9 @@ def test_gem5_systemc_good_result_requires_and_accepts_l4_proof(tmp_path):
         "driver_status_verified",
         "driver_completion_descriptor_verified",
         "result_status_passed",
+        "non_smoke_l4_activity",
     }
+    assert proof["non_smoke_classification"]["classification"] == "non_smoke"
     assert proof["missing_evidence"] == []
     assert proof["source_artifacts"]["gem5_log"] == "gem5.log"
     trusted_claims = [item for item in validation["validations"] if item["trusted"]]
@@ -394,6 +398,75 @@ def test_gem5_systemc_good_result_requires_and_accepts_l4_proof(tmp_path):
     assert all("gem5_l4_proof.json" in item["evidence_ids"] for item in trusted_claims)
     assert "gem5_l4_proof.json" in report["trusted_ranking"][0]["evidence_ids"]
     assert "gem5_l4_proof.json" in report["selected_recommendation"]["evidence_ids"]
+
+
+def test_codesign_artifacts_expose_l4_calibration_and_reference_feedback_hooks():
+    graph = create_sparse_spmv_graph("codesign_calibration_hooks")
+    package = package_from_graph(graph, workload_family="sparse_la", importer_id="generic_json")
+    architecture = build_pilot_architecture()
+    mapping = select_initial_mapping(graph, architecture)
+    design_point = DesignPoint(
+        design_point_id="codesign_calibration_hooks",
+        system_architecture=architecture,
+        task_mapping=mapping,
+        scheduling_policy="static_timing_level",
+        config={"backend": "gem5_systemc"},
+    )
+
+    artifacts = build_default_codesign_artifacts(
+        design_point=design_point,
+        workload_package=package,
+        executable_graph=graph,
+        architecture_artifact=architecture.to_dict(),
+        selected_record={"mapping_candidate_id": "seeded_candidate", "score": 1.0},
+        promotion_decision={"step3_evaluable": True, "reason": "test calibration hook"},
+        backend="gem5_systemc",
+        evidence_mode="summary",
+        l4_required=True,
+    )
+
+    assert artifacts["runtime_schedule"]["copy_compute_overlap"]["requires_l4_calibration"] is True
+    assert artifacts["codesign_candidate"]["promotion_policy"]["l4_required"] is True
+
+    l4 = build_codesign_l4_evidence(
+        codesign_candidate=artifacts["codesign_candidate"],
+        backend="gem5_systemc",
+        sim_result={
+            "status": "passed",
+            "metrics": {"latency_ms": 3.5, "dma_time_ms": 0.4, "device_time_ms": 2.6},
+            "resource_utilization": {"accelerator_busy_fraction": 0.75},
+            "gem5_systemc_blockers": [],
+        },
+        gem5_l4_proof={
+            "passed": True,
+            "checks": {
+                "descriptor_read_verified": True,
+                "request_decode_verified": True,
+                "microarchitecture_execute_verified": True,
+                "completion_writeback_verified": True,
+                "driver_status_verified": True,
+                "driver_completion_descriptor_verified": True,
+                "result_status_passed": True,
+            },
+            "missing_evidence": [],
+            "source_artifacts": {"gem5_log": "gem5.log", "systemc_stdout": "systemc_stdout.log"},
+        },
+        gem5_log=(
+            "descriptor_read verified=true request_bytes=1024\n"
+            "uarch_request_decode verified=true result_bytes=2048\n"
+            "microarchitecture_execute verified=true cycles=123\n"
+            "completion_writeback verified=true cycles=123\n"
+        ),
+        gem5_stdout="generic_accel_l4_status=1 error_code=0\ncompletion_magic=0x4753494d completion_status=0 cycles=123\n",
+        trusted_for_final=True,
+    )
+
+    feedback = l4["codesign_verdict"]["calibration_feedback"]
+    assert feedback["status"] == "available"
+    assert feedback["latency_ms"] == 3.5
+    assert feedback["dma_time_ms"] == 0.4
+    assert l4["dma_trace"]["total_payload_bytes_observed"] == 3072
+    assert l4["mmio_trace"]["mmio_count"] >= 4
 
 
 def test_gem5_microarchitecture_result_uses_internal_consistency_gate(tmp_path):
@@ -521,12 +594,52 @@ def test_gem5_l4_proof_fails_when_required_fields_are_missing():
     assert proof["checks"]["completion_writeback_verified"] is False
     assert proof["checks"]["driver_status_verified"] is True
     assert proof["checks"]["driver_completion_descriptor_verified"] is False
+    assert proof["checks"]["non_smoke_l4_activity"] is False
+    assert proof["non_smoke_classification"]["classification"] == "descriptor_only"
     assert proof["checks"]["result_status_passed"] is False
     assert "gem5.log must contain uarch_request_decode verified=true" in proof["missing_evidence"]
     assert "gem5.log must contain microarchitecture_execute verified=true" in proof["missing_evidence"]
     assert "L4 result JSON must have status=passed" in proof["missing_evidence"]
+    assert any("descriptor-only" in item for item in proof["missing_evidence"])
     assert proof["source_artifacts"]["gem5_log"] == "gem5.log"
     assert proof["source_artifacts"]["gem5_command_descriptor"] == "gem5_command_descriptor.json"
+
+
+def test_non_smoke_classifier_rejects_descriptor_only_and_host_only_l4_evidence():
+    descriptor_only = classify_gem5_l4_non_smoke(
+        "100: system.generic_accel: descriptor_read verified=true\n"
+        "200: system.generic_accel: completion_writeback verified=true\n",
+        {"schema_version": "gsim.result.v2", "status": "passed", "events": [], "microarchitecture_summary": {}},
+    )
+    host_only = classify_gem5_l4_non_smoke(
+        "100: system.generic_accel: descriptor_read verified=true\n"
+        "120: system.generic_accel: uarch_request_decode verified=true\n"
+        "180: system.generic_accel: microarchitecture_execute verified=true\n",
+        {
+            "schema_version": "gsim.result.v2",
+            "status": "passed",
+            "events": [{"node_id": "noop", "device": "host", "start_ns": 0, "end_ns": 1}],
+            "microarchitecture_summary": {"micro_op_count": 1, "total_cycles": 1},
+        },
+    )
+    non_smoke = classify_gem5_l4_non_smoke(
+        "100: system.generic_accel: descriptor_read verified=true\n"
+        "120: system.generic_accel: uarch_request_decode verified=true\n"
+        "180: system.generic_accel: microarchitecture_execute verified=true\n",
+        {
+            "schema_version": "gsim.result.v2",
+            "status": "passed",
+            "events": [{"node_id": "spmv", "device": "fpga-0", "start_ns": 0, "end_ns": 10}],
+            "microarchitecture_summary": {"micro_op_count": 3, "total_cycles": 128},
+        },
+    )
+
+    assert descriptor_only["classification"] == "descriptor_only"
+    assert descriptor_only["completion_eligible"] is False
+    assert host_only["classification"] == "smoke_or_host_only"
+    assert host_only["completion_eligible"] is False
+    assert non_smoke["classification"] == "non_smoke"
+    assert non_smoke["completion_eligible"] is True
 
 
 def test_gem5_systemc_failed_l4_proof_remains_untrusted_with_blocker(tmp_path):
@@ -604,7 +717,9 @@ def test_gem5_systemc_adapter_builds_available_artifacts_but_blocks_missing_real
     assert run["returncode"] == 2
     assert run["result"]["status"] == "blocked"
     blocker_ids = {blocker["id"] for blocker in run["result"]["gem5_systemc_blockers"]}
-    assert blocker_ids == {"gem5_config"}
+    assert "gem5_config" in blocker_ids
+    assert "gem5_driver" not in blocker_ids
+    assert blocker_ids <= {"gem5_config", "gem5_binary", "gem5_source_tree_missing", "gem5_build_failed"}
     assert run["gem5_l4_transport_proof"]["result_status_passed"] is False
     assert (tmp_path / "missing_l4_harness" / "gem5_command_descriptor.json").exists()
 
