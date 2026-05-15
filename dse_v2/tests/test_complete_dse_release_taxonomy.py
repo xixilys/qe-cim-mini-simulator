@@ -144,7 +144,9 @@ def test_freeze_gate_rejects_unpredeclared_or_illegal_release_candidates():
         "release_v1_status": "not_predeclared",
     }
     manifest["candidates"].append(row)
-    manifest["included_taxonomy_ids"].append("streaming_pipeline+spatial_pe_array")
+    manifest["included_taxonomy_ids"].append(
+        "streaming_pipeline+spatial_pe_array"
+    )
     manifest["candidate_count"] += 1
 
     verdict = build_freeze_gate_verdict(manifest)
