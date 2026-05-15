@@ -12,7 +12,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
-from typing import Any, Dict, Iterable, List, Mapping, Sequence
+from typing import Any, Dict, List, Mapping, Sequence
 
 from dse_v2.core.workload.package import WorkloadPackage
 from dse_v2.reference_workloads.dft_qe import DftQePwImporter, dft_qe_pw_profile
