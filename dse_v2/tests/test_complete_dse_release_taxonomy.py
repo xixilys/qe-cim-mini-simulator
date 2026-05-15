@@ -130,3 +130,31 @@ def test_freeze_gate_rejects_missing_required_taxonomy_entries():
         blocker["id"] == "missing_required_taxonomy_entries"
         for blocker in verdict["blockers"]
     )
+
+
+def test_freeze_gate_rejects_unpredeclared_or_illegal_release_candidates():
+    manifest = copy.deepcopy(build_release_subset_manifest())
+    row = copy.deepcopy(manifest["candidates"][0])
+    row["candidate_id"] = "cdse_unpredeclared_probe"
+    row["legal"] = False
+    row["identity"]["identity_layers"]["architecture_parameters"] = {
+        "taxonomy_id": "streaming_pipeline+spatial_pe_array",
+        "kind": "ad_hoc_composite",
+        "compute_organization": "unlisted composite",
+        "release_v1_status": "not_predeclared",
+    }
+    manifest["candidates"].append(row)
+    manifest["included_taxonomy_ids"].append("streaming_pipeline+spatial_pe_array")
+    manifest["candidate_count"] += 1
+
+    verdict = build_freeze_gate_verdict(manifest)
+
+    assert verdict["status"] == "blocked"
+    assert any(
+        blocker["id"] == "unpredeclared_release_taxonomy"
+        for blocker in verdict["blockers"]
+    )
+    assert any(
+        blocker["id"] == "illegal_candidate_in_release_subset"
+        for blocker in verdict["blockers"]
+    )
