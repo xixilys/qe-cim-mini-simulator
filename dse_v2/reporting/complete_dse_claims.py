@@ -357,6 +357,16 @@ def validate_l4_evidence_matrix_claims(
         missing_gates = [gate for gate in ROW_REQUIRED_GATES if gates.get(gate) is not True]
         if missing_gates:
             row_reasons.append("missing_required_gates:" + ",".join(missing_gates))
+        evidence_refs = row.get("evidence_refs", {})
+        if not isinstance(evidence_refs, Mapping):
+            evidence_refs = {}
+        missing_evidence_refs = [
+            gate
+            for gate in ROW_REQUIRED_GATES
+            if gates.get(gate) is True and not evidence_refs.get(gate)
+        ]
+        if missing_evidence_refs:
+            row_reasons.append("missing_required_evidence_refs:" + ",".join(missing_evidence_refs))
 
         if row_reasons:
             blockers.append({
