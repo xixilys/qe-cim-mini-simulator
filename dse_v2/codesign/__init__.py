@@ -17,6 +17,18 @@ from .evidence_ledger import (
     sha256_file,
     validate_candidate_evidence_ledger,
 )
+from .complete_dse_search_space import (
+    IDENTITY_LAYER_KEYS,
+    NON_IDENTITY_FIELDS,
+    build_architecture_search_space,
+    build_candidate_record,
+    build_freeze_gate_verdict,
+    build_release_subset_manifest,
+    classify_candidate_legality,
+    complete_dse_candidate_id,
+    validate_architecture_search_space,
+    write_complete_dse_search_space_artifacts,
+)
 
 __all__ = [
     "CODESIGN_L4_EVIDENCE_ARTIFACTS",
@@ -25,11 +37,21 @@ __all__ = [
     "LEDGER_VALIDATION_SCHEMA",
     "REQUIRED_EVIDENCE_REFS",
     "REQUIRED_ROW_FIELDS",
+    "IDENTITY_LAYER_KEYS",
+    "NON_IDENTITY_FIELDS",
     "artifact_ref",
+    "build_architecture_search_space",
+    "build_candidate_record",
     "build_codesign_l4_evidence",
     "build_default_codesign_artifacts",
+    "build_freeze_gate_verdict",
+    "build_release_subset_manifest",
+    "classify_candidate_legality",
+    "complete_dse_candidate_id",
     "sha256_file",
     "split_codesign_artifacts",
+    "validate_architecture_search_space",
     "validate_candidate_evidence_ledger",
     "validate_codesign_artifacts",
+    "write_complete_dse_search_space_artifacts",
 ]
