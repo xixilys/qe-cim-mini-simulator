@@ -28,7 +28,19 @@ constexpr uint32_t GsimMagic = 0x4753494d; // "GSIM"
 constexpr uint32_t GsimErrorDescriptor = 0x1001;
 constexpr uint32_t GsimErrorMicroarchitecture = 0x1101;
 constexpr size_t MaxJsonBytes = 1 << 20;
+constexpr size_t LegacyCommandDescriptorBytes = 48;
 constexpr const char *UarchEngine = "gem5_generic_accel_microarchitecture_v1";
+
+enum GsimDescriptorFlag : uint32_t {
+    GsimFlagRequestJson = 1u << 0,
+    GsimFlagResultJson = 1u << 1,
+    GsimFlagCompletionDesc = 1u << 2,
+    GsimFlagExtensionPayload = 1u << 3,
+    GsimFlagCandidateIdentity = 1u << 4,
+    GsimFlagCompileSchedule = 1u << 5,
+    GsimFlagRuntimeSchedule = 1u << 6,
+    GsimFlagSidecarDispatch = 1u << 7,
+};
 
 #pragma pack(push, 1)
 struct CommandDescriptor {
@@ -40,6 +52,16 @@ struct CommandDescriptor {
     uint64_t result_addr;
     uint64_t workspace_addr;
     uint64_t workspace_size;
+    uint64_t extension_payload_addr;
+    uint64_t extension_payload_bytes;
+    uint64_t candidate_identity_addr;
+    uint64_t candidate_identity_bytes;
+    uint64_t compile_schedule_addr;
+    uint64_t compile_schedule_bytes;
+    uint64_t runtime_schedule_addr;
+    uint64_t runtime_schedule_bytes;
+    uint64_t sidecar_dispatch_addr;
+    uint64_t sidecar_dispatch_bytes;
 };
 
 struct CompletionDescriptor {
@@ -82,6 +104,16 @@ struct ParsedAccel {
 
 struct ParsedRequest {
     std::string runId = "unknown";
+    std::string candidateId;
+    std::string algorithmId;
+    std::string architectureId;
+    std::string mappingId;
+    std::string compileScheduleId;
+    std::string runtimeScheduleId;
+    std::string workloadCaseId;
+    std::string sidecarDispatchMode = "in_gem5_uarch";
+    std::string sidecarModel;
+    bool qeExtensionPresent = false;
     std::map<std::string, ParsedNode> nodes;
     std::vector<ParsedEdge> edges;
     std::map<std::string, std::string> mapping;
@@ -120,6 +152,15 @@ std::string readGuestCString(System *sys, Addr addr, size_t maxBytes)
     sys->physProxy.readBlob(addr, buffer.data(), buffer.size());
     auto end = std::find(buffer.begin(), buffer.end(), '\0');
     return std::string(buffer.begin(), end);
+}
+
+std::string readOptionalGuestCString(System *sys, Addr addr, uint64_t bytes)
+{
+    if (addr == 0 || bytes == 0) {
+        return "";
+    }
+    const size_t boundedBytes = std::min<size_t>(static_cast<size_t>(bytes), MaxJsonBytes);
+    return readGuestCString(sys, addr, boundedBytes);
 }
 
 void skipWs(const std::string &s, size_t &pos)
@@ -352,6 +393,28 @@ ParsedRequest parseRequest(const std::string &json)
 {
     ParsedRequest req;
     req.runId = stringForKey(json, "run_id", "unknown");
+    req.workloadCaseId = stringForKey(json, "workload_case_id", "");
+
+    const std::string candidateIdentity = valueForKey(json, "candidate_identity");
+    const std::string candidateTranslation = valueForKey(json, "candidate_translation");
+    req.candidateId = stringForKey(candidateIdentity, "candidate_id",
+                                   stringForKey(candidateTranslation, "candidate_id", ""));
+    req.algorithmId = stringForKey(candidateIdentity, "algorithm_id", "");
+    req.architectureId = stringForKey(candidateIdentity, "architecture_id", "");
+    req.mappingId = stringForKey(candidateIdentity, "mapping_id", "");
+
+    const std::string compileSchedule = valueForKey(json, "compile_schedule");
+    req.compileScheduleId = stringForKey(compileSchedule, "schedule_id",
+                                         stringForKey(candidateIdentity, "compile_schedule_id", ""));
+    const std::string runtimeSchedule = valueForKey(json, "runtime_schedule");
+    req.runtimeScheduleId = stringForKey(runtimeSchedule, "schedule_id",
+                                         stringForKey(candidateIdentity, "runtime_schedule_id", ""));
+
+    const std::string sidecarDispatch = valueForKey(json, "sidecar_dispatch");
+    req.sidecarDispatchMode = stringForKey(sidecarDispatch, "mode", req.sidecarDispatchMode);
+    req.sidecarModel = stringForKey(sidecarDispatch, "model", "");
+    const std::string extensionPayload = valueForKey(json, "extension_payload");
+    req.qeExtensionPresent = !valueForKey(extensionPayload, "qe_offload").empty();
 
     const std::string workload = valueForKey(json, "workload");
     const std::string nodes = valueForKey(workload, "nodes");
@@ -630,6 +693,22 @@ std::string resultJson(const ParsedRequest &req,
        << "  \"run_id\": \"" << jsonEscape(req.runId) << "\",\n"
        << "  \"status\": \"passed\",\n"
        << "  \"execution_engine\": \"" << UarchEngine << "\",\n"
+       << "  \"claim_scope\": \"vertical_slice_only\",\n"
+       << "  \"trusted_final_claim\": false,\n"
+       << "  \"candidate_identity\": {\n"
+       << "    \"candidate_id\": \"" << jsonEscape(req.candidateId) << "\",\n"
+       << "    \"algorithm_id\": \"" << jsonEscape(req.algorithmId) << "\",\n"
+       << "    \"architecture_id\": \"" << jsonEscape(req.architectureId) << "\",\n"
+       << "    \"mapping_id\": \"" << jsonEscape(req.mappingId) << "\",\n"
+       << "    \"compile_schedule_id\": \"" << jsonEscape(req.compileScheduleId) << "\",\n"
+       << "    \"runtime_schedule_id\": \"" << jsonEscape(req.runtimeScheduleId) << "\"\n"
+       << "  },\n"
+       << "  \"software_visible_dispatch\": {\n"
+       << "    \"workload_case_id\": \"" << jsonEscape(req.workloadCaseId) << "\",\n"
+       << "    \"sidecar_dispatch_mode\": \"" << jsonEscape(req.sidecarDispatchMode) << "\",\n"
+       << "    \"sidecar_model\": \"" << jsonEscape(req.sidecarModel) << "\",\n"
+       << "    \"qe_extension_payload_present\": " << (req.qeExtensionPresent ? "true" : "false") << "\n"
+       << "  },\n"
        << "  \"metrics\": {\n"
        << "    \"latency_ms\": " << latencyMs << ",\n"
        << "    \"host_time_ms\": 0.000000,\n"
