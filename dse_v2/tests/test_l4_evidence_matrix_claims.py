@@ -134,3 +134,30 @@ def test_fallback_or_local_transport_l4_evidence_is_blocked_for_trusted_claims()
     assert only["claim_label"] == "blocked"
     assert "fallback_from_gem5_not_trusted" in only["blockers"]
     assert "transport_harness_not_real_gem5_generic_accel" in only["blockers"]
+
+
+def test_l4_closure_cli_writes_matrix_and_report(tmp_path):
+    import json
+    import subprocess
+    from pathlib import Path
+
+    release = tmp_path / "release_subset_manifest.json"
+    workloads = tmp_path / "qe_mainflow_workload_suite_manifest.json"
+    rows = tmp_path / "evidence_rows.json"
+    out = tmp_path / "out"
+    release.write_text(json.dumps({"legal_candidate_ids": ["cand_a"]}), encoding="utf-8")
+    workloads.write_text(json.dumps({"workload_case_ids": ["qe_scf"]}), encoding="utf-8")
+    rows.write_text(json.dumps([_passing_row()]), encoding="utf-8")
+
+    script = Path("dse_v2/scripts/dse/build_l4_closure_matrix.py")
+    completed = subprocess.run(
+        ["python3", str(script), "--release-subset", str(release), "--workload-suite", str(workloads), "--evidence-rows", str(rows), "--out", str(out)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    status = json.loads(completed.stdout)
+    report = json.loads((out / "coverage_claim_report.json").read_text(encoding="utf-8"))
+    assert status["deliverable_complete"] is True
+    assert report["claims"]["deliverable_complete"] is True
