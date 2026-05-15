@@ -1,0 +1,102 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://dse-framework.org/schemas/systemc_python_model_contract_v1.json",
+  "title": "SystemC/Python Sidecar Model Result Contract v1",
+  "description": "Replayable Python reference-model artifacts emitted from the same Generic SystemC request payload consumed by generic_sim. This contract is L3 projection/model evidence and is not sufficient for trusted L4 speedup or QE physics correctness claims.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "run_id",
+    "status",
+    "input_request",
+    "model_invocation",
+    "claim_boundary",
+    "timing_reference",
+    "numerical_validation"
+  ],
+  "properties": {
+    "schema_version": {"const": "gsim.python_model_result.v1"},
+    "run_id": {"type": "string"},
+    "status": {"type": "string", "enum": ["passed", "failed", "error"]},
+    "input_request": {
+      "type": "object",
+      "required": ["schema_version", "mode", "graph_id", "node_count", "edge_count"],
+      "properties": {
+        "schema_version": {"type": "string"},
+        "mode": {"type": "string"},
+        "graph_id": {"type": "string"},
+        "node_count": {"type": "integer", "minimum": 0},
+        "edge_count": {"type": "integer", "minimum": 0}
+      }
+    },
+    "model_invocation": {
+      "type": "object",
+      "required": ["tool", "accepted_payload_source", "request_path", "result_path"],
+      "properties": {
+        "tool": {"type": "string"},
+        "accepted_payload_source": {"const": "generic_systemc_request"},
+        "request_path": {"type": "string"},
+        "result_path": {"type": "string"},
+        "trace_path": {"type": ["string", "null"]}
+      }
+    },
+    "claim_boundary": {
+      "type": "object",
+      "required": ["fidelity_level", "claim", "trusted_speedup", "trusted_qe_correctness", "requires_l4_full_flow_for_trusted_speedup"],
+      "properties": {
+        "fidelity_level": {"const": "L3_python_reference_sidecar"},
+        "claim": {"const": "model_contract_and_projection_only"},
+        "trusted_speedup": {"const": false},
+        "trusted_qe_correctness": {"const": false},
+        "requires_l4_full_flow_for_trusted_speedup": {"const": true},
+        "requires_external_correctness_oracle_for_qe": {"const": true}
+      }
+    },
+    "timing_reference": {
+      "type": "object",
+      "required": ["latency_ms", "throughput_gops", "total_flops", "total_memory_bytes", "per_node"],
+      "properties": {
+        "latency_ms": {"type": "number", "minimum": 0},
+        "throughput_gops": {"type": "number", "minimum": 0},
+        "total_flops": {"type": "number", "minimum": 0},
+        "total_memory_bytes": {"type": "number", "minimum": 0},
+        "total_data_movement_mb": {"type": "number", "minimum": 0},
+        "per_node": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["node_id", "op_type", "device", "latency_ms", "output_tensor_id"]
+          }
+        }
+      }
+    },
+    "numerical_validation": {
+      "type": "object",
+      "required": ["enabled", "golden_model_executed", "all_tensors_passed", "unsupported_ops", "tensors", "correctness_scope", "limitations"],
+      "properties": {
+        "enabled": {"const": true},
+        "golden_model_executed": {"const": true},
+        "all_tensors_passed": {"type": "boolean"},
+        "unsupported_ops": {"type": "array", "items": {"type": "string"}},
+        "correctness_scope": {"const": "deterministic_sidecar_reference_contract_only"},
+        "limitations": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+        "tensors": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["tensor_id", "producer_node_id", "shape", "dtype", "checksum", "passed", "reference"],
+            "properties": {
+              "tensor_id": {"type": "string"},
+              "producer_node_id": {"type": "string"},
+              "shape": {"type": "array", "items": {"type": "integer"}},
+              "dtype": {"type": "string"},
+              "checksum": {"type": "number"},
+              "passed": {"type": "boolean"},
+              "reference": {"const": "deterministic_contract_kernel"}
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -60,10 +60,36 @@ backend = GenericSystemCBackend()
 result = backend.evaluate(design_point, compute_graph)
 ```
 
+### Python reference sidecar
+
+The sidecar Python model consumes the same `gsim.request.v1` request emitted by
+`GenericSystemCBackend` and produces a replayable model invocation record plus
+deterministic numerical/timing artifacts:
+
+```bash
+python3 model/generic_sim_backend/tools/python_reference_model.py \
+  --request path/to/simulation_request.json \
+  --result path/to/python_model_result.json \
+  --trace path/to/python_model_trace.json
+```
+
+Output is described by
+`schemas/systemc_python_model_contract_v1.json`.  The contract intentionally
+marks its claim boundary as `model_contract_and_projection_only`:
+
+- `trusted_speedup: false`
+- `trusted_qe_correctness: false`
+- `requires_l4_full_flow_for_trusted_speedup: true`
+- `requires_external_correctness_oracle_for_qe: true`
+
+This prevents a timing-only C++ result, or a standalone Python reference run,
+from being mistaken for QE physics correctness or L4 gem5 full-flow closure.
+
 ## JSON Schema
 
 - Request: `schemas/simulation_request_v1.json`
 - Result: `schemas/simulation_result_v1.json`
+- Python sidecar contract: `schemas/systemc_python_model_contract_v1.json`
 
 ## Fidelity Levels
 

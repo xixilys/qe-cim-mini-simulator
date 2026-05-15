@@ -45,6 +45,16 @@ if(GSIM_BUILD_TESTS)
         ${CMAKE_SOURCE_DIR}/include
     )
     add_test(NAME microarchitecture_simulators COMMAND test_microarchitecture_simulators)
+
+    find_package(Python3 COMPONENTS Interpreter REQUIRED)
+    add_test(
+        NAME python_reference_model_contract
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/test_python_reference_model.py
+    )
+    set_tests_properties(
+        python_reference_model_contract
+        PROPERTIES WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    )
 endif()
 
 # Install
