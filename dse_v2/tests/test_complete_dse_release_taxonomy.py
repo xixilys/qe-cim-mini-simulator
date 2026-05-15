@@ -12,7 +12,10 @@ from dse_v2.codesign.complete_dse_search_space import (
     build_freeze_gate_verdict,
     build_hybrid_template_manifest,
     build_legality_pruning_report,
+    build_release_pruning_rationale_report,
     build_release_subset_manifest,
+    build_schedule_legality_report,
+    build_workload_architecture_prior_report,
     classify_candidate_legality,
 )
 
@@ -92,6 +95,7 @@ def test_legality_rejects_ad_hoc_hybrid_and_incompatible_schedule_bindings():
 
 def test_pruning_report_classifies_pruned_rows_with_stable_reasons():
     report = build_legality_pruning_report()
+    rationale = build_release_pruning_rationale_report()
 
     assert report["status"] == "passed"
     assert report["all_pruned_rows_have_stable_reason"] is True
@@ -102,6 +106,39 @@ def test_pruning_report_classifies_pruned_rows_with_stable_reasons():
         row["classification"] == "illegal" for row in report["pruned_rows"]
     )
     assert report["claim_boundary"].startswith("pruning explains pre-freeze")
+    assert rationale["schema_version"].endswith(
+        "release_pruning_rationale_report.v1"
+    )
+    assert (
+        rationale["provenance"]["post_freeze_row_removal_allowed"] is False
+    )
+
+
+def test_workload_priors_and_schedule_legality_are_pre_freeze_only():
+    prior = build_workload_architecture_prior_report()
+    schedule = build_schedule_legality_report()
+
+    assert prior["status"] == "passed"
+    assert prior["workload_facts_affect_identity"] is False
+    assert prior["workload_facts_affect_post_freeze_pruning"] is False
+    assert prior["seed_row_count"] == len(REQUIRED_BASE_FAMILIES) + len(
+        REQUIRED_HYBRID_TEMPLATES
+    )
+    assert all(
+        row["candidate_identity_participation"] is False
+        and row["may_remove_frozen_rows"] is False
+        for row in prior["seed_rows"]
+    )
+
+    assert schedule["status"] == "passed"
+    assert schedule["summary"] == {
+        "row_count": len(REQUIRED_BASE_FAMILIES)
+        + len(REQUIRED_HYBRID_TEMPLATES),
+        "all_algorithm_bindings_legal": True,
+        "all_mapping_bindings_legal": True,
+        "all_compile_schedule_bindings_legal": True,
+        "all_runtime_schedule_bindings_legal": True,
+    }
 
 
 def test_freeze_gate_rejects_missing_required_taxonomy_entries():
