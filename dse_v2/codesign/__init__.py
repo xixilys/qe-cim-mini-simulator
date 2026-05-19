@@ -12,6 +12,11 @@ from .l4_closure import (
     L4_INTERFACE_METRICS_SCHEMA,
     canonicalize_l4_interface_metrics,
 )
+from .hardware_claim_gates import (
+    HARDWARE_CLAIM_GATE_SCHEMA,
+    HARDWARE_CLAIM_REQUIREMENTS,
+    validate_hardware_claim_evidence,
+)
 from .evidence_ledger import (
     LEDGER_SCHEMA,
     LEDGER_VALIDATION_SCHEMA,
@@ -71,6 +76,8 @@ from .qe_callgraph_offload_search import (
 __all__ = [
     "CODESIGN_L4_EVIDENCE_ARTIFACTS",
     "CODESIGN_STEP2_ARTIFACTS",
+    "HARDWARE_CLAIM_GATE_SCHEMA",
+    "HARDWARE_CLAIM_REQUIREMENTS",
     "LEDGER_SCHEMA",
     "LEDGER_VALIDATION_SCHEMA",
     "L4_INTERFACE_METRICS_SCHEMA",
@@ -119,8 +126,7 @@ __all__ = [
     "validate_artifact_scope_ids",
     "validate_candidate_evidence_ledger",
     "validate_codesign_artifacts",
-    "validate_step5_full_scf_cost_report",
-    "validate_strict_dft_qe_bundle",
+    "validate_hardware_claim_evidence",
     "validate_qe_callsite_patch_manifest",
     "write_complete_dse_search_space_artifacts",
     "write_qe_callgraph_offload_search_artifacts",
