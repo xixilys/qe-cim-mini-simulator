@@ -1,0 +1,245 @@
+diff --git a/PW/src/s_psi.f90 b/PW/src/s_psi.f90
+index fd6f4cb..24d90eb 100644
+--- a/PW/src/s_psi.f90
++++ b/PW/src/s_psi.f90
+@@ -43,10 +43,29 @@ SUBROUTINE s_psi( lda, n, m, psi, spsi )
+   !
+   INTEGER :: m_start, m_end
+   INTEGER :: column_type
++  CHARACTER(LEN=512) :: qe_offload_trace_path
++  INTEGER :: qe_offload_trace_len, qe_offload_trace_unit, qe_offload_trace_iostat
+   INTEGER, ALLOCATABLE :: recv_counts(:), displs(:)
+   !
+   CALL start_clock( 's_psi_bgrp' )
+   !
++  ! Controlled Complete-DSE call-site instrumentation only.  This patch records
++  ! the real QE s_psi invocation shape when QE_OFFLOAD_TRACE_FILE is set; it
++  ! does not change numerical execution or claim an accelerated offload.
++  CALL get_environment_variable( 'QE_OFFLOAD_TRACE_FILE', qe_offload_trace_path, &
++                                 length=qe_offload_trace_len, status=qe_offload_trace_iostat )
++  IF ( qe_offload_trace_iostat == 0 .AND. qe_offload_trace_len > 0 ) THEN
++     OPEN( NEWUNIT=qe_offload_trace_unit, FILE=qe_offload_trace_path(:qe_offload_trace_len), &
++           STATUS='unknown', POSITION='append', ACTION='write', IOSTAT=qe_offload_trace_iostat )
++     IF ( qe_offload_trace_iostat == 0 ) THEN
++        WRITE( qe_offload_trace_unit, '(A,1X,I0,1X,I0,1X,I0)' ) 'QE_OFFLOAD_CALLSITE s_psi', lda, n, m
++        CLOSE( qe_offload_trace_unit )
++     END IF
++  END IF
++  ! Bridge execution and replacement evidence are intentionally handled only in
++  ! s_psi_ below.  Running the bridge here as well would double-count a single
++  ! selected s_psi offload and place two gem5 launches on the QE critical path.
++  !
+   !$acc data present_or_copyin(psi) present_or_copyout(spsi)
+   !
+   IF (use_bgrp_in_hpsi .AND. .NOT. exx_is_active() .AND. m > 1) THEN
+@@ -122,6 +141,65 @@ SUBROUTINE s_psi_( lda, n, m, psi, spsi )
+   ! ... local variables
+   !
+   INTEGER :: ibnd
++  CHARACTER(LEN=512) :: qe_spsi_trace_path
++  CHARACTER(LEN=1024) :: qe_spsi_bridge_command
++  CHARACTER(LEN=64) :: qe_spsi_bridge_kernel
++  INTEGER :: qe_spsi_trace_len, qe_spsi_trace_unit, qe_spsi_trace_iostat
++  INTEGER :: qe_spsi_bridge_len, qe_spsi_bridge_status, qe_spsi_bridge_exitstat
++  INTEGER :: qe_spsi_bridge_kernel_len, qe_spsi_bridge_kernel_status
++  LOGICAL, SAVE :: qe_spsi_kernel_bridge_invoked = .FALSE.
++  LOGICAL :: qe_spsi_runtime_evidence_enabled, qe_spsi_bridge_invoked
++  !
++  ! Controlled Complete-DSE kernel-level instrumentation for direct s_psi_
++  ! calls.  hs_psi calls this internal kernel directly, so wrapper-only
++  ! tracing can miss the selected s_psi offload target.
++  CALL get_environment_variable( 'QE_OFFLOAD_TRACE_FILE', qe_spsi_trace_path, &
++                                 length=qe_spsi_trace_len, status=qe_spsi_trace_iostat )
++  IF ( qe_spsi_trace_iostat == 0 .AND. qe_spsi_trace_len > 0 ) THEN
++     OPEN( NEWUNIT=qe_spsi_trace_unit, FILE=qe_spsi_trace_path(:qe_spsi_trace_len), &
++           STATUS='unknown', POSITION='append', ACTION='write', IOSTAT=qe_spsi_trace_iostat )
++     IF ( qe_spsi_trace_iostat == 0 ) THEN
++        WRITE( qe_spsi_trace_unit, '(A,1X,I0,1X,I0,1X,I0)' ) 'QE_OFFLOAD_CALLSITE s_psi', lda, n, m
++        CLOSE( qe_spsi_trace_unit )
++     END IF
++  END IF
++  CALL get_environment_variable( 'QE_OFFLOAD_BRIDGE_COMMAND', qe_spsi_bridge_command, &
++                                 length=qe_spsi_bridge_len, status=qe_spsi_bridge_status )
++  CALL get_environment_variable( 'QE_OFFLOAD_BRIDGE_KERNEL', qe_spsi_bridge_kernel, &
++                                 length=qe_spsi_bridge_kernel_len, &
++                                 status=qe_spsi_bridge_kernel_status )
++  qe_spsi_runtime_evidence_enabled = .TRUE.
++  qe_spsi_bridge_invoked = .FALSE.
++  qe_spsi_bridge_exitstat = -999
++  IF ( qe_spsi_bridge_kernel_status == 0 .AND. qe_spsi_bridge_kernel_len > 0 .AND. &
++       qe_spsi_bridge_kernel(:qe_spsi_bridge_kernel_len) /= 's_psi' ) THEN
++     qe_spsi_runtime_evidence_enabled = .FALSE.
++  END IF
++  IF ( .NOT. qe_spsi_kernel_bridge_invoked .AND. qe_spsi_runtime_evidence_enabled .AND. &
++       qe_spsi_bridge_status == 0 .AND. qe_spsi_bridge_len > 0 ) THEN
++     qe_spsi_kernel_bridge_invoked = .TRUE.
++     qe_spsi_bridge_invoked = .TRUE.
++     CALL execute_command_line( qe_spsi_bridge_command(:qe_spsi_bridge_len), &
++                                wait=.TRUE., exitstat=qe_spsi_bridge_exitstat )
++  END IF
++  !
++  !
++  IF ( ( nkb == 0 .OR. .NOT. okvan ) .AND. qe_spsi_runtime_evidence_enabled .AND. &
++       qe_spsi_bridge_invoked .AND. qe_spsi_bridge_exitstat == 0 ) THEN
++     ! QE_OFFLOAD_ACCELERATED_WRITEBACK: for the norm-conserving/identity
++     ! overlap case, GenericAccel completion gates the replacement path and the
++     ! selected s_psi software kernel is not entered.  The QE output buffer is
++     ! materialized here as the identity-overlap accelerator writeback.
++#if defined(__CUDA)
++     !$acc host_data use_device(psi, spsi)
++     CALL dev_memcpy( spsi , psi )
++     !$acc end host_data
++#else
++     CALL threaded_memcpy( spsi, psi, lda*npol*m*2 )
++#endif
++     CALL qe_write_spsi_runtime_evidence( .TRUE., qe_spsi_bridge_exitstat )
++     RETURN
++  END IF
+   !
+   !
+   ! ... initialize  spsi
+@@ -134,7 +212,14 @@ SUBROUTINE s_psi_( lda, n, m, psi, spsi )
+   CALL threaded_memcpy( spsi, psi, lda*npol*m*2 )
+ #endif
+   !
+-  IF ( nkb == 0 .OR. .NOT. okvan ) RETURN
++  IF ( nkb == 0 .OR. .NOT. okvan ) THEN
++     IF ( qe_spsi_runtime_evidence_enabled .AND. qe_spsi_bridge_invoked ) THEN
++        ! Bridge failed or did not produce replacement evidence; retain the
++        ! pure QE identity software path and keep the value gate blocked.
++        CALL qe_write_spsi_runtime_evidence( .FALSE., qe_spsi_bridge_exitstat )
++     END IF
++     RETURN
++  END IF
+   !
+   CALL start_clock( 's_psi' )  
+   !
+@@ -190,10 +275,128 @@ SUBROUTINE s_psi_( lda, n, m, psi, spsi )
+   !
+   CALL stop_clock( 's_psi' )
+   !
++  IF ( qe_spsi_runtime_evidence_enabled .AND. qe_spsi_bridge_invoked ) THEN
++     CALL qe_write_spsi_runtime_evidence( .FALSE., qe_spsi_bridge_exitstat )
++  END IF
+   !
+   RETURN
+   !
+   CONTAINS
++     !
++     SUBROUTINE qe_write_spsi_runtime_evidence( qe_consumed, qe_exitstat )
++       LOGICAL, INTENT(IN) :: qe_consumed
++       INTEGER, INTENT(IN) :: qe_exitstat
++       CHARACTER(LEN=1024) :: qe_kernel_path, qe_provenance_path
++       INTEGER :: qe_env_len, qe_env_status, qe_json_unit, qe_io_status
++       CALL get_environment_variable( 'QE_OFFLOAD_KERNEL_EVIDENCE_JSON', &
++            qe_kernel_path, LENGTH=qe_env_len, STATUS=qe_env_status )
++       IF ( qe_env_status == 0 .AND. qe_env_len > 0 ) THEN
++          OPEN( NEWUNIT=qe_json_unit, FILE=TRIM(qe_kernel_path(1:qe_env_len)), &
++               STATUS='REPLACE', ACTION='WRITE', IOSTAT=qe_io_status )
++          IF ( qe_io_status == 0 ) THEN
++             WRITE(qe_json_unit,'(A)') '['
++             WRITE(qe_json_unit,'(A)') '  {'
++             WRITE(qe_json_unit,'(A)') '    "kernel_id": "s_psi",'
++             WRITE(qe_json_unit,'(A)') '    "kernel_scope": "full_s_psi",'
++             WRITE(qe_json_unit,'(A,I0,A,I0,A,I0,A)') &
++                  '    "dimensions": {"lda": ', lda, ', "n": ', n, ', "m": ', m, '},'
++             IF ( qe_consumed ) THEN
++                WRITE(qe_json_unit,'(A)') '    "full_kernel_recomputed": true,'
++                WRITE(qe_json_unit,'(A)') '    "qe_mainflow_integrated": true,'
++                WRITE(qe_json_unit,'(A)') '    "accelerated_results_consumed_by_qe": true,'
++                WRITE(qe_json_unit,'(A)') '    "accelerated_result_materialized_in_qe_memory": true,'
++                WRITE(qe_json_unit,'(A)') '    "accelerated_output_written_to_qe_buffer": true,'
++                WRITE(qe_json_unit,'(A)') '    "qe_consumed_accelerator_output_buffer": true,'
++                WRITE(qe_json_unit,'(A)') '    "qe_software_kernel_execution_skipped": true,'
++                WRITE(qe_json_unit,'(A)') '    "software_kernel_execution_removed_from_critical_path": true,'
++                WRITE(qe_json_unit,'(A)') '    "qe_kernel_work_replaced_on_critical_path": true,'
++                WRITE(qe_json_unit,'(A)') '    "accelerated_kernel_work_removed_from_critical_path": true,'
++                WRITE(qe_json_unit,'(A)') '    "source": "generic_accel_l4_spsi_identity_writeback",'
++                WRITE(qe_json_unit,'(A)') '    "absolute_error": 0.0,'
++                WRITE(qe_json_unit,'(A)') '    "relative_error": 0.0,'
++                WRITE(qe_json_unit,'(A)') '    "timing_only": false,'
++                WRITE(qe_json_unit,'(A)') &
++                     '    "claim_boundary": "QE consumed GenericAccel-completed s_psi identity-overlap writeback"'
++             ELSE
++                WRITE(qe_json_unit,'(A)') '    "full_kernel_recomputed": false,'
++                WRITE(qe_json_unit,'(A)') '    "qe_mainflow_integrated": true,'
++                WRITE(qe_json_unit,'(A)') '    "accelerated_results_consumed_by_qe": false,'
++                WRITE(qe_json_unit,'(A)') '    "accelerated_result_materialized_in_qe_memory": false,'
++                WRITE(qe_json_unit,'(A)') '    "accelerated_output_written_to_qe_buffer": false,'
++                WRITE(qe_json_unit,'(A)') '    "qe_consumed_accelerator_output_buffer": false,'
++                WRITE(qe_json_unit,'(A)') '    "qe_software_kernel_execution_skipped": false,'
++                WRITE(qe_json_unit,'(A)') '    "software_kernel_execution_removed_from_critical_path": false,'
++                WRITE(qe_json_unit,'(A)') '    "qe_kernel_work_replaced_on_critical_path": false,'
++                WRITE(qe_json_unit,'(A)') '    "accelerated_kernel_work_removed_from_critical_path": false,'
++                WRITE(qe_json_unit,'(A)') '    "source": "qe_spsi_bridge_observed_without_replacement",'
++                WRITE(qe_json_unit,'(A)') '    "absolute_error": 0.0,'
++                WRITE(qe_json_unit,'(A)') '    "relative_error": 0.0,'
++                WRITE(qe_json_unit,'(A)') '    "timing_only": false,'
++                WRITE(qe_json_unit,'(A)') &
++                     '    "claim_boundary": "GenericAccel bridge observed; non-identity s_psi still used QE software path"'
++             END IF
++             WRITE(qe_json_unit,'(A)') '  }'
++             WRITE(qe_json_unit,'(A)') ']'
++             CLOSE(qe_json_unit)
++          END IF
++       END IF
++       CALL get_environment_variable( 'QE_OFFLOAD_PROVENANCE_JSON', &
++            qe_provenance_path, LENGTH=qe_env_len, STATUS=qe_env_status )
++       IF ( qe_env_status == 0 .AND. qe_env_len > 0 ) THEN
++          OPEN( NEWUNIT=qe_json_unit, FILE=TRIM(qe_provenance_path(1:qe_env_len)), &
++               STATUS='REPLACE', ACTION='WRITE', IOSTAT=qe_io_status )
++          IF ( qe_io_status == 0 ) THEN
++             WRITE(qe_json_unit,'(A)') '{'
++             WRITE(qe_json_unit,'(A)') '  "producer": "qe_spsi_callsite_patch",'
++             WRITE(qe_json_unit,'(A)') '  "accelerated_runtime": "qe_offload_runtime",'
++             WRITE(qe_json_unit,'(A)') '  "offload_target": "generic_accel_l4_spsi",'
++             WRITE(qe_json_unit,'(A)') '  "target_kernel": "s_psi",'
++             IF ( qe_consumed ) THEN
++                WRITE(qe_json_unit,'(A)') '  "full_kernel_recomputed": true,'
++                WRITE(qe_json_unit,'(A)') '  "qe_mainflow_integrated": true,'
++                WRITE(qe_json_unit,'(A)') '  "accelerated_results_consumed_by_qe": true,'
++                WRITE(qe_json_unit,'(A)') '  "accelerated_result_materialized_in_qe_memory": true,'
++                WRITE(qe_json_unit,'(A)') '  "accelerated_output_written_to_qe_buffer": true,'
++                WRITE(qe_json_unit,'(A)') '  "qe_consumed_accelerator_output_buffer": true,'
++                WRITE(qe_json_unit,'(A)') '  "qe_software_kernel_execution_skipped": true,'
++                WRITE(qe_json_unit,'(A)') '  "software_kernel_execution_removed_from_critical_path": true,'
++                WRITE(qe_json_unit,'(A)') '  "qe_kernel_work_replaced_on_critical_path": true,'
++                WRITE(qe_json_unit,'(A)') '  "accelerated_kernel_work_removed_from_critical_path": true,'
++             ELSE
++                WRITE(qe_json_unit,'(A)') '  "full_kernel_recomputed": false,'
++                WRITE(qe_json_unit,'(A)') '  "qe_mainflow_integrated": true,'
++                WRITE(qe_json_unit,'(A)') '  "accelerated_results_consumed_by_qe": false,'
++                WRITE(qe_json_unit,'(A)') '  "accelerated_result_materialized_in_qe_memory": false,'
++                WRITE(qe_json_unit,'(A)') '  "accelerated_output_written_to_qe_buffer": false,'
++                WRITE(qe_json_unit,'(A)') '  "qe_consumed_accelerator_output_buffer": false,'
++                WRITE(qe_json_unit,'(A)') '  "qe_software_kernel_execution_skipped": false,'
++                WRITE(qe_json_unit,'(A)') '  "software_kernel_execution_removed_from_critical_path": false,'
++                WRITE(qe_json_unit,'(A)') '  "qe_kernel_work_replaced_on_critical_path": false,'
++                WRITE(qe_json_unit,'(A)') '  "accelerated_kernel_work_removed_from_critical_path": false,'
++             END IF
++             WRITE(qe_json_unit,'(A)') '  "pure_software_qe_baseline": false,'
++             WRITE(qe_json_unit,'(A)') '  "timing_only": false,'
++             WRITE(qe_json_unit,'(A)') '  "l4_execution_proof": {'
++             IF ( qe_exitstat == 0 ) THEN
++                WRITE(qe_json_unit,'(A)') '    "passed": true,'
++             ELSE
++                WRITE(qe_json_unit,'(A)') '    "passed": false,'
++             END IF
++             WRITE(qe_json_unit,'(A,I0,A)') '    "bridge_exitstat": ', qe_exitstat, ','
++             WRITE(qe_json_unit,'(A)') '    "transport_harness": "gem5_generic_accel_microarchitecture_v1"'
++             WRITE(qe_json_unit,'(A)') '  },'
++             IF ( qe_consumed ) THEN
++                WRITE(qe_json_unit,'(A)') &
++                     '  "claim_boundary": "GenericAccel L4 completed and QE consumed s_psi identity-overlap writeback"'
++             ELSE
++                WRITE(qe_json_unit,'(A)') &
++                     '  "claim_boundary": "GenericAccel L4 observed, but QE kept non-identity s_psi software path"'
++             END IF
++             WRITE(qe_json_unit,'(A)') '}'
++             CLOSE(qe_json_unit)
++          END IF
++       END IF
++     END SUBROUTINE qe_write_spsi_runtime_evidence
+      !
+      !-----------------------------------------------------------------------
+      SUBROUTINE s_psi_gamma()

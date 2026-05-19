@@ -501,7 +501,7 @@ reasons:
 | `step2_input/*.json` | Run-local copies of Step2 handoff artifacts | Replay/audit source |
 | `simulation_request.json` | Backend request reconstructed from persisted Step2 and Step1 artifacts | Replayable simulator input |
 | `simulation_result.json` | SystemC or gem5+SystemC result status, metrics, events, utilization, and errors | High-fidelity sample data |
-| `numerical_validation.json` | Generic simulator/reference checks and explicit numerical-scope boundary | Timing-model validation, not domain physics by default |
+| `simulator_consistency_check.json` | Generic simulator/reference consistency checks and explicit numerical-scope boundary; legacy `numerical_validation.json` is compatibility-only | Timing-model validation, not domain physics by default |
 | `verdict.json` | Trusted-for-final-ranking flag, coverage, evidence gaps, feasibility, unavailable metrics | Main evidence trust gate |
 | `evidence_requirements.json` | Required and optional evidence files for the selected mode | Completeness checklist |
 | `claim_validation.json` | Machine-checkable claim validation result and rejection reasons | Final report gate |
@@ -524,7 +524,7 @@ Reviewers should audit Step3 in this order:
 3. Verify `simulation_request.json` uses the executable graph, selected mapping, architecture binding, and workflow coverage from Step2 artifacts.
 4. For non-DFT workloads, confirm the request/report do not require DFT/QE-only fields or phases.
 5. For the DFT reference profile, confirm DFT coverage and seeds remain profile/workflow metadata and are not global defaults.
-6. Inspect `simulation_result.json`, `numerical_validation.json`, `verdict.json`, and `claim_validation.json` together; simulator success alone is insufficient.
+6. Inspect `simulation_result.json`, canonical `simulator_consistency_check.json`, `verdict.json`, and `claim_validation.json` together; simulator success alone is insufficient. Legacy `numerical_validation.json` is compatibility-only.
 7. Confirm smoke, diagnostic, prototype, fixed-timing, predicted-only, candidate-only, and missing-binding paths are blocked or downgraded before any trusted claim.
 8. Confirm a single trusted Step3 pilot is reported as feasibility evidence only, not as a globally converged best architecture unless comparable trusted samples and convergence evidence exist.
 
@@ -933,7 +933,7 @@ runs/dse/<run_id>/
 ├── executable_graph.json              # optional if distinct from workload_graph
 ├── simulation_request.json
 ├── simulation_result.json
-├── numerical_validation.json
+├── simulator_consistency_check.json
 ├── screening_result.json             # required after P3/P4 search is enabled
 ├── promotion_decision.json           # required after P3/P4 search is enabled
 ├── search_state_snapshot.json        # required after P3/P4 search is enabled
@@ -968,9 +968,9 @@ For any full-flow workload run, the minimum trusted SystemC evidence set is:
 `mapping_simulation_samples.json`, `mapping_feedback_state.json`,
 `workload_package.json`, `workload_graph.json`, `graph_lowering_report.json`,
 `simulation_request.json`, `simulation_result.json`,
-`numerical_validation.json`, `phase_breakdown.csv`, `resource_summary.csv`,
+`simulator_consistency_check.json`, `phase_breakdown.csv`, `resource_summary.csv`,
 `data_movement_summary.csv`, `systemc_stdout.log`, and `systemc_stderr.log`.
-`numerical_validation.json` is a scoped timing-level numeric reference check for
+`simulator_consistency_check.json` is a scoped timing-level numeric reference check for
 the generic simulator outputs; it does not by itself claim domain-specific
 correctness such as QE FP64 physics, ML model accuracy, sparse solver residuals,
 or database query equivalence unless the corresponding workload profile/importer supplies
@@ -1061,7 +1061,7 @@ Claim:
 | Pareto frontier | trusted result set, objective directions, dominance computation artifact |
 | Convergence | search-state snapshots, feedback iterations, budget and stopping reason |
 | Debug/replay | manifest, replay command, logs, relevant traces |
-| Numerical correctness | `numerical_validation.json` for generic simulator timing outputs; output hash/reference comparison/residual error for QE/DFT physical correctness where modeled |
+| Numerical correctness | `simulator_consistency_check.json` for generic simulator timing outputs; `kernel_numerical_validation.json` / `domain_physics_validation.json` for real kernel or QE/DFT physical correctness where modeled |
 | Smoke/diagnostic limitation | explicit diagnostic-only status, no trusted ranking eligibility, and no selected-winner claim |
 | Stub/unsupported limitation | status boundary and missing binding/feature evidence |
 

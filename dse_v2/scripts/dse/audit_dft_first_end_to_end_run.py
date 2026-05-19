@@ -24,6 +24,13 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from dse_v2.evidence.full_flow import build_gem5_l4_proof
+from dse_v2.reference_workloads.dft_profile_schema import (
+    DFT_DOMAIN_PHYSICS_VALIDATION_SCHEMA,
+    DFT_DOMAIN_VALIDATION_SCHEMA,
+    DFT_PROFILE_CONTRACT_VERSION,
+    DFT_PROFILE_METADATA_SCHEMA,
+    profile_contract_from_package,
+)
 
 
 AUDIT_SCHEMA = "dse.dft_end_to_end_completion_audit.v1"
@@ -56,14 +63,23 @@ REQUIRED_STEP2_ARTIFACTS = [
 
 REQUIRED_STEP3_ARTIFACT_KEYS = [
     "simulation_result",
-    "numerical_validation",
-    "verdict",
 ]
 
 REQUIRED_STEP3_DIR_ARTIFACTS = [
     "manifest.json",
     "simulation_request.json",
     "simulation_result.raw.json",
+    "step3_status.json",
+]
+
+REQUIRED_STEP4_ADJUDICATION_KEYS = [
+    "kernel_numerical_validation",
+    "domain_physics_validation",
+    "verdict",
+    "claim_validation",
+    "evidence_requirements",
+    "provenance",
+    "artifact_manifest",
 ]
 
 REQUIRED_STEP4_ARTIFACTS = [
@@ -425,9 +441,19 @@ def _audit_step1(builder: AuditBuilder, summary: Mapping[str, Any]) -> None:
     package_path = step1_dir / "workload_package.json"
     if package_path.exists():
         package = _load_json(package_path)
+        profile = package.get("profile", {}) if _is_mapping(package.get("profile")) else {}
+        profile_domain_validation = (
+            profile.get("domain_validation", {}) if _is_mapping(profile.get("domain_validation")) else {}
+        )
         dft_metadata = (
             package.get("domain_metadata", {}).get("dft", {})
             if _is_mapping(package.get("domain_metadata"))
+            else {}
+        )
+        profile_contract = profile_contract_from_package(package) if _is_mapping(package) else {}
+        profile_metadata = (
+            profile_contract.get("profile_metadata", {})
+            if _is_mapping(profile_contract.get("profile_metadata"))
             else {}
         )
         source_facts = [
@@ -441,6 +467,27 @@ def _audit_step1(builder: AuditBuilder, summary: Mapping[str, Any]) -> None:
             "Step1 workload package uses the expected source-fact schema version",
             _is_mapping(package) and package.get("schema_version") == WORKLOAD_PACKAGE_SCHEMA,
             {"artifact": str(package_path), "schema_version": package.get("schema_version") if _is_mapping(package) else None},
+        )
+        builder.check(
+            "step1_dft_profile_schema_contract",
+            "Step1 cites the frozen DFT profile/schema contract under profile-owned metadata, not generic core fields",
+            _is_mapping(profile_metadata)
+            and profile_metadata.get("schema_version") == DFT_PROFILE_METADATA_SCHEMA
+            and profile_metadata.get("contract_version") == DFT_PROFILE_CONTRACT_VERSION
+            and profile_metadata.get("owner") == "dse_v2.reference_workloads"
+            and profile_metadata.get("core_must_import") is False
+            and profile_metadata.get("core_required_fields") == []
+            and profile_metadata.get("domain_validation_schema") == DFT_DOMAIN_VALIDATION_SCHEMA
+            and profile_metadata.get("domain_physics_validation_schema") == DFT_DOMAIN_PHYSICS_VALIDATION_SCHEMA
+            and profile_domain_validation.get("contract_version") == DFT_PROFILE_CONTRACT_VERSION
+            and profile_domain_validation.get("schema_version") == DFT_DOMAIN_VALIDATION_SCHEMA
+            and profile_domain_validation.get("domain_physics_validation_schema") == DFT_DOMAIN_PHYSICS_VALIDATION_SCHEMA,
+            {
+                "artifact": str(package_path),
+                "profile_contract": profile_contract,
+                "profile_domain_validation_schema": profile_domain_validation.get("schema_version"),
+                "profile_domain_contract_version": profile_domain_validation.get("contract_version"),
+            },
         )
         builder.check(
             "step1_qe_source_facts_preserved",
@@ -567,7 +614,7 @@ def _audit_step2_step3(builder: AuditBuilder, summary: Mapping[str, Any]) -> Non
         ]
         builder.check(
             f"step3_timing_verified:{arch}",
-            "Step3 generic_sim timing pre-screen is measured and numerically verified",
+            "Step3 generic_sim timing pre-screen is measured with execution-owned artifacts present",
             record.get("timing_verified") is True
             and _positive_float(latency)
             and not missing_step3
@@ -577,6 +624,36 @@ def _audit_step2_step3(builder: AuditBuilder, summary: Mapping[str, Any]) -> Non
                 "timing_verified": record.get("timing_verified"),
                 "latency_ms": latency,
                 "missing": missing_step3 + missing_step3_dir_artifacts,
+            },
+        )
+        step4_adjudication = record.get("step4_adjudication", {}) if _is_mapping(record.get("step4_adjudication")) else {}
+        missing_step4_adjudication = [
+            key for key in REQUIRED_STEP4_ADJUDICATION_KEYS
+            if not _exists(step4_adjudication.get(key), base=builder.run_dir)
+        ]
+        kernel_path, kernel_validation = _load_mapping_artifact(step4_adjudication.get("kernel_numerical_validation"), base=builder.run_dir)
+        domain_path, domain_validation = _load_mapping_artifact(step4_adjudication.get("domain_physics_validation"), base=builder.run_dir)
+        claim_path, claim_validation = _load_mapping_artifact(step4_adjudication.get("claim_validation"), base=builder.run_dir)
+        builder.check(
+            f"step4_adjudication_artifacts_present:{arch}",
+            "DFT Step4 owns kernel/domain validation and claim-validation wrappers over Step3 timing artifacts",
+            not missing_step4_adjudication
+            and kernel_validation.get("schema_version") == "dse.kernel_numerical_validation.v1"
+            and kernel_validation.get("owner") == "evidence_adjudication"
+            and domain_validation.get("schema_version") == "dse.dft.domain_physics_validation.v1"
+            and domain_validation.get("owner") == "domain_profile_adjudication"
+            and domain_validation.get("status") == "not_claimed"
+            and claim_validation.get("schema_version") == "dse.claim_validation.v1"
+            and claim_validation.get("owner") == "claim_validation"
+            and claim_validation.get("claim_levels", {}).get("domain_physics_evidence") is False,
+            {
+                "architecture_id": arch,
+                "step4_adjudication": step4_adjudication,
+                "missing": missing_step4_adjudication,
+                "kernel_numerical_validation": str(kernel_path),
+                "domain_physics_validation": str(domain_path),
+                "claim_validation": str(claim_path),
+                "domain_status": domain_validation.get("status"),
             },
         )
         if not missing_step3 and not missing_step3_dir_artifacts and step3_dir is not None:
@@ -643,19 +720,18 @@ def _audit_step2_step3(builder: AuditBuilder, summary: Mapping[str, Any]) -> Non
             has_result_flag = "--result" in replay_cmd
             sim_metrics = sim_result.get("metrics", {}) if _is_mapping(sim_result.get("metrics")) else {}
             raw_metrics = raw_sim_result.get("metrics", {}) if _is_mapping(raw_sim_result.get("metrics")) else {}
-            hash_mismatches = _manifest_hash_mismatches(
-                step3_dir,
-                [
-                    "simulation_request.json",
-                    "simulation_result.raw.json",
-                    "simulation_result.json",
-                    "numerical_validation.json",
-                    "verdict.json",
-                ],
-            )
+            manifest_checked_paths = [
+                "simulation_request.json",
+                "simulation_result.raw.json",
+                "simulation_result.json",
+                "verdict.json",
+            ]
+            if (step3_dir / "simulator_consistency_check.json").exists():
+                manifest_checked_paths.append("simulator_consistency_check.json")
+            hash_mismatches = _manifest_hash_mismatches(step3_dir, manifest_checked_paths)
             builder.check(
                 f"step3_raw_timing_artifacts_consistent:{arch}",
-                "Step3 timing record matches raw/public generic_sim result, numerical validation, and verdict artifacts",
+                "Step3 raw/public generic_sim result is consistent with Step4-adjudicated compatibility validation artifacts",
                 request.get("schema_version") == GSIM_REQUEST_SCHEMA
                 and
                 sim_result.get("schema_version") == GSIM_RESULT_SCHEMA
@@ -665,8 +741,10 @@ def _audit_step2_step3(builder: AuditBuilder, summary: Mapping[str, Any]) -> Non
                 and _float_equal(sim_metrics.get("latency_ms"), latency)
                 and _float_equal(raw_metrics.get("latency_ms"), latency)
                 and _float_equal(raw_metrics.get("latency_ms"), sim_metrics.get("latency_ms"))
-                and numerical.get("schema_version") == NUMERICAL_VALIDATION_SCHEMA
-                and numerical.get("passed") is True
+                and (
+                    (numerical.get("schema_version") == NUMERICAL_VALIDATION_SCHEMA and numerical.get("passed") is True)
+                    or (kernel_validation.get("schema_version") == "dse.kernel_numerical_validation.v1" and kernel_validation.get("passed") is True)
+                )
                 and verdict.get("schema_version") == VERDICT_SCHEMA
                 and verdict.get("simulation_passed") is True
                 and verdict.get("numerical_validation_passed") is True
@@ -687,6 +765,8 @@ def _audit_step2_step3(builder: AuditBuilder, summary: Mapping[str, Any]) -> Non
                     "numerical_validation": str(numerical_path),
                     "numerical_schema_version": numerical.get("schema_version"),
                     "numerical_passed": numerical.get("passed"),
+                    "step4_kernel_numerical_schema_version": kernel_validation.get("schema_version"),
+                    "step4_kernel_numerical_passed": kernel_validation.get("passed"),
                     "verdict": str(verdict_path),
                     "verdict_schema_version": verdict.get("schema_version"),
                     "verdict_simulation_passed": verdict.get("simulation_passed"),
@@ -696,18 +776,12 @@ def _audit_step2_step3(builder: AuditBuilder, summary: Mapping[str, Any]) -> Non
             )
             builder.check(
                 f"step3_artifact_manifest_hashes:{arch}",
-                "Step3 artifact manifest hashes match audited request/result/validation/verdict artifacts",
+                "Compatibility artifact manifest hashes match audited request/result/validation/verdict artifacts",
                 not hash_mismatches,
                 {
                     "architecture_id": arch,
                     "artifact_manifest": str(step3_dir / "artifact_manifest.json"),
-                    "checked_paths": [
-                        "simulation_request.json",
-                        "simulation_result.raw.json",
-                        "simulation_result.json",
-                        "numerical_validation.json",
-                        "verdict.json",
-                    ],
+                    "checked_paths": manifest_checked_paths,
                     "mismatches": hash_mismatches,
                 },
             )

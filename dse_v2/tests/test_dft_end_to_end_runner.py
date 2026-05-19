@@ -14,6 +14,10 @@ from types import SimpleNamespace
 from zoneinfo import ZoneInfo
 
 from dse_v2.evidence.full_flow import build_gem5_l4_proof
+from dse_v2.reference_workloads.dft_profile_schema import (
+    dft_domain_validation_contract,
+    dft_profile_metadata_contract,
+)
 from dse_v2.scripts.dse.audit_dft_first_end_to_end_run import (
     REQUIRED_GEM5_CHECKS,
     _forbidden_no_smoke_tokens,
@@ -131,6 +135,83 @@ def _write_step4_artifact_manifest(step4: Path) -> None:
     _write_json(step4 / "artifact_manifest.json", {"artifacts": artifacts})
 
 
+def _write_step4_adjudication_fixture(run_dir: Path, arch: str) -> dict:
+    step3 = run_dir / "architectures" / arch / "step3_systemc"
+    step4 = run_dir / "architectures" / arch / "step4_adjudication"
+    _write_json(step4 / "kernel_numerical_validation.json", {
+        "schema_version": "dse.kernel_numerical_validation.v1",
+        "step": "step4",
+        "owner": "evidence_adjudication",
+        "architecture_id": arch,
+        "status": "passed",
+        "passed": True,
+        "source_step3_artifact": str(step3 / "numerical_validation.json"),
+    })
+    _write_json(step4 / "domain_physics_validation.json", {
+        "schema_version": "dse.dft.domain_physics_validation.v1",
+        "step": "step4",
+        "owner": "domain_profile_adjudication",
+        "architecture_id": arch,
+        "status": "not_claimed",
+        "passed": False,
+        "claim_boundary": "DFT scientific correctness is not inferred from timing evidence.",
+    })
+    _write_json(step4 / "verdict.json", {
+        "schema_version": "dse.verdict.v1",
+        "step": "step4",
+        "owner": "evidence_adjudication",
+        "architecture_id": arch,
+        "step3_simulation_passed": True,
+        "kernel_numerical_validation_passed": True,
+        "domain_physics_validation_passed": False,
+        "trusted_for_final_ranking": False,
+    })
+    _write_json(step4 / "claim_validation.json", {
+        "schema_version": "dse.claim_validation.v1",
+        "step": "step4",
+        "owner": "claim_validation",
+        "architecture_id": arch,
+        "trusted_final_ranking": False,
+        "claim_levels": {
+            "timing_evidence": True,
+            "kernel_numerical_evidence": True,
+            "domain_physics_evidence": False,
+            "software_visible_evidence": False,
+        },
+    })
+    _write_json(step4 / "evidence_requirements.json", {"schema_version": "dse.evidence_requirements.v1", "owner": "evidence_adjudication"})
+    _write_json(step4 / "provenance.json", {
+        "schema_version": "dse.provenance.v1",
+        "owner": "evidence_adjudication",
+        "source_step3_artifacts": {"simulation_result_raw": str(step3 / "simulation_result.raw.json")},
+    })
+    _write_json(step4 / "manifest.json", {"schema_version": "dse.step4.manifest.v1", "owner": "evidence_adjudication"})
+    artifacts = []
+    for rel in [
+        "claim_validation.json",
+        "domain_physics_validation.json",
+        "evidence_requirements.json",
+        "kernel_numerical_validation.json",
+        "manifest.json",
+        "provenance.json",
+        "verdict.json",
+    ]:
+        artifact = step4 / rel
+        artifacts.append({"exists": True, "path": rel, "required": True, "sha256": _sha256(artifact), "size_bytes": artifact.stat().st_size})
+    _write_json(step4 / "artifact_manifest.json", {"schema_version": "dse.artifact_manifest.v1", "step": "step4", "owner": "evidence_adjudication", "artifacts": artifacts})
+    return {
+        "schema_version": "dse.dft.step4_adjudication_summary.v1",
+        "step4_dir": str(step4),
+        "kernel_numerical_validation": str(step4 / "kernel_numerical_validation.json"),
+        "domain_physics_validation": str(step4 / "domain_physics_validation.json"),
+        "verdict": str(step4 / "verdict.json"),
+        "claim_validation": str(step4 / "claim_validation.json"),
+        "evidence_requirements": str(step4 / "evidence_requirements.json"),
+        "provenance": str(step4 / "provenance.json"),
+        "artifact_manifest": str(step4 / "artifact_manifest.json"),
+    }
+
+
 def _make_complete_audit_fixture(run_dir: Path) -> Path:
     step1 = run_dir / "step1"
     step4 = run_dir / "step4_gem5" / "arch_b"
@@ -199,13 +280,30 @@ def _make_complete_audit_fixture(run_dir: Path) -> Path:
             "numerical_validation_passed": True,
             "trusted_for_final_ranking": False,
         })
+        _write_json(step3 / "step3_status.json", {
+            "schema_version": "dse.step3.status.v1",
+            "step": "step3",
+            "owner": "simulation_execution",
+            "architecture_id": name,
+            "status": "passed",
+            "timing_verified": True,
+        })
         _write_step3_artifact_manifest(step3)
+
+    step4_adjudication_by_arch = {
+        "arch_a": _write_step4_adjudication_fixture(run_dir, "arch_a"),
+        "arch_b": _write_step4_adjudication_fixture(run_dir, "arch_b"),
+    }
 
     _write_json(step1 / "workload_package.json", {
         "schema_version": "dse.step1.workload_package.v1",
         "workload_family": "dft",
+        "profile": {
+            "domain_validation": dft_domain_validation_contract(source_program="qe_pw"),
+        },
         "domain_metadata": {
             "dft": {
+                "profile_metadata": dft_profile_metadata_contract(source_program="qe_pw"),
                 "source_facts": [
                     {
                         "schema_version": "dse.dft.source_fact.v1",
@@ -359,6 +457,7 @@ def _make_complete_audit_fixture(run_dir: Path) -> Path:
                     "numerical_validation": str(run_dir / "architectures" / "arch_a" / "step3_systemc" / "numerical_validation.json"),
                     "verdict": str(run_dir / "architectures" / "arch_a" / "step3_systemc" / "verdict.json"),
                 },
+                "step4_adjudication": step4_adjudication_by_arch["arch_a"],
             },
             {
                 "architecture_id": "arch_b",
@@ -372,6 +471,7 @@ def _make_complete_audit_fixture(run_dir: Path) -> Path:
                     "numerical_validation": str(run_dir / "architectures" / "arch_b" / "step3_systemc" / "numerical_validation.json"),
                     "verdict": str(run_dir / "architectures" / "arch_b" / "step3_systemc" / "verdict.json"),
                 },
+                "step4_adjudication": step4_adjudication_by_arch["arch_b"],
             },
         ],
         "best_architecture": {
@@ -735,6 +835,16 @@ def test_dft_first_runner_screens_real_qe_source_before_untrusted_skip_step4(tmp
     assert summary["step4_gem5"]["trusted_step4_timing"] is False
     assert summary["completion"]["requires_real_gem5_non_smoke"] is True
     assert summary["completion"]["trusted_final_dft_correctness_claimed"] is False
+    ownership = json.loads((out_dir / "dft_artifact_ownership.json").read_text(encoding="utf-8"))
+    assert ownership["schema_version"] == "dse.dft.step_artifact_ownership.v1"
+    assert "step3_status.json" in ownership["step3_artifacts"]
+    assert "domain_physics_validation.json" in ownership["step4_artifacts"]
+    first_record = summary["step2_step3_records"][0]
+    step4_adj = first_record["step4_adjudication"]
+    assert Path(step4_adj["domain_physics_validation"]).exists()
+    domain_validation = json.loads(Path(step4_adj["domain_physics_validation"]).read_text(encoding="utf-8"))
+    assert domain_validation["schema_version"] == "dse.dft.domain_physics_validation.v1"
+    assert domain_validation["status"] == "not_claimed"
 
     step1_characterization = json.loads((out_dir / "step1" / "workload_characterization.json").read_text(encoding="utf-8"))
     assert step1_characterization["domain_phase_summary"]["schema_version"] == "dse.domain_phase_summary.v1"
@@ -875,6 +985,8 @@ def test_gem5_l4_proof_can_require_stats_config_and_nonzero_activity(tmp_path):
     assert proof["checks"]["stats_semantics_present"] is True
     assert proof["checks"]["config_present"] is True
     assert proof["checks"]["nonzero_accelerator_activity"] is True
+    assert proof["checks"]["systemc_submit_verified"] is False
+    assert proof["checks"]["legacy_systemc_or_microarchitecture_verified"] is True
 
     no_stats = build_gem5_l4_proof(log, stdout, sim_result, {"require_gem5_stats_config": True})
     assert no_stats["passed"] is False

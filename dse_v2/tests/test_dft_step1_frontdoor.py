@@ -20,6 +20,14 @@ from dse_v2.reference_workloads.dft import (
 from dse_v2.reference_workloads.dft_importer_coverage import (
     dft_importer_fixture_coverage_matrix,
 )
+from dse_v2.reference_workloads.dft_profile_schema import (
+    DFT_CONFIG_PROFILE_SCHEMA,
+    DFT_DOMAIN_PHYSICS_VALIDATION_SCHEMA,
+    DFT_DOMAIN_VALIDATION_SCHEMA,
+    dft_config_profile_schema,
+    profile_contract_from_package,
+    validate_dft_profile_contract,
+)
 from dse_v2.reference_workloads.dft_qe import (
     dft_qe_pw_profile,
     parse_qe_profile,
@@ -186,6 +194,53 @@ def test_qe_vasp_importer_fixture_coverage_matrix_is_explicit_and_bounded():
     assert "QE numerical correctness is not claimed" in rows["dft_qe_pw"]["claim_boundary"]
     assert "VASP numerical correctness is not claimed" in rows["dft_vasp"]["claim_boundary"]
     assert "not release-complete evidence" in matrix["claim_boundary"]
+
+
+def test_dft_profile_config_and_domain_validation_contracts_are_profile_owned():
+    profile = dft_qe_pw_profile()
+    payload = profile.to_dict()
+    validation = validate_dft_profile_contract(payload)
+    schema = dft_config_profile_schema()
+
+    assert validation["valid"] is True
+    assert schema["schema_version"] == DFT_CONFIG_PROFILE_SCHEMA
+    assert schema["owner"] == "dse_v2.reference_workloads"
+    assert payload["domain_validation"]["schema_version"] == DFT_DOMAIN_VALIDATION_SCHEMA
+    assert payload["domain_validation"]["domain_physics_validation_schema"] == DFT_DOMAIN_PHYSICS_VALIDATION_SCHEMA
+    assert payload["domain_validation"]["numerical_correctness_claimed"] is False
+    assert payload["plugin_metadata"]["core_must_import"] is False
+    assert payload["plugin_metadata"]["core_required_fields"] == []
+
+
+def test_dft_package_bridges_generic_core_payload_plus_profile_owned_metadata(tmp_path):
+    profiles = default_profile_registry()
+    profiles.register(dft_qe_pw_profile())
+    importers = default_importer_registry()
+    register_dft_qe_importer(importers)
+
+    run_step1_workload_ingestion_workflow(
+        {"input": QE_INPUT, "log": QE_LOG, "profile": {"phases": {"h_psi": 2.0, "fft": 0.25}}},
+        profile_id="dft_qe_pw_static",
+        importer_id="dft_qe_pw",
+        source_kind="qe_pw_bundle",
+        parameters={"case_id": "qe_profile_contract", "graph_id": "qe_profile_contract_graph"},
+        output_dir=tmp_path,
+        profile_registry=profiles,
+        importer_registry=importers,
+    )
+
+    package = _load_json(tmp_path / "workload_package.json")
+    contract_view = profile_contract_from_package(package)
+    dft_metadata = package["domain_metadata"]["dft"]
+
+    assert package["schema_version"] == "dse.step1.workload_package.v1"
+    assert set(contract_view["top_level_dft_keys"]) == set()
+    assert contract_view["has_dft_domain_metadata"] is True
+    assert contract_view["core_required_fields"] == []
+    assert dft_metadata["profile_metadata"]["owner"] == "dse_v2.reference_workloads"
+    assert dft_metadata["profile_metadata"]["domain_physics_validation_schema"] == DFT_DOMAIN_PHYSICS_VALIDATION_SCHEMA
+    assert package["profile"]["domain_validation"]["schema_version"] == DFT_DOMAIN_VALIDATION_SCHEMA
+    assert validate_dft_profile_contract(package["profile"])["valid"] is True
 
 
 def test_source_fact_merge_preserves_conflicts_and_prefers_higher_evidence():

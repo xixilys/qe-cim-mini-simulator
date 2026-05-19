@@ -36,8 +36,10 @@ def parse_args():
     parser.add_argument("--binary", type=Path, default=Path(os.environ.get("GSIM_L4_DRIVER", default_driver())))
     parser.add_argument("--request", type=Path, required=True, help="Simulation request JSON passed to the guest driver")
     parser.add_argument("--simulator", type=Path, default=Path(os.environ.get("GSIM_L4_SIMULATOR", default_simulator())))
+    parser.add_argument("--use-systemc", action="store_true", help="Execute the configured generic sidecar executable from the GenericAccel device path")
     parser.add_argument("--max-ticks", type=int, default=int(os.environ.get("GSIM_L4_MAX_TICKS", "10000000000")))
     parser.add_argument("--cpu-type", choices=["timing", "atomic"], default=os.environ.get("GSIM_L4_CPU", "timing"))
+    parser.add_argument("--driver-repeat", type=int, default=1, help="Submit the same request N times from one guest driver process")
     return parser.parse_args()
 
 
@@ -72,14 +74,19 @@ def create_system(args):
     system.generic_accel = GenericAccel(
         pio_addr=MMIO_BASE,
         pio_size=MMIO_SIZE,
-        use_systemc=False,
+        use_systemc=args.use_systemc,
         systemc_lib_path=str(args.simulator.resolve()),
     )
     system.generic_accel.pio = system.membus.mem_side_ports
 
     system.workload = SEWorkload.init_compatible(str(args.binary.resolve()))
     process = Process()
-    process.cmd = [str(args.binary.resolve()), str(args.request.resolve())]
+    process.cmd = [
+        str(args.binary.resolve()),
+        str(args.request.resolve()),
+        "--repeat",
+        str(max(1, args.driver_repeat)),
+    ]
     system.cpu.workload = process
     system.cpu.createThreads()
     return system
@@ -99,7 +106,7 @@ def main():
     print(f"Driver: {args.binary.resolve()}")
     print(f"Request: {args.request.resolve()}")
     print(f"Execution engine: gem5 GenericAccel microarchitecture model")
-    print(f"Reference simulator argument (not required by L4 uarch path): {args.simulator.resolve()}")
+    print(f"Generic sidecar executable: {args.simulator.resolve()} use_systemc={args.use_systemc}")
     print(f"MMIO map: vaddr=0x{MMIO_BASE:X} paddr=0x{MMIO_BASE:X} size=0x{MMIO_SIZE:X}")
     print(f"Workspace map: vaddr=0x{WORK_BASE:X} paddr=0x{WORK_BASE:X} size=0x{WORK_SIZE:X}")
     print(f"CPU: {args.cpu_type}; max_ticks={args.max_ticks}")

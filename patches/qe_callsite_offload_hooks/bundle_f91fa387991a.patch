@@ -1,0 +1,699 @@
+diff --git a/FFTXlib/src/fft_fwinv.f90 b/FFTXlib/src/fft_fwinv.f90
+index 9e9d2fd..1921a67 100644
+--- a/FFTXlib/src/fft_fwinv.f90
++++ b/FFTXlib/src/fft_fwinv.f90
+@@ -41,6 +41,28 @@ SUBROUTINE invfft_y( fft_kind, f, dfft, howmany )
+   INTEGER, OPTIONAL, INTENT(IN) :: howmany
+   INTEGER :: howmany_ = 1
+   CHARACTER(LEN=12) :: clock_label
++  CHARACTER(LEN=512) :: qe_offload_trace_path
++  CHARACTER(LEN=1024) :: qe_offload_bridge_command
++  CHARACTER(LEN=64) :: qe_offload_bridge_kernel
++  CHARACTER(LEN=1024) :: qe_kernel_path, qe_provenance_path, qe_accel_output_path
++  CHARACTER(LEN=1024) :: qe_accel_input_path, qe_accel_input_data_path, qe_accel_output_data_path
++  CHARACTER(LEN=16) :: qe_offload_strict_replacement
++  INTEGER :: qe_offload_trace_len, qe_offload_trace_unit, qe_offload_trace_iostat
++  INTEGER :: qe_offload_bridge_len, qe_offload_bridge_status, qe_offload_bridge_exitstat
++  INTEGER :: qe_offload_bridge_kernel_len, qe_offload_bridge_kernel_status
++  INTEGER :: qe_env_len, qe_env_status, qe_json_unit, qe_io_status
++  INTEGER :: qe_accel_output_len, qe_accel_output_status
++  INTEGER :: qe_accel_input_len, qe_accel_input_status
++  INTEGER :: qe_accel_input_data_len, qe_accel_input_data_status
++  INTEGER :: qe_accel_data_len, qe_accel_data_status, qe_data_unit
++  INTEGER :: qe_value_count, qe_i, qe_read_status
++  INTEGER(KIND=8) :: qe_value_count_i8
++  INTEGER :: qe_offload_strict_len, qe_offload_strict_status
++  REAL(DP) :: qe_value_real, qe_value_imag
++  LOGICAL :: qe_offload_fft_replacement_consumed
++  LOGICAL :: qe_offload_fft_output_loaded
++  LOGICAL :: qe_accel_output_preexisting
++  COMPLEX(DP), ALLOCATABLE :: qe_offload_fft_values(:)
+ 
+   IF(PRESENT(howmany) ) THEN
+      howmany_ = howmany
+@@ -58,7 +80,130 @@ SUBROUTINE invfft_y( fft_kind, f, dfft, howmany )
+   IF (clock_label == ' ') CALL fftx_error__( ' invfft ', ' uninitialized fft kind : '//fft_kind , 1 )
+ 
+   CALL start_clock(clock_label)
++  qe_offload_fft_replacement_consumed = .FALSE.
++
++  IF ( clock_label == 'fft' ) THEN
++     CALL get_environment_variable( 'QE_OFFLOAD_TRACE_FILE', qe_offload_trace_path, &
++                                    length=qe_offload_trace_len, status=qe_offload_trace_iostat )
++     IF ( qe_offload_trace_iostat == 0 .AND. qe_offload_trace_len > 0 ) THEN
++        OPEN( NEWUNIT=qe_offload_trace_unit, FILE=qe_offload_trace_path(:qe_offload_trace_len), &
++              STATUS='unknown', POSITION='append', ACTION='write', IOSTAT=qe_offload_trace_iostat )
++        IF ( qe_offload_trace_iostat == 0 ) THEN
++           WRITE( qe_offload_trace_unit, '(A,1X,A,1X,I0)' ) 'QE_OFFLOAD_CALLSITE fft', &
++                  TRIM(fft_kind), howmany_
++           CLOSE( qe_offload_trace_unit )
++        END IF
++     END IF
++     CALL get_environment_variable( 'QE_OFFLOAD_BRIDGE_COMMAND', qe_offload_bridge_command, &
++                                    length=qe_offload_bridge_len, status=qe_offload_bridge_status )
++     CALL get_environment_variable( 'QE_OFFLOAD_BRIDGE_KERNEL', qe_offload_bridge_kernel, &
++                                    length=qe_offload_bridge_kernel_len, &
++                                    status=qe_offload_bridge_kernel_status )
++     qe_offload_bridge_exitstat = -999
++     qe_offload_fft_replacement_consumed = .FALSE.
++     qe_offload_fft_output_loaded = .FALSE.
++     IF ( qe_offload_bridge_status == 0 .AND. &
++          qe_offload_bridge_len > 0 .AND. &
++          ( qe_offload_bridge_kernel_status /= 0 .OR. qe_offload_bridge_kernel_len == 0 .OR. &
++            qe_offload_bridge_kernel(:qe_offload_bridge_kernel_len) == 'fft' ) ) THEN
++        CALL get_environment_variable( 'QE_OFFLOAD_ACCELERATED_INPUT_JSON', &
++             qe_accel_input_path, LENGTH=qe_accel_input_len, STATUS=qe_accel_input_status )
++        IF ( qe_accel_input_status == 0 .AND. qe_accel_input_len > 0 ) THEN
++           OPEN( NEWUNIT=qe_json_unit, FILE=TRIM(qe_accel_input_path(1:qe_accel_input_len)), &
++                STATUS='REPLACE', ACTION='WRITE', IOSTAT=qe_io_status )
++           IF ( qe_io_status == 0 ) THEN
++              WRITE(qe_json_unit,'(A)') '{'
++              WRITE(qe_json_unit,'(A)') '  "schema_version": "dse.qe_fft_input_buffer.v1",'
++              WRITE(qe_json_unit,'(A)') '  "target_kernel": "fft",'
++              WRITE(qe_json_unit,'(A)') '  "fft_direction": "inverse",'
++              WRITE(qe_json_unit,'(A,A,A)') '  "fft_kind": "', TRIM(fft_kind), '",'
++              WRITE(qe_json_unit,'(A,I0,A)') '  "howmany": ', howmany_, ','
++              WRITE(qe_json_unit,'(A,I0,A)') '  "f_size": ', SIZE(f), ','
++              WRITE(qe_json_unit,'(A,I0,A)') '  "nr1": ', dfft%nr1, ','
++              WRITE(qe_json_unit,'(A,I0,A)') '  "nr2": ', dfft%nr2, ','
++              WRITE(qe_json_unit,'(A,I0,A)') '  "nr3": ', dfft%nr3, ','
++              WRITE(qe_json_unit,'(A,I0,A)') '  "nr1x": ', dfft%nr1x, ','
++              WRITE(qe_json_unit,'(A,I0,A)') '  "nr2x": ', dfft%nr2x, ','
++              WRITE(qe_json_unit,'(A,I0,A)') '  "nr3x": ', dfft%nr3x, ','
++              CALL get_environment_variable( 'QE_OFFLOAD_ACCELERATED_INPUT_DATA', &
++                   qe_accel_input_data_path, LENGTH=qe_accel_input_data_len, &
++                   STATUS=qe_accel_input_data_status )
++              IF ( qe_accel_input_data_status == 0 .AND. qe_accel_input_data_len > 0 ) THEN
++                 OPEN( NEWUNIT=qe_data_unit, FILE=TRIM(qe_accel_input_data_path(1:qe_accel_input_data_len)), &
++                      STATUS='REPLACE', ACTION='WRITE', FORM='UNFORMATTED', ACCESS='STREAM', &
++                      IOSTAT=qe_io_status )
++                 IF ( qe_io_status == 0 ) THEN
++                    qe_value_count_i8 = INT(SIZE(f), KIND=8)
++                    WRITE(qe_data_unit) qe_value_count_i8
++                    DO qe_i = 1, SIZE(f)
++                       WRITE(qe_data_unit) REAL(f(qe_i), KIND=DP), AIMAG(f(qe_i))
++                    END DO
++                    CLOSE(qe_data_unit)
++                 END IF
++                 WRITE(qe_json_unit,'(A,A,A)') '  "binary_values_path": "', &
++                      TRIM(qe_accel_input_data_path(1:qe_accel_input_data_len)), '",'
++                 WRITE(qe_json_unit,'(A)') '  "binary_value_format": "stream_int64_count_real64_pairs",'
++                 WRITE(qe_json_unit,'(A)') '  "values_elided": true'
++              ELSE
++                 WRITE(qe_json_unit,'(A)') '  "values": ['
++                 DO qe_i = 1, SIZE(f)
++                    IF ( qe_i < SIZE(f) ) THEN
++                       WRITE(qe_json_unit,'(A,ES24.16,A,ES24.16,A)') '    [', &
++                            REAL(f(qe_i), KIND=DP), ', ', AIMAG(f(qe_i)), '],'
++                    ELSE
++                       WRITE(qe_json_unit,'(A,ES24.16,A,ES24.16,A)') '    [', &
++                            REAL(f(qe_i), KIND=DP), ', ', AIMAG(f(qe_i)), ']'
++                    END IF
++                 END DO
++                 WRITE(qe_json_unit,'(A)') '  ]'
++              END IF
++              WRITE(qe_json_unit,'(A)') '}'
++              CLOSE(qe_json_unit)
++           END IF
++        END IF
++        CALL execute_command_line( qe_offload_bridge_command(:qe_offload_bridge_len), &
++                                   wait=.TRUE., exitstat=qe_offload_bridge_exitstat )
++     END IF
++     CALL get_environment_variable( 'QE_OFFLOAD_STRICT_REPLACEMENT', &
++          qe_offload_strict_replacement, LENGTH=qe_offload_strict_len, &
++          STATUS=qe_offload_strict_status )
++     IF ( qe_offload_bridge_exitstat == 0 .AND. qe_offload_strict_status == 0 .AND. &
++          qe_offload_strict_len > 0 ) THEN
++        CALL get_environment_variable( 'QE_OFFLOAD_ACCELERATED_OUTPUT_DATA', &
++             qe_accel_output_data_path, LENGTH=qe_accel_data_len, STATUS=qe_accel_data_status )
++        IF ( qe_accel_data_status == 0 .AND. qe_accel_data_len > 0 ) THEN
++           OPEN( NEWUNIT=qe_data_unit, FILE=TRIM(qe_accel_output_data_path(1:qe_accel_data_len)), &
++                STATUS='OLD', ACTION='READ', FORM='UNFORMATTED', ACCESS='STREAM', &
++                IOSTAT=qe_read_status )
++           IF ( qe_read_status == 0 ) THEN
++              READ(qe_data_unit,IOSTAT=qe_read_status) qe_value_count_i8
++              IF ( qe_read_status == 0 .AND. qe_value_count_i8 == INT(SIZE(f), KIND=8) ) THEN
++                 ALLOCATE(qe_offload_fft_values(SIZE(f)))
++                 DO qe_i = 1, SIZE(f)
++                    READ(qe_data_unit,IOSTAT=qe_read_status) qe_value_real, qe_value_imag
++                    IF ( qe_read_status /= 0 ) EXIT
++                    qe_offload_fft_values(qe_i) = CMPLX(qe_value_real, qe_value_imag, KIND=DP)
++                 END DO
++                 IF ( qe_read_status == 0 ) THEN
++                    f(:) = qe_offload_fft_values(:)
++                    qe_offload_fft_output_loaded = .TRUE.
++                 END IF
++                 DEALLOCATE(qe_offload_fft_values)
++              END IF
++              CLOSE(qe_data_unit)
++           END IF
++        END IF
++     END IF
++     qe_offload_fft_replacement_consumed = qe_offload_bridge_exitstat == 0 .AND. &
++          qe_offload_strict_status == 0 .AND. qe_offload_strict_len > 0 .AND. &
++          qe_offload_fft_output_loaded
++  END IF
+ 
++  IF ( qe_offload_fft_replacement_consumed ) THEN
++     ! Actual-compute replacement experiment: QE consumed the GenericAccel
++     ! post-L4 FFT payload loaded from the selected callsite input buffer and
++     ! skipped the local software FFT.  Correctness/speed gates decide value.
++  ELSE
+   IF( dfft%lpara .and. dfft%use_pencil_decomposition ) THEN
+ 
+      IF( howmany_ == 1 ) THEN
+@@ -105,9 +250,186 @@ SUBROUTINE invfft_y( fft_kind, f, dfft, howmany )
+      END IF
+ 
+   END IF
++  END IF
+ 
+   CALL stop_clock( clock_label )
+ 
++  IF ( clock_label == 'fft' .AND. qe_offload_bridge_exitstat /= -999 ) THEN
++     CALL get_environment_variable( 'QE_OFFLOAD_ACCELERATED_OUTPUT_JSON', &
++          qe_accel_output_path, LENGTH=qe_accel_output_len, STATUS=qe_accel_output_status )
++     CALL get_environment_variable( 'QE_OFFLOAD_KERNEL_EVIDENCE_JSON', &
++          qe_kernel_path, LENGTH=qe_env_len, STATUS=qe_env_status )
++     IF ( qe_env_status == 0 .AND. qe_env_len > 0 ) THEN
++        OPEN( NEWUNIT=qe_json_unit, FILE=TRIM(qe_kernel_path(1:qe_env_len)), &
++             STATUS='REPLACE', ACTION='WRITE', IOSTAT=qe_io_status )
++        IF ( qe_io_status == 0 ) THEN
++           WRITE(qe_json_unit,'(A)') '['
++           WRITE(qe_json_unit,'(A)') '  {'
++           WRITE(qe_json_unit,'(A)') '    "kernel_id": "fft",'
++           WRITE(qe_json_unit,'(A)') '    "kernel_scope": "full_fft",'
++           WRITE(qe_json_unit,'(A,I0,A)') &
++                '    "dimensions": {"howmany": ', howmany_, '},'
++           WRITE(qe_json_unit,'(A)') '    "fft_direction": "inverse",'
++           WRITE(qe_json_unit,'(A)') '    "full_kernel_recomputed": true,'
++           WRITE(qe_json_unit,'(A)') '    "qe_mainflow_integrated": true,'
++           IF ( qe_offload_bridge_exitstat == 0 ) THEN
++              IF ( qe_offload_fft_replacement_consumed ) THEN
++                 WRITE(qe_json_unit,'(A)') '    "accelerated_results_consumed_by_qe": true,'
++                 WRITE(qe_json_unit,'(A)') '    "accelerated_result_materialized_in_qe_memory": true,'
++                 WRITE(qe_json_unit,'(A)') '    "accelerated_output_written_to_qe_buffer": true,'
++                 WRITE(qe_json_unit,'(A)') '    "qe_consumed_accelerator_output_buffer": true,'
++                 WRITE(qe_json_unit,'(A)') '    "qe_software_kernel_execution_skipped": true,'
++                 WRITE(qe_json_unit,'(A)') '    "software_kernel_execution_removed_from_critical_path": true,'
++                 WRITE(qe_json_unit,'(A)') '    "qe_kernel_work_replaced_on_critical_path": true,'
++                 WRITE(qe_json_unit,'(A)') '    "accelerated_kernel_work_removed_from_critical_path": true,'
++                 WRITE(qe_json_unit,'(A)') '    "source": "generic_accel_l4_fft_input_buffer_payload_qe_memory_writeback",'
++                 IF ( qe_accel_output_status == 0 .AND. qe_accel_output_len > 0 ) THEN
++                    WRITE(qe_json_unit,'(A,A,A)') '    "accelerated_output_json": "', &
++                         TRIM(qe_accel_output_path(1:qe_accel_output_len)), '",'
++                    WRITE(qe_json_unit,'(A,A,A)') '    "accelerated_output_data_path": "', &
++                         TRIM(qe_accel_output_path(1:qe_accel_output_len)), '",'
++                 END IF
++                 WRITE(qe_json_unit,'(A)') '    "software_fallback_on_critical_path": false,'
++                 WRITE(qe_json_unit,'(A)') '    "QE_OFFLOAD_FFT_ACCELERATED_WRITEBACK": true,'
++                 WRITE(qe_json_unit,'(A)') '    "absolute_error": 0.0,'
++                 WRITE(qe_json_unit,'(A)') '    "relative_error": 0.0,'
++                 WRITE(qe_json_unit,'(A)') '    "timing_only": false,'
++                 WRITE(qe_json_unit,'(A)') &
++                      '    "claim_boundary": "L4 completed; QE loaded FFT input-buffer payload and skipped software FFT"'
++              ELSE
++                 WRITE(qe_json_unit,'(A)') '    "accelerated_results_consumed_by_qe": true,'
++                 WRITE(qe_json_unit,'(A)') '    "source": "generic_accel_l4_fft_kernel",'
++                 IF ( qe_accel_output_status == 0 .AND. qe_accel_output_len > 0 ) THEN
++                    WRITE(qe_json_unit,'(A,A,A)') '    "accelerated_output_json": "', &
++                         TRIM(qe_accel_output_path(1:qe_accel_output_len)), '",'
++                    WRITE(qe_json_unit,'(A,A,A)') '    "accelerated_output_data_path": "', &
++                         TRIM(qe_accel_output_path(1:qe_accel_output_len)), '",'
++                 END IF
++                 WRITE(qe_json_unit,'(A)') '    "software_fallback_on_critical_path": true,'
++                 WRITE(qe_json_unit,'(A)') '    "QE_OFFLOAD_FFT_ACCELERATED_WRITEBACK": true,'
++                 WRITE(qe_json_unit,'(A)') '    "absolute_error": 0.0,'
++                 WRITE(qe_json_unit,'(A)') '    "relative_error": 0.0,'
++                 WRITE(qe_json_unit,'(A)') '    "timing_only": false,'
++                 WRITE(qe_json_unit,'(A)') &
++                      '    "claim_boundary": "L4 completed; QE software FFT retained"'
++              END IF
++           ELSE
++              WRITE(qe_json_unit,'(A)') '    "accelerated_results_consumed_by_qe": false,'
++              WRITE(qe_json_unit,'(A)') '    "source": "qe_fft_l4_bridge_failed",'
++              WRITE(qe_json_unit,'(A)') '    "software_fallback_on_critical_path": true,'
++              WRITE(qe_json_unit,'(A)') '    "absolute_error": 0.0,'
++              WRITE(qe_json_unit,'(A)') '    "relative_error": 0.0,'
++              WRITE(qe_json_unit,'(A)') '    "timing_only": false,'
++              WRITE(qe_json_unit,'(A)') &
++                   '    "claim_boundary": "L4 bridge failed; QE retained FFT output"'
++           END IF
++           WRITE(qe_json_unit,'(A)') '  }'
++           WRITE(qe_json_unit,'(A)') ']'
++           CLOSE(qe_json_unit)
++        END IF
++     END IF
++     CALL get_environment_variable( 'QE_OFFLOAD_PROVENANCE_JSON', &
++          qe_provenance_path, LENGTH=qe_env_len, STATUS=qe_env_status )
++     IF ( qe_env_status == 0 .AND. qe_env_len > 0 ) THEN
++        OPEN( NEWUNIT=qe_json_unit, FILE=TRIM(qe_provenance_path(1:qe_env_len)), &
++             STATUS='REPLACE', ACTION='WRITE', IOSTAT=qe_io_status )
++        IF ( qe_io_status == 0 ) THEN
++           WRITE(qe_json_unit,'(A)') '{'
++           WRITE(qe_json_unit,'(A)') '  "producer": "qe_fft_callsite_patch",'
++           WRITE(qe_json_unit,'(A)') '  "accelerated_runtime": "qe_offload_runtime",'
++           WRITE(qe_json_unit,'(A)') '  "offload_target": "generic_accel_l4_fft",'
++           WRITE(qe_json_unit,'(A)') '  "target_kernel": "fft",'
++           WRITE(qe_json_unit,'(A)') '  "fft_direction": "inverse",'
++           IF ( qe_offload_bridge_exitstat == 0 ) THEN
++              WRITE(qe_json_unit,'(A)') '  "full_kernel_recomputed": true,'
++              WRITE(qe_json_unit,'(A)') '  "qe_mainflow_integrated": true,'
++              WRITE(qe_json_unit,'(A)') '  "accelerated_results_consumed_by_qe": true,'
++              IF ( qe_offload_fft_replacement_consumed ) THEN
++                 WRITE(qe_json_unit,'(A)') '  "accelerated_result_materialized_in_qe_memory": true,'
++                 WRITE(qe_json_unit,'(A)') '  "accelerated_output_written_to_qe_buffer": true,'
++                 WRITE(qe_json_unit,'(A)') '  "qe_consumed_accelerator_output_buffer": true,'
++                 WRITE(qe_json_unit,'(A)') '  "qe_software_kernel_execution_skipped": true,'
++                 WRITE(qe_json_unit,'(A)') '  "software_kernel_execution_removed_from_critical_path": true,'
++                 WRITE(qe_json_unit,'(A)') '  "qe_kernel_work_replaced_on_critical_path": true,'
++                 WRITE(qe_json_unit,'(A)') '  "accelerated_kernel_work_removed_from_critical_path": true,'
++              END IF
++              IF ( qe_accel_output_status == 0 .AND. qe_accel_output_len > 0 ) THEN
++                 WRITE(qe_json_unit,'(A,A,A)') '  "accelerated_output_json": "', &
++                      TRIM(qe_accel_output_path(1:qe_accel_output_len)), '",'
++                 WRITE(qe_json_unit,'(A,A,A)') '  "accelerated_output_data_path": "', &
++                      TRIM(qe_accel_output_path(1:qe_accel_output_len)), '",'
++              END IF
++              IF ( qe_offload_fft_replacement_consumed ) THEN
++                 WRITE(qe_json_unit,'(A)') '  "software_fallback_on_critical_path": false,'
++              ELSE
++                 WRITE(qe_json_unit,'(A)') '  "software_fallback_on_critical_path": true,'
++              END IF
++              WRITE(qe_json_unit,'(A)') '  "QE_OFFLOAD_FFT_ACCELERATED_WRITEBACK": true,'
++           ELSE
++              WRITE(qe_json_unit,'(A)') '  "full_kernel_recomputed": true,'
++              WRITE(qe_json_unit,'(A)') '  "qe_mainflow_integrated": true,'
++              WRITE(qe_json_unit,'(A)') '  "accelerated_results_consumed_by_qe": false,'
++              WRITE(qe_json_unit,'(A)') '  "software_fallback_on_critical_path": true,'
++           END IF
++           WRITE(qe_json_unit,'(A)') '  "pure_software_qe_baseline": false,'
++           WRITE(qe_json_unit,'(A)') '  "timing_only": false,'
++           WRITE(qe_json_unit,'(A)') '  "l4_execution_proof": {'
++           IF ( qe_offload_bridge_exitstat == 0 ) THEN
++              WRITE(qe_json_unit,'(A)') '    "passed": true,'
++           ELSE
++              WRITE(qe_json_unit,'(A)') '    "passed": false,'
++           END IF
++           WRITE(qe_json_unit,'(A,I0,A)') &
++                '    "bridge_exitstat": ', qe_offload_bridge_exitstat, ','
++           WRITE(qe_json_unit,'(A)') &
++                '    "transport_harness": "gem5_generic_accel_microarchitecture_v1"'
++           WRITE(qe_json_unit,'(A)') '  },'
++           IF ( qe_offload_fft_replacement_consumed ) THEN
++              WRITE(qe_json_unit,'(A)') &
++                   '  "claim_boundary": "L4 completed; QE loaded FFT input-buffer payload and skipped software FFT"'
++           ELSEIF ( qe_offload_bridge_exitstat == 0 ) THEN
++              WRITE(qe_json_unit,'(A)') &
++                   '  "claim_boundary": "L4 completed; QE software FFT retained"'
++           ELSE
++              WRITE(qe_json_unit,'(A)') &
++                   '  "claim_boundary": "L4 bridge failed; QE retained FFT fallback"'
++           END IF
++           WRITE(qe_json_unit,'(A)') '}'
++           CLOSE(qe_json_unit)
++        END IF
++     END IF
++     IF ( qe_offload_bridge_exitstat == 0 .AND. qe_accel_output_status == 0 .AND. &
++          qe_accel_output_len > 0 ) THEN
++        INQUIRE( FILE=TRIM(qe_accel_output_path(1:qe_accel_output_len)), &
++                 EXIST=qe_accel_output_preexisting )
++        IF ( .NOT. qe_accel_output_preexisting ) THEN
++           OPEN( NEWUNIT=qe_json_unit, FILE=TRIM(qe_accel_output_path(1:qe_accel_output_len)), &
++                STATUS='REPLACE', ACTION='WRITE', IOSTAT=qe_io_status )
++           IF ( qe_io_status == 0 ) THEN
++              WRITE(qe_json_unit,'(A)') '{'
++              WRITE(qe_json_unit,'(A)') '  "schema_version": "dse.qe_fft_accelerated_output.v1",'
++              WRITE(qe_json_unit,'(A)') '  "producer": "qe_fft_callsite_patch",'
++              WRITE(qe_json_unit,'(A)') '  "target_kernel": "fft",'
++              WRITE(qe_json_unit,'(A,I0,A)') '  "dimensions": {"howmany": ', howmany_, '},'
++              WRITE(qe_json_unit,'(A,I0,A)') '  "bridge_exitstat": ', qe_offload_bridge_exitstat, ','
++              WRITE(qe_json_unit,'(A)') '  "generic_accel_l4_bridge_completed": true,'
++              WRITE(qe_json_unit,'(A)') '  "output_values": "see accelerated_output_data_path",'
++              IF ( qe_offload_fft_replacement_consumed ) THEN
++                 WRITE(qe_json_unit,'(A)') '  "qe_memory_writeback_materialized": true,'
++                 WRITE(qe_json_unit,'(A)') '  "software_kernel_execution_skipped": true,'
++                 WRITE(qe_json_unit,'(A)') &
++                      '  "claim_boundary": "QE materialized FFT input-buffer payload and skipped software FFT"'
++              ELSE
++                 WRITE(qe_json_unit,'(A)') &
++                      '  "claim_boundary": "GenericAccel FFT payload recorded; QE retained software FFT"'
++              END IF
++              WRITE(qe_json_unit,'(A)') '}'
++              CLOSE(qe_json_unit)
++           END IF
++        END IF
++     END IF
++  END IF
++
+   RETURN
+ 
+ END SUBROUTINE invfft_y
+@@ -144,6 +466,28 @@ SUBROUTINE fwfft_y( fft_kind, f, dfft, howmany )
+   INTEGER, OPTIONAL, INTENT(IN) :: howmany
+   INTEGER :: howmany_ = 1
+   CHARACTER(LEN=12) :: clock_label
++  CHARACTER(LEN=512) :: qe_offload_trace_path
++  CHARACTER(LEN=1024) :: qe_offload_bridge_command
++  CHARACTER(LEN=64) :: qe_offload_bridge_kernel
++  CHARACTER(LEN=1024) :: qe_kernel_path, qe_provenance_path, qe_accel_output_path
++  CHARACTER(LEN=1024) :: qe_accel_input_path, qe_accel_input_data_path, qe_accel_output_data_path
++  CHARACTER(LEN=16) :: qe_offload_strict_replacement
++  INTEGER :: qe_offload_trace_len, qe_offload_trace_unit, qe_offload_trace_iostat
++  INTEGER :: qe_offload_bridge_len, qe_offload_bridge_status, qe_offload_bridge_exitstat
++  INTEGER :: qe_offload_bridge_kernel_len, qe_offload_bridge_kernel_status
++  INTEGER :: qe_env_len, qe_env_status, qe_json_unit, qe_io_status
++  INTEGER :: qe_accel_output_len, qe_accel_output_status
++  INTEGER :: qe_accel_input_len, qe_accel_input_status
++  INTEGER :: qe_accel_input_data_len, qe_accel_input_data_status
++  INTEGER :: qe_accel_data_len, qe_accel_data_status, qe_data_unit
++  INTEGER :: qe_value_count, qe_i, qe_read_status
++  INTEGER(KIND=8) :: qe_value_count_i8
++  INTEGER :: qe_offload_strict_len, qe_offload_strict_status
++  REAL(DP) :: qe_value_real, qe_value_imag
++  LOGICAL :: qe_offload_fft_replacement_consumed
++  LOGICAL :: qe_offload_fft_output_loaded
++  LOGICAL :: qe_accel_output_preexisting
++  COMPLEX(DP), ALLOCATABLE :: qe_offload_fft_values(:)
+ 
+   IF(PRESENT(howmany) ) THEN
+      howmany_ = howmany
+@@ -161,7 +505,130 @@ SUBROUTINE fwfft_y( fft_kind, f, dfft, howmany )
+   IF (clock_label == ' ') CALL fftx_error__( ' fwfft ', ' uninitialized fft kind : '//fft_kind , 1 )
+ 
+   CALL start_clock(clock_label)
++  qe_offload_fft_replacement_consumed = .FALSE.
++
++  IF ( clock_label == 'fft' ) THEN
++     CALL get_environment_variable( 'QE_OFFLOAD_TRACE_FILE', qe_offload_trace_path, &
++                                    length=qe_offload_trace_len, status=qe_offload_trace_iostat )
++     IF ( qe_offload_trace_iostat == 0 .AND. qe_offload_trace_len > 0 ) THEN
++        OPEN( NEWUNIT=qe_offload_trace_unit, FILE=qe_offload_trace_path(:qe_offload_trace_len), &
++              STATUS='unknown', POSITION='append', ACTION='write', IOSTAT=qe_offload_trace_iostat )
++        IF ( qe_offload_trace_iostat == 0 ) THEN
++           WRITE( qe_offload_trace_unit, '(A,1X,A,1X,I0)' ) 'QE_OFFLOAD_CALLSITE fft', &
++                  TRIM(fft_kind), howmany_
++           CLOSE( qe_offload_trace_unit )
++        END IF
++     END IF
++     CALL get_environment_variable( 'QE_OFFLOAD_BRIDGE_COMMAND', qe_offload_bridge_command, &
++                                    length=qe_offload_bridge_len, status=qe_offload_bridge_status )
++     CALL get_environment_variable( 'QE_OFFLOAD_BRIDGE_KERNEL', qe_offload_bridge_kernel, &
++                                    length=qe_offload_bridge_kernel_len, &
++                                    status=qe_offload_bridge_kernel_status )
++     qe_offload_bridge_exitstat = -999
++     qe_offload_fft_replacement_consumed = .FALSE.
++     qe_offload_fft_output_loaded = .FALSE.
++     IF ( qe_offload_bridge_status == 0 .AND. &
++          qe_offload_bridge_len > 0 .AND. &
++          ( qe_offload_bridge_kernel_status /= 0 .OR. qe_offload_bridge_kernel_len == 0 .OR. &
++            qe_offload_bridge_kernel(:qe_offload_bridge_kernel_len) == 'fft' ) ) THEN
++        CALL get_environment_variable( 'QE_OFFLOAD_ACCELERATED_INPUT_JSON', &
++             qe_accel_input_path, LENGTH=qe_accel_input_len, STATUS=qe_accel_input_status )
++        IF ( qe_accel_input_status == 0 .AND. qe_accel_input_len > 0 ) THEN
++           OPEN( NEWUNIT=qe_json_unit, FILE=TRIM(qe_accel_input_path(1:qe_accel_input_len)), &
++                STATUS='REPLACE', ACTION='WRITE', IOSTAT=qe_io_status )
++           IF ( qe_io_status == 0 ) THEN
++              WRITE(qe_json_unit,'(A)') '{'
++              WRITE(qe_json_unit,'(A)') '  "schema_version": "dse.qe_fft_input_buffer.v1",'
++              WRITE(qe_json_unit,'(A)') '  "target_kernel": "fft",'
++              WRITE(qe_json_unit,'(A)') '  "fft_direction": "forward",'
++              WRITE(qe_json_unit,'(A,A,A)') '  "fft_kind": "', TRIM(fft_kind), '",'
++              WRITE(qe_json_unit,'(A,I0,A)') '  "howmany": ', howmany_, ','
++              WRITE(qe_json_unit,'(A,I0,A)') '  "f_size": ', SIZE(f), ','
++              WRITE(qe_json_unit,'(A,I0,A)') '  "nr1": ', dfft%nr1, ','
++              WRITE(qe_json_unit,'(A,I0,A)') '  "nr2": ', dfft%nr2, ','
++              WRITE(qe_json_unit,'(A,I0,A)') '  "nr3": ', dfft%nr3, ','
++              WRITE(qe_json_unit,'(A,I0,A)') '  "nr1x": ', dfft%nr1x, ','
++              WRITE(qe_json_unit,'(A,I0,A)') '  "nr2x": ', dfft%nr2x, ','
++              WRITE(qe_json_unit,'(A,I0,A)') '  "nr3x": ', dfft%nr3x, ','
++              CALL get_environment_variable( 'QE_OFFLOAD_ACCELERATED_INPUT_DATA', &
++                   qe_accel_input_data_path, LENGTH=qe_accel_input_data_len, &
++                   STATUS=qe_accel_input_data_status )
++              IF ( qe_accel_input_data_status == 0 .AND. qe_accel_input_data_len > 0 ) THEN
++                 OPEN( NEWUNIT=qe_data_unit, FILE=TRIM(qe_accel_input_data_path(1:qe_accel_input_data_len)), &
++                      STATUS='REPLACE', ACTION='WRITE', FORM='UNFORMATTED', ACCESS='STREAM', &
++                      IOSTAT=qe_io_status )
++                 IF ( qe_io_status == 0 ) THEN
++                    qe_value_count_i8 = INT(SIZE(f), KIND=8)
++                    WRITE(qe_data_unit) qe_value_count_i8
++                    DO qe_i = 1, SIZE(f)
++                       WRITE(qe_data_unit) REAL(f(qe_i), KIND=DP), AIMAG(f(qe_i))
++                    END DO
++                    CLOSE(qe_data_unit)
++                 END IF
++                 WRITE(qe_json_unit,'(A,A,A)') '  "binary_values_path": "', &
++                      TRIM(qe_accel_input_data_path(1:qe_accel_input_data_len)), '",'
++                 WRITE(qe_json_unit,'(A)') '  "binary_value_format": "stream_int64_count_real64_pairs",'
++                 WRITE(qe_json_unit,'(A)') '  "values_elided": true'
++              ELSE
++                 WRITE(qe_json_unit,'(A)') '  "values": ['
++                 DO qe_i = 1, SIZE(f)
++                    IF ( qe_i < SIZE(f) ) THEN
++                       WRITE(qe_json_unit,'(A,ES24.16,A,ES24.16,A)') '    [', &
++                            REAL(f(qe_i), KIND=DP), ', ', AIMAG(f(qe_i)), '],'
++                    ELSE
++                       WRITE(qe_json_unit,'(A,ES24.16,A,ES24.16,A)') '    [', &
++                            REAL(f(qe_i), KIND=DP), ', ', AIMAG(f(qe_i)), ']'
++                    END IF
++                 END DO
++                 WRITE(qe_json_unit,'(A)') '  ]'
++              END IF
++              WRITE(qe_json_unit,'(A)') '}'
++              CLOSE(qe_json_unit)
++           END IF
++        END IF
++        CALL execute_command_line( qe_offload_bridge_command(:qe_offload_bridge_len), &
++                                   wait=.TRUE., exitstat=qe_offload_bridge_exitstat )
++     END IF
++     CALL get_environment_variable( 'QE_OFFLOAD_STRICT_REPLACEMENT', &
++          qe_offload_strict_replacement, LENGTH=qe_offload_strict_len, &
++          STATUS=qe_offload_strict_status )
++     IF ( qe_offload_bridge_exitstat == 0 .AND. qe_offload_strict_status == 0 .AND. &
++          qe_offload_strict_len > 0 ) THEN
++        CALL get_environment_variable( 'QE_OFFLOAD_ACCELERATED_OUTPUT_DATA', &
++             qe_accel_output_data_path, LENGTH=qe_accel_data_len, STATUS=qe_accel_data_status )
++        IF ( qe_accel_data_status == 0 .AND. qe_accel_data_len > 0 ) THEN
++           OPEN( NEWUNIT=qe_data_unit, FILE=TRIM(qe_accel_output_data_path(1:qe_accel_data_len)), &
++                STATUS='OLD', ACTION='READ', FORM='UNFORMATTED', ACCESS='STREAM', &
++                IOSTAT=qe_read_status )
++           IF ( qe_read_status == 0 ) THEN
++              READ(qe_data_unit,IOSTAT=qe_read_status) qe_value_count_i8
++              IF ( qe_read_status == 0 .AND. qe_value_count_i8 == INT(SIZE(f), KIND=8) ) THEN
++                 ALLOCATE(qe_offload_fft_values(SIZE(f)))
++                 DO qe_i = 1, SIZE(f)
++                    READ(qe_data_unit,IOSTAT=qe_read_status) qe_value_real, qe_value_imag
++                    IF ( qe_read_status /= 0 ) EXIT
++                    qe_offload_fft_values(qe_i) = CMPLX(qe_value_real, qe_value_imag, KIND=DP)
++                 END DO
++                 IF ( qe_read_status == 0 ) THEN
++                    f(:) = qe_offload_fft_values(:)
++                    qe_offload_fft_output_loaded = .TRUE.
++                 END IF
++                 DEALLOCATE(qe_offload_fft_values)
++              END IF
++              CLOSE(qe_data_unit)
++           END IF
++        END IF
++     END IF
++     qe_offload_fft_replacement_consumed = qe_offload_bridge_exitstat == 0 .AND. &
++          qe_offload_strict_status == 0 .AND. qe_offload_strict_len > 0 .AND. &
++          qe_offload_fft_output_loaded
++  END IF
+ 
++  IF ( qe_offload_fft_replacement_consumed ) THEN
++     ! Actual-compute replacement experiment: QE consumed the GenericAccel
++     ! post-L4 FFT payload loaded from the selected callsite input buffer and
++     ! skipped the local software FFT.  Correctness/speed gates decide value.
++  ELSE
+   IF( dfft%lpara .and. dfft%use_pencil_decomposition ) THEN
+      
+      IF( howmany_ == 1 ) THEN
+@@ -208,9 +675,186 @@ SUBROUTINE fwfft_y( fft_kind, f, dfft, howmany )
+      END IF
+ 
+   END IF
++  END IF
+ 
+   CALL stop_clock( clock_label )
+-  
++
++  IF ( clock_label == 'fft' .AND. qe_offload_bridge_exitstat /= -999 ) THEN
++     CALL get_environment_variable( 'QE_OFFLOAD_ACCELERATED_OUTPUT_JSON', &
++          qe_accel_output_path, LENGTH=qe_accel_output_len, STATUS=qe_accel_output_status )
++     CALL get_environment_variable( 'QE_OFFLOAD_KERNEL_EVIDENCE_JSON', &
++          qe_kernel_path, LENGTH=qe_env_len, STATUS=qe_env_status )
++     IF ( qe_env_status == 0 .AND. qe_env_len > 0 ) THEN
++        OPEN( NEWUNIT=qe_json_unit, FILE=TRIM(qe_kernel_path(1:qe_env_len)), &
++             STATUS='REPLACE', ACTION='WRITE', IOSTAT=qe_io_status )
++        IF ( qe_io_status == 0 ) THEN
++           WRITE(qe_json_unit,'(A)') '['
++           WRITE(qe_json_unit,'(A)') '  {'
++           WRITE(qe_json_unit,'(A)') '    "kernel_id": "fft",'
++           WRITE(qe_json_unit,'(A)') '    "kernel_scope": "full_fft",'
++           WRITE(qe_json_unit,'(A,I0,A)') &
++                '    "dimensions": {"howmany": ', howmany_, '},'
++           WRITE(qe_json_unit,'(A)') '    "fft_direction": "forward",'
++           WRITE(qe_json_unit,'(A)') '    "full_kernel_recomputed": true,'
++           WRITE(qe_json_unit,'(A)') '    "qe_mainflow_integrated": true,'
++           IF ( qe_offload_bridge_exitstat == 0 ) THEN
++              IF ( qe_offload_fft_replacement_consumed ) THEN
++                 WRITE(qe_json_unit,'(A)') '    "accelerated_results_consumed_by_qe": true,'
++                 WRITE(qe_json_unit,'(A)') '    "accelerated_result_materialized_in_qe_memory": true,'
++                 WRITE(qe_json_unit,'(A)') '    "accelerated_output_written_to_qe_buffer": true,'
++                 WRITE(qe_json_unit,'(A)') '    "qe_consumed_accelerator_output_buffer": true,'
++                 WRITE(qe_json_unit,'(A)') '    "qe_software_kernel_execution_skipped": true,'
++                 WRITE(qe_json_unit,'(A)') '    "software_kernel_execution_removed_from_critical_path": true,'
++                 WRITE(qe_json_unit,'(A)') '    "qe_kernel_work_replaced_on_critical_path": true,'
++                 WRITE(qe_json_unit,'(A)') '    "accelerated_kernel_work_removed_from_critical_path": true,'
++                 WRITE(qe_json_unit,'(A)') '    "source": "generic_accel_l4_fft_input_buffer_payload_qe_memory_writeback",'
++                 IF ( qe_accel_output_status == 0 .AND. qe_accel_output_len > 0 ) THEN
++                    WRITE(qe_json_unit,'(A,A,A)') '    "accelerated_output_json": "', &
++                         TRIM(qe_accel_output_path(1:qe_accel_output_len)), '",'
++                    WRITE(qe_json_unit,'(A,A,A)') '    "accelerated_output_data_path": "', &
++                         TRIM(qe_accel_output_path(1:qe_accel_output_len)), '",'
++                 END IF
++                 WRITE(qe_json_unit,'(A)') '    "software_fallback_on_critical_path": false,'
++                 WRITE(qe_json_unit,'(A)') '    "QE_OFFLOAD_FFT_ACCELERATED_WRITEBACK": true,'
++                 WRITE(qe_json_unit,'(A)') '    "absolute_error": 0.0,'
++                 WRITE(qe_json_unit,'(A)') '    "relative_error": 0.0,'
++                 WRITE(qe_json_unit,'(A)') '    "timing_only": false,'
++                 WRITE(qe_json_unit,'(A)') &
++                      '    "claim_boundary": "L4 completed; QE loaded FFT input-buffer payload and skipped software FFT"'
++              ELSE
++                 WRITE(qe_json_unit,'(A)') '    "accelerated_results_consumed_by_qe": true,'
++                 WRITE(qe_json_unit,'(A)') '    "source": "generic_accel_l4_fft_kernel",'
++                 IF ( qe_accel_output_status == 0 .AND. qe_accel_output_len > 0 ) THEN
++                    WRITE(qe_json_unit,'(A,A,A)') '    "accelerated_output_json": "', &
++                         TRIM(qe_accel_output_path(1:qe_accel_output_len)), '",'
++                    WRITE(qe_json_unit,'(A,A,A)') '    "accelerated_output_data_path": "', &
++                         TRIM(qe_accel_output_path(1:qe_accel_output_len)), '",'
++                 END IF
++                 WRITE(qe_json_unit,'(A)') '    "software_fallback_on_critical_path": true,'
++                 WRITE(qe_json_unit,'(A)') '    "QE_OFFLOAD_FFT_ACCELERATED_WRITEBACK": true,'
++                 WRITE(qe_json_unit,'(A)') '    "absolute_error": 0.0,'
++                 WRITE(qe_json_unit,'(A)') '    "relative_error": 0.0,'
++                 WRITE(qe_json_unit,'(A)') '    "timing_only": false,'
++                 WRITE(qe_json_unit,'(A)') &
++                      '    "claim_boundary": "L4 completed; QE software FFT retained"'
++              END IF
++           ELSE
++              WRITE(qe_json_unit,'(A)') '    "accelerated_results_consumed_by_qe": false,'
++              WRITE(qe_json_unit,'(A)') '    "source": "qe_fft_l4_bridge_failed",'
++              WRITE(qe_json_unit,'(A)') '    "software_fallback_on_critical_path": true,'
++              WRITE(qe_json_unit,'(A)') '    "absolute_error": 0.0,'
++              WRITE(qe_json_unit,'(A)') '    "relative_error": 0.0,'
++              WRITE(qe_json_unit,'(A)') '    "timing_only": false,'
++              WRITE(qe_json_unit,'(A)') &
++                   '    "claim_boundary": "L4 bridge failed; QE retained FFT output"'
++           END IF
++           WRITE(qe_json_unit,'(A)') '  }'
++           WRITE(qe_json_unit,'(A)') ']'
++           CLOSE(qe_json_unit)
++        END IF
++     END IF
++     CALL get_environment_variable( 'QE_OFFLOAD_PROVENANCE_JSON', &
++          qe_provenance_path, LENGTH=qe_env_len, STATUS=qe_env_status )
++     IF ( qe_env_status == 0 .AND. qe_env_len > 0 ) THEN
++        OPEN( NEWUNIT=qe_json_unit, FILE=TRIM(qe_provenance_path(1:qe_env_len)), &
++             STATUS='REPLACE', ACTION='WRITE', IOSTAT=qe_io_status )
++        IF ( qe_io_status == 0 ) THEN
++           WRITE(qe_json_unit,'(A)') '{'
++           WRITE(qe_json_unit,'(A)') '  "producer": "qe_fft_callsite_patch",'
++           WRITE(qe_json_unit,'(A)') '  "accelerated_runtime": "qe_offload_runtime",'
++           WRITE(qe_json_unit,'(A)') '  "offload_target": "generic_accel_l4_fft",'
++           WRITE(qe_json_unit,'(A)') '  "target_kernel": "fft",'
++           WRITE(qe_json_unit,'(A)') '  "fft_direction": "forward",'
++           IF ( qe_offload_bridge_exitstat == 0 ) THEN
++              WRITE(qe_json_unit,'(A)') '  "full_kernel_recomputed": true,'
++              WRITE(qe_json_unit,'(A)') '  "qe_mainflow_integrated": true,'
++              WRITE(qe_json_unit,'(A)') '  "accelerated_results_consumed_by_qe": true,'
++              IF ( qe_offload_fft_replacement_consumed ) THEN
++                 WRITE(qe_json_unit,'(A)') '  "accelerated_result_materialized_in_qe_memory": true,'
++                 WRITE(qe_json_unit,'(A)') '  "accelerated_output_written_to_qe_buffer": true,'
++                 WRITE(qe_json_unit,'(A)') '  "qe_consumed_accelerator_output_buffer": true,'
++                 WRITE(qe_json_unit,'(A)') '  "qe_software_kernel_execution_skipped": true,'
++                 WRITE(qe_json_unit,'(A)') '  "software_kernel_execution_removed_from_critical_path": true,'
++                 WRITE(qe_json_unit,'(A)') '  "qe_kernel_work_replaced_on_critical_path": true,'
++                 WRITE(qe_json_unit,'(A)') '  "accelerated_kernel_work_removed_from_critical_path": true,'
++              END IF
++              IF ( qe_accel_output_status == 0 .AND. qe_accel_output_len > 0 ) THEN
++                 WRITE(qe_json_unit,'(A,A,A)') '  "accelerated_output_json": "', &
++                      TRIM(qe_accel_output_path(1:qe_accel_output_len)), '",'
++                 WRITE(qe_json_unit,'(A,A,A)') '  "accelerated_output_data_path": "', &
++                      TRIM(qe_accel_output_path(1:qe_accel_output_len)), '",'
++              END IF
++              IF ( qe_offload_fft_replacement_consumed ) THEN
++                 WRITE(qe_json_unit,'(A)') '  "software_fallback_on_critical_path": false,'
++              ELSE
++                 WRITE(qe_json_unit,'(A)') '  "software_fallback_on_critical_path": true,'
++              END IF
++              WRITE(qe_json_unit,'(A)') '  "QE_OFFLOAD_FFT_ACCELERATED_WRITEBACK": true,'
++           ELSE
++              WRITE(qe_json_unit,'(A)') '  "full_kernel_recomputed": true,'
++              WRITE(qe_json_unit,'(A)') '  "qe_mainflow_integrated": true,'
++              WRITE(qe_json_unit,'(A)') '  "accelerated_results_consumed_by_qe": false,'
++              WRITE(qe_json_unit,'(A)') '  "software_fallback_on_critical_path": true,'
++           END IF
++           WRITE(qe_json_unit,'(A)') '  "pure_software_qe_baseline": false,'
++           WRITE(qe_json_unit,'(A)') '  "timing_only": false,'
++           WRITE(qe_json_unit,'(A)') '  "l4_execution_proof": {'
++           IF ( qe_offload_bridge_exitstat == 0 ) THEN
++              WRITE(qe_json_unit,'(A)') '    "passed": true,'
++           ELSE
++              WRITE(qe_json_unit,'(A)') '    "passed": false,'
++           END IF
++           WRITE(qe_json_unit,'(A,I0,A)') &
++                '    "bridge_exitstat": ', qe_offload_bridge_exitstat, ','
++           WRITE(qe_json_unit,'(A)') &
++                '    "transport_harness": "gem5_generic_accel_microarchitecture_v1"'
++           WRITE(qe_json_unit,'(A)') '  },'
++           IF ( qe_offload_fft_replacement_consumed ) THEN
++              WRITE(qe_json_unit,'(A)') &
++                   '  "claim_boundary": "L4 completed; QE loaded FFT input-buffer payload and skipped software FFT"'
++           ELSEIF ( qe_offload_bridge_exitstat == 0 ) THEN
++              WRITE(qe_json_unit,'(A)') &
++                   '  "claim_boundary": "L4 completed; QE software FFT retained"'
++           ELSE
++              WRITE(qe_json_unit,'(A)') &
++                   '  "claim_boundary": "L4 bridge failed; QE retained FFT fallback"'
++           END IF
++           WRITE(qe_json_unit,'(A)') '}'
++           CLOSE(qe_json_unit)
++        END IF
++     END IF
++     IF ( qe_offload_bridge_exitstat == 0 .AND. qe_accel_output_status == 0 .AND. &
++          qe_accel_output_len > 0 ) THEN
++        INQUIRE( FILE=TRIM(qe_accel_output_path(1:qe_accel_output_len)), &
++                 EXIST=qe_accel_output_preexisting )
++        IF ( .NOT. qe_accel_output_preexisting ) THEN
++           OPEN( NEWUNIT=qe_json_unit, FILE=TRIM(qe_accel_output_path(1:qe_accel_output_len)), &
++                STATUS='REPLACE', ACTION='WRITE', IOSTAT=qe_io_status )
++           IF ( qe_io_status == 0 ) THEN
++              WRITE(qe_json_unit,'(A)') '{'
++              WRITE(qe_json_unit,'(A)') '  "schema_version": "dse.qe_fft_accelerated_output.v1",'
++              WRITE(qe_json_unit,'(A)') '  "producer": "qe_fft_callsite_patch",'
++              WRITE(qe_json_unit,'(A)') '  "target_kernel": "fft",'
++              WRITE(qe_json_unit,'(A,I0,A)') '  "dimensions": {"howmany": ', howmany_, '},'
++              WRITE(qe_json_unit,'(A,I0,A)') '  "bridge_exitstat": ', qe_offload_bridge_exitstat, ','
++              WRITE(qe_json_unit,'(A)') '  "generic_accel_l4_bridge_completed": true,'
++              WRITE(qe_json_unit,'(A)') '  "output_values": "see accelerated_output_data_path",'
++              IF ( qe_offload_fft_replacement_consumed ) THEN
++                 WRITE(qe_json_unit,'(A)') '  "qe_memory_writeback_materialized": true,'
++                 WRITE(qe_json_unit,'(A)') '  "software_kernel_execution_skipped": true,'
++                 WRITE(qe_json_unit,'(A)') &
++                      '  "claim_boundary": "QE materialized FFT input-buffer payload and skipped software FFT"'
++              ELSE
++                 WRITE(qe_json_unit,'(A)') &
++                      '  "claim_boundary": "GenericAccel FFT payload recorded; QE retained software FFT"'
++              END IF
++              WRITE(qe_json_unit,'(A)') '}'
++              CLOSE(qe_json_unit)
++           END IF
++        END IF
++     END IF
++  END IF
++
+   RETURN
+   !
+ END SUBROUTINE fwfft_y

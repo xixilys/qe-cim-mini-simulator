@@ -1,0 +1,47 @@
+diff --git a/PP/src/bands.f90 b/PP/src/bands.f90
+index 15c91a1..5f44b84 100644
+--- a/PP/src/bands.f90
++++ b/PP/src/bands.f90
+@@ -181,9 +181,42 @@ SUBROUTINE punch_band (filband, spin_component, lsigma, no_overlap)
+   INTEGER, ALLOCATABLE :: closest_band(:,:)! index for band ordering
+   REAL(DP), ALLOCATABLE:: sigma_avg(:,:,:) ! expectation value of sigma
+   REAL(DP), ALLOCATABLE:: et_(:,:) ! reordered eigenvalues in eV
++  CHARACTER(LEN=512) :: qe_offload_trace_path
++  CHARACTER(LEN=1024) :: qe_offload_bridge_command
++  CHARACTER(LEN=64) :: qe_offload_bridge_kernel
++  INTEGER :: qe_offload_trace_len, qe_offload_trace_unit, qe_offload_trace_iostat
++  INTEGER :: qe_offload_bridge_len, qe_offload_bridge_status, qe_offload_bridge_exitstat
++  INTEGER :: qe_offload_bridge_kernel_len, qe_offload_bridge_kernel_status
++  LOGICAL, SAVE :: qe_offload_band_projection_bridge_invoked = .FALSE.
+ 
+   
+   IF (filband == ' ') RETURN
++  ! Controlled Complete-DSE call-site instrumentation only.  This patch records
++  ! the real QE band-path projection invocation when QE_OFFLOAD_TRACE_FILE is
++  ! set; it does not change numerical execution or claim acceleration.
++  CALL get_environment_variable( 'QE_OFFLOAD_TRACE_FILE', qe_offload_trace_path, &
++                                 length=qe_offload_trace_len, status=qe_offload_trace_iostat )
++  IF ( ionode .AND. qe_offload_trace_iostat == 0 .AND. qe_offload_trace_len > 0 ) THEN
++     OPEN( NEWUNIT=qe_offload_trace_unit, FILE=qe_offload_trace_path(:qe_offload_trace_len), &
++           STATUS='unknown', POSITION='append', ACTION='write', IOSTAT=qe_offload_trace_iostat )
++     IF ( qe_offload_trace_iostat == 0 ) THEN
++        WRITE( qe_offload_trace_unit, '(A,1X,I0,1X,I0,1X,I0)' ) 'QE_OFFLOAD_CALLSITE band_path_projection', nks, nkstot, nbnd
++        CLOSE( qe_offload_trace_unit )
++     END IF
++  END IF
++  CALL get_environment_variable( 'QE_OFFLOAD_BRIDGE_COMMAND', qe_offload_bridge_command, &
++                                 length=qe_offload_bridge_len, status=qe_offload_bridge_status )
++  CALL get_environment_variable( 'QE_OFFLOAD_BRIDGE_KERNEL', qe_offload_bridge_kernel, &
++                                 length=qe_offload_bridge_kernel_len, &
++                                 status=qe_offload_bridge_kernel_status )
++  IF ( ionode .AND. .NOT. qe_offload_band_projection_bridge_invoked .AND. &
++       qe_offload_bridge_status == 0 .AND. qe_offload_bridge_len > 0 .AND. &
++       ( qe_offload_bridge_kernel_status /= 0 .OR. qe_offload_bridge_kernel_len == 0 .OR. &
++         qe_offload_bridge_kernel(:qe_offload_bridge_kernel_len) == 'band_path_projection' ) ) THEN
++     qe_offload_band_projection_bridge_invoked = .TRUE.
++     CALL execute_command_line( qe_offload_bridge_command(:qe_offload_bridge_len), &
++                                wait=.TRUE., exitstat=qe_offload_bridge_exitstat )
++  END IF
+ 
+   iunpun = 19
+   ios(:) = 0

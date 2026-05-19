@@ -11,6 +11,8 @@ from dse_v2.reporting.final_report import (
     validate_claims,
     validate_report_claims,
     write_final_report_artifacts,
+    write_step4_claim_validation_artifacts,
+    write_step5_report_artifacts,
 )
 from dse_v2.reporting.complete_dse_claims import (
     ANTI_DOWNGRADE_RULES,
@@ -50,4 +52,6 @@ __all__ = [
     "validate_report_claims",
     "write_complete_dse_reporting_package",
     "write_final_report_artifacts",
+    "write_step4_claim_validation_artifacts",
+    "write_step5_report_artifacts",
 ]

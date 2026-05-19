@@ -15,6 +15,17 @@ from dse_v2.mapping.domain_policy import (
     Step2PolicyInput,
     default_step2_domain_policy_registry,
 )
+from dse_v2.mapping.search_policy import (
+    BottleneckGuidedPolicy,
+    CapabilityDecision,
+    ComponentCapability,
+    RandomBaselinePolicy,
+    SearchCandidateRecord,
+    SearchCheckpoint,
+    SearchPolicy,
+    SearchProblem,
+    SeededBeamSearchPolicy,
+)
 from dse_v2.mapping.step2_workflow import (
     STEP2_ARTIFACT_NAMES,
     STEP2_LOW_FIDELITY_ARTIFACTS,
@@ -34,6 +45,15 @@ from dse_v2.mapping.step2_workflow import (
 )
 
 __all__ = [
+    "SeededBeamSearchPolicy",
+    "SearchProblem",
+    "SearchPolicy",
+    "SearchCheckpoint",
+    "SearchCandidateRecord",
+    "RandomBaselinePolicy",
+    "ComponentCapability",
+    "CapabilityDecision",
+    "BottleneckGuidedPolicy",
     "MappingCandidate",
     "STEP2_ARTIFACT_NAMES",
     "STEP2_LOW_FIDELITY_ARTIFACTS",

@@ -17,6 +17,7 @@ from dse_v2.codesign import (
     CODESIGN_L4_EVIDENCE_ARTIFACTS,
     CODESIGN_STEP2_ARTIFACTS,
     build_codesign_l4_evidence,
+    canonicalize_l4_interface_metrics,
     split_codesign_artifacts,
     validate_codesign_artifacts,
 )
@@ -24,6 +25,7 @@ from dse_v2.core.ir.compute_graph import ComputeGraph, DataEdge
 from dse_v2.core.workload.lowering import lower_compute_graph
 from dse_v2.core.workload.package import WorkloadPackage, package_from_graph
 from dse_v2.core.workload.workflows import required_coverage_from_workflow
+from dse_v2.contracts import CONTRACT_VERSION
 from dse_v2.dse.orchestrator import DesignPoint
 from dse_v2.mapping.search import run_mapping_search
 
@@ -81,6 +83,26 @@ REQUIRED_EVIDENCE_FILES = [
     "systemc_stderr.log",
 ]
 
+STEP4_REQUIRED_EVIDENCE_FILES = [
+    artifact
+    for artifact in REQUIRED_EVIDENCE_FILES
+    if artifact not in {"final_report.json", "final_report.md", "numerical_validation.json"}
+] + [
+    "simulator_consistency_check.json",
+    "timing_model_calibration.json",
+    "calibration_record.json",
+    "feedback_update.json",
+    "provenance.json",
+]
+
+STEP5_REPORTING_ARTIFACTS = [
+    "final_report.json",
+    "final_report.md",
+    "campaign_summary.json",
+    "trusted_ranking.json",
+    "pareto_frontier.json",
+]
+
 GEM5_UARCH_ENGINE = "gem5_generic_accel_microarchitecture_v1"
 
 
@@ -99,6 +121,28 @@ def _write_text(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
         f.write(text)
+
+
+def _load_optional_json(path: Path) -> Dict[str, Any]:
+    if not path.exists():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _resolve_artifact_path(run_dir: Path, raw_path: Any) -> Optional[Path]:
+    if not raw_path:
+        return None
+    path = Path(str(raw_path))
+    if path.exists():
+        return path
+    candidate = run_dir / path
+    if candidate.exists():
+        return candidate
+    return path if path.is_absolute() else candidate
 
 
 def _sha256(path: Path) -> str:
@@ -184,7 +228,17 @@ def _interconnect_bandwidth_gbps(sim_request: Mapping[str, Any]) -> float:
 
 
 def _tensor_size_bytes(edge: Mapping[str, Any]) -> float:
-    size = 8.0
+    explicit_size = edge.get("size_bytes")
+    if explicit_size is not None:
+        try:
+            return float(explicit_size)
+        except (TypeError, ValueError):
+            pass
+    element_size = edge.get("element_size")
+    try:
+        size = float(element_size) if element_size is not None else 8.0
+    except (TypeError, ValueError):
+        size = 8.0
     for dim in edge.get("tensor_shape", []) or []:
         size *= float(dim)
     return size
@@ -754,6 +808,36 @@ def build_numerical_validation(
     }
 
 
+def build_simulator_consistency_check(numerical_validation: Mapping[str, Any]) -> Dict[str, Any]:
+    """Return the Step4 canonical simulator-consistency artifact.
+
+    The legacy builder name is retained for compatibility, but the staged
+    Step3/Step4/Step5 contract no longer treats ``numerical_validation.json`` as
+    the canonical timing-simulator artifact.  Step4 writes this renamed payload.
+    """
+    summary = numerical_validation.get("summary", {}) if isinstance(numerical_validation.get("summary", {}), Mapping) else {}
+    return {
+        "schema_version": "dse.simulator_consistency_check.v1",
+        "status": numerical_validation.get("status", "unavailable"),
+        "passed": bool(numerical_validation.get("passed", False)),
+        "scope": numerical_validation.get("scope"),
+        "reference_model": numerical_validation.get("reference_model"),
+        "profile_domain_correctness_claimed": False,
+        "domain_correctness_boundary": numerical_validation.get(
+            "domain_correctness_boundary",
+            "Simulator consistency checks do not prove profile-specific domain correctness.",
+        ),
+        "summary": dict(summary),
+        "tolerances": dict(numerical_validation.get("tolerances", {}) or {}),
+        "failed_checks": list(numerical_validation.get("failed_checks", []) or []),
+        "checks": list(numerical_validation.get("checks", []) or []),
+        "legacy_replacement": {
+            "replaces": "numerical_validation.json",
+            "reason": "timing-simulator consistency is Step4 adjudication evidence, not Step3 numerical correctness",
+        },
+    }
+
+
 def build_phase_results(
     sim_result: Mapping[str, Any],
     sim_request: Mapping[str, Any],
@@ -1064,10 +1148,10 @@ def build_gem5_l4_proof(
         "descriptor_read_verified": "descriptor_read verified=true" in log,
         "request_decode_verified": request_decode_verified,
         "microarchitecture_execute_verified": microarchitecture_execute_verified,
-        # Backward-compatible key for older report readers.  New trusted L4
-        # evidence is the in-gem5 microarchitecture execution marker, not an
-        # external generic_sim/SystemC submit.
-        "systemc_submit_verified": ("systemc_submit verified=true" in log) or microarchitecture_execute_verified,
+        "systemc_submit_verified": "systemc_submit verified=true" in log,
+        "legacy_systemc_or_microarchitecture_verified": (
+            "systemc_submit verified=true" in log or microarchitecture_execute_verified
+        ),
         "completion_writeback_verified": "completion_writeback verified=true" in log,
         "driver_status_verified": "generic_accel_l4_status=1 error_code=0" in stdout,
         "driver_completion_descriptor_verified": (
@@ -1142,7 +1226,7 @@ def _artifact_entries(run_dir: Path, required_files: Iterable[str]) -> List[Dict
         path = run_dir / rel
         entry: Dict[str, Any] = {
             "path": rel,
-            "required": rel in REQUIRED_EVIDENCE_FILES,
+            "required": rel in STEP4_REQUIRED_EVIDENCE_FILES or rel in STEP5_REPORTING_ARTIFACTS,
             "exists": path.exists(),
         }
         if path.exists() and path.is_file():
@@ -1154,6 +1238,44 @@ def _artifact_entries(run_dir: Path, required_files: Iterable[str]) -> List[Dict
             entry["unavailable_reason"] = "not generated for this backend/run"
         entries.append(entry)
     return entries
+
+
+def _hash_existing_artifacts(run_dir: Path, names: Iterable[str]) -> Dict[str, str]:
+    """Return sha256 bindings for source artifacts that exist in ``run_dir``."""
+
+    hashes: Dict[str, str] = {}
+    for name in names:
+        rel = str(name)
+        path = run_dir / rel
+        if path.exists() and path.is_file():
+            hashes[rel] = f"sha256:{_sha256(path)}"
+    return hashes
+
+
+def _control_plane_scope(
+    *,
+    workload_package: WorkloadPackage,
+    compute_graph: ComputeGraph,
+    design_point: DesignPoint,
+) -> Dict[str, str]:
+    """Derive stable Campaign/WorkloadRun/Trial IDs for canonical Step4 artifacts.
+
+    Older pilot paths do not yet allocate real registry IDs before calling this
+    writer.  Until those paths are fully ledger-owned, the emitted artifacts use
+    deterministic IDs derived from the workload/design-point identity so schema
+    validation and artifact hash binding remain explicit instead of absent.
+    """
+
+    source = workload_package.source if isinstance(workload_package.source, Mapping) else {}
+    metadata = compute_graph.metadata if isinstance(compute_graph.metadata, Mapping) else {}
+    config = design_point.config if isinstance(design_point.config, Mapping) else {}
+    workload_id = str(workload_package.workload_id or compute_graph.graph_id or "workload")
+    design_point_id = str(design_point.design_point_id or "design-point")
+    return {
+        "campaign_id": str(source.get("campaign_id") or metadata.get("campaign_id") or f"campaign-{workload_id}"),
+        "workload_run_id": str(source.get("workload_run_id") or metadata.get("workload_run_id") or f"workload-run-{workload_id}"),
+        "trial_id": str(config.get("trial_id") or metadata.get("trial_id") or f"trial-{design_point_id}"),
+    }
 
 
 def write_full_flow_evidence(
@@ -1178,8 +1300,15 @@ def write_full_flow_evidence(
     feedback_sample_budget: Optional[int] = None,
     workload_package: Optional[WorkloadPackage] = None,
     codesign_candidate: Optional[Mapping[str, Any]] = None,
+    emit_step4_artifacts: bool = True,
+    emit_step5_artifacts: bool = True,
 ) -> Dict[str, Any]:
-    """Write required evidence artifacts for a selected full workload package."""
+    """Write staged evidence artifacts for a selected full workload package.
+
+    ``emit_step4_artifacts=False`` is used by Step3-only workflows: simulation
+    request/result/log artifacts are written, while canonical adjudication and
+    reporting artifacts remain absent until Step4/Step5 APIs are invoked.
+    """
     run_dir.mkdir(parents=True, exist_ok=True)
     raw_result = dict(simulation_result or {})
     workload_package = workload_package or package_from_graph(
@@ -1198,7 +1327,8 @@ def write_full_flow_evidence(
     missing_phases = [p for p, r in phase_results.items() if r.get("status") != "available"]
     simulation_passed = simulator_returncode == 0 and raw_result.get("status") == "passed"
     numerical_validation = build_numerical_validation(simulation_request, raw_result, required_coverage)
-    numerical_passed = bool(numerical_validation.get("passed", False))
+    simulator_consistency_check = build_simulator_consistency_check(numerical_validation)
+    numerical_passed = bool(simulator_consistency_check.get("passed", False))
     gem5_l4_proof = build_gem5_l4_proof(gem5_log, systemc_stdout, raw_result, gem5_source_artifacts) if backend == "gem5_systemc" else {
         "schema_version": "dse.gem5_l4_proof.v1",
         "passed": False,
@@ -1209,6 +1339,19 @@ def write_full_flow_evidence(
         "source_artifacts": {},
         "claim_boundary": "not applicable to standalone SystemC runs",
     }
+    raw_l4_observations_artifact = None
+    l4_interface_metrics: Dict[str, Any] = {}
+    if backend == "gem5_systemc":
+        source_artifacts = gem5_l4_proof.get("source_artifacts", {})
+        if isinstance(source_artifacts, Mapping):
+            raw_l4_observations_artifact = source_artifacts.get("raw_l4_interface_observations")
+        raw_l4_path = _resolve_artifact_path(run_dir, raw_l4_observations_artifact)
+        raw_l4_observations = _load_optional_json(raw_l4_path) if raw_l4_path is not None else {}
+        l4_interface_metrics = canonicalize_l4_interface_metrics(
+            raw_l4_observations,
+            gem5_l4_proof=gem5_l4_proof,
+            raw_observations_artifact=str(raw_l4_observations_artifact) if raw_l4_observations_artifact else None,
+        )
     full_workload_eligible = bool(lowering_report.get("full_workload_eligible", False)) and workload_package.is_full_workload()
     trusted_systemc = backend == "systemc" and simulation_passed and not missing_phases and numerical_passed and full_workload_eligible
     trusted_gem5_systemc = (
@@ -1318,12 +1461,12 @@ def write_full_flow_evidence(
         "required_workload_phases": required_coverage,
         "phase_results": phase_results,
         "missing_required_coverage": missing_phases,
-        "numerical_validation": {
-            "artifact": "numerical_validation.json",
-            "status": numerical_validation.get("status"),
+        "simulator_consistency_check": {
+            "artifact": "simulator_consistency_check.json",
+            "status": simulator_consistency_check.get("status"),
             "passed": numerical_passed,
-            "scope": numerical_validation.get("scope"),
-            "summary": numerical_validation.get("summary", {}),
+            "scope": simulator_consistency_check.get("scope"),
+            "summary": simulator_consistency_check.get("summary", {}),
         },
         "gem5_l4_proof": {
             "artifact": "gem5_l4_proof.json",
@@ -1335,6 +1478,14 @@ def write_full_flow_evidence(
         "simulator_returncode": simulator_returncode,
         "unavailable_metrics": unavailable_metric_records,
     })
+    if emit_step4_artifacts and emit_step5_artifacts:
+        public_result["numerical_validation"] = {
+            "artifact": "numerical_validation.json",
+            "status": numerical_validation.get("status"),
+            "passed": numerical_passed,
+            "scope": numerical_validation.get("scope"),
+            "summary": numerical_validation.get("summary", {}),
+        }
 
     mapping_artifacts = run_mapping_search(
         compute_graph,
@@ -1476,6 +1627,9 @@ def write_full_flow_evidence(
             "full_workload_eligible": lowering_report.get("full_workload_eligible", False),
             "unsupported_constructs": lowering_report.get("unsupported_constructs", []),
         },
+        "simulator_consistency_passed": numerical_passed,
+        "simulator_consistency_scope": simulator_consistency_check.get("scope"),
+        "simulator_consistency_metrics": simulator_consistency_check.get("summary", {}),
         "numerical_validation_passed": numerical_passed,
         "numerical_validation_scope": numerical_validation.get("scope"),
         "numerical_error_metrics": numerical_validation.get("summary", {}),
@@ -1551,30 +1705,31 @@ def write_full_flow_evidence(
             ),
         }
 
-    _write_json(run_dir / "design_point.json", design_point_payload)
-    _write_json(run_dir / "architecture.json", architecture_payload)
-    _write_json(run_dir / "architecture_catalog.json", catalog_payload)
-    _write_json(run_dir / "mapping.json", mapping_payload)
-    _write_json(run_dir / "mapping_legality_matrix.json", mapping_artifacts["legality_matrix"])
-    _write_json(run_dir / "mapping_seed_set.json", mapping_artifacts["seed_set"])
-    _write_json(run_dir / "mapping_candidate_records.json", mapping_artifacts["candidate_records"])
-    _write_json(run_dir / "mapping_selected_record.json", mapping_artifacts["selected_record"])
-    _write_json(run_dir / "mapping_simulation_samples.json", mapping_artifacts["simulation_samples"])
-    _write_json(run_dir / "mapping_feedback_state.json", mapping_artifacts["feedback_state"])
-    _write_json(run_dir / "convergence_status.json", mapping_artifacts["convergence_status"])
-    _write_json(run_dir / "workload_package.json", workload_package_payload)
-    _write_json(run_dir / "workload_graph.json", workload_payload)
-    _write_json(run_dir / "graph_lowering_report.json", lowering_report)
-    if graph_lowering.executable_graph is not None:
-        _write_json(run_dir / "executable_graph.json", graph_lowering.executable_graph.to_dict())
-    if codesign_artifacts.get("codesign_candidate"):
-        _write_json(run_dir / "codesign_candidate.json", codesign_artifacts["codesign_candidate"])
-        _write_json(run_dir / "software_stack_config.json", codesign_artifacts["software_stack_config"])
-        _write_json(run_dir / "compiler_lowering.json", codesign_artifacts["compiler_lowering"])
-        _write_json(run_dir / "runtime_schedule.json", codesign_artifacts["runtime_schedule"])
-        _write_json(run_dir / "descriptor_protocol.json", codesign_artifacts["descriptor_protocol"])
-        _write_json(run_dir / "memory_policy.json", codesign_artifacts["memory_policy"])
-        _write_json(run_dir / "codesign_artifact_validation.json", codesign_validation)
+    if emit_step4_artifacts:
+        _write_json(run_dir / "design_point.json", design_point_payload)
+        _write_json(run_dir / "architecture.json", architecture_payload)
+        _write_json(run_dir / "architecture_catalog.json", catalog_payload)
+        _write_json(run_dir / "mapping.json", mapping_payload)
+        _write_json(run_dir / "mapping_legality_matrix.json", mapping_artifacts["legality_matrix"])
+        _write_json(run_dir / "mapping_seed_set.json", mapping_artifacts["seed_set"])
+        _write_json(run_dir / "mapping_candidate_records.json", mapping_artifacts["candidate_records"])
+        _write_json(run_dir / "mapping_selected_record.json", mapping_artifacts["selected_record"])
+        _write_json(run_dir / "mapping_simulation_samples.json", mapping_artifacts["simulation_samples"])
+        _write_json(run_dir / "mapping_feedback_state.json", mapping_artifacts["feedback_state"])
+        _write_json(run_dir / "convergence_status.json", mapping_artifacts["convergence_status"])
+        _write_json(run_dir / "workload_package.json", workload_package_payload)
+        _write_json(run_dir / "workload_graph.json", workload_payload)
+        _write_json(run_dir / "graph_lowering_report.json", lowering_report)
+        if graph_lowering.executable_graph is not None:
+            _write_json(run_dir / "executable_graph.json", graph_lowering.executable_graph.to_dict())
+        if codesign_artifacts.get("codesign_candidate"):
+            _write_json(run_dir / "codesign_candidate.json", codesign_artifacts["codesign_candidate"])
+            _write_json(run_dir / "software_stack_config.json", codesign_artifacts["software_stack_config"])
+            _write_json(run_dir / "compiler_lowering.json", codesign_artifacts["compiler_lowering"])
+            _write_json(run_dir / "runtime_schedule.json", codesign_artifacts["runtime_schedule"])
+            _write_json(run_dir / "descriptor_protocol.json", codesign_artifacts["descriptor_protocol"])
+            _write_json(run_dir / "memory_policy.json", codesign_artifacts["memory_policy"])
+            _write_json(run_dir / "codesign_artifact_validation.json", codesign_validation)
     for key, filename in [
         ("l4_execution_trace", "l4_execution_trace.json"),
         ("dma_trace", "dma_trace.json"),
@@ -1582,14 +1737,64 @@ def write_full_flow_evidence(
         ("cpu_runtime_trace", "cpu_runtime_trace.json"),
         ("accelerator_trace", "accelerator_trace.json"),
         ("completion_proof", "completion_proof.json"),
-        ("codesign_verdict", "codesign_verdict.json"),
     ]:
         if key in codesign_l4_artifacts:
             _write_json(run_dir / filename, codesign_l4_artifacts[key])
+    if emit_step4_artifacts and "codesign_verdict" in codesign_l4_artifacts:
+        _write_json(run_dir / "codesign_verdict.json", codesign_l4_artifacts["codesign_verdict"])
     _write_json(run_dir / "simulation_request.json", simulation_request)
     _write_json(run_dir / "simulation_result.json", public_result)
-    _write_json(run_dir / "numerical_validation.json", numerical_validation)
-    _write_json(run_dir / "gem5_l4_proof.json", gem5_l4_proof)
+    if emit_step4_artifacts:
+        _write_json(run_dir / "simulator_consistency_check.json", simulator_consistency_check)
+        if emit_step5_artifacts:
+            _write_json(run_dir / "numerical_validation.json", numerical_validation)
+        control_scope = _control_plane_scope(
+            workload_package=workload_package,
+            compute_graph=compute_graph,
+            design_point=design_point,
+        )
+        _write_json(run_dir / "timing_model_calibration.json", {
+            "schema_version": "dse.timing_model_calibration.v1",
+            "status": "calibrated_from_simulator_consistency" if numerical_passed else "blocked",
+            "source_artifact": "simulator_consistency_check.json",
+            "valid_region": {"backend": backend, "workload_profile": workload_package.profile_id},
+            "confidence": 0.8 if numerical_passed else 0.0,
+            "summary": simulator_consistency_check.get("summary", {}),
+        })
+        calibration_source_hashes = _hash_existing_artifacts(
+            run_dir,
+            ["simulation_result.json", "simulator_consistency_check.json"],
+        )
+        _write_json(run_dir / "calibration_record.json", {
+            "schema_version": CONTRACT_VERSION,
+            **control_scope,
+            "levels": ["l3", "l4" if backend == "gem5_systemc" else "l3_reference"],
+            "confidence": 0.8 if numerical_passed else 0.0,
+            "valid_region": {"backend": backend, "workload_profile": workload_package.profile_id},
+            "error_metrics": simulator_consistency_check.get("summary", {}),
+            "source_artifact_hashes": calibration_source_hashes,
+        })
+        feedback_source_hashes = _hash_existing_artifacts(
+            run_dir,
+            ["simulation_result.json", "mapping_feedback_state.json"],
+        )
+        _write_json(run_dir / "feedback_update.json", {
+            "schema_version": CONTRACT_VERSION,
+            **control_scope,
+            "updates": [
+                {
+                    "target": "promotion_policy",
+                    "status": "available",
+                    "trusted_sample": trusted_for_final,
+                    "mapping_feedback_state": "mapping_feedback_state.json",
+                    "source_artifacts": ["simulation_result.json", "mapping_feedback_state.json"],
+                }
+            ],
+            "source_artifact_hashes": feedback_source_hashes,
+        })
+        _write_json(run_dir / "gem5_l4_proof.json", gem5_l4_proof)
+        if backend == "gem5_systemc":
+            _write_json(run_dir / "l4_interface_metrics.json", l4_interface_metrics)
     _write_json(run_dir / "simulation_result.raw.json", raw_result)
     _write_text(run_dir / "systemc_stdout.log", systemc_stdout)
     _write_text(run_dir / "systemc_stderr.log", systemc_stderr)
@@ -1599,7 +1804,42 @@ def write_full_flow_evidence(
     _write_json(run_dir / "gem5_systemc_blockers.json", {"blockers": gem5_blockers})
     if gem5_log is not None:
         _write_text(run_dir / "gem5.log", gem5_log)
+    if not emit_step4_artifacts:
+        return {
+            "run_id": run_id,
+            "run_dir": str(run_dir),
+            "trusted_for_final_ranking": False,
+            "simulation_passed": simulation_passed,
+            "missing_required_coverage": missing_phases,
+            "profile_required_coverage": required_coverage,
+            "step4_pending": True,
+            "step5_pending": True,
+            "verdict": verdict,
+            "simulator_consistency_check": simulator_consistency_check,
+            "report_artifacts": {},
+        }
+
     _write_json(run_dir / "verdict.json", verdict)
+    _write_json(run_dir / "provenance.json", {
+        "schema_version": "dse.step4.provenance.v1",
+        "run_id": run_id,
+        "generated_at": _now_iso(),
+        "producer_step": "step4_evidence_adjudication",
+        "inputs": [
+            "simulation_request.json",
+            "simulation_result.json",
+            "simulation_result.raw.json",
+            "systemc_stdout.log",
+            "systemc_stderr.log",
+        ],
+        "outputs": [
+            "verdict.json",
+            "simulator_consistency_check.json",
+            "timing_model_calibration.json",
+            "calibration_record.json",
+            "feedback_update.json",
+        ],
+    })
 
     manifest = {
         "schema_version": "dse.manifest.v1",
@@ -1623,7 +1863,9 @@ def write_full_flow_evidence(
             "simulation_result": "simulation_result.json",
         },
         "trusted_for_final_ranking": trusted_for_final,
-        "required_evidence_files": REQUIRED_EVIDENCE_FILES,
+        "required_evidence_files": STEP4_REQUIRED_EVIDENCE_FILES
+        + (["l4_interface_metrics.json"] if backend == "gem5_systemc" else [])
+        + (STEP5_REPORTING_ARTIFACTS if emit_step5_artifacts else []),
         "optional_evidence_files": [
             "executable_graph.json",
             "simulation_result.raw.json",
@@ -1647,8 +1889,20 @@ def write_full_flow_evidence(
     if codesign_l4_artifacts:
         codesign_paths.extend(CODESIGN_L4_EVIDENCE_ARTIFACTS)
     artifact_paths = list(dict.fromkeys(
-        REQUIRED_EVIDENCE_FILES
-        + ["simulation_result.raw.json", "gem5_systemc_blockers.json", "gem5_l4_proof.json"]
+        STEP4_REQUIRED_EVIDENCE_FILES
+        + (STEP5_REPORTING_ARTIFACTS if emit_step5_artifacts else [])
+        + (["numerical_validation.json"] if emit_step5_artifacts else [])
+        + [
+            "simulation_result.raw.json",
+            "gem5_systemc_blockers.json",
+            "gem5_l4_proof.json",
+            "simulator_consistency_check.json",
+            "timing_model_calibration.json",
+            "calibration_record.json",
+            "feedback_update.json",
+            "provenance.json",
+        ]
+        + (["l4_interface_metrics.json"] if backend == "gem5_systemc" else [])
         + codesign_paths
         + list(extra_artifact_paths or [])
     ))
@@ -1666,16 +1920,21 @@ def write_full_flow_evidence(
         if (run_dir / optional_path).exists() or (optional_path == "gem5.log" and gem5_log is not None):
             artifact_paths.append(optional_path)
 
-    # P5 final reporting is generated from the evidence bundle before the
-    # artifact manifest is sealed.  The report validates claims against concrete
-    # files already written above, while the final artifact manifest below then
-    # records the report artifacts themselves for audit/replay discovery.
-    from dse_v2.reporting.final_report import write_final_report_artifacts
+    from dse_v2.reporting.final_report import (
+        write_step4_claim_validation_artifacts,
+        write_step5_report_artifacts,
+    )
 
-    report_artifacts = write_final_report_artifacts(run_dir, artifact_paths=artifact_paths)
-    manifest["report_artifacts"] = report_artifacts
+    step4_report_artifacts = write_step4_claim_validation_artifacts(run_dir, artifact_paths=artifact_paths)
+    manifest["step4_adjudication_artifacts"] = step4_report_artifacts
     _write_json(run_dir / "manifest.json", manifest)
-    artifact_paths.extend(report_artifacts.values())
+    artifact_paths.extend(step4_report_artifacts.values())
+    report_artifacts: Dict[str, str] = {}
+    if emit_step5_artifacts:
+        report_artifacts = write_step5_report_artifacts(run_dir, artifact_paths=artifact_paths)
+        manifest["step5_reporting_artifacts"] = report_artifacts
+        _write_json(run_dir / "manifest.json", manifest)
+        artifact_paths.extend(report_artifacts.values())
 
     artifact_entries = _artifact_entries(run_dir, artifact_paths)
     for entry in artifact_entries:
@@ -1700,5 +1959,6 @@ def write_full_flow_evidence(
         "profile_required_coverage": required_coverage,
         "verdict": verdict,
         "codesign_verdict": codesign_l4_artifacts.get("codesign_verdict") if codesign_l4_artifacts else None,
+        "step4_adjudication_artifacts": step4_report_artifacts,
         "report_artifacts": report_artifacts,
     }

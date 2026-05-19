@@ -29,6 +29,7 @@ def test_default_qe_mainflow_suite_covers_release_v1_mainflow_and_boundary():
     assert all(case["adapter_boundary"]["generic_core_required_qe_fields"] == [] for case in manifest["cases"])
     assert all(case["baseline_run_provenance"] for case in manifest["cases"])
     assert all(case["tolerance_reference"]["required_fields"] for case in manifest["cases"])
+    assert any("fft" in case["kernel_coverage"] for case in manifest["cases"])
 
 
 def test_scf_only_qe_suite_is_rejected_for_release_acceptance():

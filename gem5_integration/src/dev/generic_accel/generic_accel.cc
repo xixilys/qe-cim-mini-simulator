@@ -12,6 +12,7 @@
 #include <cstdlib>
 #include <fstream>
 #include <iomanip>
+#include <iterator>
 #include <limits>
 #include <map>
 #include <queue>
@@ -113,7 +114,7 @@ struct ParsedRequest {
     std::string workloadCaseId;
     std::string sidecarDispatchMode = "in_gem5_uarch";
     std::string sidecarModel;
-    bool qeExtensionPresent = false;
+    bool extensionPayloadPresent = false;
     std::map<std::string, ParsedNode> nodes;
     std::vector<ParsedEdge> edges;
     std::map<std::string, std::string> mapping;
@@ -414,7 +415,7 @@ ParsedRequest parseRequest(const std::string &json)
     req.sidecarDispatchMode = stringForKey(sidecarDispatch, "mode", req.sidecarDispatchMode);
     req.sidecarModel = stringForKey(sidecarDispatch, "model", "");
     const std::string extensionPayload = valueForKey(json, "extension_payload");
-    req.qeExtensionPresent = !valueForKey(extensionPayload, "qe_offload").empty();
+    req.extensionPayloadPresent = !extensionPayload.empty();
 
     const std::string workload = valueForKey(json, "workload");
     const std::string nodes = valueForKey(workload, "nodes");
@@ -666,6 +667,30 @@ bool writeTextFile(const std::string &path, const std::string &text)
     return true;
 }
 
+std::string readTextFile(const std::string &path)
+{
+    std::ifstream in(path);
+    if (!in.is_open()) {
+        return "";
+    }
+    return std::string(std::istreambuf_iterator<char>(in),
+                       std::istreambuf_iterator<char>());
+}
+
+std::string shellQuote(const std::string &value)
+{
+    std::string out = "'";
+    for (char c : value) {
+        if (c == '\'') {
+            out += "'\\''";
+        } else {
+            out.push_back(c);
+        }
+    }
+    out += "'";
+    return out;
+}
+
 std::string resultJson(const ParsedRequest &req,
                        const std::vector<GenericAccel::ScheduledMicroOp> &ops,
                        const std::map<std::string, DeviceStats> &deviceStats,
@@ -707,7 +732,7 @@ std::string resultJson(const ParsedRequest &req,
        << "    \"workload_case_id\": \"" << jsonEscape(req.workloadCaseId) << "\",\n"
        << "    \"sidecar_dispatch_mode\": \"" << jsonEscape(req.sidecarDispatchMode) << "\",\n"
        << "    \"sidecar_model\": \"" << jsonEscape(req.sidecarModel) << "\",\n"
-       << "    \"qe_extension_payload_present\": " << (req.qeExtensionPresent ? "true" : "false") << "\n"
+       << "    \"extension_payload_present\": " << (req.extensionPayloadPresent ? "true" : "false") << "\n"
        << "  },\n"
        << "  \"metrics\": {\n"
        << "    \"latency_ms\": " << latencyMs << ",\n"
@@ -1064,10 +1089,9 @@ void GenericAccel::processCommand()
             systemcExecutable.c_str(),
             (desc.flags & GsimFlagSidecarDispatch) ? "true" : "false");
     DPRINTF(GenericAccel,
-            "extension_payload_trace observed=%s bytes=%llu qe_hook=%s flag=%s\n",
+            "extension_payload_trace observed=%s bytes=%llu flag=%s\n",
             (!extensionPayload.empty() || (desc.flags & GsimFlagExtensionPayload)) ? "true" : "false",
             static_cast<unsigned long long>(extensionPayload.size()),
-            (extensionPayload.find("qe_offload") != std::string::npos || requestJson.find("qe_offload") != std::string::npos) ? "true" : "false",
             (desc.flags & GsimFlagExtensionPayload) ? "true" : "false");
     metric_bytes_read += static_cast<uint64_t>(requestJson.size() + candidatePayload.size() +
                                                compilePayload.size() + runtimePayload.size() +
@@ -1087,6 +1111,33 @@ void GenericAccel::processCommand()
         pendingMicroOps = std::move(scheduleResult.microOps);
         pendingResultJson = std::move(scheduleResult.resultJson);
         pendingResultPath = "/tmp/gem5_generic_accel_uarch_" + std::to_string(curTick()) + ".result.json";
+        if (useSystemC && !systemcExecutable.empty()) {
+            const std::string sidecarRequestPath =
+                "/tmp/gem5_generic_accel_sidecar_" + std::to_string(curTick()) + ".request.json";
+            const std::string sidecarResultPath =
+                "/tmp/gem5_generic_accel_sidecar_" + std::to_string(curTick()) + ".result.json";
+            const bool sidecarRequestWritten = writeTextFile(sidecarRequestPath, requestJson);
+            const std::string sidecarCmd = shellQuote(systemcExecutable) +
+                " --request " + shellQuote(sidecarRequestPath) +
+                " --result " + shellQuote(sidecarResultPath);
+            const int sidecarRc = sidecarRequestWritten ? std::system(sidecarCmd.c_str()) : -1;
+            const std::string sidecarResultJson = sidecarRc == 0 ? readTextFile(sidecarResultPath) : "";
+            DPRINTF(GenericAccel,
+                    "systemc_submit verified=%s executable=%s request_path=%s result_path=%s return_code=%d result_bytes=%llu claim_boundary=generic_sidecar_result_not_trusted_without_runner_gates\n",
+                    (sidecarRc == 0 && !sidecarResultJson.empty()) ? "true" : "false",
+                    systemcExecutable.c_str(),
+                    sidecarRequestPath.c_str(),
+                    sidecarResultPath.c_str(),
+                    sidecarRc,
+                    static_cast<unsigned long long>(sidecarResultJson.size()));
+            if (sidecarRc != 0 || sidecarResultJson.empty()) {
+                comp_error_code = GsimErrorMicroarchitecture;
+                pendingResultJson = errorResultJson("unknown", "generic sidecar executable failed or produced no result");
+                pendingCycles = 1;
+                schedule(completionEvent, curTick() + 1);
+                return;
+            }
+        }
         const bool resultFileWritten = writeTextFile(pendingResultPath, pendingResultJson);
         pendingCycles = scheduleResult.totalCycles;
         metric_cycles += pendingCycles;

@@ -17,6 +17,11 @@
 
 **重要声明**：本系统的核心仍是 domain-neutral 的 Generic DSE 框架，不把任何单一应用写死进 core schema。当前论文和工程收敛策略调整为：用 **DFT 计算（Density Functional Theory）到 FPGA 部署** 作为主证明场景和第一条完整 vertical slice，来证明框架对真实 workload、mapping、memory、runtime、gem5/software-visible evidence 的完备性；其他 workload 通过同一 profile/importer 合同继续支持和扩展。
 
+
+### 1.1 Active restructure manual
+
+The current research-grade restructure contract is frozen in `docs/architecture/research_grade_control_plane_design_manual.md`.  That manual is canonical for Campaign/WorkloadRun/Trial identity propagation, Step3/Step4/Step5 artifact ownership, completion status taxonomy, DFT proof boundaries, L4 raw-vs-canonical evidence, and hard-gate completion rules.  Older sections in this overview must be interpreted through that contract.
+
 ## 2. 范围与非目标
 
 ### 2.1 覆盖范围
@@ -1139,7 +1144,7 @@ public:
 {
   "schema_version": "gsim.result.v2",
   "status": "passed",
-  "numerical_validation": {
+  "simulator_consistency_check": {
     "enabled": true,
     "golden_model_executed": true,
     "all_tensors_passed": true,
@@ -1384,7 +1389,7 @@ class GenericSystemCBackend:
 
 新增证据文件：
 
-- `numerical_validation.json`：数值验证结果
+- `simulator_consistency_check.json`：timing simulator consistency 结果；legacy `numerical_validation.json` 仅作兼容迁移名。
 - `golden_model_execution.json`：Golden model 执行记录
 - `tensor_comparison.csv`：Tensor 对比详细结果
 - `scoreboard_report.json`：Scoreboard 检查报告

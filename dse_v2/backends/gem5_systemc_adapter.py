@@ -33,8 +33,9 @@ GENERIC_ACCEL_REQUEST_OFFSET = 0x1000
 GENERIC_ACCEL_COMPLETION_OFFSET = 0x110000
 GENERIC_ACCEL_RESULT_OFFSET = 0x120000
 GENERIC_ACCEL_WORKSPACE_SIZE = 1 << 20
-GENERIC_ACCEL_DESCRIPTOR_FLAGS = 0x7
-GENERIC_ACCEL_COMMAND_DESCRIPTOR_BYTES = 48
+GENERIC_ACCEL_DESCRIPTOR_FLAGS = 0xFF
+GENERIC_ACCEL_LEGACY_COMMAND_DESCRIPTOR_BYTES = 48
+GENERIC_ACCEL_COMMAND_DESCRIPTOR_BYTES = 128
 GENERIC_ACCEL_SOURCE_FILES = ("GenericAccel.py", "generic_accel.cc", "generic_accel.hh", "SConscript")
 GENERIC_ACCEL_DEV_SCONSCRIPT_LINE = "SConscript('generic_accel/SConscript')"
 
@@ -134,6 +135,165 @@ def _extract_token(pattern: str, text: str) -> Optional[str]:
     return match.group(1) if match else None
 
 
+def _extract_marker_line(marker: str, text: str) -> str:
+    for line in (text or "").splitlines():
+        if marker in line:
+            return line
+    return ""
+
+
+def _extract_log_value(line: str, key: str) -> Optional[str]:
+    match = re.search(rf"(?:^|\s){re.escape(key)}=([^\s]+)", line or "")
+    return match.group(1) if match else None
+
+
+def _as_int(value: Any) -> Optional[int]:
+    if value is None:
+        return None
+    try:
+        return int(str(value), 0)
+    except (TypeError, ValueError):
+        return None
+
+
+def _as_float(value: Any) -> Optional[float]:
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def build_raw_l4_interface_observations(
+    *,
+    gem5_log: str,
+    gem5_stdout: str,
+    result: Optional[Mapping[str, Any]],
+    source_artifacts: Optional[Mapping[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Extract raw L4 interface observations without canonicalizing claims.
+
+    The gem5 adapter owns observed logs/traces/proof only.  Step4 consumes this
+    sidecar and produces the canonical ``l4_interface_metrics.json`` artifact.
+    """
+
+    result_map: Mapping[str, Any] = result if isinstance(result, Mapping) else {}
+    metrics = result_map.get("metrics", {}) if isinstance(result_map.get("metrics", {}), Mapping) else {}
+    utilization = result_map.get("resource_utilization", {}) if isinstance(result_map.get("resource_utilization", {}), Mapping) else {}
+    summary = result_map.get("microarchitecture_summary", {}) if isinstance(result_map.get("microarchitecture_summary", {}), Mapping) else {}
+    events = [event for event in result_map.get("events", []) or [] if isinstance(event, Mapping)]
+    accelerator_events = [
+        event for event in events
+        if str(event.get("device", "host")) not in {"", "host", "cpu", "host-0"}
+    ]
+
+    descriptor_line = _extract_marker_line("descriptor_read verified=", gem5_log)
+    decode_line = _extract_marker_line("uarch_request_decode verified=", gem5_log)
+    execute_line = _extract_marker_line("microarchitecture_execute verified=", gem5_log)
+    completion_line = _extract_marker_line("completion_writeback verified=", gem5_log)
+    driver_completion_line = _extract_marker_line("completion_magic=", gem5_stdout)
+    op_lines = [line for line in (gem5_log or "").splitlines() if "uarch_op_complete verified=true" in line]
+    dma_lines = [line for line in op_lines if "kind=dma_transfer" in line]
+    dma_bytes = sum(_as_int(_extract_log_value(line, "bytes")) or 0 for line in dma_lines)
+    op_cycles = sum(_as_int(_extract_log_value(line, "cycles")) or 0 for line in op_lines)
+
+    accelerator_busy_fraction = None
+    busy_candidates: list[float] = []
+    for device, payload in utilization.items():
+        if str(device) in {"", "host", "cpu", "host-0"} or not isinstance(payload, Mapping):
+            continue
+        compute_percent = _as_float(payload.get("compute_percent"))
+        if compute_percent is not None:
+            busy_candidates.append(max(0.0, min(1.0, compute_percent / 100.0)))
+    if busy_candidates:
+        accelerator_busy_fraction = max(busy_candidates)
+
+    observed_metrics = {
+        "latency_ms": _as_float(metrics.get("latency_ms")),
+        "host_time_ms": _as_float(metrics.get("host_time_ms")),
+        "device_time_ms": _as_float(metrics.get("device_time_ms")),
+        "dma_time_ms": _as_float(metrics.get("dma_time_ms")),
+        "software_visible_latency_ms": _as_float(metrics.get("latency_ms")),
+        "accelerator_busy_fraction": accelerator_busy_fraction,
+        "accelerator_idle_fraction": None if accelerator_busy_fraction is None else max(0.0, 1.0 - accelerator_busy_fraction),
+    }
+
+    return {
+        "schema_version": "dse.raw_l4_interface_observations.v1",
+        "producer": "dse_v2.backends.gem5_systemc_adapter",
+        "artifact_role": "raw_l4_observations",
+        "canonical_artifact_owner": "Step4",
+        "canonical_artifact": "l4_interface_metrics.json",
+        "claim_boundary": (
+            "Raw gem5 observations are not canonical L4 interface metrics; "
+            "Step4 must validate and canonicalize them before reports or claims consume them."
+        ),
+        "transport_harness": str((source_artifacts or {}).get("transport_harness") or "gem5_generic_accel_microarchitecture_v1"),
+        "source_artifacts": dict(source_artifacts or {}),
+        "markers": {
+            "descriptor_read_verified": "descriptor_read verified=true" in (gem5_log or ""),
+            "request_decode_verified": "uarch_request_decode verified=true" in (gem5_log or ""),
+            "microarchitecture_execute_verified": "microarchitecture_execute verified=true" in (gem5_log or ""),
+            "completion_writeback_verified": "completion_writeback verified=true" in (gem5_log or ""),
+            "driver_status_verified": "generic_accel_l4_status=1 error_code=0" in (gem5_stdout or ""),
+            "driver_completion_descriptor_verified": (
+                "completion_magic=0x4753494d completion_status=0" in (gem5_stdout or "")
+                or "completion_magic=0x4753494D completion_status=0" in (gem5_stdout or "")
+            ),
+        },
+        "descriptor_decode": {
+            "addr": _extract_log_value(descriptor_line, "addr"),
+            "request_addr": _extract_log_value(descriptor_line, "request_addr"),
+            "result_addr": _extract_log_value(descriptor_line, "result_addr"),
+            "request_bytes": _as_int(_extract_log_value(descriptor_line, "request_bytes")),
+            "descriptor_bytes": _as_int(_extract_log_value(descriptor_line, "descriptor_bytes")),
+            "flags": _extract_log_value(descriptor_line, "flags"),
+            "extension_fields": _extract_log_value(descriptor_line, "extension_fields"),
+            "raw_line": descriptor_line,
+        },
+        "request_decode": {
+            "engine": _extract_log_value(decode_line, "engine"),
+            "request_bytes": _as_int(_extract_log_value(decode_line, "request_bytes")),
+            "micro_ops": _as_int(_extract_log_value(decode_line, "micro_ops")),
+            "result_bytes": _as_int(_extract_log_value(decode_line, "result_bytes")),
+            "result_path": _extract_log_value(decode_line, "result_path"),
+            "total_cycles": _as_int(_extract_log_value(decode_line, "total_cycles")),
+            "total_payload_bytes": _as_int(_extract_log_value(decode_line, "total_payload_bytes")),
+            "raw_line": decode_line,
+        },
+        "microarchitecture_execute": {
+            "engine": _extract_log_value(execute_line, "engine"),
+            "micro_ops": _as_int(_extract_log_value(execute_line, "micro_ops")),
+            "cycles": _as_int(_extract_log_value(execute_line, "cycles")),
+            "raw_line": execute_line,
+        },
+        "uarch_op_summary": {
+            "op_count": len(op_lines),
+            "dma_op_count": len(dma_lines),
+            "total_dma_bytes_observed": dma_bytes if dma_lines else None,
+            "total_op_cycles_observed": op_cycles if op_lines else None,
+        },
+        "completion": {
+            "result_addr": _extract_log_value(completion_line, "result_addr"),
+            "completion_addr": _extract_log_value(completion_line, "completion_addr"),
+            "result_bytes": _as_int(_extract_log_value(completion_line, "result_bytes")),
+            "cycles": _as_int(_extract_log_value(completion_line, "cycles")),
+            "error_code": _as_int(_extract_log_value(completion_line, "error_code")),
+            "driver_cycles": _as_int(_extract_log_value(driver_completion_line, "cycles")),
+            "raw_line": completion_line,
+            "driver_raw_line": driver_completion_line,
+        },
+        "observed_metrics": observed_metrics,
+        "event_summary": {
+            "event_count": len(events),
+            "accelerator_event_count": len(accelerator_events),
+            "accelerator_devices": sorted({str(event.get("device")) for event in accelerator_events if event.get("device")}),
+        },
+        "microarchitecture_summary": dict(summary),
+    }
+
+
 def build_generic_accel_command_descriptor(
     simulation_request: Mapping[str, Any],
     *,
@@ -169,6 +329,20 @@ def build_generic_accel_command_descriptor(
         "workspace_addr": workspace_addr,
         "workspace_size": workspace_size,
     }
+    request_payload_bytes = len(json.dumps(dict(simulation_request), sort_keys=True, default=str).encode("utf-8")) + 1
+    if flags & 0xF8:
+        descriptor.update({
+            "extension_payload_addr": request_addr,
+            "extension_payload_bytes_estimate": request_payload_bytes,
+            "candidate_identity_addr": request_addr,
+            "candidate_identity_bytes_estimate": request_payload_bytes,
+            "compile_schedule_addr": request_addr,
+            "compile_schedule_bytes_estimate": request_payload_bytes,
+            "runtime_schedule_addr": request_addr,
+            "runtime_schedule_bytes_estimate": request_payload_bytes,
+            "sidecar_dispatch_addr": request_addr,
+            "sidecar_dispatch_bytes_estimate": request_payload_bytes,
+        })
     return {
         "schema_version": "gsim.generic_accel_command_descriptor_translation.v1",
         "translator": "dse_v2.backends.gem5_systemc_adapter.build_generic_accel_command_descriptor",
@@ -179,6 +353,7 @@ def build_generic_accel_command_descriptor(
         "descriptor_addr": descriptor_addr,
         "completion_addr": completion_addr,
         "descriptor_size_bytes": GENERIC_ACCEL_COMMAND_DESCRIPTOR_BYTES,
+        "legacy_prefix_bytes": GENERIC_ACCEL_LEGACY_COMMAND_DESCRIPTOR_BYTES,
         "descriptor": descriptor,
         "layout": {
             "work_base": workspace_addr,
@@ -614,6 +789,7 @@ class Gem5SystemCClosureAdapter:
         design_point: DesignPoint,
         compute_graph: ComputeGraph,
         workload_package: Optional[WorkloadPackage] = None,
+        request_overrides: Optional[Mapping[str, Any]] = None,
         output_dir: Path,
         gem5_binary: Optional[Path] = None,
         gem5_config: Optional[Path] = None,
@@ -623,6 +799,7 @@ class Gem5SystemCClosureAdapter:
         cpu_type: str = "atomic",
         timeout: int = 120,
         allow_local_transport_fallback: bool = False,
+        use_systemc_sidecar: bool = False,
     ) -> Dict[str, Any]:
         """Run the real SE-mode gem5 GenericAccel L4 microarchitecture harness.
 
@@ -650,6 +827,8 @@ class Gem5SystemCClosureAdapter:
 
         request = self.bridge._build_request(design_point, compute_graph, workload_package=workload_package, output_dir=output_dir)
         request["mode"] = "gem5_cosim"
+        if request_overrides:
+            request.update(dict(request_overrides))
         descriptor_translation = build_generic_accel_command_descriptor(request)
         request["generic_accel_descriptor_translation"] = descriptor_translation
         _write_json(output_dir / "generic_accel_command_descriptor.json", descriptor_translation)
@@ -672,6 +851,8 @@ class Gem5SystemCClosureAdapter:
             "--cpu-type",
             cpu_type,
         ]
+        if use_systemc_sidecar:
+            cmd.append("--use-systemc")
 
         blockers: list[Dict[str, Any]] = list(driver_blockers) + list(gem5_blockers)
         if allow_local_transport_fallback:
@@ -744,7 +925,11 @@ class Gem5SystemCClosureAdapter:
         config_ini_path = _copy_if_exists(m5out / "config.ini", output_dir / "config.ini")
         config_json_path = _copy_if_exists(m5out / "config.json", output_dir / "config.json")
 
-        result_path_token = _extract_token(r"result_path=(\S+)", gem5_log)
+        result_path_token = _extract_token(r"uarch_request_decode verified=true.*result_path=(\S+)", gem5_log)
+        sidecar_request_path_token = _extract_token(r"systemc_submit verified=true.*request_path=(\S+)", gem5_log)
+        sidecar_result_path_token = _extract_token(r"systemc_submit verified=true.*result_path=(\S+)", gem5_log)
+        if not result_path_token:
+            result_path_token = _extract_token(r"result_path=(\S+)", gem5_log)
         raw_result_path = Path(result_path_token) if result_path_token else None
         if raw_result_path is None or not raw_result_path.exists():
             tick = _extract_token(r"^(\d+): .*systemc_submit verified=true", gem5_log)
@@ -757,16 +942,58 @@ class Gem5SystemCClosureAdapter:
         if raw_result_path is not None and raw_result_path.exists():
             result = json.loads(raw_result_path.read_text(encoding="utf-8"))
             _write_json(result_copy, result)
+        sidecar_request_copy = (
+            _copy_if_exists(Path(sidecar_request_path_token), output_dir / "systemc_sidecar_request.raw.json")
+            if sidecar_request_path_token
+            else None
+        )
+        sidecar_result_copy = (
+            _copy_if_exists(Path(sidecar_result_path_token), output_dir / "systemc_sidecar_result.raw.json")
+            if sidecar_result_path_token
+            else None
+        )
         activity_summary = _gem5_activity_summary(result, gem5_log)
         _write_json(output_dir / "gem5_activity_summary.json", activity_summary)
+        source_artifacts = {
+            "transport_harness": "gem5_generic_accel_microarchitecture_v1",
+            "fallback_from_gem5": False,
+            "simulation_request": str(request_path),
+            "simulation_result": str(result_copy) if result is not None else (str(raw_result_path) if raw_result_path else None),
+            "gem5_log": str(output_dir / "gem5.log"),
+            "gem5_stdout": str(output_dir / "gem5_stdout.txt"),
+            "gem5_stderr": str(output_dir / "gem5_stderr.txt"),
+            "generic_accel_command_descriptor": str(output_dir / "generic_accel_command_descriptor.json"),
+            "gem5_command_descriptor": str(output_dir / "gem5_command_descriptor.json"),
+            "gem5_completion_descriptor": str(output_dir / "gem5_completion_descriptor.json"),
+            "gem5_stats": stats_path,
+            "gem5_config_ini": config_ini_path,
+            "gem5_config_json": config_json_path,
+            "gem5_activity_summary": str(output_dir / "gem5_activity_summary.json"),
+            "systemc_sidecar_request": sidecar_request_copy or sidecar_request_path_token,
+            "systemc_sidecar_result": sidecar_result_copy or sidecar_result_path_token,
+            "systemc_sidecar_request_observed_path": sidecar_request_path_token,
+            "systemc_sidecar_result_observed_path": sidecar_result_path_token,
+            "require_gem5_stats_config": True,
+        }
+        raw_observations_path = output_dir / "raw_l4_interface_observations.json"
+        raw_observations = build_raw_l4_interface_observations(
+            gem5_log=gem5_log,
+            gem5_stdout=completed.stdout,
+            result=result,
+            source_artifacts=source_artifacts,
+        )
+        _write_json(raw_observations_path, raw_observations)
+        source_artifacts["raw_l4_interface_observations"] = str(raw_observations_path)
 
         request_decode_verified = "uarch_request_decode verified=true" in gem5_log
         microarchitecture_execute_verified = "microarchitecture_execute verified=true" in gem5_log
+        systemc_submit_verified = "systemc_submit verified=true" in gem5_log
         proof = {
             "descriptor_read_verified": "descriptor_read verified=true" in gem5_log,
             "request_decode_verified": request_decode_verified,
             "microarchitecture_execute_verified": microarchitecture_execute_verified,
-            "systemc_submit_verified": ("systemc_submit verified=true" in gem5_log) or microarchitecture_execute_verified,
+            "systemc_submit_verified": systemc_submit_verified,
+            "legacy_systemc_or_microarchitecture_verified": systemc_submit_verified or microarchitecture_execute_verified,
             "completion_writeback_verified": "completion_writeback verified=true" in gem5_log,
             "driver_status_verified": "generic_accel_l4_status=1 error_code=0" in completed.stdout,
             "driver_completion_descriptor_verified": "completion_magic=0x4753494d completion_status=0" in completed.stdout,
@@ -777,23 +1004,7 @@ class Gem5SystemCClosureAdapter:
             "transport_harness": "gem5_generic_accel_microarchitecture_v1",
             "fallback_from_gem5": False,
             "result_path": str(raw_result_path) if raw_result_path else None,
-            "source_artifacts": {
-                "transport_harness": "gem5_generic_accel_microarchitecture_v1",
-                "fallback_from_gem5": False,
-                "simulation_request": str(request_path),
-                "simulation_result": str(result_copy) if result is not None else (str(raw_result_path) if raw_result_path else None),
-                "gem5_log": str(output_dir / "gem5.log"),
-                "gem5_stdout": str(output_dir / "gem5_stdout.txt"),
-                "gem5_stderr": str(output_dir / "gem5_stderr.txt"),
-                "generic_accel_command_descriptor": str(output_dir / "generic_accel_command_descriptor.json"),
-                "gem5_command_descriptor": str(output_dir / "gem5_command_descriptor.json"),
-                "gem5_completion_descriptor": str(output_dir / "gem5_completion_descriptor.json"),
-                "gem5_stats": stats_path,
-                "gem5_config_ini": config_ini_path,
-                "gem5_config_json": config_json_path,
-                "gem5_activity_summary": str(output_dir / "gem5_activity_summary.json"),
-                "require_gem5_stats_config": True,
-            },
+            "source_artifacts": source_artifacts,
         }
         _write_json(output_dir / "gem5_command_descriptor.json", {
             "schema_version": "gsim.gem5_command_descriptor_observed.v1",
@@ -848,9 +1059,11 @@ class Gem5SystemCClosureAdapter:
 
 __all__ = [
     "GENERIC_ACCEL_COMMAND_DESCRIPTOR_BYTES",
+    "GENERIC_ACCEL_LEGACY_COMMAND_DESCRIPTOR_BYTES",
     "GSIM_COMMAND_TYPE_GRAPH",
     "GSIM_DESCRIPTOR_VERSION",
     "GSIM_MAGIC",
     "Gem5SystemCClosureAdapter",
+    "build_raw_l4_interface_observations",
     "build_generic_accel_command_descriptor",
 ]

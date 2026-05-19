@@ -144,6 +144,11 @@ python3 dse_v2/scripts/dse/run_full_flow_pilot.py \
 - Multi-candidate feedback runs now record `mapping_simulation_samples.json`,
   `mapping_feedback_state.json`, and `convergence_status.json`; budget
   exhaustion is reported as a limitation rather than convergence.
+- Additional feedback samples emitted by the pilot CLI are raw Step3
+  measurements, not final-trusted samples, until each sample has its own Step4
+  verdict/claim-validation/evidence-requirements bundle.  The pilot records the
+  blocker as `missing_step4_adjudication_for_feedback_sample` instead of
+  inflating trusted sample counts from raw simulator success alone.
 - Final best-architecture, mapping-comparison, and Pareto claims require multiple
   comparable SystemC/gem5+SystemC evidence runs and cannot be created by a single
   pilot report.

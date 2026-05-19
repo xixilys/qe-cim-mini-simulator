@@ -18,7 +18,9 @@ from dse_v2.evidence.step3_workflow import (
     run_step3_simulation_evidence_workflow,
     validate_step2_handoff_for_step3,
 )
+from dse_v2.evidence.step4_adjudication import run_step4_evidence_adjudication
 from dse_v2.mapping.step2_workflow import run_step2_architecture_mapping_workflow
+from dse_v2.reporting.final_report import write_step5_report_artifacts
 
 
 QE_ONLY_TOKENS = {"npw", "nkb", "h_psi", "s_psi", "diagonalize", "mix_rho", "veff"}
@@ -40,15 +42,24 @@ def test_sparse_step1_step2_step3_full_flow_evidence_without_qe_fields(tmp_path)
 
     request = _load(step3_dir / "simulation_request.json")
     result = _load(step3_dir / "simulation_result.json")
-    verdict = _load(step3_dir / "verdict.json")
-    report = _load(step3_dir / "final_report.json")
-    claim_validation = _load(step3_dir / "claim_validation.json")
     status = _load(step3_dir / "step3_status.json")
+
+    assert not (step3_dir / "verdict.json").exists()
+    assert not (step3_dir / "claim_validation.json").exists()
+    assert not (step3_dir / "final_report.json").exists()
+    step4 = run_step4_evidence_adjudication(step3_dir)
+    assert step4.status == "adjudicated"
+    assert step4.trusted_for_final_ranking is True
+    verdict = _load(step3_dir / "verdict.json")
+    claim_validation = _load(step3_dir / "claim_validation.json")
+    assert not (step3_dir / "final_report.json").exists()
+    write_step5_report_artifacts(step3_dir)
+    report = _load(step3_dir / "final_report.json")
 
     assert step2.status == "ready_for_step3_simulation"
     assert validation["valid"] is True
-    assert step3.status == "trusted_full_flow_evidence_emitted"
-    assert step3.trusted_for_final_ranking is True
+    assert step3.status == "simulation_completed"
+    assert step3.trusted_for_final_ranking is False
     assert status["full_flow_simulation_attempted"] is True
     assert result["status"] == "passed"
     assert verdict["trusted_for_final_ranking"] is True
@@ -89,10 +100,16 @@ def test_database_vector_search_cross_step_request_has_no_qe_required_phases(tmp
     step3 = run_step3_simulation_evidence_workflow(step2_dir, output_dir=step3_dir, timeout=30)
 
     request = _load(step3_dir / "simulation_request.json")
+    assert not (step3_dir / "verdict.json").exists()
+    assert not (step3_dir / "final_report.json").exists()
+    step4 = run_step4_evidence_adjudication(step3_dir)
+    assert step4.trusted_for_final_ranking is True
     verdict = _load(step3_dir / "verdict.json")
+    write_step5_report_artifacts(step3_dir)
     report = _load(step3_dir / "final_report.json")
 
-    assert step3.trusted_for_final_ranking is True
+    assert step3.status == "simulation_completed"
+    assert step3.trusted_for_final_ranking is False
     assert request["workload"]["workflow"]["workload_family"] == "database_vector_search"
     assert QE_ONLY_TOKENS.isdisjoint(set(request["workload"]["required_coverage"]))
     assert "required_qe_scf_phases" not in verdict
@@ -120,17 +137,21 @@ def test_gem5_systemc_step3_blocks_when_real_l4_config_is_missing(tmp_path):
         timeout=1,
     )
 
-    codesign_verdict = _load(step3_dir / "codesign_verdict.json")
     request = _load(step3_dir / "simulation_request.json")
     descriptor = _load(step3_dir / "generic_accel_command_descriptor.json")
     observed_descriptor = _load(step3_dir / "gem5_command_descriptor.json")
     l4_trace = _load(step3_dir / "l4_execution_trace.json")
     completion = _load(step3_dir / "completion_proof.json")
+    assert not (step3_dir / "codesign_verdict.json").exists()
+    assert not (step3_dir / "gem5_l4_proof.json").exists()
+    assert not (step3_dir / "verdict.json").exists()
+    step4 = run_step4_evidence_adjudication(step3_dir)
+    assert step4.status == "adjudicated_untrusted"
+    codesign_verdict = _load(step3_dir / "codesign_verdict.json")
     proof = _load(step3_dir / "gem5_l4_proof.json")
-    report = _load(step3_dir / "final_report.json")
     verdict = _load(step3_dir / "verdict.json")
 
-    assert step3.status == "simulation_completed_untrusted"
+    assert step3.status in {"simulation_completed", "simulation_completed_untrusted"}
     assert step3.trusted_for_final_ranking is False
     assert descriptor["schema_version"] == "gsim.generic_accel_command_descriptor_translation.v1"
     assert descriptor["translator"] == "dse_v2.backends.gem5_systemc_adapter.build_generic_accel_command_descriptor"
@@ -153,6 +174,8 @@ def test_gem5_systemc_step3_blocks_when_real_l4_config_is_missing(tmp_path):
     assert any(event["event"] == "gem5_microarchitecture_model_executed_from_device_path" for event in l4_trace["events"])
     assert completion["passed"] is False
     assert verdict["codesign_verdict"]["status"] == "blocked"
+    write_step5_report_artifacts(step3_dir)
+    report = _load(step3_dir / "final_report.json")
     assert report["codesign"]["status"] == "blocked"
     assert report["codesign"]["trusted_for_codesign_ranking"] is False
     assert (step3_dir / "step2_input" / "codesign_candidate.json").exists()
@@ -169,12 +192,17 @@ def test_qe_reference_step1_step2_step3_regression_preserves_profile_importer_bo
     step3 = run_step3_simulation_evidence_workflow(step2_dir, output_dir=step3_dir, timeout=30)
 
     request = _load(step3_dir / "simulation_request.json")
+    assert not (step3_dir / "verdict.json").exists()
+    step4 = run_step4_evidence_adjudication(step3_dir)
+    assert step4.trusted_for_final_ranking is True
     verdict = _load(step3_dir / "verdict.json")
+    write_step5_report_artifacts(step3_dir)
     report = _load(step3_dir / "final_report.json")
     seed_set = _load(step2_dir / "mapping_seed_set.json")
     seed_names = {seed["seed_name"] for seed in seed_set["seeds"]}
 
-    assert step3.trusted_for_final_ranking is True
+    assert step3.status == "simulation_completed"
+    assert step3.trusted_for_final_ranking is False
     assert request["workload"]["workload_package"]["profile"]["profile_id"] == "qe_scf_reference"
     assert request["workload"]["workload_package"]["importer"]["importer_id"] == "qe_reference_fixture"
     assert request["workload"]["required_coverage"] == QE_SCF_REQUIRED_COVERAGE
@@ -252,6 +280,31 @@ def test_step3_blocks_candidate_only_missing_binding_and_smoke_boundary(tmp_path
     assert smoke_status["full_flow_simulation_attempted"] is False
     assert "diagnostic_claim_boundary" in smoke_reasons
     assert "step2_not_promoted_for_simulation" in smoke_reasons
+
+
+def test_step3_requires_matching_promoted_queue_entry(tmp_path):
+    graph = create_sparse_spmv_graph("queue_mismatch_cross_step")
+    package = package_from_graph(graph, workload_family="sparse_la", importer_id="generic_json")
+    step2_dir = tmp_path / "step2_queue_mismatch"
+    step3_dir = tmp_path / "step3_queue_mismatch"
+
+    run_step2_architecture_mapping_workflow(package, output_dir=step2_dir)
+    queue = _load(step2_dir / "step3_simulation_queue.json")
+    queue["entries"][0]["mapping_id"] = "different_mapping_id"
+    (step2_dir / "step3_simulation_queue.json").write_text(
+        json.dumps(queue, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+    result = run_step3_simulation_evidence_workflow(step2_dir, output_dir=step3_dir, timeout=30)
+    status = _load(step3_dir / "step3_status.json")
+    reasons = {reason["reason_id"] for reason in status["reasons"]}
+
+    assert result.status == "blocked_before_simulation"
+    assert status["full_flow_simulation_attempted"] is False
+    assert "missing_matching_step3_queue_entry" in reasons
+    assert "step2_artifact_validation_failed" in reasons
+    assert not (step3_dir / "simulation_result.json").exists()
 
 
 def test_step3_blocks_illegal_step2_mapping_and_missing_required_artifact(tmp_path):

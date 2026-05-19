@@ -22,6 +22,10 @@ from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence
 from dse_v2.core.ir.compute_graph import ComputeGraph, ComputeNode, DataEdge, GraphRegion, TensorSpec
 from dse_v2.core.workload.package import WorkloadPackage, package_from_graph
 from dse_v2.core.workload.profiles import WorkloadProfile
+from dse_v2.reference_workloads.dft_profile_schema import (
+    attach_dft_profile_contract,
+    dft_profile_metadata_contract,
+)
 from dse_v2.reference_workloads.dft_workflow import (
     DftClaimEvidence,
     DftHotspotClaim,
@@ -471,7 +475,7 @@ def merge_source_facts(
 
 def dft_phase_reference_profile() -> WorkloadProfile:
     """Optional DFT/QE profile for source-derived phase/kernel graphs."""
-    return WorkloadProfile(
+    profile = WorkloadProfile(
         profile_id="dft_qe_pw_static",
         profile_version="v1",
         workload_family="dft",
@@ -505,6 +509,7 @@ def dft_phase_reference_profile() -> WorkloadProfile:
         description="Optional DFT/QE static source frontdoor that emits architecture-independent phase/kernel workload facts.",
         plugin_metadata={"reference_only": True, "domain": "dft", "source_program": "qe_pw"},
     )
+    return WorkloadProfile.from_dict(attach_dft_profile_contract(profile.to_dict(), source_program="qe_pw"))
 
 
 def build_dft_phase_graph(case: DftCase, *, graph_id: Optional[str] = None) -> ComputeGraph:
@@ -1037,6 +1042,7 @@ def package_from_dft_workflow(
     """Wrap a normalized DFT workflow in the generic WorkloadPackage contract."""
     graph = build_dft_workflow_graph(workflow, graph_id=graph_id)
     profile_payload = profile.to_dict() if isinstance(profile, WorkloadProfile) else dict(profile or dft_phase_reference_profile().to_dict())
+    profile_payload = attach_dft_profile_contract(profile_payload, source_program=workflow.source_software)
     source_facts = _workflow_source_facts(workflow)
     domain_metadata = {
         "dft": {
@@ -1048,6 +1054,7 @@ def package_from_dft_workflow(
                 for stage in workflow.stages
             },
             "source_program": workflow.source_software,
+            "profile_metadata": dft_profile_metadata_contract(source_program=workflow.source_software),
             "claim_boundary": claim_boundary,
             "review_flags": sorted(set(workflow.review_flags)),
             "limitations": sorted(set(workflow.limitations)),
@@ -1089,10 +1096,12 @@ def package_from_dft_case(
     """Wrap a DFT case graph in the generic WorkloadPackage contract."""
     graph = build_dft_phase_graph(case, graph_id=graph_id)
     profile_payload = profile.to_dict() if isinstance(profile, WorkloadProfile) else dict(profile or dft_phase_reference_profile().to_dict())
+    profile_payload = attach_dft_profile_contract(profile_payload, source_program=case.source_program)
     workflow = workflow_from_dft_case(case)
     domain_metadata = {
         "dft": {
             **case.to_domain_metadata(),
+            "profile_metadata": dft_profile_metadata_contract(source_program=case.source_program),
             "workflow": workflow.to_dict(),
         },
         "characterization": {

@@ -82,9 +82,15 @@ def test_dft_reference_logic_does_not_leak_into_core_or_mapping_layers():
     offenders = []
     for root in (REPO_ROOT / "dse_v2" / "core", REPO_ROOT / "dse_v2" / "mapping"):
         for path in root.rglob("*.py"):
-            text = path.read_text(encoding="utf-8").lower()
+            lowered = path.read_text(encoding="utf-8").lower()
+            allowed_boundary_mentions = (
+                "dft-specific intent must be translated by a profile",
+            )
+            scrubbed = lowered
+            for allowed in allowed_boundary_mentions:
+                scrubbed = scrubbed.replace(allowed, "")
             for marker in forbidden_markers:
-                if marker in text:
+                if marker in scrubbed:
                     offenders.append(f"{path.relative_to(REPO_ROOT)} contains {marker!r}")
 
     assert offenders == []

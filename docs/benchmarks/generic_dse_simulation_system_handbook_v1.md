@@ -8,6 +8,9 @@
 
 ---
 
+
+> **2026-05 restructure notice:** The canonical execution contract is now `docs/architecture/research_grade_control_plane_design_manual.md`.  In particular, Step3 is simulation execution only; Step4 owns `verdict.json`, `claim_validation.json`, calibration/feedback, and canonical `l4_interface_metrics.json`; Step5 owns `final_report.json` and `final_report.md`.  Legacy mentions of Step3-owned final reports or `numerical_validation.json` below are migration history unless explicitly renamed to `simulator_consistency_check.json`, `timing_model_calibration.json`, `kernel_numerical_validation.json`, or `domain_physics_validation.json`.
+
 ## 0. 阅读规则与证据边界
 
 本手册说明当前仓库中的通用 Design Space Exploration（DSE）与仿真证据闭环系统如何被运行、扩展和审查。全局架构以 `docs/architecture/generic_dse_global_system_design_v0.md` 为准；本文只保留执行规则、artifact 规则和 claim 边界。它面向 4 类读者：
@@ -267,21 +270,38 @@ domain seed generation
 | Artifact | 作用 | Claim 边界 |
 | --- | --- | --- |
 | `step2_status.json` | Step2 状态、selected ids、reasons | 不是 final evidence。 |
-| `architecture_catalog.json` | catalog snapshot | 审计架构空间。 |
+| `architecture_search_space.json` | 参数化 architecture family/search-space 定义 | Step2 搜索边界；不是测量结果。 |
+| `architecture_candidate_generation_report.json` | candidate 生成记录、参数、provenance | 证明不是固定手工候选。 |
+| `architecture_screening_report.json` | workload-aware screening / pruning / blocker reasons | promotion 前的筛选审计。 |
+| `architecture_catalog.json` | catalog snapshot / compatibility support | 支撑 search-space；不是 canonical closure 的替代物。 |
 | `architecture.json` | selected architecture instance | 缺 binding 时是 candidate-only。 |
 | `design_point.json` | replayable DesignPoint | Step3 输入。 |
 | `mapping_legality_matrix.json` | node/resource legality | 解释 rejection。 |
 | `mapping_seed_set.json` | generic / profile-owned seed mappings | 复现搜索。 |
-| `mapping_candidate_records.json` | generated candidates | candidate audit。 |
+| `mapping_candidates.jsonl` / `mapping_candidate_records.json` | generated mapping candidates | candidate audit；新写入优先 JSONL canonical 记录。 |
+| `screening_results.jsonl` | L1/L2/surrogate screening records | Step2 screening evidence。 |
+| `promotion_decisions.jsonl` / `mapping_promotion_decision.json` | 是否进入 Step3 | 不能声明 trusted final。 |
 | `mapping_selected_record.json` | selected mapping | final report 需引用。 |
-| `mapping_promotion_decision.json` | 是否进入 Step3 | 不能声明 trusted final。 |
-| `mapping_simulation_samples.json` | promoted samples / placeholders | 反馈桥。 |
-| `mapping_feedback_state.json` | ranking / calibration state | 下一轮搜索输入。 |
+| `mapping_simulation_samples.json` | promoted samples / placeholders | 反馈桥；pilot CLI 的额外 SystemC samples 只是 raw Step3 measurement，缺 per-sample Step4 adjudication 时必须保持 blocked/untrusted。 |
+| `mapping_feedback_state.json` | compatibility feedback state | canonical Step4 feedback 是 `feedback_update.json`。 |
 | `convergence_status.json` | stop/continue reason | budget exhaustion 是 limitation。 |
+
+当前实现说明（2026-05-19）：Step2 writer 已经在
+`dse_v2/mapping/step2_workflow.py` 中写出 canonical search bundle
+（search-space、generation report、screening report、三类 JSONL ledger）并保留
+`mapping_candidate_records.json` / `mapping_promotion_decision.json` 作为兼容性
+handoff。最终完整性仍然要求 Step3/Step4/Step5 证据闭环；这些 Step2 artifact
+只证明 candidate generation / screening / promotion 是可回放的。
 
 ### 5.5 Step2 acceptance gate
 
 Step2 进入 Step3 前必须满足：
+
+2026-05-19 hardening：Step3 admission 会重新检查
+`step3_simulation_queue.json`。Promoted candidate 必须在 queue 中有匹配
+`design_point_id`、`mapping_id`、`architecture_id` 和 mapping candidate 的
+entry，且 entry 必须处于 scheduled 状态；queue 篡改或把未 promoted candidate
+排进 Step3 会在仿真前 blocked。
 
 - workload package valid；
 - graph lowering `full_workload_eligible = true`；
@@ -316,15 +336,32 @@ Step3 是 high-fidelity evidence boundary。它必须从磁盘 reload Step2 arti
 | `simulation_request.json` | backend 消费的 workload / architecture / mapping request。 |
 | `simulation_result.json` | public simulation result。 |
 | `simulation_result.raw.json` | optional raw backend output。 |
-| `numerical_validation.json` | generic timing-level numeric reference check。 |
-| `verdict.json` | trust gate 的主要机器可读 verdict。 |
+| `step3_status.json` | Step3 execution status and blockers。 |
+| backend logs / raw traces | raw measurement observations。 |
+
+Step3 **不**拥有 `verdict.json`、`claim_validation.json`、`final_report.json` 或 `final_report.md`。Step4 负责 adjudication/calibration/feedback；Step5 负责 final report。Legacy `numerical_validation.json` 只作为迁移兼容名；canonical timing-simulator artifact 是 `simulator_consistency_check.json`，real kernel/domain correctness 分别使用 `kernel_numerical_validation.json` 和 `domain_physics_validation.json`。
+
+### 6.3.1 Step4 / Step5 artifacts
+
+| Artifact | 作用 |
+| --- | --- |
+| `simulator_consistency_check.json` | timing simulator consistency check；不是 domain correctness。 |
+| `timing_model_calibration.json` | timing/resource calibration input/status。 |
+| `calibration_record.json` (`CalibrationRecord`) | L1/L2/L3/L4 calibration record，必须绑定 Campaign/Trial 和 source artifact hashes。 |
+| `feedback_update.json` | promotion/search feedback update，必须绑定 Campaign/Trial 和 source artifact hashes。 |
+| `verdict.json` | Step4 trust/adjudication verdict。 |
 | `evidence_requirements.json` | required / optional evidence files。 |
-| `claim_validation.json` | claim validation 结果。 |
-| `final_report.json` | machine-readable final report。 |
-| `final_report.md` | human-readable final report。 |
+| `claim_validation.json` | Step4 claim validation 结果。 |
 | `artifact_manifest.json` | run-local evidence index。 |
 | `manifest.json` | run id、command、backend、status、artifact paths。 |
-| `gem5_l4_proof.json` | L4 gem5+SystemC proof，仅 L4 trusted claim 必需。 |
+| `gem5_l4_proof.json` | L4 gem5+SystemC raw proof，由 L4 adapter 生成、Step4 消费。 |
+| `l4_interface_metrics.json` | canonical L4 metrics，由 Step4 从 raw proof/logs 归一化。 |
+| `final_report.json` / `final_report.md` | Step5 report only。 |
+
+Step5 hardening（2026-05-19）：`write_step5_report_artifacts()` 在写
+`final_report.json` / `final_report.md` 前必须看到 Step4 的 `verdict.json`、
+`claim_validation.json` 和 `evidence_requirements.json`。Step5 可以呈现 blocked
+claim，但不能把未通过的 Step4 claim validation 升级成 trusted winner。
 
 ### 6.4 Trusted ranking gate
 
@@ -514,6 +551,12 @@ BO、NSGA-II、OpenTuner-style ensemble、Optuna sampler、Ax/BoTorch acquisitio
 
 ---
 
+## 10.0 Matrix admissibility note
+
+A complete-DSE L4 matrix generated before canonical schema/registry/Step3-4-5/calibration/evidence-policy changes is **provisional**. It must be rerun or explicitly revalidated after those structural changes before any final claim.
+
+The DFT full-flow audit must cite the frozen DFT profile/schema contract from `dse_v2/reference_workloads/dft_profile_schema.py`; missing or stale profile-owned metadata blocks deliverable-complete closure.
+
 ## 10. Runbook
 
 ### 10.1 构建 generic SystemC backend
@@ -552,11 +595,14 @@ workload_graph.json
 graph_lowering_report.json
 simulation_request.json
 simulation_result.json
-numerical_validation.json
+simulator_consistency_check.json
+timing_model_calibration.json
+calibration_record.json
+feedback_update.json
 verdict.json
+claim_validation.json
 final_report.json
 final_report.md
-claim_validation.json
 ```
 
 可信等级：single-run feasibility / timing evidence。不能声明 best architecture 或 Pareto frontier。
@@ -609,6 +655,58 @@ claim_validation.json
 ```
 
 可信等级：只有 `gem5_l4_proof.json` passed 且 `claim_validation.json` passed 时，才能写成 L4 trusted evidence。
+
+#### 10.4.1 QE h_psi gem5 sidecar evidence boundary
+
+当前必须区分两类 sidecar 证据：
+
+- `runs/dse/qe_l4_one_row_gem5_sidecar_abs_20260518T213029Z` 是 legacy
+  component-model diagnostic。它证明绝对路径 sidecar 模板和 gem5
+  GenericAccel/SystemC transport 可运行，但 payload 仍由 Python software
+  component model 计算，因此只能作为 foundation / integration evidence。
+- `runs/dse/qe_l4_one_row_gem5_native_hpsi_abs_20260518T230010Z` 是 native
+  h_psi model-level L4 vertical slice。producer 在 `--fail-on-blocked` 下通过，
+  1 row passed / 0 blocked；kernel/provenance 记录 42 次 observed/attempted/
+  consumed h_psi sidecar calls、0 failed calls、`software_component_model_not_l4=false`
+  和 passed gem5 transport proof。
+
+native row 可以写成 “SystemC/GenericAccel model L4 offload + kernel numerical
+evidence”，但不能写成 silicon/RTL proof，也不能替代 36-row final-admissible
+bundle 或 complete-DSE matrix zero-blocked gate。
+
+2026-05-19 运行约束：`qe_si_bands_path_v1` proof fixture 采用 13-kpoint
+compact high-symmetry bands path。旧 41-kpoint fixture 在 360s per-stage
+timeout 下只推进到约 13/41 k-points，因此旧 bundle 的 timeout rows 必须记录为
+blocked；新的 compact fixture 仍需完整通过 36/36 rows 才能进入 matrix。
+
+
+2026-05-19 final serial bundle: `runs/dse/qe_l4_full_gem5_native_hpsi_abs_current_20260519T014428Z`
+通过 36/36 rows，`blocked_row_count=0`，`admissibility_ledger.json` 为
+`final_admissible`。`.omx/context/final-admissible-qe-l4-bundle.path` 指向该
+bundle，后续 matrix 必须从这个 pointer 读取，而不是复用旧 diagnostic run。
+
+2026-05-19 complete-DSE matrix：`runs/dse/complete_dse_full_l4_evidence_final_20260519T040705Z`
+使用上述 bundle 运行，输出 `row_count=36`、`expected_row_count=36`、
+`blocked_row_count=0`。这关闭当前技术 matrix gate，但最终项目状态仍受
+manual/checklist 一致性、IC/EDA 可达性记录、anti-downgrade audit 和
+`2026-06-01 12:00` local date gate 约束。
+
+2026-05-19 IC/EDA key-auth refresh：本机 SSH alias `ic-eda` / `ic-eda-windows`
+已指向 `192.168.16.1:1266` 的 `ICer` 用户，并使用本机私钥
+`~/.ssh/ic_eda_ed25519` 免密登录；只上传公钥，不能把密码写入 repo、脚本、log
+或 SSH config。`ssh -o BatchMode=yes ic-eda` 已验证远端 host 为 `IC_EDA`，并且
+`source ~/.bashrc` 后可见 `dc_shell` O-2018.06-SP1、`vcs` O-2018.09、Vivado
+2019.1。该证据说明工具路径可达，但仍是 RTL/FPGA/EDA closure 的 side evidence，
+不能替代 QE/gem5 L4 actual-compute value gate。
+
+2026-05-19 producer 并发约束：native h_psi QE producer 的 final-admissible
+bundle 当前必须按可信串行测量路径生成。一次 3-lane per-candidate 并行诊断在多个
+候选的 SCF 阶段产生 `cdiaghg` / `S matrix not positive definite` 和
+`accelerated_qe_returncode:1`，而相同 candidate/workload 单行串行复现实验通过。
+因此该并行 run 已被 invalidated，不能作为完整系统 blocker 或 final evidence。
+只有未来证明 QE/gem5/h_psi sidecar 进程隔离后，才允许并行 producer 进入
+final-admissible 路径。
+
 
 ### 10.5 运行 focused regression
 
@@ -687,7 +785,7 @@ scoped reference profile/importer / DFT vertical proof evidence / historical evi
 - simulator return code；
 - `simulation_result.json` status；
 - required coverage；
-- `numerical_validation.json`；
+- `simulator_consistency_check.json`；
 - `verdict.json`；
 - `claim_validation.json`。
 
@@ -750,6 +848,9 @@ gem5.log
 | `workload_package.json` | Step1 | Workload contract。 |
 | `workload_graph.json` | Step1 | Source graph。 |
 | `graph_lowering_report.json` | Step1 | Lowering / eligibility audit。 |
+| `architecture_search_space.json` | Step2 | Parameterized architecture search-space。 |
+| `architecture_candidate_generation_report.json` | Step2 | Candidate generation provenance。 |
+| `architecture_screening_report.json` | Step2 | Screening/pruning/blocker report。 |
 | `architecture_catalog.json` | Step2 | Architecture space snapshot。 |
 | `architecture.json` | Step2 | Selected architecture instance。 |
 | `design_point.json` | Step2 | Replayable candidate。 |
@@ -758,10 +859,13 @@ gem5.log
 | `mapping_promotion_decision.json` | Step2 | Step3 admission gate。 |
 | `simulation_request.json` | Step3 | Backend request。 |
 | `simulation_result.json` | Step3 | Public backend result。 |
-| `numerical_validation.json` | Step3 | Generic timing numeric check。 |
-| `verdict.json` | Step3 | Trust gate。 |
-| `claim_validation.json` | Step3/report | Machine-checkable claim gate。 |
-| `final_report.md` | Report | Human-readable review surface。 |
+| `simulator_consistency_check.json` | Step4 | Timing simulator consistency check；legacy `numerical_validation.json` is compatibility only。 |
+| `verdict.json` | Step4 | Trust/adjudication gate。 |
+| `claim_validation.json` | Step4 | Machine-checkable claim gate。 |
+| `calibration_record.json` | Step4 | CalibrationRecord with Campaign/Trial and artifact hashes。 |
+| `feedback_update.json` | Step4 | Search/promotion feedback with artifact hashes。 |
+| `final_report.json` | Step5 | Machine-readable report。 |
+| `final_report.md` | Step5 | Human-readable review surface。 |
 | `gem5_l4_proof.json` | L4 | Software-visible completion proof。 |
 
 ---

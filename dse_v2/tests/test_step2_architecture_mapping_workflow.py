@@ -65,6 +65,14 @@ def _load_json(path: Path):
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def _load_jsonl(path: Path):
+    return [
+        json.loads(line)
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+
+
 def _create_policy_hint_graph(graph_id: str) -> ComputeGraph:
     graph = ComputeGraph(graph_id=graph_id, metadata={"workload_family": "ml_tensor"})
     graph.add_node(ComputeNode(
@@ -242,6 +250,12 @@ def test_step2_runs_representative_non_qe_workloads_and_writes_required_artifact
             "executable_graph.json",
             "mapping.json",
             "mapping_promotion_decision.json",
+            "architecture_search_space.json",
+            "architecture_candidate_generation_report.json",
+            "architecture_screening_report.json",
+            "mapping_candidates.jsonl",
+            "screening_results.jsonl",
+            "promotion_decisions.jsonl",
             "step2_artifact_validation.json",
         ]:
             assert (run_dir / artifact_name).exists(), f"{family}: missing {artifact_name}"
@@ -260,9 +274,31 @@ def test_step2_runs_representative_non_qe_workloads_and_writes_required_artifact
         l2_decision = _load_json(run_dir / "l2_promotion_decision.json")
         low_fidelity_summary = _load_json(run_dir / "low_fidelity_screening_summary.json")
         promotion = _load_json(run_dir / "mapping_promotion_decision.json")
+        search_space = _load_json(run_dir / "architecture_search_space.json")
+        candidate_generation = _load_json(run_dir / "architecture_candidate_generation_report.json")
+        screening_report = _load_json(run_dir / "architecture_screening_report.json")
+        mapping_candidates = _load_jsonl(run_dir / "mapping_candidates.jsonl")
+        screening_results = _load_jsonl(run_dir / "screening_results.jsonl")
+        promotion_decisions = _load_jsonl(run_dir / "promotion_decisions.jsonl")
 
         assert status["workload_family"] == family
         assert status["trusted_final_claim"] is False
+        assert search_space["search_space_hash"].startswith("sha256:")
+        assert search_space["trusted_final_claim"] is False
+        assert search_space["freeze_gate_verdict"]["completion_evidence"] is False
+        assert candidate_generation["search_space_hash"] == search_space["search_space_hash"]
+        assert candidate_generation["mapping_candidate_count"] == len(mapping_candidates)
+        assert candidate_generation["trusted_final_claim"] is False
+        assert screening_report["promotion_decision_artifact"] == "promotion_decisions.jsonl"
+        assert screening_report["trusted_final_claim"] is False
+        assert mapping_candidates
+        assert all(record["step2_screenable"] is True for record in mapping_candidates)
+        assert all(record["trusted_final_claim"] is False for record in mapping_candidates)
+        assert screening_results
+        assert all(record["trusted_final_claim"] is False for record in screening_results)
+        assert promotion_decisions
+        assert all(record["queue_artifact"] == "step3_simulation_queue.json" for record in promotion_decisions)
+        assert all(record["trusted_final_claim"] is False for record in promotion_decisions)
         assert architecture["architecture_family"] == "balanced"
         assert architecture["components"]
         assert architecture["constraints"]["min_memory_bytes"] > 0
@@ -710,10 +746,23 @@ def test_step2_screens_multiple_architectures_without_breaking_step3_handoff(tmp
     future_dir = tmp_path / "architectures" / "future-custom-candidate-v0"
     screening_queue = _load_json(tmp_path / "step3_simulation_queue.json")
     screening_candidate_set = _load_json(tmp_path / "architecture_candidate_set.json")
+    search_space = _load_json(tmp_path / "architecture_search_space.json")
+    candidate_generation = _load_json(tmp_path / "architecture_candidate_generation_report.json")
+    screening_report = _load_json(tmp_path / "architecture_screening_report.json")
+    mapping_candidates = _load_jsonl(tmp_path / "mapping_candidates.jsonl")
+    screening_results = _load_jsonl(tmp_path / "screening_results.jsonl")
+    promotion_decisions = _load_jsonl(tmp_path / "promotion_decisions.jsonl")
 
     assert result.status == "architecture_screening_completed"
     assert result.trusted_final_eligible is False
     assert (tmp_path / "architecture_screening_records.json").exists()
+    assert search_space["policy_scope"] == "architecture_screening"
+    assert set(search_space["parameters"]["architecture_ids"]) == {"balanced-generic-systemc-v0", "future-custom-candidate-v0"}
+    assert candidate_generation["search_space_hash"] == search_space["search_space_hash"]
+    assert screening_report["screened_candidate_count"] >= 2
+    assert mapping_candidates
+    assert len(screening_results) >= 2
+    assert {record["decision"] for record in promotion_decisions} == {"promote", "block"}
     assert screening_candidate_set["policy_scope"] == "architecture_screening"
     assert screening_candidate_set["candidate_count"] == 2
     assert screening_queue["queue_mode"] == "selected-entry-only"
@@ -774,6 +823,10 @@ def test_dft_research_architecture_instances_are_cataloged_and_step3_searchable(
     assert {entry["architecture_id"] for entry in screening_queue["entries"]} == set(DFT_RESEARCH_ARCHITECTURE_IDS)
     assert {entry["queue_state"] for entry in screening_queue["entries"]} == {"scheduled_for_simulation"}
     assert all(record["step3_searchable"] is True for record in records)
+    assert all(record["step2_screenable"] is True for record in records)
+    assert all(record["step3_evaluable"] is True for record in records)
+    assert all(record["simulation_eligible"] is True for record in records)
+    assert all(record["simulation_blockers"] == [] for record in records)
     assert all(record["promoted_for_simulation"] is True for record in records)
     assert all(record["candidate_only_reasons"] for record in records)
     assert all("Step3-searchable" in record["candidate_only_reasons"][0]["detail"] for record in records)

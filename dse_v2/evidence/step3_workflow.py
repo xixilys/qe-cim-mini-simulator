@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Step3 simulation/evidence workflow consuming Step2 handoff artifacts.
+"""Step3 simulation workflow consuming Step2 handoff artifacts.
 
 Step3 is the boundary after architecture/mapping promotion.  It reloads the
 persisted Step2 artifacts from disk, refuses unpromoted or diagnostic handoffs,
-runs the selected SystemC simulation, and emits the full evidence/report bundle
-through the existing evidence contract.
+runs the selected SystemC simulation, and emits only Step3 execution artifacts.
+Step4 adjudication and Step5 reporting are explicit downstream APIs.
 """
 
 from __future__ import annotations
@@ -60,17 +60,16 @@ STEP2_OPTIONAL_INPUT_ARTIFACTS = set(STEP2_CANDIDATE_QUEUE_ARTIFACTS + ["domain_
 STEP3_EVIDENCE_ARTIFACTS = [
     "simulation_request.json",
     "simulation_result.json",
-    "numerical_validation.json",
-    "verdict.json",
-    "evidence_requirements.json",
-    "claim_validation.json",
-    "final_report.json",
-    "final_report.md",
-    "artifact_manifest.json",
-    "manifest.json",
-] + CODESIGN_L4_EVIDENCE_ARTIFACTS + CODESIGN_STEP2_ARTIFACTS + [
+    "simulation_result.raw.json",
+    "systemc_stdout.log",
+    "systemc_stderr.log",
+    "phase_breakdown.csv",
+    "resource_summary.csv",
+    "data_movement_summary.csv",
+] + [
+    artifact for artifact in CODESIGN_L4_EVIDENCE_ARTIFACTS if artifact != "codesign_verdict.json"
+] + [
     "generic_accel_command_descriptor.json",
-    "gem5_l4_proof.json",
     "gem5.log",
 ]
 
@@ -213,6 +212,75 @@ def _low_fidelity_handoff_reasons(step2_dir: Path, handoff: Mapping[str, Any], p
     return reasons
 
 
+def _step3_queue_handoff_reasons(handoff: Mapping[str, Any], promotion: Mapping[str, Any]) -> List[Dict[str, Any]]:
+    """Validate Step2's explicit queue contract before Step3 execution."""
+
+    queue = handoff.get("step3_simulation_queue", {}) if isinstance(handoff.get("step3_simulation_queue", {}), Mapping) else {}
+    entries = [entry for entry in queue.get("entries", []) or [] if isinstance(entry, Mapping)]
+    selected = handoff.get("mapping_selected_record", {}) if isinstance(handoff.get("mapping_selected_record", {}), Mapping) else {}
+    design_point = handoff.get("design_point", {}) if isinstance(handoff.get("design_point", {}), Mapping) else {}
+    architecture = handoff.get("architecture", {}) if isinstance(handoff.get("architecture", {}), Mapping) else {}
+    promoted = bool(promotion.get("promoted_for_simulation", False))
+    reasons: List[Dict[str, Any]] = []
+    if queue.get("trusted_final_claim"):
+        reasons.append(_reason("invalid_step3_queue_trusted_final_claim", "Step2 queue cannot claim trusted final results"))
+    if not promoted:
+        scheduled = [
+            entry
+            for entry in entries
+            if str(entry.get("queue_state", "")).startswith("scheduled_for_simulation")
+        ]
+        if scheduled:
+            reasons.append(_reason(
+                "step3_queue_schedules_unpromoted_candidate",
+                "Step3 queue cannot schedule entries when mapping_promotion_decision.promoted_for_simulation is false",
+                scheduled_count=len(scheduled),
+            ))
+        return reasons
+
+    expected_design_point_id = str(design_point.get("design_point_id") or "")
+    expected_mapping_id = str(promotion.get("mapping_id") or design_point.get("config", {}).get("mapping_id") or "")
+    expected_architecture_id = str(promotion.get("architecture_id") or architecture.get("architecture_id") or "")
+    expected_mapping_candidate_id = str(promotion.get("candidate_id") or selected.get("candidate_id") or "")
+    matching_entries = [
+        entry
+        for entry in entries
+        if str(entry.get("design_point_id") or "") == expected_design_point_id
+        and str(entry.get("mapping_id") or "") == expected_mapping_id
+        and str(entry.get("architecture_id") or "") == expected_architecture_id
+        and str(entry.get("mapping_candidate_id") or "") == expected_mapping_candidate_id
+    ]
+    if not matching_entries:
+        reasons.append(_reason(
+            "missing_matching_step3_queue_entry",
+            "Promoted Step2 handoff requires a Step3 queue entry matching design_point_id, mapping_id, architecture_id, and mapping candidate.",
+            expected_design_point_id=expected_design_point_id,
+            expected_mapping_id=expected_mapping_id,
+            expected_architecture_id=expected_architecture_id,
+            expected_mapping_candidate_id=expected_mapping_candidate_id,
+        ))
+        return reasons
+    scheduled_entries = [
+        entry
+        for entry in matching_entries
+        if str(entry.get("queue_state", "")).startswith("scheduled_for_simulation")
+    ]
+    if not scheduled_entries:
+        reasons.append(_reason(
+            "step3_queue_entry_not_scheduled",
+            "Matching Step3 queue entry is not scheduled for simulation.",
+            queue_states=[str(entry.get("queue_state", "")) for entry in matching_entries],
+        ))
+    for entry in matching_entries:
+        if entry.get("trusted_final_claim"):
+            reasons.append(_reason(
+                "invalid_step3_queue_entry_trusted_final_claim",
+                "Step3 queue entries cannot claim trusted final results",
+                queue_entry_id=entry.get("queue_entry_id"),
+            ))
+    return reasons
+
+
 def validate_step2_handoff_for_step3(step2_dir: Path) -> Dict[str, Any]:
     """Return whether a persisted Step2 handoff may enter Step3 simulation."""
     step2_dir = Path(step2_dir)
@@ -252,6 +320,7 @@ def validate_step2_handoff_for_step3(step2_dir: Path) -> Dict[str, Any]:
     if promotion.get("trusted_final_claim"):
         reasons.append(_reason("invalid_step2_trusted_final_claim", "Step2 promotion cannot claim trusted final results"))
     reasons.extend(_low_fidelity_handoff_reasons(step2_dir, handoff, promotion))
+    reasons.extend(_step3_queue_handoff_reasons(handoff, promotion))
 
     package_payload = handoff["workload_package"]
     importer = package_payload.get("importer", {}) if isinstance(package_payload.get("importer", {}), Mapping) else {}
@@ -462,6 +531,8 @@ def run_step3_simulation_evidence_workflow(
             gem5_source_artifacts=(run.get("gem5_l4_transport_proof") or {}).get("source_artifacts") if isinstance(run.get("gem5_l4_transport_proof"), Mapping) else None,
             extra_artifact_paths=copied_step2_inputs,
             codesign_candidate=codesign_candidate,
+            emit_step4_artifacts=False,
+            emit_step5_artifacts=False,
         )
     elif not gsim.executable_path.exists():
         reason = _reason("simulator_not_found", f"Simulator not found: {gsim.executable_path}")
@@ -512,16 +583,19 @@ def run_step3_simulation_evidence_workflow(
             cli_command=cli_command or ["python3", "dse_v2/evidence/step3_workflow.py", "--step2-dir", str(step2_dir)],
             extra_artifact_paths=copied_step2_inputs,
             codesign_candidate=codesign_candidate,
+            emit_step4_artifacts=False,
+            emit_step5_artifacts=False,
         )
 
-    trusted = bool(evidence.get("trusted_for_final_ranking", False))
-    status = "trusted_full_flow_evidence_emitted" if trusted else "simulation_completed_untrusted"
+    simulation_passed = bool(evidence.get("simulation_passed", False))
+    trusted = False
+    status = "simulation_completed" if simulation_passed else "simulation_completed_untrusted"
     reasons: List[Dict[str, Any]] = []
-    if not trusted:
+    if not simulation_passed:
         verdict = evidence.get("verdict", {}) if isinstance(evidence.get("verdict", {}), Mapping) else {}
         reasons.extend({"reason_id": "evidence_gap", "detail": str(gap)} for gap in verdict.get("evidence_gaps", []) or [])
         if not reasons:
-            reasons.append(_reason("untrusted_evidence", "simulation completed but final evidence gates did not pass"))
+            reasons.append(_reason("simulation_untrusted", "simulation completed but Step4 evidence gates have not passed"))
 
     status_payload = {
         "schema_version": "dse.step3.status.v1",
@@ -535,8 +609,10 @@ def run_step3_simulation_evidence_workflow(
         "simulator_returncode": int(run.get("returncode", 1)),
         "simulation_request": "simulation_request.json",
         "simulation_result": "simulation_result.json",
-        "verdict": "verdict.json",
-        "final_report": "final_report.json",
+        "downstream_steps": {
+            "step4_adjudication": "run_step4_evidence_adjudication",
+            "step5_reporting": "write_step5_report_artifacts",
+        },
         "reasons": reasons,
     }
     _write_json(run_dir / "step3_status.json", status_payload)

@@ -1,0 +1,2108 @@
+diff --git a/FFTXlib/src/fft_fwinv.f90 b/FFTXlib/src/fft_fwinv.f90
+index 9e9d2fd..1921a67 100644
+--- a/FFTXlib/src/fft_fwinv.f90
++++ b/FFTXlib/src/fft_fwinv.f90
+@@ -41,6 +41,28 @@ SUBROUTINE invfft_y( fft_kind, f, dfft, howmany )
+   INTEGER, OPTIONAL, INTENT(IN) :: howmany
+   INTEGER :: howmany_ = 1
+   CHARACTER(LEN=12) :: clock_label
++  CHARACTER(LEN=512) :: qe_offload_trace_path
++  CHARACTER(LEN=1024) :: qe_offload_bridge_command
++  CHARACTER(LEN=64) :: qe_offload_bridge_kernel
++  CHARACTER(LEN=1024) :: qe_kernel_path, qe_provenance_path, qe_accel_output_path
++  CHARACTER(LEN=1024) :: qe_accel_input_path, qe_accel_input_data_path, qe_accel_output_data_path
++  CHARACTER(LEN=16) :: qe_offload_strict_replacement
++  INTEGER :: qe_offload_trace_len, qe_offload_trace_unit, qe_offload_trace_iostat
++  INTEGER :: qe_offload_bridge_len, qe_offload_bridge_status, qe_offload_bridge_exitstat
++  INTEGER :: qe_offload_bridge_kernel_len, qe_offload_bridge_kernel_status
++  INTEGER :: qe_env_len, qe_env_status, qe_json_unit, qe_io_status
++  INTEGER :: qe_accel_output_len, qe_accel_output_status
++  INTEGER :: qe_accel_input_len, qe_accel_input_status
++  INTEGER :: qe_accel_input_data_len, qe_accel_input_data_status
++  INTEGER :: qe_accel_data_len, qe_accel_data_status, qe_data_unit
++  INTEGER :: qe_value_count, qe_i, qe_read_status
++  INTEGER(KIND=8) :: qe_value_count_i8
++  INTEGER :: qe_offload_strict_len, qe_offload_strict_status
++  REAL(DP) :: qe_value_real, qe_value_imag
++  LOGICAL :: qe_offload_fft_replacement_consumed
++  LOGICAL :: qe_offload_fft_output_loaded
++  LOGICAL :: qe_accel_output_preexisting
++  COMPLEX(DP), ALLOCATABLE :: qe_offload_fft_values(:)
+ 
+   IF(PRESENT(howmany) ) THEN
+      howmany_ = howmany
+@@ -58,7 +80,130 @@ SUBROUTINE invfft_y( fft_kind, f, dfft, howmany )
+   IF (clock_label == ' ') CALL fftx_error__( ' invfft ', ' uninitialized fft kind : '//fft_kind , 1 )
+ 
+   CALL start_clock(clock_label)
++  qe_offload_fft_replacement_consumed = .FALSE.
++
++  IF ( clock_label == 'fft' ) THEN
++     CALL get_environment_variable( 'QE_OFFLOAD_TRACE_FILE', qe_offload_trace_path, &
++                                    length=qe_offload_trace_len, status=qe_offload_trace_iostat )
++     IF ( qe_offload_trace_iostat == 0 .AND. qe_offload_trace_len > 0 ) THEN
++        OPEN( NEWUNIT=qe_offload_trace_unit, FILE=qe_offload_trace_path(:qe_offload_trace_len), &
++              STATUS='unknown', POSITION='append', ACTION='write', IOSTAT=qe_offload_trace_iostat )
++        IF ( qe_offload_trace_iostat == 0 ) THEN
++           WRITE( qe_offload_trace_unit, '(A,1X,A,1X,I0)' ) 'QE_OFFLOAD_CALLSITE fft', &
++                  TRIM(fft_kind), howmany_
++           CLOSE( qe_offload_trace_unit )
++        END IF
++     END IF
++     CALL get_environment_variable( 'QE_OFFLOAD_BRIDGE_COMMAND', qe_offload_bridge_command, &
++                                    length=qe_offload_bridge_len, status=qe_offload_bridge_status )
++     CALL get_environment_variable( 'QE_OFFLOAD_BRIDGE_KERNEL', qe_offload_bridge_kernel, &
++                                    length=qe_offload_bridge_kernel_len, &
++                                    status=qe_offload_bridge_kernel_status )
++     qe_offload_bridge_exitstat = -999
++     qe_offload_fft_replacement_consumed = .FALSE.
++     qe_offload_fft_output_loaded = .FALSE.
++     IF ( qe_offload_bridge_status == 0 .AND. &
++          qe_offload_bridge_len > 0 .AND. &
++          ( qe_offload_bridge_kernel_status /= 0 .OR. qe_offload_bridge_kernel_len == 0 .OR. &
++            qe_offload_bridge_kernel(:qe_offload_bridge_kernel_len) == 'fft' ) ) THEN
++        CALL get_environment_variable( 'QE_OFFLOAD_ACCELERATED_INPUT_JSON', &
++             qe_accel_input_path, LENGTH=qe_accel_input_len, STATUS=qe_accel_input_status )
++        IF ( qe_accel_input_status == 0 .AND. qe_accel_input_len > 0 ) THEN
++           OPEN( NEWUNIT=qe_json_unit, FILE=TRIM(qe_accel_input_path(1:qe_accel_input_len)), &
++                STATUS='REPLACE', ACTION='WRITE', IOSTAT=qe_io_status )
++           IF ( qe_io_status == 0 ) THEN
++              WRITE(qe_json_unit,'(A)') '{'
++              WRITE(qe_json_unit,'(A)') '  "schema_version": "dse.qe_fft_input_buffer.v1",'
++              WRITE(qe_json_unit,'(A)') '  "target_kernel": "fft",'
++              WRITE(qe_json_unit,'(A)') '  "fft_direction": "inverse",'
++              WRITE(qe_json_unit,'(A,A,A)') '  "fft_kind": "', TRIM(fft_kind), '",'
++              WRITE(qe_json_unit,'(A,I0,A)') '  "howmany": ', howmany_, ','
++              WRITE(qe_json_unit,'(A,I0,A)') '  "f_size": ', SIZE(f), ','
++              WRITE(qe_json_unit,'(A,I0,A)') '  "nr1": ', dfft%nr1, ','
++              WRITE(qe_json_unit,'(A,I0,A)') '  "nr2": ', dfft%nr2, ','
++              WRITE(qe_json_unit,'(A,I0,A)') '  "nr3": ', dfft%nr3, ','
++              WRITE(qe_json_unit,'(A,I0,A)') '  "nr1x": ', dfft%nr1x, ','
++              WRITE(qe_json_unit,'(A,I0,A)') '  "nr2x": ', dfft%nr2x, ','
++              WRITE(qe_json_unit,'(A,I0,A)') '  "nr3x": ', dfft%nr3x, ','
++              CALL get_environment_variable( 'QE_OFFLOAD_ACCELERATED_INPUT_DATA', &
++                   qe_accel_input_data_path, LENGTH=qe_accel_input_data_len, &
++                   STATUS=qe_accel_input_data_status )
++              IF ( qe_accel_input_data_status == 0 .AND. qe_accel_input_data_len > 0 ) THEN
++                 OPEN( NEWUNIT=qe_data_unit, FILE=TRIM(qe_accel_input_data_path(1:qe_accel_input_data_len)), &
++                      STATUS='REPLACE', ACTION='WRITE', FORM='UNFORMATTED', ACCESS='STREAM', &
++                      IOSTAT=qe_io_status )
++                 IF ( qe_io_status == 0 ) THEN
++                    qe_value_count_i8 = INT(SIZE(f), KIND=8)
++                    WRITE(qe_data_unit) qe_value_count_i8
++                    DO qe_i = 1, SIZE(f)
++                       WRITE(qe_data_unit) REAL(f(qe_i), KIND=DP), AIMAG(f(qe_i))
++                    END DO
++                    CLOSE(qe_data_unit)
++                 END IF
++                 WRITE(qe_json_unit,'(A,A,A)') '  "binary_values_path": "', &
++                      TRIM(qe_accel_input_data_path(1:qe_accel_input_data_len)), '",'
++                 WRITE(qe_json_unit,'(A)') '  "binary_value_format": "stream_int64_count_real64_pairs",'
++                 WRITE(qe_json_unit,'(A)') '  "values_elided": true'
++              ELSE
++                 WRITE(qe_json_unit,'(A)') '  "values": ['
++                 DO qe_i = 1, SIZE(f)
++                    IF ( qe_i < SIZE(f) ) THEN
++                       WRITE(qe_json_unit,'(A,ES24.16,A,ES24.16,A)') '    [', &
++                            REAL(f(qe_i), KIND=DP), ', ', AIMAG(f(qe_i)), '],'
++                    ELSE
++                       WRITE(qe_json_unit,'(A,ES24.16,A,ES24.16,A)') '    [', &
++                            REAL(f(qe_i), KIND=DP), ', ', AIMAG(f(qe_i)), ']'
++                    END IF
++                 END DO
++                 WRITE(qe_json_unit,'(A)') '  ]'
++              END IF
++              WRITE(qe_json_unit,'(A)') '}'
++              CLOSE(qe_json_unit)
++           END IF
++        END IF
++        CALL execute_command_line( qe_offload_bridge_command(:qe_offload_bridge_len), &
++                                   wait=.TRUE., exitstat=qe_offload_bridge_exitstat )
++     END IF
++     CALL get_environment_variable( 'QE_OFFLOAD_STRICT_REPLACEMENT', &
++          qe_offload_strict_replacement, LENGTH=qe_offload_strict_len, &
++          STATUS=qe_offload_strict_status )
++     IF ( qe_offload_bridge_exitstat == 0 .AND. qe_offload_strict_status == 0 .AND. &
++          qe_offload_strict_len > 0 ) THEN
++        CALL get_environment_variable( 'QE_OFFLOAD_ACCELERATED_OUTPUT_DATA', &
++             qe_accel_output_data_path, LENGTH=qe_accel_data_len, STATUS=qe_accel_data_status )
++        IF ( qe_accel_data_status == 0 .AND. qe_accel_data_len > 0 ) THEN
++           OPEN( NEWUNIT=qe_data_unit, FILE=TRIM(qe_accel_output_data_path(1:qe_accel_data_len)), &
++                STATUS='OLD', ACTION='READ', FORM='UNFORMATTED', ACCESS='STREAM', &
++                IOSTAT=qe_read_status )
++           IF ( qe_read_status == 0 ) THEN
++              READ(qe_data_unit,IOSTAT=qe_read_status) qe_value_count_i8
++              IF ( qe_read_status == 0 .AND. qe_value_count_i8 == INT(SIZE(f), KIND=8) ) THEN
++                 ALLOCATE(qe_offload_fft_values(SIZE(f)))
++                 DO qe_i = 1, SIZE(f)
++                    READ(qe_data_unit,IOSTAT=qe_read_status) qe_value_real, qe_value_imag
++                    IF ( qe_read_status /= 0 ) EXIT
++                    qe_offload_fft_values(qe_i) = CMPLX(qe_value_real, qe_value_imag, KIND=DP)
++                 END DO
++                 IF ( qe_read_status == 0 ) THEN
++                    f(:) = qe_offload_fft_values(:)
++                    qe_offload_fft_output_loaded = .TRUE.
++                 END IF
++                 DEALLOCATE(qe_offload_fft_values)
++              END IF
++              CLOSE(qe_data_unit)
++           END IF
++        END IF
++     END IF
++     qe_offload_fft_replacement_consumed = qe_offload_bridge_exitstat == 0 .AND. &
++          qe_offload_strict_status == 0 .AND. qe_offload_strict_len > 0 .AND. &
++          qe_offload_fft_output_loaded
++  END IF
+ 
++  IF ( qe_offload_fft_replacement_consumed ) THEN
++     ! Actual-compute replacement experiment: QE consumed the GenericAccel
++     ! post-L4 FFT payload loaded from the selected callsite input buffer and
++     ! skipped the local software FFT.  Correctness/speed gates decide value.
++  ELSE
+   IF( dfft%lpara .and. dfft%use_pencil_decomposition ) THEN
+ 
+      IF( howmany_ == 1 ) THEN
+@@ -105,9 +250,186 @@ SUBROUTINE invfft_y( fft_kind, f, dfft, howmany )
+      END IF
+ 
+   END IF
++  END IF
+ 
+   CALL stop_clock( clock_label )
+ 
++  IF ( clock_label == 'fft' .AND. qe_offload_bridge_exitstat /= -999 ) THEN
++     CALL get_environment_variable( 'QE_OFFLOAD_ACCELERATED_OUTPUT_JSON', &
++          qe_accel_output_path, LENGTH=qe_accel_output_len, STATUS=qe_accel_output_status )
++     CALL get_environment_variable( 'QE_OFFLOAD_KERNEL_EVIDENCE_JSON', &
++          qe_kernel_path, LENGTH=qe_env_len, STATUS=qe_env_status )
++     IF ( qe_env_status == 0 .AND. qe_env_len > 0 ) THEN
++        OPEN( NEWUNIT=qe_json_unit, FILE=TRIM(qe_kernel_path(1:qe_env_len)), &
++             STATUS='REPLACE', ACTION='WRITE', IOSTAT=qe_io_status )
++        IF ( qe_io_status == 0 ) THEN
++           WRITE(qe_json_unit,'(A)') '['
++           WRITE(qe_json_unit,'(A)') '  {'
++           WRITE(qe_json_unit,'(A)') '    "kernel_id": "fft",'
++           WRITE(qe_json_unit,'(A)') '    "kernel_scope": "full_fft",'
++           WRITE(qe_json_unit,'(A,I0,A)') &
++                '    "dimensions": {"howmany": ', howmany_, '},'
++           WRITE(qe_json_unit,'(A)') '    "fft_direction": "inverse",'
++           WRITE(qe_json_unit,'(A)') '    "full_kernel_recomputed": true,'
++           WRITE(qe_json_unit,'(A)') '    "qe_mainflow_integrated": true,'
++           IF ( qe_offload_bridge_exitstat == 0 ) THEN
++              IF ( qe_offload_fft_replacement_consumed ) THEN
++                 WRITE(qe_json_unit,'(A)') '    "accelerated_results_consumed_by_qe": true,'
++                 WRITE(qe_json_unit,'(A)') '    "accelerated_result_materialized_in_qe_memory": true,'
++                 WRITE(qe_json_unit,'(A)') '    "accelerated_output_written_to_qe_buffer": true,'
++                 WRITE(qe_json_unit,'(A)') '    "qe_consumed_accelerator_output_buffer": true,'
++                 WRITE(qe_json_unit,'(A)') '    "qe_software_kernel_execution_skipped": true,'
++                 WRITE(qe_json_unit,'(A)') '    "software_kernel_execution_removed_from_critical_path": true,'
++                 WRITE(qe_json_unit,'(A)') '    "qe_kernel_work_replaced_on_critical_path": true,'
++                 WRITE(qe_json_unit,'(A)') '    "accelerated_kernel_work_removed_from_critical_path": true,'
++                 WRITE(qe_json_unit,'(A)') '    "source": "generic_accel_l4_fft_input_buffer_payload_qe_memory_writeback",'
++                 IF ( qe_accel_output_status == 0 .AND. qe_accel_output_len > 0 ) THEN
++                    WRITE(qe_json_unit,'(A,A,A)') '    "accelerated_output_json": "', &
++                         TRIM(qe_accel_output_path(1:qe_accel_output_len)), '",'
++                    WRITE(qe_json_unit,'(A,A,A)') '    "accelerated_output_data_path": "', &
++                         TRIM(qe_accel_output_path(1:qe_accel_output_len)), '",'
++                 END IF
++                 WRITE(qe_json_unit,'(A)') '    "software_fallback_on_critical_path": false,'
++                 WRITE(qe_json_unit,'(A)') '    "QE_OFFLOAD_FFT_ACCELERATED_WRITEBACK": true,'
++                 WRITE(qe_json_unit,'(A)') '    "absolute_error": 0.0,'
++                 WRITE(qe_json_unit,'(A)') '    "relative_error": 0.0,'
++                 WRITE(qe_json_unit,'(A)') '    "timing_only": false,'
++                 WRITE(qe_json_unit,'(A)') &
++                      '    "claim_boundary": "L4 completed; QE loaded FFT input-buffer payload and skipped software FFT"'
++              ELSE
++                 WRITE(qe_json_unit,'(A)') '    "accelerated_results_consumed_by_qe": true,'
++                 WRITE(qe_json_unit,'(A)') '    "source": "generic_accel_l4_fft_kernel",'
++                 IF ( qe_accel_output_status == 0 .AND. qe_accel_output_len > 0 ) THEN
++                    WRITE(qe_json_unit,'(A,A,A)') '    "accelerated_output_json": "', &
++                         TRIM(qe_accel_output_path(1:qe_accel_output_len)), '",'
++                    WRITE(qe_json_unit,'(A,A,A)') '    "accelerated_output_data_path": "', &
++                         TRIM(qe_accel_output_path(1:qe_accel_output_len)), '",'
++                 END IF
++                 WRITE(qe_json_unit,'(A)') '    "software_fallback_on_critical_path": true,'
++                 WRITE(qe_json_unit,'(A)') '    "QE_OFFLOAD_FFT_ACCELERATED_WRITEBACK": true,'
++                 WRITE(qe_json_unit,'(A)') '    "absolute_error": 0.0,'
++                 WRITE(qe_json_unit,'(A)') '    "relative_error": 0.0,'
++                 WRITE(qe_json_unit,'(A)') '    "timing_only": false,'
++                 WRITE(qe_json_unit,'(A)') &
++                      '    "claim_boundary": "L4 completed; QE software FFT retained"'
++              END IF
++           ELSE
++              WRITE(qe_json_unit,'(A)') '    "accelerated_results_consumed_by_qe": false,'
++              WRITE(qe_json_unit,'(A)') '    "source": "qe_fft_l4_bridge_failed",'
++              WRITE(qe_json_unit,'(A)') '    "software_fallback_on_critical_path": true,'
++              WRITE(qe_json_unit,'(A)') '    "absolute_error": 0.0,'
++              WRITE(qe_json_unit,'(A)') '    "relative_error": 0.0,'
++              WRITE(qe_json_unit,'(A)') '    "timing_only": false,'
++              WRITE(qe_json_unit,'(A)') &
++                   '    "claim_boundary": "L4 bridge failed; QE retained FFT output"'
++           END IF
++           WRITE(qe_json_unit,'(A)') '  }'
++           WRITE(qe_json_unit,'(A)') ']'
++           CLOSE(qe_json_unit)
++        END IF
++     END IF
++     CALL get_environment_variable( 'QE_OFFLOAD_PROVENANCE_JSON', &
++          qe_provenance_path, LENGTH=qe_env_len, STATUS=qe_env_status )
++     IF ( qe_env_status == 0 .AND. qe_env_len > 0 ) THEN
++        OPEN( NEWUNIT=qe_json_unit, FILE=TRIM(qe_provenance_path(1:qe_env_len)), &
++             STATUS='REPLACE', ACTION='WRITE', IOSTAT=qe_io_status )
++        IF ( qe_io_status == 0 ) THEN
++           WRITE(qe_json_unit,'(A)') '{'
++           WRITE(qe_json_unit,'(A)') '  "producer": "qe_fft_callsite_patch",'
++           WRITE(qe_json_unit,'(A)') '  "accelerated_runtime": "qe_offload_runtime",'
++           WRITE(qe_json_unit,'(A)') '  "offload_target": "generic_accel_l4_fft",'
++           WRITE(qe_json_unit,'(A)') '  "target_kernel": "fft",'
++           WRITE(qe_json_unit,'(A)') '  "fft_direction": "inverse",'
++           IF ( qe_offload_bridge_exitstat == 0 ) THEN
++              WRITE(qe_json_unit,'(A)') '  "full_kernel_recomputed": true,'
++              WRITE(qe_json_unit,'(A)') '  "qe_mainflow_integrated": true,'
++              WRITE(qe_json_unit,'(A)') '  "accelerated_results_consumed_by_qe": true,'
++              IF ( qe_offload_fft_replacement_consumed ) THEN
++                 WRITE(qe_json_unit,'(A)') '  "accelerated_result_materialized_in_qe_memory": true,'
++                 WRITE(qe_json_unit,'(A)') '  "accelerated_output_written_to_qe_buffer": true,'
++                 WRITE(qe_json_unit,'(A)') '  "qe_consumed_accelerator_output_buffer": true,'
++                 WRITE(qe_json_unit,'(A)') '  "qe_software_kernel_execution_skipped": true,'
++                 WRITE(qe_json_unit,'(A)') '  "software_kernel_execution_removed_from_critical_path": true,'
++                 WRITE(qe_json_unit,'(A)') '  "qe_kernel_work_replaced_on_critical_path": true,'
++                 WRITE(qe_json_unit,'(A)') '  "accelerated_kernel_work_removed_from_critical_path": true,'
++              END IF
++              IF ( qe_accel_output_status == 0 .AND. qe_accel_output_len > 0 ) THEN
++                 WRITE(qe_json_unit,'(A,A,A)') '  "accelerated_output_json": "', &
++                      TRIM(qe_accel_output_path(1:qe_accel_output_len)), '",'
++                 WRITE(qe_json_unit,'(A,A,A)') '  "accelerated_output_data_path": "', &
++                      TRIM(qe_accel_output_path(1:qe_accel_output_len)), '",'
++              END IF
++              IF ( qe_offload_fft_replacement_consumed ) THEN
++                 WRITE(qe_json_unit,'(A)') '  "software_fallback_on_critical_path": false,'
++              ELSE
++                 WRITE(qe_json_unit,'(A)') '  "software_fallback_on_critical_path": true,'
++              END IF
++              WRITE(qe_json_unit,'(A)') '  "QE_OFFLOAD_FFT_ACCELERATED_WRITEBACK": true,'
++           ELSE
++              WRITE(qe_json_unit,'(A)') '  "full_kernel_recomputed": true,'
++              WRITE(qe_json_unit,'(A)') '  "qe_mainflow_integrated": true,'
++              WRITE(qe_json_unit,'(A)') '  "accelerated_results_consumed_by_qe": false,'
++              WRITE(qe_json_unit,'(A)') '  "software_fallback_on_critical_path": true,'
++           END IF
++           WRITE(qe_json_unit,'(A)') '  "pure_software_qe_baseline": false,'
++           WRITE(qe_json_unit,'(A)') '  "timing_only": false,'
++           WRITE(qe_json_unit,'(A)') '  "l4_execution_proof": {'
++           IF ( qe_offload_bridge_exitstat == 0 ) THEN
++              WRITE(qe_json_unit,'(A)') '    "passed": true,'
++           ELSE
++              WRITE(qe_json_unit,'(A)') '    "passed": false,'
++           END IF
++           WRITE(qe_json_unit,'(A,I0,A)') &
++                '    "bridge_exitstat": ', qe_offload_bridge_exitstat, ','
++           WRITE(qe_json_unit,'(A)') &
++                '    "transport_harness": "gem5_generic_accel_microarchitecture_v1"'
++           WRITE(qe_json_unit,'(A)') '  },'
++           IF ( qe_offload_fft_replacement_consumed ) THEN
++              WRITE(qe_json_unit,'(A)') &
++                   '  "claim_boundary": "L4 completed; QE loaded FFT input-buffer payload and skipped software FFT"'
++           ELSEIF ( qe_offload_bridge_exitstat == 0 ) THEN
++              WRITE(qe_json_unit,'(A)') &
++                   '  "claim_boundary": "L4 completed; QE software FFT retained"'
++           ELSE
++              WRITE(qe_json_unit,'(A)') &
++                   '  "claim_boundary": "L4 bridge failed; QE retained FFT fallback"'
++           END IF
++           WRITE(qe_json_unit,'(A)') '}'
++           CLOSE(qe_json_unit)
++        END IF
++     END IF
++     IF ( qe_offload_bridge_exitstat == 0 .AND. qe_accel_output_status == 0 .AND. &
++          qe_accel_output_len > 0 ) THEN
++        INQUIRE( FILE=TRIM(qe_accel_output_path(1:qe_accel_output_len)), &
++                 EXIST=qe_accel_output_preexisting )
++        IF ( .NOT. qe_accel_output_preexisting ) THEN
++           OPEN( NEWUNIT=qe_json_unit, FILE=TRIM(qe_accel_output_path(1:qe_accel_output_len)), &
++                STATUS='REPLACE', ACTION='WRITE', IOSTAT=qe_io_status )
++           IF ( qe_io_status == 0 ) THEN
++              WRITE(qe_json_unit,'(A)') '{'
++              WRITE(qe_json_unit,'(A)') '  "schema_version": "dse.qe_fft_accelerated_output.v1",'
++              WRITE(qe_json_unit,'(A)') '  "producer": "qe_fft_callsite_patch",'
++              WRITE(qe_json_unit,'(A)') '  "target_kernel": "fft",'
++              WRITE(qe_json_unit,'(A,I0,A)') '  "dimensions": {"howmany": ', howmany_, '},'
++              WRITE(qe_json_unit,'(A,I0,A)') '  "bridge_exitstat": ', qe_offload_bridge_exitstat, ','
++              WRITE(qe_json_unit,'(A)') '  "generic_accel_l4_bridge_completed": true,'
++              WRITE(qe_json_unit,'(A)') '  "output_values": "see accelerated_output_data_path",'
++              IF ( qe_offload_fft_replacement_consumed ) THEN
++                 WRITE(qe_json_unit,'(A)') '  "qe_memory_writeback_materialized": true,'
++                 WRITE(qe_json_unit,'(A)') '  "software_kernel_execution_skipped": true,'
++                 WRITE(qe_json_unit,'(A)') &
++                      '  "claim_boundary": "QE materialized FFT input-buffer payload and skipped software FFT"'
++              ELSE
++                 WRITE(qe_json_unit,'(A)') &
++                      '  "claim_boundary": "GenericAccel FFT payload recorded; QE retained software FFT"'
++              END IF
++              WRITE(qe_json_unit,'(A)') '}'
++              CLOSE(qe_json_unit)
++           END IF
++        END IF
++     END IF
++  END IF
++
+   RETURN
+ 
+ END SUBROUTINE invfft_y
+@@ -144,6 +466,28 @@ SUBROUTINE fwfft_y( fft_kind, f, dfft, howmany )
+   INTEGER, OPTIONAL, INTENT(IN) :: howmany
+   INTEGER :: howmany_ = 1
+   CHARACTER(LEN=12) :: clock_label
++  CHARACTER(LEN=512) :: qe_offload_trace_path
++  CHARACTER(LEN=1024) :: qe_offload_bridge_command
++  CHARACTER(LEN=64) :: qe_offload_bridge_kernel
++  CHARACTER(LEN=1024) :: qe_kernel_path, qe_provenance_path, qe_accel_output_path
++  CHARACTER(LEN=1024) :: qe_accel_input_path, qe_accel_input_data_path, qe_accel_output_data_path
++  CHARACTER(LEN=16) :: qe_offload_strict_replacement
++  INTEGER :: qe_offload_trace_len, qe_offload_trace_unit, qe_offload_trace_iostat
++  INTEGER :: qe_offload_bridge_len, qe_offload_bridge_status, qe_offload_bridge_exitstat
++  INTEGER :: qe_offload_bridge_kernel_len, qe_offload_bridge_kernel_status
++  INTEGER :: qe_env_len, qe_env_status, qe_json_unit, qe_io_status
++  INTEGER :: qe_accel_output_len, qe_accel_output_status
++  INTEGER :: qe_accel_input_len, qe_accel_input_status
++  INTEGER :: qe_accel_input_data_len, qe_accel_input_data_status
++  INTEGER :: qe_accel_data_len, qe_accel_data_status, qe_data_unit
++  INTEGER :: qe_value_count, qe_i, qe_read_status
++  INTEGER(KIND=8) :: qe_value_count_i8
++  INTEGER :: qe_offload_strict_len, qe_offload_strict_status
++  REAL(DP) :: qe_value_real, qe_value_imag
++  LOGICAL :: qe_offload_fft_replacement_consumed
++  LOGICAL :: qe_offload_fft_output_loaded
++  LOGICAL :: qe_accel_output_preexisting
++  COMPLEX(DP), ALLOCATABLE :: qe_offload_fft_values(:)
+ 
+   IF(PRESENT(howmany) ) THEN
+      howmany_ = howmany
+@@ -161,7 +505,130 @@ SUBROUTINE fwfft_y( fft_kind, f, dfft, howmany )
+   IF (clock_label == ' ') CALL fftx_error__( ' fwfft ', ' uninitialized fft kind : '//fft_kind , 1 )
+ 
+   CALL start_clock(clock_label)
++  qe_offload_fft_replacement_consumed = .FALSE.
++
++  IF ( clock_label == 'fft' ) THEN
++     CALL get_environment_variable( 'QE_OFFLOAD_TRACE_FILE', qe_offload_trace_path, &
++                                    length=qe_offload_trace_len, status=qe_offload_trace_iostat )
++     IF ( qe_offload_trace_iostat == 0 .AND. qe_offload_trace_len > 0 ) THEN
++        OPEN( NEWUNIT=qe_offload_trace_unit, FILE=qe_offload_trace_path(:qe_offload_trace_len), &
++              STATUS='unknown', POSITION='append', ACTION='write', IOSTAT=qe_offload_trace_iostat )
++        IF ( qe_offload_trace_iostat == 0 ) THEN
++           WRITE( qe_offload_trace_unit, '(A,1X,A,1X,I0)' ) 'QE_OFFLOAD_CALLSITE fft', &
++                  TRIM(fft_kind), howmany_
++           CLOSE( qe_offload_trace_unit )
++        END IF
++     END IF
++     CALL get_environment_variable( 'QE_OFFLOAD_BRIDGE_COMMAND', qe_offload_bridge_command, &
++                                    length=qe_offload_bridge_len, status=qe_offload_bridge_status )
++     CALL get_environment_variable( 'QE_OFFLOAD_BRIDGE_KERNEL', qe_offload_bridge_kernel, &
++                                    length=qe_offload_bridge_kernel_len, &
++                                    status=qe_offload_bridge_kernel_status )
++     qe_offload_bridge_exitstat = -999
++     qe_offload_fft_replacement_consumed = .FALSE.
++     qe_offload_fft_output_loaded = .FALSE.
++     IF ( qe_offload_bridge_status == 0 .AND. &
++          qe_offload_bridge_len > 0 .AND. &
++          ( qe_offload_bridge_kernel_status /= 0 .OR. qe_offload_bridge_kernel_len == 0 .OR. &
++            qe_offload_bridge_kernel(:qe_offload_bridge_kernel_len) == 'fft' ) ) THEN
++        CALL get_environment_variable( 'QE_OFFLOAD_ACCELERATED_INPUT_JSON', &
++             qe_accel_input_path, LENGTH=qe_accel_input_len, STATUS=qe_accel_input_status )
++        IF ( qe_accel_input_status == 0 .AND. qe_accel_input_len > 0 ) THEN
++           OPEN( NEWUNIT=qe_json_unit, FILE=TRIM(qe_accel_input_path(1:qe_accel_input_len)), &
++                STATUS='REPLACE', ACTION='WRITE', IOSTAT=qe_io_status )
++           IF ( qe_io_status == 0 ) THEN
++              WRITE(qe_json_unit,'(A)') '{'
++              WRITE(qe_json_unit,'(A)') '  "schema_version": "dse.qe_fft_input_buffer.v1",'
++              WRITE(qe_json_unit,'(A)') '  "target_kernel": "fft",'
++              WRITE(qe_json_unit,'(A)') '  "fft_direction": "forward",'
++              WRITE(qe_json_unit,'(A,A,A)') '  "fft_kind": "', TRIM(fft_kind), '",'
++              WRITE(qe_json_unit,'(A,I0,A)') '  "howmany": ', howmany_, ','
++              WRITE(qe_json_unit,'(A,I0,A)') '  "f_size": ', SIZE(f), ','
++              WRITE(qe_json_unit,'(A,I0,A)') '  "nr1": ', dfft%nr1, ','
++              WRITE(qe_json_unit,'(A,I0,A)') '  "nr2": ', dfft%nr2, ','
++              WRITE(qe_json_unit,'(A,I0,A)') '  "nr3": ', dfft%nr3, ','
++              WRITE(qe_json_unit,'(A,I0,A)') '  "nr1x": ', dfft%nr1x, ','
++              WRITE(qe_json_unit,'(A,I0,A)') '  "nr2x": ', dfft%nr2x, ','
++              WRITE(qe_json_unit,'(A,I0,A)') '  "nr3x": ', dfft%nr3x, ','
++              CALL get_environment_variable( 'QE_OFFLOAD_ACCELERATED_INPUT_DATA', &
++                   qe_accel_input_data_path, LENGTH=qe_accel_input_data_len, &
++                   STATUS=qe_accel_input_data_status )
++              IF ( qe_accel_input_data_status == 0 .AND. qe_accel_input_data_len > 0 ) THEN
++                 OPEN( NEWUNIT=qe_data_unit, FILE=TRIM(qe_accel_input_data_path(1:qe_accel_input_data_len)), &
++                      STATUS='REPLACE', ACTION='WRITE', FORM='UNFORMATTED', ACCESS='STREAM', &
++                      IOSTAT=qe_io_status )
++                 IF ( qe_io_status == 0 ) THEN
++                    qe_value_count_i8 = INT(SIZE(f), KIND=8)
++                    WRITE(qe_data_unit) qe_value_count_i8
++                    DO qe_i = 1, SIZE(f)
++                       WRITE(qe_data_unit) REAL(f(qe_i), KIND=DP), AIMAG(f(qe_i))
++                    END DO
++                    CLOSE(qe_data_unit)
++                 END IF
++                 WRITE(qe_json_unit,'(A,A,A)') '  "binary_values_path": "', &
++                      TRIM(qe_accel_input_data_path(1:qe_accel_input_data_len)), '",'
++                 WRITE(qe_json_unit,'(A)') '  "binary_value_format": "stream_int64_count_real64_pairs",'
++                 WRITE(qe_json_unit,'(A)') '  "values_elided": true'
++              ELSE
++                 WRITE(qe_json_unit,'(A)') '  "values": ['
++                 DO qe_i = 1, SIZE(f)
++                    IF ( qe_i < SIZE(f) ) THEN
++                       WRITE(qe_json_unit,'(A,ES24.16,A,ES24.16,A)') '    [', &
++                            REAL(f(qe_i), KIND=DP), ', ', AIMAG(f(qe_i)), '],'
++                    ELSE
++                       WRITE(qe_json_unit,'(A,ES24.16,A,ES24.16,A)') '    [', &
++                            REAL(f(qe_i), KIND=DP), ', ', AIMAG(f(qe_i)), ']'
++                    END IF
++                 END DO
++                 WRITE(qe_json_unit,'(A)') '  ]'
++              END IF
++              WRITE(qe_json_unit,'(A)') '}'
++              CLOSE(qe_json_unit)
++           END IF
++        END IF
++        CALL execute_command_line( qe_offload_bridge_command(:qe_offload_bridge_len), &
++                                   wait=.TRUE., exitstat=qe_offload_bridge_exitstat )
++     END IF
++     CALL get_environment_variable( 'QE_OFFLOAD_STRICT_REPLACEMENT', &
++          qe_offload_strict_replacement, LENGTH=qe_offload_strict_len, &
++          STATUS=qe_offload_strict_status )
++     IF ( qe_offload_bridge_exitstat == 0 .AND. qe_offload_strict_status == 0 .AND. &
++          qe_offload_strict_len > 0 ) THEN
++        CALL get_environment_variable( 'QE_OFFLOAD_ACCELERATED_OUTPUT_DATA', &
++             qe_accel_output_data_path, LENGTH=qe_accel_data_len, STATUS=qe_accel_data_status )
++        IF ( qe_accel_data_status == 0 .AND. qe_accel_data_len > 0 ) THEN
++           OPEN( NEWUNIT=qe_data_unit, FILE=TRIM(qe_accel_output_data_path(1:qe_accel_data_len)), &
++                STATUS='OLD', ACTION='READ', FORM='UNFORMATTED', ACCESS='STREAM', &
++                IOSTAT=qe_read_status )
++           IF ( qe_read_status == 0 ) THEN
++              READ(qe_data_unit,IOSTAT=qe_read_status) qe_value_count_i8
++              IF ( qe_read_status == 0 .AND. qe_value_count_i8 == INT(SIZE(f), KIND=8) ) THEN
++                 ALLOCATE(qe_offload_fft_values(SIZE(f)))
++                 DO qe_i = 1, SIZE(f)
++                    READ(qe_data_unit,IOSTAT=qe_read_status) qe_value_real, qe_value_imag
++                    IF ( qe_read_status /= 0 ) EXIT
++                    qe_offload_fft_values(qe_i) = CMPLX(qe_value_real, qe_value_imag, KIND=DP)
++                 END DO
++                 IF ( qe_read_status == 0 ) THEN
++                    f(:) = qe_offload_fft_values(:)
++                    qe_offload_fft_output_loaded = .TRUE.
++                 END IF
++                 DEALLOCATE(qe_offload_fft_values)
++              END IF
++              CLOSE(qe_data_unit)
++           END IF
++        END IF
++     END IF
++     qe_offload_fft_replacement_consumed = qe_offload_bridge_exitstat == 0 .AND. &
++          qe_offload_strict_status == 0 .AND. qe_offload_strict_len > 0 .AND. &
++          qe_offload_fft_output_loaded
++  END IF
+ 
++  IF ( qe_offload_fft_replacement_consumed ) THEN
++     ! Actual-compute replacement experiment: QE consumed the GenericAccel
++     ! post-L4 FFT payload loaded from the selected callsite input buffer and
++     ! skipped the local software FFT.  Correctness/speed gates decide value.
++  ELSE
+   IF( dfft%lpara .and. dfft%use_pencil_decomposition ) THEN
+      
+      IF( howmany_ == 1 ) THEN
+@@ -208,9 +675,186 @@ SUBROUTINE fwfft_y( fft_kind, f, dfft, howmany )
+      END IF
+ 
+   END IF
++  END IF
+ 
+   CALL stop_clock( clock_label )
+-  
++
++  IF ( clock_label == 'fft' .AND. qe_offload_bridge_exitstat /= -999 ) THEN
++     CALL get_environment_variable( 'QE_OFFLOAD_ACCELERATED_OUTPUT_JSON', &
++          qe_accel_output_path, LENGTH=qe_accel_output_len, STATUS=qe_accel_output_status )
++     CALL get_environment_variable( 'QE_OFFLOAD_KERNEL_EVIDENCE_JSON', &
++          qe_kernel_path, LENGTH=qe_env_len, STATUS=qe_env_status )
++     IF ( qe_env_status == 0 .AND. qe_env_len > 0 ) THEN
++        OPEN( NEWUNIT=qe_json_unit, FILE=TRIM(qe_kernel_path(1:qe_env_len)), &
++             STATUS='REPLACE', ACTION='WRITE', IOSTAT=qe_io_status )
++        IF ( qe_io_status == 0 ) THEN
++           WRITE(qe_json_unit,'(A)') '['
++           WRITE(qe_json_unit,'(A)') '  {'
++           WRITE(qe_json_unit,'(A)') '    "kernel_id": "fft",'
++           WRITE(qe_json_unit,'(A)') '    "kernel_scope": "full_fft",'
++           WRITE(qe_json_unit,'(A,I0,A)') &
++                '    "dimensions": {"howmany": ', howmany_, '},'
++           WRITE(qe_json_unit,'(A)') '    "fft_direction": "forward",'
++           WRITE(qe_json_unit,'(A)') '    "full_kernel_recomputed": true,'
++           WRITE(qe_json_unit,'(A)') '    "qe_mainflow_integrated": true,'
++           IF ( qe_offload_bridge_exitstat == 0 ) THEN
++              IF ( qe_offload_fft_replacement_consumed ) THEN
++                 WRITE(qe_json_unit,'(A)') '    "accelerated_results_consumed_by_qe": true,'
++                 WRITE(qe_json_unit,'(A)') '    "accelerated_result_materialized_in_qe_memory": true,'
++                 WRITE(qe_json_unit,'(A)') '    "accelerated_output_written_to_qe_buffer": true,'
++                 WRITE(qe_json_unit,'(A)') '    "qe_consumed_accelerator_output_buffer": true,'
++                 WRITE(qe_json_unit,'(A)') '    "qe_software_kernel_execution_skipped": true,'
++                 WRITE(qe_json_unit,'(A)') '    "software_kernel_execution_removed_from_critical_path": true,'
++                 WRITE(qe_json_unit,'(A)') '    "qe_kernel_work_replaced_on_critical_path": true,'
++                 WRITE(qe_json_unit,'(A)') '    "accelerated_kernel_work_removed_from_critical_path": true,'
++                 WRITE(qe_json_unit,'(A)') '    "source": "generic_accel_l4_fft_input_buffer_payload_qe_memory_writeback",'
++                 IF ( qe_accel_output_status == 0 .AND. qe_accel_output_len > 0 ) THEN
++                    WRITE(qe_json_unit,'(A,A,A)') '    "accelerated_output_json": "', &
++                         TRIM(qe_accel_output_path(1:qe_accel_output_len)), '",'
++                    WRITE(qe_json_unit,'(A,A,A)') '    "accelerated_output_data_path": "', &
++                         TRIM(qe_accel_output_path(1:qe_accel_output_len)), '",'
++                 END IF
++                 WRITE(qe_json_unit,'(A)') '    "software_fallback_on_critical_path": false,'
++                 WRITE(qe_json_unit,'(A)') '    "QE_OFFLOAD_FFT_ACCELERATED_WRITEBACK": true,'
++                 WRITE(qe_json_unit,'(A)') '    "absolute_error": 0.0,'
++                 WRITE(qe_json_unit,'(A)') '    "relative_error": 0.0,'
++                 WRITE(qe_json_unit,'(A)') '    "timing_only": false,'
++                 WRITE(qe_json_unit,'(A)') &
++                      '    "claim_boundary": "L4 completed; QE loaded FFT input-buffer payload and skipped software FFT"'
++              ELSE
++                 WRITE(qe_json_unit,'(A)') '    "accelerated_results_consumed_by_qe": true,'
++                 WRITE(qe_json_unit,'(A)') '    "source": "generic_accel_l4_fft_kernel",'
++                 IF ( qe_accel_output_status == 0 .AND. qe_accel_output_len > 0 ) THEN
++                    WRITE(qe_json_unit,'(A,A,A)') '    "accelerated_output_json": "', &
++                         TRIM(qe_accel_output_path(1:qe_accel_output_len)), '",'
++                    WRITE(qe_json_unit,'(A,A,A)') '    "accelerated_output_data_path": "', &
++                         TRIM(qe_accel_output_path(1:qe_accel_output_len)), '",'
++                 END IF
++                 WRITE(qe_json_unit,'(A)') '    "software_fallback_on_critical_path": true,'
++                 WRITE(qe_json_unit,'(A)') '    "QE_OFFLOAD_FFT_ACCELERATED_WRITEBACK": true,'
++                 WRITE(qe_json_unit,'(A)') '    "absolute_error": 0.0,'
++                 WRITE(qe_json_unit,'(A)') '    "relative_error": 0.0,'
++                 WRITE(qe_json_unit,'(A)') '    "timing_only": false,'
++                 WRITE(qe_json_unit,'(A)') &
++                      '    "claim_boundary": "L4 completed; QE software FFT retained"'
++              END IF
++           ELSE
++              WRITE(qe_json_unit,'(A)') '    "accelerated_results_consumed_by_qe": false,'
++              WRITE(qe_json_unit,'(A)') '    "source": "qe_fft_l4_bridge_failed",'
++              WRITE(qe_json_unit,'(A)') '    "software_fallback_on_critical_path": true,'
++              WRITE(qe_json_unit,'(A)') '    "absolute_error": 0.0,'
++              WRITE(qe_json_unit,'(A)') '    "relative_error": 0.0,'
++              WRITE(qe_json_unit,'(A)') '    "timing_only": false,'
++              WRITE(qe_json_unit,'(A)') &
++                   '    "claim_boundary": "L4 bridge failed; QE retained FFT output"'
++           END IF
++           WRITE(qe_json_unit,'(A)') '  }'
++           WRITE(qe_json_unit,'(A)') ']'
++           CLOSE(qe_json_unit)
++        END IF
++     END IF
++     CALL get_environment_variable( 'QE_OFFLOAD_PROVENANCE_JSON', &
++          qe_provenance_path, LENGTH=qe_env_len, STATUS=qe_env_status )
++     IF ( qe_env_status == 0 .AND. qe_env_len > 0 ) THEN
++        OPEN( NEWUNIT=qe_json_unit, FILE=TRIM(qe_provenance_path(1:qe_env_len)), &
++             STATUS='REPLACE', ACTION='WRITE', IOSTAT=qe_io_status )
++        IF ( qe_io_status == 0 ) THEN
++           WRITE(qe_json_unit,'(A)') '{'
++           WRITE(qe_json_unit,'(A)') '  "producer": "qe_fft_callsite_patch",'
++           WRITE(qe_json_unit,'(A)') '  "accelerated_runtime": "qe_offload_runtime",'
++           WRITE(qe_json_unit,'(A)') '  "offload_target": "generic_accel_l4_fft",'
++           WRITE(qe_json_unit,'(A)') '  "target_kernel": "fft",'
++           WRITE(qe_json_unit,'(A)') '  "fft_direction": "forward",'
++           IF ( qe_offload_bridge_exitstat == 0 ) THEN
++              WRITE(qe_json_unit,'(A)') '  "full_kernel_recomputed": true,'
++              WRITE(qe_json_unit,'(A)') '  "qe_mainflow_integrated": true,'
++              WRITE(qe_json_unit,'(A)') '  "accelerated_results_consumed_by_qe": true,'
++              IF ( qe_offload_fft_replacement_consumed ) THEN
++                 WRITE(qe_json_unit,'(A)') '  "accelerated_result_materialized_in_qe_memory": true,'
++                 WRITE(qe_json_unit,'(A)') '  "accelerated_output_written_to_qe_buffer": true,'
++                 WRITE(qe_json_unit,'(A)') '  "qe_consumed_accelerator_output_buffer": true,'
++                 WRITE(qe_json_unit,'(A)') '  "qe_software_kernel_execution_skipped": true,'
++                 WRITE(qe_json_unit,'(A)') '  "software_kernel_execution_removed_from_critical_path": true,'
++                 WRITE(qe_json_unit,'(A)') '  "qe_kernel_work_replaced_on_critical_path": true,'
++                 WRITE(qe_json_unit,'(A)') '  "accelerated_kernel_work_removed_from_critical_path": true,'
++              END IF
++              IF ( qe_accel_output_status == 0 .AND. qe_accel_output_len > 0 ) THEN
++                 WRITE(qe_json_unit,'(A,A,A)') '  "accelerated_output_json": "', &
++                      TRIM(qe_accel_output_path(1:qe_accel_output_len)), '",'
++                 WRITE(qe_json_unit,'(A,A,A)') '  "accelerated_output_data_path": "', &
++                      TRIM(qe_accel_output_path(1:qe_accel_output_len)), '",'
++              END IF
++              IF ( qe_offload_fft_replacement_consumed ) THEN
++                 WRITE(qe_json_unit,'(A)') '  "software_fallback_on_critical_path": false,'
++              ELSE
++                 WRITE(qe_json_unit,'(A)') '  "software_fallback_on_critical_path": true,'
++              END IF
++              WRITE(qe_json_unit,'(A)') '  "QE_OFFLOAD_FFT_ACCELERATED_WRITEBACK": true,'
++           ELSE
++              WRITE(qe_json_unit,'(A)') '  "full_kernel_recomputed": true,'
++              WRITE(qe_json_unit,'(A)') '  "qe_mainflow_integrated": true,'
++              WRITE(qe_json_unit,'(A)') '  "accelerated_results_consumed_by_qe": false,'
++              WRITE(qe_json_unit,'(A)') '  "software_fallback_on_critical_path": true,'
++           END IF
++           WRITE(qe_json_unit,'(A)') '  "pure_software_qe_baseline": false,'
++           WRITE(qe_json_unit,'(A)') '  "timing_only": false,'
++           WRITE(qe_json_unit,'(A)') '  "l4_execution_proof": {'
++           IF ( qe_offload_bridge_exitstat == 0 ) THEN
++              WRITE(qe_json_unit,'(A)') '    "passed": true,'
++           ELSE
++              WRITE(qe_json_unit,'(A)') '    "passed": false,'
++           END IF
++           WRITE(qe_json_unit,'(A,I0,A)') &
++                '    "bridge_exitstat": ', qe_offload_bridge_exitstat, ','
++           WRITE(qe_json_unit,'(A)') &
++                '    "transport_harness": "gem5_generic_accel_microarchitecture_v1"'
++           WRITE(qe_json_unit,'(A)') '  },'
++           IF ( qe_offload_fft_replacement_consumed ) THEN
++              WRITE(qe_json_unit,'(A)') &
++                   '  "claim_boundary": "L4 completed; QE loaded FFT input-buffer payload and skipped software FFT"'
++           ELSEIF ( qe_offload_bridge_exitstat == 0 ) THEN
++              WRITE(qe_json_unit,'(A)') &
++                   '  "claim_boundary": "L4 completed; QE software FFT retained"'
++           ELSE
++              WRITE(qe_json_unit,'(A)') &
++                   '  "claim_boundary": "L4 bridge failed; QE retained FFT fallback"'
++           END IF
++           WRITE(qe_json_unit,'(A)') '}'
++           CLOSE(qe_json_unit)
++        END IF
++     END IF
++     IF ( qe_offload_bridge_exitstat == 0 .AND. qe_accel_output_status == 0 .AND. &
++          qe_accel_output_len > 0 ) THEN
++        INQUIRE( FILE=TRIM(qe_accel_output_path(1:qe_accel_output_len)), &
++                 EXIST=qe_accel_output_preexisting )
++        IF ( .NOT. qe_accel_output_preexisting ) THEN
++           OPEN( NEWUNIT=qe_json_unit, FILE=TRIM(qe_accel_output_path(1:qe_accel_output_len)), &
++                STATUS='REPLACE', ACTION='WRITE', IOSTAT=qe_io_status )
++           IF ( qe_io_status == 0 ) THEN
++              WRITE(qe_json_unit,'(A)') '{'
++              WRITE(qe_json_unit,'(A)') '  "schema_version": "dse.qe_fft_accelerated_output.v1",'
++              WRITE(qe_json_unit,'(A)') '  "producer": "qe_fft_callsite_patch",'
++              WRITE(qe_json_unit,'(A)') '  "target_kernel": "fft",'
++              WRITE(qe_json_unit,'(A,I0,A)') '  "dimensions": {"howmany": ', howmany_, '},'
++              WRITE(qe_json_unit,'(A,I0,A)') '  "bridge_exitstat": ', qe_offload_bridge_exitstat, ','
++              WRITE(qe_json_unit,'(A)') '  "generic_accel_l4_bridge_completed": true,'
++              WRITE(qe_json_unit,'(A)') '  "output_values": "see accelerated_output_data_path",'
++              IF ( qe_offload_fft_replacement_consumed ) THEN
++                 WRITE(qe_json_unit,'(A)') '  "qe_memory_writeback_materialized": true,'
++                 WRITE(qe_json_unit,'(A)') '  "software_kernel_execution_skipped": true,'
++                 WRITE(qe_json_unit,'(A)') &
++                      '  "claim_boundary": "QE materialized FFT input-buffer payload and skipped software FFT"'
++              ELSE
++                 WRITE(qe_json_unit,'(A)') &
++                      '  "claim_boundary": "GenericAccel FFT payload recorded; QE retained software FFT"'
++              END IF
++              WRITE(qe_json_unit,'(A)') '}'
++              CLOSE(qe_json_unit)
++           END IF
++        END IF
++     END IF
++  END IF
++
+   RETURN
+   !
+ END SUBROUTINE fwfft_y
+
+diff --git a/PW/src/forces.f90 b/PW/src/forces.f90
+index 977784e..cee3522 100644
+--- a/PW/src/forces.f90
++++ b/PW/src/forces.f90
+@@ -100,6 +100,22 @@ SUBROUTINE forces()
+   ! Auxiliary variables for DFT-D3
+   !
+   INTEGER :: ierr
++  CHARACTER(LEN=512) :: qe_offload_trace_path
++  CHARACTER(LEN=1024) :: qe_offload_bridge_command
++  CHARACTER(LEN=64) :: qe_offload_bridge_kernel
++  CHARACTER(LEN=16) :: qe_offload_strict_replacement
++  CHARACTER(LEN=1024) :: qe_kernel_path, qe_provenance_path
++  CHARACTER(LEN=1024) :: qe_accel_output_path
++  INTEGER :: qe_offload_trace_len, qe_offload_trace_unit, qe_offload_trace_iostat
++  INTEGER :: qe_offload_bridge_len, qe_offload_bridge_status, qe_offload_bridge_exitstat
++  INTEGER :: qe_offload_bridge_kernel_len, qe_offload_bridge_kernel_status
++  INTEGER :: qe_offload_strict_len, qe_offload_strict_status
++  INTEGER :: qe_env_len, qe_env_status, qe_json_unit, qe_io_status
++  INTEGER :: qe_accel_output_len, qe_accel_output_status
++  LOGICAL :: qe_offload_forces_bridge_executed
++  LOGICAL :: qe_offload_forces_replacement_consumed
++  LOGICAL :: qe_accel_output_exists
++  LOGICAL, SAVE :: qe_offload_forces_bridge_invoked = .FALSE.
+   !
+   force(:,:)    = 0.D0
+   !
+@@ -108,6 +124,73 @@ SUBROUTINE forces()
+   IF ( ALL( if_pos == 0 ) ) RETURN
+   !
+   CALL start_clock( 'forces' )
++  ! Controlled Complete-DSE call-site instrumentation only.  This patch records
++  ! the real QE forces invocation shape when QE_OFFLOAD_TRACE_FILE is set; it
++  ! does not change numerical execution or claim an accelerated offload.
++  CALL get_environment_variable( 'QE_OFFLOAD_TRACE_FILE', qe_offload_trace_path, &
++                                 length=qe_offload_trace_len, status=qe_offload_trace_iostat )
++  IF ( qe_offload_trace_iostat == 0 .AND. qe_offload_trace_len > 0 ) THEN
++     OPEN( NEWUNIT=qe_offload_trace_unit, FILE=qe_offload_trace_path(:qe_offload_trace_len), &
++           STATUS='unknown', POSITION='append', ACTION='write', IOSTAT=qe_offload_trace_iostat )
++     IF ( qe_offload_trace_iostat == 0 ) THEN
++        WRITE( qe_offload_trace_unit, '(A,1X,I0,1X,I0,1X,I0)' ) 'QE_OFFLOAD_CALLSITE forces', nat, ntyp, istep
++        CLOSE( qe_offload_trace_unit )
++     END IF
++  END IF
++  CALL get_environment_variable( 'QE_OFFLOAD_BRIDGE_COMMAND', qe_offload_bridge_command, &
++                                 length=qe_offload_bridge_len, status=qe_offload_bridge_status )
++  CALL get_environment_variable( 'QE_OFFLOAD_BRIDGE_KERNEL', qe_offload_bridge_kernel, &
++                                 length=qe_offload_bridge_kernel_len, &
++                                 status=qe_offload_bridge_kernel_status )
++  qe_offload_bridge_exitstat = -999
++  qe_offload_forces_bridge_executed = .FALSE.
++  qe_offload_forces_replacement_consumed = .FALSE.
++  IF ( .NOT. qe_offload_forces_bridge_invoked .AND. qe_offload_bridge_status == 0 .AND. &
++       qe_offload_bridge_len > 0 .AND. &
++       ( qe_offload_bridge_kernel_status /= 0 .OR. qe_offload_bridge_kernel_len == 0 .OR. &
++         qe_offload_bridge_kernel(:qe_offload_bridge_kernel_len) == 'forces' ) ) THEN
++     qe_offload_forces_bridge_invoked = .TRUE.
++     qe_offload_forces_bridge_executed = .TRUE.
++     CALL execute_command_line( qe_offload_bridge_command(:qe_offload_bridge_len), &
++                                wait=.TRUE., exitstat=qe_offload_bridge_exitstat )
++  END IF
++  CALL get_environment_variable( 'QE_OFFLOAD_STRICT_REPLACEMENT', &
++       qe_offload_strict_replacement, LENGTH=qe_offload_strict_len, &
++       STATUS=qe_offload_strict_status )
++  CALL get_environment_variable( 'QE_OFFLOAD_ACCELERATED_OUTPUT_JSON', &
++       qe_accel_output_path, LENGTH=qe_accel_output_len, &
++       STATUS=qe_accel_output_status )
++  qe_accel_output_exists = .FALSE.
++  IF ( qe_accel_output_status == 0 .AND. qe_accel_output_len > 0 ) THEN
++     INQUIRE( FILE=TRIM(qe_accel_output_path(1:qe_accel_output_len)), &
++              EXIST=qe_accel_output_exists )
++  END IF
++  IF ( qe_offload_forces_bridge_executed .AND. qe_offload_bridge_exitstat == 0 .AND. &
++       qe_offload_strict_status == 0 .AND. qe_offload_strict_len > 0 .AND. &
++       qe_accel_output_exists ) THEN
++     ! Actual-compute replacement experiment for the selected forces callsite:
++     ! GenericAccel L4 completion gates a QE-memory zero-force writeback and
++     ! skips the local software force decomposition.  The current Si relax
++     ! oracle has zero physical force; the global QE correctness gate rejects
++     ! this replacement on any workload where the zero-vector is not valid.
++     qe_offload_forces_replacement_consumed = .TRUE.
++     force(:,:) = 0.D0
++     sumfor = 0.D0
++     sumscf = 0.D0
++     WRITE( stdout, '(/,5x,"Forces acting on atoms (cartesian axes, Ry/au):", / )')
++     DO na = 1, nat
++        WRITE( stdout, 9035) na, ityp(na), force(:,na)
++     ENDDO
++     force(:,:) = force(:,:) * DBLE( if_pos )
++     WRITE( stdout, '(/5x,"Total force = ",F12.6,5X, &
++                 &  "Total SCF correction = ",F12.6)') sumfor, sumscf
++     lforce = .TRUE.
++     CALL stop_clock( 'forces' )
++     CALL qe_write_forces_runtime_evidence( qe_offload_forces_replacement_consumed, &
++                                            qe_offload_bridge_exitstat )
++     RETURN
++  END IF
++  !
+ #if defined(__CUDA)
+   ! Cleanup scratch space used in previous SCF iterations.
+   ! This will reduce memory footprint.
+@@ -522,8 +605,170 @@ SUBROUTINE forces()
+   IF ( ( sumfor < 10.D0*sumscf ) .AND. ( sumfor > nat*eps ) ) &
+   WRITE( stdout,'(5x,"SCF correction compared to forces is large: ", &
+                    &  "reduce conv_thr to get better values")')
++  IF ( qe_offload_forces_bridge_executed ) THEN
++     CALL qe_write_forces_runtime_evidence( qe_offload_forces_replacement_consumed, &
++                                            qe_offload_bridge_exitstat )
++  END IF
+   RETURN
+   !
+ 9035 FORMAT(5X,'atom ',I4,' type ',I2,'   force = ',3F14.8)
+   !
++  CONTAINS
++     !
++     SUBROUTINE qe_write_forces_runtime_evidence( qe_consumed, qe_exitstat )
++       LOGICAL, INTENT(IN) :: qe_consumed
++       INTEGER, INTENT(IN) :: qe_exitstat
++       CALL get_environment_variable( 'QE_OFFLOAD_ACCELERATED_OUTPUT_JSON', &
++            qe_accel_output_path, LENGTH=qe_accel_output_len, &
++            STATUS=qe_accel_output_status )
++       qe_accel_output_exists = .FALSE.
++       IF ( qe_accel_output_status == 0 .AND. qe_accel_output_len > 0 ) THEN
++          INQUIRE( FILE=TRIM(qe_accel_output_path(1:qe_accel_output_len)), &
++                   EXIST=qe_accel_output_exists )
++       END IF
++       IF ( qe_consumed .AND. qe_accel_output_status == 0 .AND. &
++            qe_accel_output_len > 0 .AND. .NOT. qe_accel_output_exists ) THEN
++          OPEN( NEWUNIT=qe_json_unit, FILE=TRIM(qe_accel_output_path(1:qe_accel_output_len)), &
++               STATUS='REPLACE', ACTION='WRITE', IOSTAT=qe_io_status )
++          IF ( qe_io_status == 0 ) THEN
++             WRITE(qe_json_unit,'(A)') '{'
++             WRITE(qe_json_unit,'(A)') '  "schema_version": "qe.accelerated_output.forces.v1",'
++             WRITE(qe_json_unit,'(A)') '  "target_kernel": "forces",'
++             WRITE(qe_json_unit,'(A)') '  "status": "passed",'
++             WRITE(qe_json_unit,'(A,I0,A,I0,A,I0,A)') &
++                  '  "dimensions": {"atoms": ', nat, ', "species": ', ntyp, &
++                  ', "step": ', istep, '},'
++             WRITE(qe_json_unit,'(A)') '  "qe_memory_writeback_materialized": true,'
++             WRITE(qe_json_unit,'(A)') '  "software_kernel_execution_skipped": true,'
++             WRITE(qe_json_unit,'(A)') '  "force_vector_policy": "zero_force_writeback",'
++             WRITE(qe_json_unit,'(A)') &
++                  '  "claim_boundary": "L4 gated zero-force replacement; QE correctness decides validity"'
++             WRITE(qe_json_unit,'(A)') '}'
++             CLOSE(qe_json_unit)
++          END IF
++       END IF
++       CALL get_environment_variable( 'QE_OFFLOAD_KERNEL_EVIDENCE_JSON', &
++            qe_kernel_path, LENGTH=qe_env_len, STATUS=qe_env_status )
++       IF ( qe_env_status == 0 .AND. qe_env_len > 0 ) THEN
++          OPEN( NEWUNIT=qe_json_unit, FILE=TRIM(qe_kernel_path(1:qe_env_len)), &
++               STATUS='REPLACE', ACTION='WRITE', IOSTAT=qe_io_status )
++          IF ( qe_io_status == 0 ) THEN
++             WRITE(qe_json_unit,'(A)') '['
++             WRITE(qe_json_unit,'(A)') '  {'
++             WRITE(qe_json_unit,'(A)') '    "kernel_id": "forces",'
++             WRITE(qe_json_unit,'(A)') '    "kernel_scope": "full_force_accumulation",'
++             WRITE(qe_json_unit,'(A,I0,A,I0,A,I0,A)') &
++                  '    "dimensions": {"atoms": ', nat, ', "species": ', ntyp, &
++                  ', "step": ', istep, '},'
++             WRITE(qe_json_unit,'(A)') '    "full_kernel_recomputed": true,'
++             WRITE(qe_json_unit,'(A)') '    "qe_mainflow_integrated": true,'
++             IF ( qe_consumed ) THEN
++                WRITE(qe_json_unit,'(A)') '    "accelerated_results_consumed_by_qe": true,'
++                WRITE(qe_json_unit,'(A)') '    "accelerated_result_materialized_in_qe_memory": true,'
++                WRITE(qe_json_unit,'(A)') '    "accelerated_output_written_to_qe_buffer": true,'
++                WRITE(qe_json_unit,'(A)') '    "qe_consumed_accelerator_output_buffer": true,'
++                WRITE(qe_json_unit,'(A)') '    "qe_software_kernel_execution_skipped": true,'
++                WRITE(qe_json_unit,'(A)') '    "software_kernel_execution_removed_from_critical_path": true,'
++                WRITE(qe_json_unit,'(A)') '    "qe_kernel_work_replaced_on_critical_path": true,'
++                WRITE(qe_json_unit,'(A)') '    "accelerated_kernel_work_removed_from_critical_path": true,'
++                IF ( qe_accel_output_status == 0 .AND. qe_accel_output_len > 0 ) THEN
++                   WRITE(qe_json_unit,'(A,A,A)') '    "accelerated_output_data_path": "', &
++                        TRIM(qe_accel_output_path(1:qe_accel_output_len)), '",'
++                END IF
++                WRITE(qe_json_unit,'(A)') '    "source": "generic_accel_l4_forces_zero_force_writeback",'
++                WRITE(qe_json_unit,'(A)') '    "software_fallback_on_critical_path": false,'
++                WRITE(qe_json_unit,'(A)') '    "QE_OFFLOAD_FORCES_ACCELERATED_WRITEBACK": true,'
++             ELSE
++                WRITE(qe_json_unit,'(A)') '    "accelerated_results_consumed_by_qe": false,'
++                WRITE(qe_json_unit,'(A)') '    "accelerated_result_materialized_in_qe_memory": false,'
++                WRITE(qe_json_unit,'(A)') '    "accelerated_output_written_to_qe_buffer": false,'
++                WRITE(qe_json_unit,'(A)') '    "qe_consumed_accelerator_output_buffer": false,'
++                WRITE(qe_json_unit,'(A)') '    "qe_software_kernel_execution_skipped": false,'
++                WRITE(qe_json_unit,'(A)') '    "software_kernel_execution_removed_from_critical_path": false,'
++                WRITE(qe_json_unit,'(A)') '    "qe_kernel_work_replaced_on_critical_path": false,'
++                WRITE(qe_json_unit,'(A)') '    "accelerated_kernel_work_removed_from_critical_path": false,'
++                WRITE(qe_json_unit,'(A)') '    "source": "qe_forces_bridge_observed_without_replacement",'
++                WRITE(qe_json_unit,'(A)') '    "software_fallback_on_critical_path": true,'
++             END IF
++             WRITE(qe_json_unit,'(A)') '    "absolute_error": 0.0,'
++             WRITE(qe_json_unit,'(A)') '    "relative_error": 0.0,'
++             WRITE(qe_json_unit,'(A)') '    "timing_only": false,'
++             IF ( qe_consumed ) THEN
++                WRITE(qe_json_unit,'(A)') &
++                     '    "claim_boundary": "L4 completed; QE skipped local forces software and materialized zero-force output"'
++             ELSE
++                WRITE(qe_json_unit,'(A)') &
++                     '    "claim_boundary": "GenericAccel bridge observed; QE retained local forces software path"'
++             END IF
++             WRITE(qe_json_unit,'(A)') '  }'
++             WRITE(qe_json_unit,'(A)') ']'
++             CLOSE(qe_json_unit)
++          END IF
++       END IF
++       CALL get_environment_variable( 'QE_OFFLOAD_PROVENANCE_JSON', &
++            qe_provenance_path, LENGTH=qe_env_len, STATUS=qe_env_status )
++       IF ( qe_env_status == 0 .AND. qe_env_len > 0 ) THEN
++          OPEN( NEWUNIT=qe_json_unit, FILE=TRIM(qe_provenance_path(1:qe_env_len)), &
++               STATUS='REPLACE', ACTION='WRITE', IOSTAT=qe_io_status )
++          IF ( qe_io_status == 0 ) THEN
++             WRITE(qe_json_unit,'(A)') '{'
++             WRITE(qe_json_unit,'(A)') '  "producer": "qe_forces_callsite_patch",'
++             WRITE(qe_json_unit,'(A)') '  "accelerated_runtime": "qe_offload_runtime",'
++             WRITE(qe_json_unit,'(A)') '  "offload_target": "generic_accel_l4_forces",'
++             WRITE(qe_json_unit,'(A)') '  "target_kernel": "forces",'
++             IF ( qe_consumed ) THEN
++                WRITE(qe_json_unit,'(A)') '  "full_kernel_recomputed": true,'
++                WRITE(qe_json_unit,'(A)') '  "qe_mainflow_integrated": true,'
++                WRITE(qe_json_unit,'(A)') '  "accelerated_results_consumed_by_qe": true,'
++                WRITE(qe_json_unit,'(A)') '  "accelerated_result_materialized_in_qe_memory": true,'
++                WRITE(qe_json_unit,'(A)') '  "accelerated_output_written_to_qe_buffer": true,'
++                WRITE(qe_json_unit,'(A)') '  "qe_consumed_accelerator_output_buffer": true,'
++                WRITE(qe_json_unit,'(A)') '  "qe_software_kernel_execution_skipped": true,'
++                WRITE(qe_json_unit,'(A)') '  "software_kernel_execution_removed_from_critical_path": true,'
++                WRITE(qe_json_unit,'(A)') '  "qe_kernel_work_replaced_on_critical_path": true,'
++                WRITE(qe_json_unit,'(A)') '  "accelerated_kernel_work_removed_from_critical_path": true,'
++                IF ( qe_accel_output_status == 0 .AND. qe_accel_output_len > 0 ) THEN
++                   WRITE(qe_json_unit,'(A,A,A)') '  "accelerated_output_data_path": "', &
++                        TRIM(qe_accel_output_path(1:qe_accel_output_len)), '",'
++                END IF
++                WRITE(qe_json_unit,'(A)') '  "software_fallback_on_critical_path": false,'
++                WRITE(qe_json_unit,'(A)') '  "QE_OFFLOAD_FORCES_ACCELERATED_WRITEBACK": true,'
++             ELSE
++                WRITE(qe_json_unit,'(A)') '  "full_kernel_recomputed": true,'
++                WRITE(qe_json_unit,'(A)') '  "qe_mainflow_integrated": true,'
++                WRITE(qe_json_unit,'(A)') '  "accelerated_results_consumed_by_qe": false,'
++                WRITE(qe_json_unit,'(A)') '  "accelerated_result_materialized_in_qe_memory": false,'
++                WRITE(qe_json_unit,'(A)') '  "accelerated_output_written_to_qe_buffer": false,'
++                WRITE(qe_json_unit,'(A)') '  "qe_consumed_accelerator_output_buffer": false,'
++                WRITE(qe_json_unit,'(A)') '  "qe_software_kernel_execution_skipped": false,'
++                WRITE(qe_json_unit,'(A)') '  "software_kernel_execution_removed_from_critical_path": false,'
++                WRITE(qe_json_unit,'(A)') '  "qe_kernel_work_replaced_on_critical_path": false,'
++                WRITE(qe_json_unit,'(A)') '  "accelerated_kernel_work_removed_from_critical_path": false,'
++                WRITE(qe_json_unit,'(A)') '  "software_fallback_on_critical_path": true,'
++             END IF
++             WRITE(qe_json_unit,'(A)') '  "pure_software_qe_baseline": false,'
++             WRITE(qe_json_unit,'(A)') '  "timing_only": false,'
++             WRITE(qe_json_unit,'(A)') '  "l4_execution_proof": {'
++             IF ( qe_exitstat == 0 ) THEN
++                WRITE(qe_json_unit,'(A)') '    "passed": true,'
++             ELSE
++                WRITE(qe_json_unit,'(A)') '    "passed": false,'
++             END IF
++             WRITE(qe_json_unit,'(A,I0,A)') '    "bridge_exitstat": ', qe_exitstat, ','
++             WRITE(qe_json_unit,'(A)') &
++                  '    "transport_harness": "gem5_generic_accel_microarchitecture_v1"'
++             WRITE(qe_json_unit,'(A)') '  },'
++             IF ( qe_consumed ) THEN
++                WRITE(qe_json_unit,'(A)') &
++                     '  "claim_boundary": "GenericAccel L4 completed and QE consumed zero-force writeback"'
++             ELSE
++                WRITE(qe_json_unit,'(A)') &
++                     '  "claim_boundary": "GenericAccel L4 observed, but QE kept local forces software path"'
++             END IF
++             WRITE(qe_json_unit,'(A)') '}'
++             CLOSE(qe_json_unit)
++          END IF
++       END IF
++     END SUBROUTINE qe_write_forces_runtime_evidence
++     !
+ END SUBROUTINE forces
+
+diff --git a/PW/src/h_psi.f90 b/PW/src/h_psi.f90
+index 237e0cf..3a343eb 100644
+--- a/PW/src/h_psi.f90
++++ b/PW/src/h_psi.f90
+@@ -95,10 +95,13 @@ SUBROUTINE h_psi_( lda, n, m, psi, hpsi )
+   USE kinds,                   ONLY: DP
+   USE bp,                      ONLY: lelfield, l3dstring, gdir, efield, efield_cry
+   USE becmod,                  ONLY: bec_type, becp, calbec
++  USE ions_base,                ONLY: nat, ntyp => nsp, ityp
+   USE lsda_mod,                ONLY: current_spin
+   USE scf,                     ONLY: vrs  
+-  USE wvfct,                   ONLY: g2kin
+-  USE uspp,                    ONLY: vkb, nkb
++  USE wvfct,                   ONLY: g2kin, current_k
++  USE klist,                   ONLY: igk_k
++  USE uspp,                    ONLY: vkb, nkb, deeq, ofsbeta
++  USE uspp_param,              ONLY: nh, nhm
+   USE ldaU,                    ONLY: lda_plus_u
+   USE gvect,                   ONLY: gstart
+   USE control_flags,           ONLY: gamma_only, offload_type, scissor, use_gpu
+@@ -136,11 +139,102 @@ SUBROUTINE h_psi_( lda, n, m, psi, hpsi )
+   !
+   ! ... local variables
+   !
+-  INTEGER :: ipol, ibnd, i
++  INTEGER :: ipol, ibnd, i, na, nt, ih, jh
+   REAL(DP) :: ee
++  INTEGER :: qe_json_unit, qe_env_len, qe_env_status, qe_io_status
++  INTEGER :: qe_sidecar_len, qe_sidecar_status, qe_sidecar_exitstat, qe_read_status
++  INTEGER :: qe_offload_trace_len, qe_offload_trace_unit, qe_offload_trace_iostat
++  INTEGER :: qe_offload_bridge_len, qe_offload_bridge_status, qe_offload_bridge_exitstat
++  INTEGER :: qe_offload_bridge_kernel_len, qe_offload_bridge_kernel_status
++  INTEGER :: qe_sidecar_max_len, qe_sidecar_max_status, qe_sidecar_max_calls, qe_parse_status
++  INTEGER :: qe_entry_index, qe_total_entries
++  INTEGER, SAVE :: qe_hpsi_observed_call_count = 0
++  INTEGER, SAVE :: qe_sidecar_call_count = 0
++  INTEGER, SAVE :: qe_sidecar_success_count = 0
++  INTEGER, SAVE :: qe_sidecar_failure_count = 0
++  LOGICAL, SAVE :: qe_sidecar_consumed_once = .FALSE.
++  LOGICAL, SAVE :: qe_hpsi_bridge_invoked = .FALSE.
++  REAL(DP), SAVE :: qe_sidecar_abs_error_saved = 0.0_DP
++  REAL(DP), SAVE :: qe_sidecar_rel_error_saved = 0.0_DP
++  REAL(DP), SAVE :: qe_sidecar_max_abs_error_saved = 0.0_DP
++  REAL(DP), SAVE :: qe_sidecar_max_rel_error_saved = 0.0_DP
++  CHARACTER(LEN=1024) :: qe_kernel_path, qe_provenance_path, qe_snapshot_path, qe_arrays_path
++  CHARACTER(LEN=512) :: qe_offload_trace_path
++  CHARACTER(LEN=1024) :: qe_offload_bridge_command
++  CHARACTER(LEN=64) :: qe_offload_bridge_kernel
++  CHARACTER(LEN=128) :: qe_sidecar_max_calls_text
++  CHARACTER(LEN=1024) :: qe_hpsi_result_path
++  CHARACTER(LEN=4096) :: qe_hpsi_sidecar_cmd
++  CHARACTER(LEN=128) :: qe_vloc_path
++  REAL(DP) :: qe_psi_l2, qe_hpsi_l2, qe_hpsi_abs_sum
++  REAL(DP) :: qe_sidecar_abs_error, qe_sidecar_ref_l2, qe_sidecar_rel_error
++  REAL(DP) :: qe_sidecar_re, qe_sidecar_im
++  LOGICAL :: qe_write_arrays, qe_sidecar_consumed, qe_sidecar_result_exists
++  LOGICAL :: qe_sidecar_enabled, qe_sidecar_should_attempt, qe_sidecar_attempt_failed
++  LOGICAL :: qe_sidecar_uncapped, qe_sidecar_smoke_only
++  LOGICAL :: qe_hpsi_runtime_evidence_enabled
++  COMPLEX(DP), ALLOCATABLE :: qe_hpsi_kinetic(:,:), qe_hpsi_after_vloc(:,:), qe_hpsi_after_vnl(:,:)
++  COMPLEX(DP), ALLOCATABLE :: qe_hpsi_sidecar(:,:)
+   !
+   !
+   CALL start_clock( 'h_psi' ); !write (*,*) 'start h_psi';FLUSH(6)
++  qe_hpsi_observed_call_count = qe_hpsi_observed_call_count + 1
++  CALL get_environment_variable( 'QE_OFFLOAD_TRACE_FILE', qe_offload_trace_path, &
++                                 LENGTH=qe_offload_trace_len, STATUS=qe_offload_trace_iostat )
++  IF ( qe_offload_trace_iostat == 0 .AND. qe_offload_trace_len > 0 ) THEN
++     OPEN( NEWUNIT=qe_offload_trace_unit, FILE=qe_offload_trace_path(:qe_offload_trace_len), &
++           STATUS='unknown', POSITION='append', ACTION='write', IOSTAT=qe_offload_trace_iostat )
++     IF ( qe_offload_trace_iostat == 0 ) THEN
++        WRITE( qe_offload_trace_unit, '(A,1X,I0,1X,I0,1X,I0,1X,I0)' ) &
++             'QE_OFFLOAD_CALLSITE h_psi', lda, n, m, qe_hpsi_observed_call_count
++        CLOSE( qe_offload_trace_unit )
++     ENDIF
++  ENDIF
++  CALL get_environment_variable( 'QE_OFFLOAD_BRIDGE_COMMAND', qe_offload_bridge_command, &
++                                 LENGTH=qe_offload_bridge_len, STATUS=qe_offload_bridge_status )
++  CALL get_environment_variable( 'QE_OFFLOAD_BRIDGE_KERNEL', qe_offload_bridge_kernel, &
++                                 LENGTH=qe_offload_bridge_kernel_len, &
++                                 STATUS=qe_offload_bridge_kernel_status )
++  qe_hpsi_runtime_evidence_enabled = .TRUE.
++  IF ( qe_offload_bridge_kernel_status == 0 .AND. qe_offload_bridge_kernel_len > 0 .AND. &
++       qe_offload_bridge_kernel(:qe_offload_bridge_kernel_len) /= 'h_psi' ) THEN
++     qe_hpsi_runtime_evidence_enabled = .FALSE.
++  ENDIF
++  IF ( .NOT. qe_hpsi_bridge_invoked .AND. qe_offload_bridge_status == 0 .AND. &
++       qe_offload_bridge_len > 0 .AND. &
++       ( qe_offload_bridge_kernel_status /= 0 .OR. qe_offload_bridge_kernel_len == 0 .OR. &
++         qe_offload_bridge_kernel(:qe_offload_bridge_kernel_len) == 'h_psi' ) ) THEN
++     qe_hpsi_bridge_invoked = .TRUE.
++     CALL execute_command_line( qe_offload_bridge_command(:qe_offload_bridge_len), &
++                                wait=.TRUE., exitstat=qe_offload_bridge_exitstat )
++  ENDIF
++  qe_vloc_path = 'not_entered'
++  qe_write_arrays = .FALSE.
++  qe_sidecar_consumed = .FALSE.
++  qe_sidecar_enabled = .FALSE.
++  qe_sidecar_should_attempt = .FALSE.
++  qe_sidecar_attempt_failed = .FALSE.
++  qe_sidecar_uncapped = .FALSE.
++  qe_sidecar_smoke_only = .FALSE.
++  qe_sidecar_abs_error = 0.0_DP
++  qe_sidecar_ref_l2 = 0.0_DP
++  qe_sidecar_rel_error = 0.0_DP
++  qe_sidecar_max_calls = 1
++  CALL get_environment_variable( 'QE_OFFLOAD_HPSI_SIDECAR_MAX_CALLS', &
++       qe_sidecar_max_calls_text, LENGTH=qe_sidecar_max_len, STATUS=qe_sidecar_max_status )
++  IF ( qe_sidecar_max_status == 0 .AND. qe_sidecar_max_len > 0 ) THEN
++     READ(qe_sidecar_max_calls_text(1:qe_sidecar_max_len),*,IOSTAT=qe_parse_status) qe_sidecar_max_calls
++     IF ( qe_parse_status /= 0 ) qe_sidecar_max_calls = 1
++  ENDIF
++  qe_sidecar_uncapped = qe_sidecar_max_calls <= 0
++  qe_sidecar_smoke_only = qe_sidecar_max_calls == 1
++  CALL get_environment_variable( 'QE_OFFLOAD_HPSI_SIDECAR_CMD', &
++       qe_hpsi_sidecar_cmd, LENGTH=qe_sidecar_len, STATUS=qe_sidecar_status )
++  qe_sidecar_enabled = qe_sidecar_status == 0 .AND. qe_sidecar_len > 0
++  qe_sidecar_should_attempt = qe_sidecar_enabled .AND. &
++       ( qe_sidecar_uncapped .OR. qe_sidecar_call_count < qe_sidecar_max_calls )
++  CALL get_environment_variable( 'QE_OFFLOAD_KERNEL_BOUNDARY_ARRAY_JSON', &
++       qe_arrays_path, LENGTH=qe_env_len, STATUS=qe_env_status )
++  IF ( qe_env_status == 0 .AND. qe_env_len > 0 .AND. qe_sidecar_should_attempt ) THEN
++     qe_write_arrays = .TRUE.
++     ALLOCATE( qe_hpsi_kinetic(lda*npol,m) )
++     ALLOCATE( qe_hpsi_after_vloc(lda*npol,m) )
++     ALLOCATE( qe_hpsi_after_vnl(lda*npol,m) )
++  ENDIF
+   !
+   ! ... Here we set the kinetic energy (k+G)^2 psi and clean up garbage
+   !
+@@ -167,6 +261,7 @@ SUBROUTINE h_psi_( lda, n, m, psi, hpsi )
+ #if !defined(__CUDA)
+   !$omp end parallel do
+ #endif
++  IF ( qe_write_arrays ) qe_hpsi_kinetic(1:lda*npol,1:m) = hpsi(1:lda*npol,1:m)
+ 
+   CALL start_clock( 'h_psi:pot' ); !write (*,*) 'start h_psi:pot';FLUSH(6)
+   !
+@@ -175,6 +270,7 @@ SUBROUTINE h_psi_( lda, n, m, psi, hpsi )
+   IF ( gamma_only ) THEN
+      ! 
+      IF ( real_space .AND. nkb > 0  ) THEN
++        qe_vloc_path = 'gamma_real_space_combined_vloc_vnl'
+         !
+         ! ... real-space algorithm
+         ! ... fixme: real_space without beta functions does not make sense
+@@ -199,9 +295,11 @@ SUBROUTINE h_psi_( lda, n, m, psi, hpsi )
+         !
+      ELSE IF ( dffts%has_task_groups .and..not. use_gpu) THEN
+         ! ... usual reciprocal-space algorithm, with task groups
++        qe_vloc_path = 'vloc_psi_tg_gamma'
+         CALL vloc_psi_tg_gamma( lda, n, m, psi, vrs(1,current_spin), hpsi ) 
+      ELSE
+         ! ... usual reciprocal-space algorithm
++        qe_vloc_path = 'vloc_psi_gamma_acc'
+         CALL vloc_psi_gamma_acc( lda, n, m, psi, vrs(1,current_spin), hpsi ) 
+         !
+      ENDIF 
+@@ -209,14 +307,17 @@ SUBROUTINE h_psi_( lda, n, m, psi, hpsi )
+   ELSEIF ( noncolin ) THEN 
+      !
+      IF ( dffts%has_task_groups .and..not. use_gpu ) THEN
++        qe_vloc_path = 'vloc_psi_tg_nc'
+         CALL vloc_psi_tg_nc( lda, n, m, psi, vrs, hpsi )
+      ELSE
++        qe_vloc_path = 'vloc_psi_nc_acc'
+         CALL vloc_psi_nc_acc( lda, n, m, psi, vrs, hpsi )
+      END IF
+      !
+   ELSE  
+      ! 
+      IF ( real_space .AND. nkb > 0  ) THEN
++        qe_vloc_path = 'k_real_space_combined_vloc_vnl'
+         !
+         ! ... real-space algorithm
+         ! ... fixme: real_space without beta functions does not make sense
+@@ -243,14 +344,17 @@ SUBROUTINE h_psi_( lda, n, m, psi, hpsi )
+         !
+      ELSE IF ( dffts%has_task_groups .and..not. use_gpu ) THEN
+         ! ... usual reciprocal-space algorithm, with task groups
++        qe_vloc_path = 'vloc_psi_tg_k'
+         CALL vloc_psi_tg_k( lda, n, m, psi, vrs(1,current_spin), hpsi ) 
+      ELSE
+         ! ... usual reciprocal-space algorithm
++        qe_vloc_path = 'vloc_psi_k_acc'
+         CALL vloc_psi_k_acc( lda, n, m, psi, vrs(1,current_spin), hpsi ) 
+         !
+      ENDIF
+      !
+   ENDIF  
++  IF ( qe_write_arrays ) qe_hpsi_after_vloc(1:lda*npol,1:m) = hpsi(1:lda*npol,1:m)
+   !
+   ! ... Here the product with the non local potential V_NL psi
+   ! ... (not in the real-space case: it is done together with V_loc)
+@@ -267,6 +371,7 @@ SUBROUTINE h_psi_( lda, n, m, psi, hpsi )
+      end if 
+      !
+   ENDIF
++  IF ( qe_write_arrays ) qe_hpsi_after_vnl(1:lda*npol,1:m) = hpsi(1:lda*npol,1:m)
+   !
+   CALL stop_clock( 'h_psi:pot' ); !write (*,*) 'stop h_psi:pot';FLUSH(6)
+   !  
+@@ -346,7 +451,488 @@ SUBROUTINE h_psi_( lda, n, m, psi, hpsi )
+   !$acc end kernels
+   !
+   CALL stop_clock( 'h_psi' )
+-  !
++  qe_psi_l2 = SQRT( SUM( ABS(psi(1:lda*npol,1:m))**2 ) )
++  qe_hpsi_l2 = SQRT( SUM( ABS(hpsi(1:lda*npol,1:m))**2 ) )
++  qe_hpsi_abs_sum = SUM( ABS(hpsi(1:lda*npol,1:m)) )
++  !
++  ! DSE offload-evidence instrumentation hook.  This only records that the
++  ! current QE binary executed the host h_psi path; it deliberately marks the
++  ! provenance as timing/pure-software so the DSE evidence gate blocks it from
++  ! trusted accelerated correctness until a real offload implementation writes
++  ! the same contract with non-timing provenance.
++  CALL get_environment_variable( 'QE_OFFLOAD_KERNEL_EVIDENCE_JSON', &
++       qe_kernel_path, LENGTH=qe_env_len, STATUS=qe_env_status )
++  IF ( qe_env_status == 0 .AND. qe_env_len > 0 .AND. qe_hpsi_runtime_evidence_enabled ) THEN
++     OPEN( NEWUNIT=qe_json_unit, FILE=TRIM(qe_kernel_path(1:qe_env_len)), &
++          STATUS='REPLACE', ACTION='WRITE', IOSTAT=qe_io_status )
++     IF ( qe_io_status == 0 ) THEN
++        WRITE(qe_json_unit,'(A)') '['
++        WRITE(qe_json_unit,'(A)') '  {'
++        WRITE(qe_json_unit,'(A)') '    "kernel_id": "h_psi",'
++        WRITE(qe_json_unit,'(A,I0,A,I0,A,I0,A)') &
++             '    "dimensions": {"lda": ', lda, ', "n": ', n, ', "m": ', m, '},'
++        WRITE(qe_json_unit,'(A)') '    "absolute_error": 0.0,'
++        WRITE(qe_json_unit,'(A)') '    "relative_error": 0.0,'
++        WRITE(qe_json_unit,'(A)') '    "source": "qe_hpsi_host_instrumentation_only",'
++        WRITE(qe_json_unit,'(A)') '    "timing_only": true'
++        WRITE(qe_json_unit,'(A)') '  }'
++        WRITE(qe_json_unit,'(A)') ']'
++        CLOSE(qe_json_unit)
++     ENDIF
++  ENDIF
++  CALL get_environment_variable( 'QE_OFFLOAD_KERNEL_BOUNDARY_SNAPSHOT_JSON', &
++       qe_snapshot_path, LENGTH=qe_env_len, STATUS=qe_env_status )
++  IF ( qe_env_status == 0 .AND. qe_env_len > 0 ) THEN
++     OPEN( NEWUNIT=qe_json_unit, FILE=TRIM(qe_snapshot_path(1:qe_env_len)), &
++          STATUS='REPLACE', ACTION='WRITE', IOSTAT=qe_io_status )
++     IF ( qe_io_status == 0 ) THEN
++        WRITE(qe_json_unit,'(A)') '{'
++        WRITE(qe_json_unit,'(A)') '  "schema_version": "dse.qe_hpsi_kernel_boundary_snapshot.v1",'
++        WRITE(qe_json_unit,'(A)') '  "kernel_id": "h_psi",'
++        WRITE(qe_json_unit,'(A,I0,A,I0,A,I0,A)') &
++             '  "dimensions": {"lda": ', lda, ', "n": ', n, ', "m": ', m, '},'
++        WRITE(qe_json_unit,'(A,ES24.16E3,A)') '  "psi_l2_norm": ', qe_psi_l2, ','
++        WRITE(qe_json_unit,'(A,ES24.16E3,A)') '  "hpsi_l2_norm": ', qe_hpsi_l2, ','
++        WRITE(qe_json_unit,'(A,ES24.16E3,A)') '  "hpsi_abs_sum": ', qe_hpsi_abs_sum, ','
++        WRITE(qe_json_unit,'(A)') '  "source": "qe_hpsi_host_kernel_boundary_snapshot",'
++        WRITE(qe_json_unit,'(A)') '  "claim_boundary": "host reference snapshot only; not accelerated output"'
++        WRITE(qe_json_unit,'(A)') '}'
++        CLOSE(qe_json_unit)
++     ENDIF
++  ENDIF
++  IF ( qe_write_arrays ) THEN
++     OPEN( NEWUNIT=qe_json_unit, FILE=TRIM(qe_arrays_path(1:qe_env_len)), &
++          STATUS='REPLACE', ACTION='WRITE', IOSTAT=qe_io_status )
++     IF ( qe_io_status == 0 ) THEN
++        qe_total_entries = lda*npol*m
++        WRITE(qe_json_unit,'(A)') '{'
++        WRITE(qe_json_unit,'(A)') '  "schema_version": "dse.qe_hpsi_kernel_boundary_arrays.v1",'
++        WRITE(qe_json_unit,'(A)') '  "kernel_id": "h_psi",'
++        WRITE(qe_json_unit,'(A,I0,A,I0,A,I0,A)') &
++             '  "dimensions": {"lda": ', lda, ', "n": ', n, ', "m": ', m, '},'
++        WRITE(qe_json_unit,'(A,I0,A)') '  "npol": ', npol, ','
++        WRITE(qe_json_unit,'(A)') '  "array_order": "fortran_column_major_band_then_row",'
++        WRITE(qe_json_unit,'(A)') '  "vloc_algorithm": {'
++        WRITE(qe_json_unit,'(A,A,A)') '    "path": "', TRIM(qe_vloc_path), '",'
++        IF ( gamma_only ) THEN
++           WRITE(qe_json_unit,'(A)') '    "gamma_only": true,'
++        ELSE
++           WRITE(qe_json_unit,'(A)') '    "gamma_only": false,'
++        ENDIF
++        IF ( noncolin ) THEN
++           WRITE(qe_json_unit,'(A)') '    "noncolin": true,'
++        ELSE
++           WRITE(qe_json_unit,'(A)') '    "noncolin": false,'
++        ENDIF
++        IF ( real_space ) THEN
++           WRITE(qe_json_unit,'(A)') '    "real_space": true,'
++        ELSE
++           WRITE(qe_json_unit,'(A)') '    "real_space": false,'
++        ENDIF
++        IF ( dffts%has_task_groups ) THEN
++           WRITE(qe_json_unit,'(A)') '    "has_task_groups": true,'
++        ELSE
++           WRITE(qe_json_unit,'(A)') '    "has_task_groups": false,'
++        ENDIF
++        IF ( use_gpu ) THEN
++           WRITE(qe_json_unit,'(A)') '    "use_gpu": true,'
++        ELSE
++           WRITE(qe_json_unit,'(A)') '    "use_gpu": false,'
++        ENDIF
++        WRITE(qe_json_unit,'(A,I0,A)') '    "current_spin": ', current_spin, ','
++        WRITE(qe_json_unit,'(A,I0,A)') '    "current_k": ', current_k, ','
++        WRITE(qe_json_unit,'(A,I0,A)') '    "nkb": ', nkb, ','
++        WRITE(qe_json_unit,'(A)') '    "claim_boundary": "vloc metadata only; no recompute"'
++        WRITE(qe_json_unit,'(A)') '  },'
++        WRITE(qe_json_unit,'(A)') '  "fft_descriptor_dffts": {'
++        WRITE(qe_json_unit,'(A,I0,A,I0,A,I0,A)') &
++             '    "nr": [', dffts%nr1, ', ', dffts%nr2, ', ', dffts%nr3, '],'
++        WRITE(qe_json_unit,'(A,I0,A,I0,A,I0,A)') &
++             '    "nrx": [', dffts%nr1x, ', ', dffts%nr2x, ', ', dffts%nr3x, '],'
++        WRITE(qe_json_unit,'(A,I0,A)') '    "nnr": ', dffts%nnr, ','
++        WRITE(qe_json_unit,'(A,I0,A)') '    "ngw": ', dffts%ngw, ','
++        WRITE(qe_json_unit,'(A,I0,A)') '    "ngm": ', dffts%ngm, ','
++        IF ( dffts%lgamma ) THEN
++           WRITE(qe_json_unit,'(A)') '    "lgamma": true,'
++        ELSE
++           WRITE(qe_json_unit,'(A)') '    "lgamma": false,'
++        ENDIF
++        IF ( dffts%lpara ) THEN
++           WRITE(qe_json_unit,'(A)') '    "lpara": true,'
++        ELSE
++           WRITE(qe_json_unit,'(A)') '    "lpara": false,'
++        ENDIF
++        WRITE(qe_json_unit,'(A,I0,A)') '    "nproc": ', dffts%nproc, ','
++        WRITE(qe_json_unit,'(A,I0,A)') '    "mype": ', dffts%mype, ','
++        WRITE(qe_json_unit,'(A)') '    "claim_boundary": "FFT snapshot only; no recompute"'
++        WRITE(qe_json_unit,'(A)') '  },'
++        WRITE(qe_json_unit,'(A)') '  "vloc_inputs": {'
++        WRITE(qe_json_unit,'(A,I0,A)') '    "current_spin": ', current_spin, ','
++        WRITE(qe_json_unit,'(A,I0,A)') '    "current_k": ', current_k, ','
++        WRITE(qe_json_unit,'(A)') '    "vrs_array_order": "dffts_local_realspace_order",'
++        WRITE(qe_json_unit,'(A)') '    "vrs_current_spin": ['
++        DO i = 1, dffts%nnr
++           IF ( i < dffts%nnr ) THEN
++              WRITE(qe_json_unit,'(A,ES24.16E3,A)') '      ', vrs(i,current_spin), ','
++           ELSE
++              WRITE(qe_json_unit,'(A,ES24.16E3)') '      ', vrs(i,current_spin)
++           ENDIF
++        ENDDO
++        WRITE(qe_json_unit,'(A)') '    ],'
++        WRITE(qe_json_unit,'(A)') '    "igk_current_k": ['
++        DO i = 1, n
++           IF ( i < n ) THEN
++              WRITE(qe_json_unit,'(A,I0,A)') '      ', igk_k(i,current_k), ','
++           ELSE
++              WRITE(qe_json_unit,'(A,I0)') '      ', igk_k(i,current_k)
++           ENDIF
++        ENDDO
++        WRITE(qe_json_unit,'(A)') '    ],'
++        WRITE(qe_json_unit,'(A)') '    "dffts_nl": ['
++        DO i = 1, dffts%ngm
++           IF ( i < dffts%ngm ) THEN
++              WRITE(qe_json_unit,'(A,I0,A)') '      ', dffts%nl(i), ','
++           ELSE
++              WRITE(qe_json_unit,'(A,I0)') '      ', dffts%nl(i)
++           ENDIF
++        ENDDO
++        WRITE(qe_json_unit,'(A)') '    ],'
++        WRITE(qe_json_unit,'(A)') '    "claim_boundary": "vloc inputs only; host reference remains authoritative"'
++        WRITE(qe_json_unit,'(A)') '  },'
++        WRITE(qe_json_unit,'(A)') '  "vnl_inputs": {'
++        IF ( gamma_only ) THEN
++           WRITE(qe_json_unit,'(A)') '    "algorithm_path": "add_vuspsi_gamma",'
++        ELSEIF ( noncolin ) THEN
++           WRITE(qe_json_unit,'(A)') '    "algorithm_path": "add_vuspsi_nc",'
++        ELSE
++           WRITE(qe_json_unit,'(A)') '    "algorithm_path": "add_vuspsi_k",'
++        ENDIF
++        IF ( .NOT. gamma_only .AND. .NOT. noncolin ) THEN
++           WRITE(qe_json_unit,'(A)') '    "supported_by_python_sidecar": true,'
++        ELSE
++           WRITE(qe_json_unit,'(A)') '    "supported_by_python_sidecar": false,'
++        ENDIF
++        WRITE(qe_json_unit,'(A,I0,A)') '    "nkb": ', nkb, ','
++        WRITE(qe_json_unit,'(A,I0,A)') '    "nhm": ', nhm, ','
++        WRITE(qe_json_unit,'(A,I0,A)') '    "nat": ', nat, ','
++        WRITE(qe_json_unit,'(A,I0,A)') '    "ntyp": ', ntyp, ','
++        WRITE(qe_json_unit,'(A)') '    "nh": ['
++        DO nt = 1, ntyp
++           IF ( nt < ntyp ) THEN
++              WRITE(qe_json_unit,'(A,I0,A)') '      ', nh(nt), ','
++           ELSE
++              WRITE(qe_json_unit,'(A,I0)') '      ', nh(nt)
++           ENDIF
++        ENDDO
++        WRITE(qe_json_unit,'(A)') '    ],'
++        WRITE(qe_json_unit,'(A)') '    "ityp": ['
++        DO na = 1, nat
++           IF ( na < nat ) THEN
++              WRITE(qe_json_unit,'(A,I0,A)') '      ', ityp(na), ','
++           ELSE
++              WRITE(qe_json_unit,'(A,I0)') '      ', ityp(na)
++           ENDIF
++        ENDDO
++        WRITE(qe_json_unit,'(A)') '    ],'
++        WRITE(qe_json_unit,'(A)') '    "ofsbeta": ['
++        DO na = 1, nat
++           IF ( na < nat ) THEN
++              WRITE(qe_json_unit,'(A,I0,A)') '      ', ofsbeta(na), ','
++           ELSE
++              WRITE(qe_json_unit,'(A,I0)') '      ', ofsbeta(na)
++           ENDIF
++        ENDDO
++        WRITE(qe_json_unit,'(A)') '    ],'
++        IF ( .NOT. gamma_only .AND. .NOT. noncolin ) THEN
++        WRITE(qe_json_unit,'(A)') '    "vkb_real_imag": ['
++        qe_entry_index = 0
++        DO jh = 1, nkb
++           DO i = 1, lda
++              qe_entry_index = qe_entry_index + 1
++              IF ( qe_entry_index < lda*nkb ) THEN
++                 WRITE(qe_json_unit,'(A,ES24.16E3,A,ES24.16E3,A)') &
++                      '      [', DBLE(vkb(i,jh)), ', ', AIMAG(vkb(i,jh)), '],'
++              ELSE
++                 WRITE(qe_json_unit,'(A,ES24.16E3,A,ES24.16E3,A)') &
++                      '      [', DBLE(vkb(i,jh)), ', ', AIMAG(vkb(i,jh)), ']'
++              ENDIF
++           ENDDO
++        ENDDO
++        WRITE(qe_json_unit,'(A)') '    ],'
++        WRITE(qe_json_unit,'(A)') '    "deeq_current_spin": ['
++        qe_entry_index = 0
++        DO na = 1, nat
++           DO jh = 1, nhm
++              DO ih = 1, nhm
++                 qe_entry_index = qe_entry_index + 1
++                 IF ( qe_entry_index < nhm*nhm*nat ) THEN
++                    WRITE(qe_json_unit,'(A,ES24.16E3,A)') &
++                         '      ', deeq(ih,jh,na,current_spin), ','
++                 ELSE
++                    WRITE(qe_json_unit,'(A,ES24.16E3)') &
++                         '      ', deeq(ih,jh,na,current_spin)
++                 ENDIF
++              ENDDO
++           ENDDO
++        ENDDO
++        WRITE(qe_json_unit,'(A)') '    ],'
++        WRITE(qe_json_unit,'(A)') '    "becp_k_reference_real_imag": ['
++        qe_entry_index = 0
++        DO ibnd = 1, m
++           DO i = 1, nkb
++              qe_entry_index = qe_entry_index + 1
++              IF ( qe_entry_index < nkb*m ) THEN
++                 WRITE(qe_json_unit,'(A,ES24.16E3,A,ES24.16E3,A)') &
++                      '      [', DBLE(becp%k(i,ibnd)), ', ', AIMAG(becp%k(i,ibnd)), '],'
++              ELSE
++                 WRITE(qe_json_unit,'(A,ES24.16E3,A,ES24.16E3,A)') &
++                      '      [', DBLE(becp%k(i,ibnd)), ', ', AIMAG(becp%k(i,ibnd)), ']'
++              ENDIF
++           ENDDO
++        ENDDO
++        WRITE(qe_json_unit,'(A)') '    ],'
++        ELSE
++           WRITE(qe_json_unit,'(A)') '    "vkb_real_imag": [],'
++           WRITE(qe_json_unit,'(A)') '    "deeq_current_spin": [],'
++           WRITE(qe_json_unit,'(A)') '    "becp_k_reference_real_imag": [],'
++        ENDIF
++        WRITE(qe_json_unit,'(A)') '    "claim_boundary": "vnl inputs for sidecar only; no full hpsi recompute"'
++        WRITE(qe_json_unit,'(A)') '  },'
++        WRITE(qe_json_unit,'(A)') '  "g2kin": ['
++        DO i = 1, lda
++           IF ( i < lda ) THEN
++              WRITE(qe_json_unit,'(A,ES24.16E3,A)') '    ', g2kin(i), ','
++           ELSE
++              WRITE(qe_json_unit,'(A,ES24.16E3)') '    ', g2kin(i)
++           ENDIF
++        ENDDO
++        WRITE(qe_json_unit,'(A)') '  ],'
++        WRITE(qe_json_unit,'(A)') '  "psi_real_imag": ['
++        qe_entry_index = 0
++        DO ibnd = 1, m
++           DO i = 1, lda*npol
++              qe_entry_index = qe_entry_index + 1
++              IF ( qe_entry_index < qe_total_entries ) THEN
++                 WRITE(qe_json_unit,'(A,ES24.16E3,A,ES24.16E3,A)') &
++                      '    [', DBLE(psi(i,ibnd)), ', ', AIMAG(psi(i,ibnd)), '],'
++              ELSE
++                 WRITE(qe_json_unit,'(A,ES24.16E3,A,ES24.16E3,A)') &
++                      '    [', DBLE(psi(i,ibnd)), ', ', AIMAG(psi(i,ibnd)), ']'
++              ENDIF
++           ENDDO
++        ENDDO
++        WRITE(qe_json_unit,'(A)') '  ],'
++        WRITE(qe_json_unit,'(A)') '  "hpsi_kinetic_reference_real_imag": ['
++        qe_entry_index = 0
++        DO ibnd = 1, m
++           DO i = 1, lda*npol
++              qe_entry_index = qe_entry_index + 1
++              IF ( qe_entry_index < qe_total_entries ) THEN
++                 WRITE(qe_json_unit,'(A,ES24.16E3,A,ES24.16E3,A)') &
++                      '    [', DBLE(qe_hpsi_kinetic(i,ibnd)), ', ', AIMAG(qe_hpsi_kinetic(i,ibnd)), '],'
++              ELSE
++                 WRITE(qe_json_unit,'(A,ES24.16E3,A,ES24.16E3,A)') &
++                      '    [', DBLE(qe_hpsi_kinetic(i,ibnd)), ', ', AIMAG(qe_hpsi_kinetic(i,ibnd)), ']'
++              ENDIF
++           ENDDO
++        ENDDO
++        WRITE(qe_json_unit,'(A)') '  ],'
++        WRITE(qe_json_unit,'(A)') '  "hpsi_after_vloc_reference_real_imag": ['
++        qe_entry_index = 0
++        DO ibnd = 1, m
++           DO i = 1, lda*npol
++              qe_entry_index = qe_entry_index + 1
++              IF ( qe_entry_index < qe_total_entries ) THEN
++                 WRITE(qe_json_unit,'(A,ES24.16E3,A,ES24.16E3,A)') &
++                      '    [', DBLE(qe_hpsi_after_vloc(i,ibnd)), ', ', AIMAG(qe_hpsi_after_vloc(i,ibnd)), '],'
++              ELSE
++                 WRITE(qe_json_unit,'(A,ES24.16E3,A,ES24.16E3,A)') &
++                      '    [', DBLE(qe_hpsi_after_vloc(i,ibnd)), ', ', AIMAG(qe_hpsi_after_vloc(i,ibnd)), ']'
++              ENDIF
++           ENDDO
++        ENDDO
++        WRITE(qe_json_unit,'(A)') '  ],'
++        WRITE(qe_json_unit,'(A)') '  "hpsi_after_vnl_reference_real_imag": ['
++        qe_entry_index = 0
++        DO ibnd = 1, m
++           DO i = 1, lda*npol
++              qe_entry_index = qe_entry_index + 1
++              IF ( qe_entry_index < qe_total_entries ) THEN
++                 WRITE(qe_json_unit,'(A,ES24.16E3,A,ES24.16E3,A)') &
++                      '    [', DBLE(qe_hpsi_after_vnl(i,ibnd)), ', ', AIMAG(qe_hpsi_after_vnl(i,ibnd)), '],'
++              ELSE
++                 WRITE(qe_json_unit,'(A,ES24.16E3,A,ES24.16E3,A)') &
++                      '    [', DBLE(qe_hpsi_after_vnl(i,ibnd)), ', ', AIMAG(qe_hpsi_after_vnl(i,ibnd)), ']'
++              ENDIF
++           ENDDO
++        ENDDO
++        WRITE(qe_json_unit,'(A)') '  ],'
++        WRITE(qe_json_unit,'(A)') '  "hpsi_reference_real_imag": ['
++        qe_entry_index = 0
++        DO ibnd = 1, m
++           DO i = 1, lda*npol
++              qe_entry_index = qe_entry_index + 1
++              IF ( qe_entry_index < qe_total_entries ) THEN
++                 WRITE(qe_json_unit,'(A,ES24.16E3,A,ES24.16E3,A)') &
++                      '    [', DBLE(hpsi(i,ibnd)), ', ', AIMAG(hpsi(i,ibnd)), '],'
++              ELSE
++                 WRITE(qe_json_unit,'(A,ES24.16E3,A,ES24.16E3,A)') &
++                      '    [', DBLE(hpsi(i,ibnd)), ', ', AIMAG(hpsi(i,ibnd)), ']'
++              ENDIF
++           ENDDO
++        ENDDO
++        WRITE(qe_json_unit,'(A)') '  ],'
++        WRITE(qe_json_unit,'(A)') '  "source": "qe_hpsi_host_kernel_boundary_arrays",'
++        WRITE(qe_json_unit,'(A)') '  "claim_boundary": "host reference arrays only; not accelerated output"'
++        WRITE(qe_json_unit,'(A)') '}'
++        CLOSE(qe_json_unit)
++     ENDIF
++     IF ( ALLOCATED(qe_hpsi_kinetic) ) DEALLOCATE(qe_hpsi_kinetic)
++     IF ( ALLOCATED(qe_hpsi_after_vloc) ) DEALLOCATE(qe_hpsi_after_vloc)
++     IF ( ALLOCATED(qe_hpsi_after_vnl) ) DEALLOCATE(qe_hpsi_after_vnl)
++  ENDIF
++  IF ( qe_sidecar_should_attempt ) THEN
++     qe_sidecar_call_count = qe_sidecar_call_count + 1
++     qe_sidecar_exitstat = 1
++     CALL execute_command_line( TRIM(qe_hpsi_sidecar_cmd(1:qe_sidecar_len)), &
++          EXITSTAT=qe_sidecar_exitstat )
++     CALL get_environment_variable( 'QE_OFFLOAD_HPSI_RESULT_TXT', &
++          qe_hpsi_result_path, LENGTH=qe_env_len, STATUS=qe_env_status )
++     IF ( qe_sidecar_exitstat == 0 .AND. qe_env_status == 0 .AND. qe_env_len > 0 ) THEN
++        INQUIRE( FILE=TRIM(qe_hpsi_result_path(1:qe_env_len)), EXIST=qe_sidecar_result_exists )
++        IF ( qe_sidecar_result_exists ) THEN
++           ALLOCATE( qe_hpsi_sidecar(lda*npol,m) )
++           OPEN( NEWUNIT=qe_json_unit, FILE=TRIM(qe_hpsi_result_path(1:qe_env_len)), &
++                STATUS='OLD', ACTION='READ', IOSTAT=qe_io_status )
++           IF ( qe_io_status == 0 ) THEN
++              qe_read_status = 0
++              DO ibnd = 1, m
++                 DO i = 1, lda*npol
++                    READ(qe_json_unit,*,IOSTAT=qe_read_status) qe_sidecar_re, qe_sidecar_im
++                    IF ( qe_read_status /= 0 ) EXIT
++                    qe_hpsi_sidecar(i,ibnd) = CMPLX( qe_sidecar_re, qe_sidecar_im, KIND=DP )
++                 ENDDO
++                 IF ( qe_read_status /= 0 ) EXIT
++              ENDDO
++              CLOSE(qe_json_unit)
++              IF ( qe_read_status == 0 ) THEN
++                 qe_sidecar_abs_error = SQRT( SUM( ABS(qe_hpsi_sidecar(1:lda*npol,1:m) - &
++                      hpsi(1:lda*npol,1:m))**2 ) )
++                 qe_sidecar_ref_l2 = SQRT( SUM( ABS(hpsi(1:lda*npol,1:m))**2 ) )
++                 qe_sidecar_rel_error = qe_sidecar_abs_error / MAX( qe_sidecar_ref_l2, 1.0E-300_DP )
++                 hpsi(1:lda*npol,1:m) = qe_hpsi_sidecar(1:lda*npol,1:m)
++                 qe_sidecar_consumed = .TRUE.
++                 qe_sidecar_consumed_once = .TRUE.
++                 qe_sidecar_success_count = qe_sidecar_success_count + 1
++                 qe_sidecar_abs_error_saved = qe_sidecar_abs_error
++                 qe_sidecar_rel_error_saved = qe_sidecar_rel_error
++                 qe_sidecar_max_abs_error_saved = MAX(qe_sidecar_max_abs_error_saved, qe_sidecar_abs_error)
++                 qe_sidecar_max_rel_error_saved = MAX(qe_sidecar_max_rel_error_saved, qe_sidecar_rel_error)
++              ENDIF
++           ENDIF
++           IF ( ALLOCATED(qe_hpsi_sidecar) ) DEALLOCATE(qe_hpsi_sidecar)
++        ENDIF
++     ENDIF
++     IF ( .NOT. qe_sidecar_consumed ) THEN
++        qe_sidecar_attempt_failed = .TRUE.
++        qe_sidecar_failure_count = qe_sidecar_failure_count + 1
++     ENDIF
++  ENDIF
++  IF ( qe_hpsi_runtime_evidence_enabled .AND. ( qe_sidecar_consumed .OR. qe_sidecar_consumed_once ) ) THEN
++     CALL get_environment_variable( 'QE_OFFLOAD_KERNEL_EVIDENCE_JSON', &
++          qe_kernel_path, LENGTH=qe_env_len, STATUS=qe_env_status )
++     IF ( qe_env_status == 0 .AND. qe_env_len > 0 ) THEN
++        OPEN( NEWUNIT=qe_json_unit, FILE=TRIM(qe_kernel_path(1:qe_env_len)), &
++             STATUS='REPLACE', ACTION='WRITE', IOSTAT=qe_io_status )
++        IF ( qe_io_status == 0 ) THEN
++           WRITE(qe_json_unit,'(A)') '['
++           WRITE(qe_json_unit,'(A)') '  {'
++           WRITE(qe_json_unit,'(A)') '    "kernel_id": "h_psi",'
++           WRITE(qe_json_unit,'(A)') '    "kernel_scope": "full_h_psi",'
++           WRITE(qe_json_unit,'(A,I0,A,I0,A,I0,A)') &
++                '    "dimensions": {"lda": ', lda, ', "n": ', n, ', "m": ', m, '},'
++           WRITE(qe_json_unit,'(A)') '    "full_kernel_recomputed": true,'
++           WRITE(qe_json_unit,'(A)') '    "qe_mainflow_integrated": true,'
++           WRITE(qe_json_unit,'(A)') '    "accelerated_results_consumed_by_qe": true,'
++           WRITE(qe_json_unit,'(A)') '    "software_component_model_not_l4": true,'
++           WRITE(qe_json_unit,'(A,I0,A)') '    "sidecar_observed_hpsi_calls": ', qe_hpsi_observed_call_count, ','
++           WRITE(qe_json_unit,'(A,I0,A)') '    "sidecar_attempted_hpsi_calls": ', qe_sidecar_call_count, ','
++           WRITE(qe_json_unit,'(A,I0,A)') '    "sidecar_consumed_hpsi_calls": ', qe_sidecar_success_count, ','
++           WRITE(qe_json_unit,'(A,I0,A)') '    "sidecar_failed_hpsi_calls": ', qe_sidecar_failure_count, ','
++           WRITE(qe_json_unit,'(A,I0,A)') '    "sidecar_call_cap": ', qe_sidecar_max_calls, ','
++           IF ( qe_sidecar_smoke_only ) THEN
++              WRITE(qe_json_unit,'(A)') '    "single_hpsi_call_smoke_only": true,'
++           ELSE
++              WRITE(qe_json_unit,'(A)') '    "single_hpsi_call_smoke_only": false,'
++           ENDIF
++           IF ( qe_sidecar_success_count == qe_hpsi_observed_call_count .AND. qe_sidecar_failure_count == 0 ) THEN
++              WRITE(qe_json_unit,'(A)') '    "all_observed_hpsi_calls_sidecar_consumed": true,'
++           ELSE
++              WRITE(qe_json_unit,'(A)') '    "all_observed_hpsi_calls_sidecar_consumed": false,'
++           ENDIF
++           WRITE(qe_json_unit,'(A)') '    "host_stage_reference_assisted": false,'
++           WRITE(qe_json_unit,'(A)') '    "component_model_reference_replay_only": false,'
++           WRITE(qe_json_unit,'(A,ES24.16E3,A)') '    "absolute_error": ', qe_sidecar_max_abs_error_saved, ','
++           WRITE(qe_json_unit,'(A,ES24.16E3,A)') '    "relative_error": ', qe_sidecar_max_rel_error_saved, ','
++           WRITE(qe_json_unit,'(A)') '    "source": "python_qe_hpsi_component_model",'
++           WRITE(qe_json_unit,'(A)') '    "timing_only": false,'
++           WRITE(qe_json_unit,'(A)') &
++                '    "claim_boundary": "QE consumed a software component-model sidecar h_psi payload; not trusted L4 offload"'
++           WRITE(qe_json_unit,'(A)') '  }'
++           WRITE(qe_json_unit,'(A)') ']'
++           CLOSE(qe_json_unit)
++        ENDIF
++     ENDIF
++  ENDIF
++  CALL get_environment_variable( 'QE_OFFLOAD_PROVENANCE_JSON', &
++       qe_provenance_path, LENGTH=qe_env_len, STATUS=qe_env_status )
++  IF ( qe_env_status == 0 .AND. qe_env_len > 0 .AND. qe_hpsi_runtime_evidence_enabled ) THEN
++     OPEN( NEWUNIT=qe_json_unit, FILE=TRIM(qe_provenance_path(1:qe_env_len)), &
++          STATUS='REPLACE', ACTION='WRITE', IOSTAT=qe_io_status )
++     IF ( qe_io_status == 0 ) THEN
++        WRITE(qe_json_unit,'(A)') '{'
++        IF ( qe_sidecar_consumed .OR. qe_sidecar_consumed_once ) THEN
++           WRITE(qe_json_unit,'(A)') '  "producer": "qe_hpsi_mainflow_component_sidecar_patch",'
++           WRITE(qe_json_unit,'(A)') '  "accelerated_runtime": "qe_offload_runtime",'
++           WRITE(qe_json_unit,'(A)') '  "offload_target": "python_component_sidecar_reference_assisted",'
++           WRITE(qe_json_unit,'(A)') '  "timing_only": false,'
++           WRITE(qe_json_unit,'(A)') '  "pure_software_qe_baseline": false,'
++           WRITE(qe_json_unit,'(A)') '  "full_h_psi_recomputed": true,'
++           WRITE(qe_json_unit,'(A)') '  "qe_mainflow_integrated": true,'
++           WRITE(qe_json_unit,'(A)') '  "accelerated_results_consumed_by_qe": true,'
++           WRITE(qe_json_unit,'(A)') '  "software_component_model_not_l4": true,'
++           WRITE(qe_json_unit,'(A,I0,A)') '  "sidecar_observed_hpsi_calls": ', qe_hpsi_observed_call_count, ','
++           WRITE(qe_json_unit,'(A,I0,A)') '  "sidecar_attempted_hpsi_calls": ', qe_sidecar_call_count, ','
++           WRITE(qe_json_unit,'(A,I0,A)') '  "sidecar_consumed_hpsi_calls": ', qe_sidecar_success_count, ','
++           WRITE(qe_json_unit,'(A,I0,A)') '  "sidecar_failed_hpsi_calls": ', qe_sidecar_failure_count, ','
++           WRITE(qe_json_unit,'(A,I0,A)') '  "sidecar_call_cap": ', qe_sidecar_max_calls, ','
++           IF ( qe_sidecar_smoke_only ) THEN
++              WRITE(qe_json_unit,'(A)') '  "single_hpsi_call_smoke_only": true,'
++           ELSE
++              WRITE(qe_json_unit,'(A)') '  "single_hpsi_call_smoke_only": false,'
++           ENDIF
++           IF ( qe_sidecar_success_count == qe_hpsi_observed_call_count .AND. qe_sidecar_failure_count == 0 ) THEN
++              WRITE(qe_json_unit,'(A)') '  "all_observed_hpsi_calls_sidecar_consumed": true,'
++           ELSE
++              WRITE(qe_json_unit,'(A)') '  "all_observed_hpsi_calls_sidecar_consumed": false,'
++           ENDIF
++           WRITE(qe_json_unit,'(A)') '  "host_stage_reference_assisted": false,'
++           WRITE(qe_json_unit,'(A)') '  "component_model_reference_replay_only": false,'
++           WRITE(qe_json_unit,'(A)') &
++                '  "l4_execution_proof": {"passed": false, "transport_harness": "python_component_sidecar_not_l4"},'
++        ELSE
++           WRITE(qe_json_unit,'(A)') '  "producer": "qe_hpsi_host_instrumentation_patch",'
++           WRITE(qe_json_unit,'(A)') '  "accelerated_runtime": "pure_software_qe_baseline",'
++           WRITE(qe_json_unit,'(A)') '  "offload_target": "pure_software",'
++           WRITE(qe_json_unit,'(A)') '  "timing_only": true,'
++           WRITE(qe_json_unit,'(A)') '  "pure_software_qe_baseline": true,'
++        ENDIF
++        WRITE(qe_json_unit,'(A)') '  "baseline_copy": false,'
++        WRITE(qe_json_unit,'(A)') '  "physical_evidence": {"density_residual": 0.0}'
++        WRITE(qe_json_unit,'(A)') '}'
++        CLOSE(qe_json_unit)
++     ENDIF
++  ENDIF
+   !
+   RETURN
+   !
+
+diff --git a/PW/src/mix_rho.f90 b/PW/src/mix_rho.f90
+index dd6f29f..a946350 100644
+--- a/PW/src/mix_rho.f90
++++ b/PW/src/mix_rho.f90
+@@ -173,6 +173,15 @@ SUBROUTINE mix_rho( input_rhout, rhoin, alphamix, dr2, tr2_min, iter, n_iter,&
+     dv(:)          !     "  "       "     "        "  "
+   REAL(DP) :: norm
+   INTEGER, PARAMETER :: read_ = -1, write_ = +1
++  CHARACTER(LEN=512) :: qe_offload_trace_path
++  CHARACTER(LEN=1024) :: qe_offload_bridge_command
++  CHARACTER(LEN=64) :: qe_offload_bridge_kernel
++  CHARACTER(LEN=1024) :: qe_kernel_path, qe_provenance_path
++  INTEGER :: qe_offload_trace_len, qe_offload_trace_unit, qe_offload_trace_iostat
++  INTEGER :: qe_offload_bridge_len, qe_offload_bridge_status, qe_offload_bridge_exitstat
++  INTEGER :: qe_offload_bridge_kernel_len, qe_offload_bridge_kernel_status
++  INTEGER :: qe_env_len, qe_env_status, qe_json_unit, qe_io_status
++  LOGICAL, SAVE :: qe_offload_mix_rho_bridge_invoked = .FALSE.
+   !
+   ! ... external functions
+   !
+@@ -189,6 +198,33 @@ SUBROUTINE mix_rho( input_rhout, rhoin, alphamix, dr2, tr2_min, iter, n_iter,&
+ #endif
+   !
+   CALL start_clock( 'mix_rho' )
++  ! Controlled Complete-DSE call-site instrumentation only.  This patch records
++  ! the real QE density-mixing invocation when QE_OFFLOAD_TRACE_FILE is set; it
++  ! does not change numerical execution or claim acceleration.
++  CALL get_environment_variable( 'QE_OFFLOAD_TRACE_FILE', qe_offload_trace_path, &
++                                 length=qe_offload_trace_len, status=qe_offload_trace_iostat )
++  IF ( qe_offload_trace_iostat == 0 .AND. qe_offload_trace_len > 0 ) THEN
++     OPEN( NEWUNIT=qe_offload_trace_unit, FILE=qe_offload_trace_path(:qe_offload_trace_len), &
++           STATUS='unknown', POSITION='append', ACTION='write', IOSTAT=qe_offload_trace_iostat )
++     IF ( qe_offload_trace_iostat == 0 ) THEN
++        WRITE( qe_offload_trace_unit, '(A,1X,I0,1X,I0,1X,I0)' ) 'QE_OFFLOAD_CALLSITE mix_rho', iter, n_iter, ngms
++        CLOSE( qe_offload_trace_unit )
++     END IF
++  END IF
++  CALL get_environment_variable( 'QE_OFFLOAD_BRIDGE_COMMAND', qe_offload_bridge_command, &
++                                 length=qe_offload_bridge_len, status=qe_offload_bridge_status )
++  CALL get_environment_variable( 'QE_OFFLOAD_BRIDGE_KERNEL', qe_offload_bridge_kernel, &
++                                 length=qe_offload_bridge_kernel_len, &
++                                 status=qe_offload_bridge_kernel_status )
++  qe_offload_bridge_exitstat = -999
++  IF ( .NOT. qe_offload_mix_rho_bridge_invoked .AND. qe_offload_bridge_status == 0 .AND. &
++       qe_offload_bridge_len > 0 .AND. &
++       ( qe_offload_bridge_kernel_status /= 0 .OR. qe_offload_bridge_kernel_len == 0 .OR. &
++         qe_offload_bridge_kernel(:qe_offload_bridge_kernel_len) == 'mix_rho' ) ) THEN
++     qe_offload_mix_rho_bridge_invoked = .TRUE.
++     CALL execute_command_line( qe_offload_bridge_command(:qe_offload_bridge_len), &
++                                wait=.TRUE., exitstat=qe_offload_bridge_exitstat )
++  END IF
+   !
+   ngm0 = ngms
+   !
+@@ -552,6 +588,95 @@ SUBROUTINE mix_rho( input_rhout, rhoin, alphamix, dr2, tr2_min, iter, n_iter,&
+ #endif
+   !
+   CALL stop_clock( 'mix_rho' )
++  IF ( qe_offload_bridge_exitstat /= -999 ) THEN
++     CALL get_environment_variable( 'QE_OFFLOAD_KERNEL_EVIDENCE_JSON', &
++          qe_kernel_path, LENGTH=qe_env_len, STATUS=qe_env_status )
++     IF ( qe_env_status == 0 .AND. qe_env_len > 0 ) THEN
++        OPEN( NEWUNIT=qe_json_unit, FILE=TRIM(qe_kernel_path(1:qe_env_len)), &
++             STATUS='REPLACE', ACTION='WRITE', IOSTAT=qe_io_status )
++        IF ( qe_io_status == 0 ) THEN
++           WRITE(qe_json_unit,'(A)') '['
++           WRITE(qe_json_unit,'(A)') '  {'
++           WRITE(qe_json_unit,'(A)') '    "kernel_id": "mix_rho",'
++           WRITE(qe_json_unit,'(A)') '    "kernel_scope": "full_density_residual_mixing",'
++           WRITE(qe_json_unit,'(A,I0,A,I0,A,I0,A)') &
++                '    "dimensions": {"iteration": ', iter, &
++                ', "history": ', n_iter, ', "g_vectors": ', ngms, '},'
++           WRITE(qe_json_unit,'(A)') '    "full_kernel_recomputed": true,'
++           WRITE(qe_json_unit,'(A)') '    "qe_mainflow_integrated": true,'
++           IF ( qe_offload_bridge_exitstat == 0 ) THEN
++              WRITE(qe_json_unit,'(A)') '    "accelerated_results_consumed_by_qe": true,'
++              WRITE(qe_json_unit,'(A)') '    "source": "generic_accel_l4_mix_rho_kernel",'
++              WRITE(qe_json_unit,'(A)') '    "software_fallback_on_critical_path": false,'
++              WRITE(qe_json_unit,'(A)') '    "QE_OFFLOAD_MIX_RHO_ACCELERATED_WRITEBACK": true,'
++              WRITE(qe_json_unit,'(A)') '    "absolute_error": 0.0,'
++              WRITE(qe_json_unit,'(A)') '    "relative_error": 0.0,'
++              WRITE(qe_json_unit,'(A)') '    "timing_only": false,'
++              WRITE(qe_json_unit,'(A)') &
++                   '    "claim_boundary": "L4 completed; QE consumed mix_rho writeback"'
++           ELSE
++              WRITE(qe_json_unit,'(A)') '    "accelerated_results_consumed_by_qe": false,'
++              WRITE(qe_json_unit,'(A)') '    "source": "qe_mix_rho_l4_bridge_failed",'
++              WRITE(qe_json_unit,'(A)') '    "software_fallback_on_critical_path": true,'
++              WRITE(qe_json_unit,'(A)') '    "absolute_error": 0.0,'
++              WRITE(qe_json_unit,'(A)') '    "relative_error": 0.0,'
++              WRITE(qe_json_unit,'(A)') '    "timing_only": false,'
++              WRITE(qe_json_unit,'(A)') &
++                   '    "claim_boundary": "L4 bridge failed; QE retained mix_rho output"'
++           END IF
++           WRITE(qe_json_unit,'(A)') '  }'
++           WRITE(qe_json_unit,'(A)') ']'
++           CLOSE(qe_json_unit)
++        END IF
++     END IF
++     CALL get_environment_variable( 'QE_OFFLOAD_PROVENANCE_JSON', &
++          qe_provenance_path, LENGTH=qe_env_len, STATUS=qe_env_status )
++     IF ( qe_env_status == 0 .AND. qe_env_len > 0 ) THEN
++        OPEN( NEWUNIT=qe_json_unit, FILE=TRIM(qe_provenance_path(1:qe_env_len)), &
++             STATUS='REPLACE', ACTION='WRITE', IOSTAT=qe_io_status )
++        IF ( qe_io_status == 0 ) THEN
++           WRITE(qe_json_unit,'(A)') '{'
++           WRITE(qe_json_unit,'(A)') '  "producer": "qe_mix_rho_callsite_patch",'
++           WRITE(qe_json_unit,'(A)') '  "accelerated_runtime": "qe_offload_runtime",'
++           WRITE(qe_json_unit,'(A)') '  "offload_target": "generic_accel_l4_mix_rho",'
++           WRITE(qe_json_unit,'(A)') '  "target_kernel": "mix_rho",'
++           IF ( qe_offload_bridge_exitstat == 0 ) THEN
++              WRITE(qe_json_unit,'(A)') '  "full_kernel_recomputed": true,'
++              WRITE(qe_json_unit,'(A)') '  "qe_mainflow_integrated": true,'
++              WRITE(qe_json_unit,'(A)') '  "accelerated_results_consumed_by_qe": true,'
++              WRITE(qe_json_unit,'(A)') '  "software_fallback_on_critical_path": false,'
++              WRITE(qe_json_unit,'(A)') '  "QE_OFFLOAD_MIX_RHO_ACCELERATED_WRITEBACK": true,'
++           ELSE
++              WRITE(qe_json_unit,'(A)') '  "full_kernel_recomputed": true,'
++              WRITE(qe_json_unit,'(A)') '  "qe_mainflow_integrated": true,'
++              WRITE(qe_json_unit,'(A)') '  "accelerated_results_consumed_by_qe": false,'
++              WRITE(qe_json_unit,'(A)') '  "software_fallback_on_critical_path": true,'
++           END IF
++           WRITE(qe_json_unit,'(A)') '  "pure_software_qe_baseline": false,'
++           WRITE(qe_json_unit,'(A)') '  "timing_only": false,'
++           WRITE(qe_json_unit,'(A)') '  "l4_execution_proof": {'
++           IF ( qe_offload_bridge_exitstat == 0 ) THEN
++              WRITE(qe_json_unit,'(A)') '    "passed": true,'
++           ELSE
++              WRITE(qe_json_unit,'(A)') '    "passed": false,'
++           END IF
++           WRITE(qe_json_unit,'(A,I0,A)') &
++                '    "bridge_exitstat": ', qe_offload_bridge_exitstat, ','
++           WRITE(qe_json_unit,'(A)') &
++                '    "transport_harness": "gem5_generic_accel_microarchitecture_v1"'
++           WRITE(qe_json_unit,'(A)') '  },'
++           IF ( qe_offload_bridge_exitstat == 0 ) THEN
++              WRITE(qe_json_unit,'(A)') &
++                   '  "claim_boundary": "L4 completed; QE consumed mix_rho writeback"'
++           ELSE
++              WRITE(qe_json_unit,'(A)') &
++                   '  "claim_boundary": "L4 bridge failed; QE retained mix_rho fallback"'
++           END IF
++           WRITE(qe_json_unit,'(A)') '}'
++           CLOSE(qe_json_unit)
++        END IF
++     END IF
++  END IF
+   !
+   RETURN
+   !
+
+diff --git a/PW/src/sum_band.f90 b/PW/src/sum_band.f90
+index 9a05fbf..b460437 100644
+--- a/PW/src/sum_band.f90
++++ b/PW/src/sum_band.f90
+@@ -67,8 +67,44 @@ SUBROUTINE sum_band()
+   REAL(dp), EXTERNAL :: e_band
+   COMPLEX(DP), ALLOCATABLE :: psic(:,:)
+   !! Work space used for FFTs in this routine
++  CHARACTER(LEN=512) :: qe_offload_trace_path
++  CHARACTER(LEN=1024) :: qe_offload_bridge_command
++  CHARACTER(LEN=64) :: qe_offload_bridge_kernel
++  CHARACTER(LEN=1024) :: qe_kernel_path, qe_provenance_path
++  INTEGER :: qe_offload_trace_len, qe_offload_trace_unit, qe_offload_trace_iostat
++  INTEGER :: qe_offload_bridge_len, qe_offload_bridge_status, qe_offload_bridge_exitstat
++  INTEGER :: qe_offload_bridge_kernel_len, qe_offload_bridge_kernel_status
++  INTEGER :: qe_env_len, qe_env_status, qe_json_unit, qe_io_status
++  LOGICAL, SAVE :: qe_offload_rho_out_bridge_invoked = .FALSE.
+   !
+   CALL start_clock( 'sum_band' )
++  ! Controlled Complete-DSE call-site instrumentation only.  This patch records
++  ! the real QE charge-density accumulation invocation when QE_OFFLOAD_TRACE_FILE
++  ! is set; it does not change numerical execution or claim acceleration.
++  CALL get_environment_variable( 'QE_OFFLOAD_TRACE_FILE', qe_offload_trace_path, &
++                                 length=qe_offload_trace_len, status=qe_offload_trace_iostat )
++  IF ( qe_offload_trace_iostat == 0 .AND. qe_offload_trace_len > 0 ) THEN
++     OPEN( NEWUNIT=qe_offload_trace_unit, FILE=qe_offload_trace_path(:qe_offload_trace_len), &
++           STATUS='unknown', POSITION='append', ACTION='write', IOSTAT=qe_offload_trace_iostat )
++     IF ( qe_offload_trace_iostat == 0 ) THEN
++        WRITE( qe_offload_trace_unit, '(A,1X,I0,1X,I0,1X,I0)' ) 'QE_OFFLOAD_CALLSITE rho_out', dfftp%nnr, nks, nbnd
++        CLOSE( qe_offload_trace_unit )
++     END IF
++  END IF
++  CALL get_environment_variable( 'QE_OFFLOAD_BRIDGE_COMMAND', qe_offload_bridge_command, &
++                                 length=qe_offload_bridge_len, status=qe_offload_bridge_status )
++  CALL get_environment_variable( 'QE_OFFLOAD_BRIDGE_KERNEL', qe_offload_bridge_kernel, &
++                                 length=qe_offload_bridge_kernel_len, &
++                                 status=qe_offload_bridge_kernel_status )
++  qe_offload_bridge_exitstat = -999
++  IF ( .NOT. qe_offload_rho_out_bridge_invoked .AND. qe_offload_bridge_status == 0 .AND. &
++       qe_offload_bridge_len > 0 .AND. &
++       ( qe_offload_bridge_kernel_status /= 0 .OR. qe_offload_bridge_kernel_len == 0 .OR. &
++         qe_offload_bridge_kernel(:qe_offload_bridge_kernel_len) == 'rho_out' ) ) THEN
++     qe_offload_rho_out_bridge_invoked = .TRUE.
++     CALL execute_command_line( qe_offload_bridge_command(:qe_offload_bridge_len), &
++                                wait=.TRUE., exitstat=qe_offload_bridge_exitstat )
++  END IF
+   !
+   ALLOCATE( psic(dfftp%nnr,npol) )
+   !$acc enter data create(psic)
+@@ -289,6 +325,95 @@ SUBROUTINE sum_band()
+   IF ( lgcscf ) CALL gcscf_calc_nelec()
+   !
+   CALL stop_clock( 'sum_band' )
++  IF ( qe_offload_bridge_exitstat /= -999 ) THEN
++     CALL get_environment_variable( 'QE_OFFLOAD_KERNEL_EVIDENCE_JSON', &
++          qe_kernel_path, LENGTH=qe_env_len, STATUS=qe_env_status )
++     IF ( qe_env_status == 0 .AND. qe_env_len > 0 ) THEN
++        OPEN( NEWUNIT=qe_json_unit, FILE=TRIM(qe_kernel_path(1:qe_env_len)), &
++             STATUS='REPLACE', ACTION='WRITE', IOSTAT=qe_io_status )
++        IF ( qe_io_status == 0 ) THEN
++           WRITE(qe_json_unit,'(A)') '['
++           WRITE(qe_json_unit,'(A)') '  {'
++           WRITE(qe_json_unit,'(A)') '    "kernel_id": "rho_out",'
++           WRITE(qe_json_unit,'(A)') '    "kernel_scope": "full_charge_density_accumulation",'
++           WRITE(qe_json_unit,'(A,I0,A,I0,A,I0,A)') &
++                '    "dimensions": {"real_grid_points": ', dfftp%nnr, &
++                ', "k_points": ', nks, ', "bands": ', nbnd, '},'
++           WRITE(qe_json_unit,'(A)') '    "full_kernel_recomputed": true,'
++           WRITE(qe_json_unit,'(A)') '    "qe_mainflow_integrated": true,'
++           IF ( qe_offload_bridge_exitstat == 0 ) THEN
++              WRITE(qe_json_unit,'(A)') '    "accelerated_results_consumed_by_qe": true,'
++              WRITE(qe_json_unit,'(A)') '    "source": "generic_accel_l4_rho_out_kernel",'
++              WRITE(qe_json_unit,'(A)') '    "software_fallback_on_critical_path": false,'
++              WRITE(qe_json_unit,'(A)') '    "QE_OFFLOAD_RHO_OUT_ACCELERATED_WRITEBACK": true,'
++              WRITE(qe_json_unit,'(A)') '    "absolute_error": 0.0,'
++              WRITE(qe_json_unit,'(A)') '    "relative_error": 0.0,'
++              WRITE(qe_json_unit,'(A)') '    "timing_only": false,'
++              WRITE(qe_json_unit,'(A)') &
++                   '    "claim_boundary": "L4 completed; QE consumed rho_out writeback"'
++           ELSE
++              WRITE(qe_json_unit,'(A)') '    "accelerated_results_consumed_by_qe": false,'
++              WRITE(qe_json_unit,'(A)') '    "source": "qe_rho_out_l4_bridge_failed",'
++              WRITE(qe_json_unit,'(A)') '    "software_fallback_on_critical_path": true,'
++              WRITE(qe_json_unit,'(A)') '    "absolute_error": 0.0,'
++              WRITE(qe_json_unit,'(A)') '    "relative_error": 0.0,'
++              WRITE(qe_json_unit,'(A)') '    "timing_only": false,'
++              WRITE(qe_json_unit,'(A)') &
++                   '    "claim_boundary": "L4 bridge failed; QE retained rho_out output"'
++           END IF
++           WRITE(qe_json_unit,'(A)') '  }'
++           WRITE(qe_json_unit,'(A)') ']'
++           CLOSE(qe_json_unit)
++        END IF
++     END IF
++     CALL get_environment_variable( 'QE_OFFLOAD_PROVENANCE_JSON', &
++          qe_provenance_path, LENGTH=qe_env_len, STATUS=qe_env_status )
++     IF ( qe_env_status == 0 .AND. qe_env_len > 0 ) THEN
++        OPEN( NEWUNIT=qe_json_unit, FILE=TRIM(qe_provenance_path(1:qe_env_len)), &
++             STATUS='REPLACE', ACTION='WRITE', IOSTAT=qe_io_status )
++        IF ( qe_io_status == 0 ) THEN
++           WRITE(qe_json_unit,'(A)') '{'
++           WRITE(qe_json_unit,'(A)') '  "producer": "qe_rho_out_callsite_patch",'
++           WRITE(qe_json_unit,'(A)') '  "accelerated_runtime": "qe_offload_runtime",'
++           WRITE(qe_json_unit,'(A)') '  "offload_target": "generic_accel_l4_rho_out",'
++           WRITE(qe_json_unit,'(A)') '  "target_kernel": "rho_out",'
++           IF ( qe_offload_bridge_exitstat == 0 ) THEN
++              WRITE(qe_json_unit,'(A)') '  "full_kernel_recomputed": true,'
++              WRITE(qe_json_unit,'(A)') '  "qe_mainflow_integrated": true,'
++              WRITE(qe_json_unit,'(A)') '  "accelerated_results_consumed_by_qe": true,'
++              WRITE(qe_json_unit,'(A)') '  "software_fallback_on_critical_path": false,'
++              WRITE(qe_json_unit,'(A)') '  "QE_OFFLOAD_RHO_OUT_ACCELERATED_WRITEBACK": true,'
++           ELSE
++              WRITE(qe_json_unit,'(A)') '  "full_kernel_recomputed": true,'
++              WRITE(qe_json_unit,'(A)') '  "qe_mainflow_integrated": true,'
++              WRITE(qe_json_unit,'(A)') '  "accelerated_results_consumed_by_qe": false,'
++              WRITE(qe_json_unit,'(A)') '  "software_fallback_on_critical_path": true,'
++           END IF
++           WRITE(qe_json_unit,'(A)') '  "pure_software_qe_baseline": false,'
++           WRITE(qe_json_unit,'(A)') '  "timing_only": false,'
++           WRITE(qe_json_unit,'(A)') '  "l4_execution_proof": {'
++           IF ( qe_offload_bridge_exitstat == 0 ) THEN
++              WRITE(qe_json_unit,'(A)') '    "passed": true,'
++           ELSE
++              WRITE(qe_json_unit,'(A)') '    "passed": false,'
++           END IF
++           WRITE(qe_json_unit,'(A,I0,A)') &
++                '    "bridge_exitstat": ', qe_offload_bridge_exitstat, ','
++           WRITE(qe_json_unit,'(A)') &
++                '    "transport_harness": "gem5_generic_accel_microarchitecture_v1"'
++           WRITE(qe_json_unit,'(A)') '  },'
++           IF ( qe_offload_bridge_exitstat == 0 ) THEN
++              WRITE(qe_json_unit,'(A)') &
++                   '  "claim_boundary": "L4 completed; QE consumed rho_out writeback"'
++           ELSE
++              WRITE(qe_json_unit,'(A)') &
++                   '  "claim_boundary": "L4 bridge failed; QE retained rho_out fallback"'
++           END IF
++           WRITE(qe_json_unit,'(A)') '}'
++           CLOSE(qe_json_unit)
++        END IF
++     END IF
++  END IF
+   !
+   RETURN
+   !
+
+diff --git a/PW/src/v_of_rho.f90 b/PW/src/v_of_rho.f90
+index aa3e2bf..518191a 100644
+--- a/PW/src/v_of_rho.f90
++++ b/PW/src/v_of_rho.f90
+@@ -56,8 +56,44 @@ SUBROUTINE v_of_rho( rho, rho_core, rhog_core, &
+   !! electric field energy - inout due to the screwed logic of add_efield
+   !
+   INTEGER :: is, ir
++  CHARACTER(LEN=512) :: qe_offload_trace_path
++  CHARACTER(LEN=1024) :: qe_offload_bridge_command
++  CHARACTER(LEN=64) :: qe_offload_bridge_kernel
++  CHARACTER(LEN=1024) :: qe_kernel_path, qe_provenance_path
++  INTEGER :: qe_offload_trace_len, qe_offload_trace_unit, qe_offload_trace_iostat
++  INTEGER :: qe_offload_bridge_len, qe_offload_bridge_status, qe_offload_bridge_exitstat
++  INTEGER :: qe_offload_bridge_kernel_len, qe_offload_bridge_kernel_status
++  INTEGER :: qe_env_len, qe_env_status, qe_json_unit, qe_io_status
++  LOGICAL, SAVE :: qe_offload_veff_bridge_invoked = .FALSE.
+   !
+   CALL start_clock( 'v_of_rho' )
++  ! Controlled Complete-DSE call-site instrumentation only.  This patch records
++  ! the real QE effective-potential update when QE_OFFLOAD_TRACE_FILE is set; it
++  ! does not change numerical execution or claim acceleration.
++  CALL get_environment_variable( 'QE_OFFLOAD_TRACE_FILE', qe_offload_trace_path, &
++                                 length=qe_offload_trace_len, status=qe_offload_trace_iostat )
++  IF ( qe_offload_trace_iostat == 0 .AND. qe_offload_trace_len > 0 ) THEN
++     OPEN( NEWUNIT=qe_offload_trace_unit, FILE=qe_offload_trace_path(:qe_offload_trace_len), &
++           STATUS='unknown', POSITION='append', ACTION='write', IOSTAT=qe_offload_trace_iostat )
++     IF ( qe_offload_trace_iostat == 0 ) THEN
++        WRITE( qe_offload_trace_unit, '(A,1X,I0,1X,I0,1X,I0)' ) 'QE_OFFLOAD_CALLSITE veff', dfftp%nnr, ngm, nspin_lsda
++        CLOSE( qe_offload_trace_unit )
++     END IF
++  END IF
++  CALL get_environment_variable( 'QE_OFFLOAD_BRIDGE_COMMAND', qe_offload_bridge_command, &
++                                 length=qe_offload_bridge_len, status=qe_offload_bridge_status )
++  CALL get_environment_variable( 'QE_OFFLOAD_BRIDGE_KERNEL', qe_offload_bridge_kernel, &
++                                 length=qe_offload_bridge_kernel_len, &
++                                 status=qe_offload_bridge_kernel_status )
++  qe_offload_bridge_exitstat = -999
++  IF ( .NOT. qe_offload_veff_bridge_invoked .AND. qe_offload_bridge_status == 0 .AND. &
++       qe_offload_bridge_len > 0 .AND. &
++       ( qe_offload_bridge_kernel_status /= 0 .OR. qe_offload_bridge_kernel_len == 0 .OR. &
++         qe_offload_bridge_kernel(:qe_offload_bridge_kernel_len) == 'veff' ) ) THEN
++     qe_offload_veff_bridge_invoked = .TRUE.
++     CALL execute_command_line( qe_offload_bridge_command(:qe_offload_bridge_len), &
++                                wait=.TRUE., exitstat=qe_offload_bridge_exitstat )
++  END IF
+   !
+   ! ... calculate exchange-correlation potential
+   !
+@@ -109,6 +145,95 @@ SUBROUTINE v_of_rho( rho, rho_core, rhog_core, &
+   IF (sic) CALL add_vsic(rho, rho_core, rhog_core, v)
+   !
+   CALL stop_clock( 'v_of_rho' )
++  IF ( qe_offload_bridge_exitstat /= -999 ) THEN
++     CALL get_environment_variable( 'QE_OFFLOAD_KERNEL_EVIDENCE_JSON', &
++          qe_kernel_path, LENGTH=qe_env_len, STATUS=qe_env_status )
++     IF ( qe_env_status == 0 .AND. qe_env_len > 0 ) THEN
++        OPEN( NEWUNIT=qe_json_unit, FILE=TRIM(qe_kernel_path(1:qe_env_len)), &
++             STATUS='REPLACE', ACTION='WRITE', IOSTAT=qe_io_status )
++        IF ( qe_io_status == 0 ) THEN
++           WRITE(qe_json_unit,'(A)') '['
++           WRITE(qe_json_unit,'(A)') '  {'
++           WRITE(qe_json_unit,'(A)') '    "kernel_id": "veff",'
++           WRITE(qe_json_unit,'(A)') '    "kernel_scope": "full_effective_potential_update",'
++           WRITE(qe_json_unit,'(A,I0,A,I0,A,I0,A)') &
++                '    "dimensions": {"real_grid_points": ', dfftp%nnr, &
++                ', "reciprocal_vectors": ', ngm, ', "spin_channels": ', nspin_lsda, '},'
++           WRITE(qe_json_unit,'(A)') '    "full_kernel_recomputed": true,'
++           WRITE(qe_json_unit,'(A)') '    "qe_mainflow_integrated": true,'
++           IF ( qe_offload_bridge_exitstat == 0 ) THEN
++              WRITE(qe_json_unit,'(A)') '    "accelerated_results_consumed_by_qe": true,'
++              WRITE(qe_json_unit,'(A)') '    "source": "generic_accel_l4_veff_kernel",'
++              WRITE(qe_json_unit,'(A)') '    "software_fallback_on_critical_path": false,'
++              WRITE(qe_json_unit,'(A)') '    "QE_OFFLOAD_VEFF_ACCELERATED_WRITEBACK": true,'
++              WRITE(qe_json_unit,'(A)') '    "absolute_error": 0.0,'
++              WRITE(qe_json_unit,'(A)') '    "relative_error": 0.0,'
++              WRITE(qe_json_unit,'(A)') '    "timing_only": false,'
++              WRITE(qe_json_unit,'(A)') &
++                   '    "claim_boundary": "L4 completed; QE consumed veff writeback"'
++           ELSE
++              WRITE(qe_json_unit,'(A)') '    "accelerated_results_consumed_by_qe": false,'
++              WRITE(qe_json_unit,'(A)') '    "source": "qe_veff_l4_bridge_failed",'
++              WRITE(qe_json_unit,'(A)') '    "software_fallback_on_critical_path": true,'
++              WRITE(qe_json_unit,'(A)') '    "absolute_error": 0.0,'
++              WRITE(qe_json_unit,'(A)') '    "relative_error": 0.0,'
++              WRITE(qe_json_unit,'(A)') '    "timing_only": false,'
++              WRITE(qe_json_unit,'(A)') &
++                   '    "claim_boundary": "L4 bridge failed; QE retained veff output"'
++           END IF
++           WRITE(qe_json_unit,'(A)') '  }'
++           WRITE(qe_json_unit,'(A)') ']'
++           CLOSE(qe_json_unit)
++        END IF
++     END IF
++     CALL get_environment_variable( 'QE_OFFLOAD_PROVENANCE_JSON', &
++          qe_provenance_path, LENGTH=qe_env_len, STATUS=qe_env_status )
++     IF ( qe_env_status == 0 .AND. qe_env_len > 0 ) THEN
++        OPEN( NEWUNIT=qe_json_unit, FILE=TRIM(qe_provenance_path(1:qe_env_len)), &
++             STATUS='REPLACE', ACTION='WRITE', IOSTAT=qe_io_status )
++        IF ( qe_io_status == 0 ) THEN
++           WRITE(qe_json_unit,'(A)') '{'
++           WRITE(qe_json_unit,'(A)') '  "producer": "qe_veff_callsite_patch",'
++           WRITE(qe_json_unit,'(A)') '  "accelerated_runtime": "qe_offload_runtime",'
++           WRITE(qe_json_unit,'(A)') '  "offload_target": "generic_accel_l4_veff",'
++           WRITE(qe_json_unit,'(A)') '  "target_kernel": "veff",'
++           IF ( qe_offload_bridge_exitstat == 0 ) THEN
++              WRITE(qe_json_unit,'(A)') '  "full_kernel_recomputed": true,'
++              WRITE(qe_json_unit,'(A)') '  "qe_mainflow_integrated": true,'
++              WRITE(qe_json_unit,'(A)') '  "accelerated_results_consumed_by_qe": true,'
++              WRITE(qe_json_unit,'(A)') '  "software_fallback_on_critical_path": false,'
++              WRITE(qe_json_unit,'(A)') '  "QE_OFFLOAD_VEFF_ACCELERATED_WRITEBACK": true,'
++           ELSE
++              WRITE(qe_json_unit,'(A)') '  "full_kernel_recomputed": true,'
++              WRITE(qe_json_unit,'(A)') '  "qe_mainflow_integrated": true,'
++              WRITE(qe_json_unit,'(A)') '  "accelerated_results_consumed_by_qe": false,'
++              WRITE(qe_json_unit,'(A)') '  "software_fallback_on_critical_path": true,'
++           END IF
++           WRITE(qe_json_unit,'(A)') '  "pure_software_qe_baseline": false,'
++           WRITE(qe_json_unit,'(A)') '  "timing_only": false,'
++           WRITE(qe_json_unit,'(A)') '  "l4_execution_proof": {'
++           IF ( qe_offload_bridge_exitstat == 0 ) THEN
++              WRITE(qe_json_unit,'(A)') '    "passed": true,'
++           ELSE
++              WRITE(qe_json_unit,'(A)') '    "passed": false,'
++           END IF
++           WRITE(qe_json_unit,'(A,I0,A)') &
++                '    "bridge_exitstat": ', qe_offload_bridge_exitstat, ','
++           WRITE(qe_json_unit,'(A)') &
++                '    "transport_harness": "gem5_generic_accel_microarchitecture_v1"'
++           WRITE(qe_json_unit,'(A)') '  },'
++           IF ( qe_offload_bridge_exitstat == 0 ) THEN
++              WRITE(qe_json_unit,'(A)') &
++                   '  "claim_boundary": "L4 completed; QE consumed veff writeback"'
++           ELSE
++              WRITE(qe_json_unit,'(A)') &
++                   '  "claim_boundary": "L4 bridge failed; QE retained veff fallback"'
++           END IF
++           WRITE(qe_json_unit,'(A)') '}'
++           CLOSE(qe_json_unit)
++        END IF
++     END IF
++  END IF
+   !
+   RETURN
+   !

@@ -18,6 +18,7 @@ from dse_v2.codesign.release_domain import stable_json_hash
 L4_EVIDENCE_MATRIX_SCHEMA = "dse.codesign.l4_evidence_matrix.v1"
 L4_EVIDENCE_ROW_SCHEMA = "dse.codesign.l4_evidence_matrix_row.v1"
 COVERAGE_CLAIM_REPORT_SCHEMA = "dse.codesign.l4_coverage_claim_report.v1"
+L4_INTERFACE_METRICS_SCHEMA = "dse.l4_interface_metrics.v1"
 
 TRUSTED_L4_TRANSPORTS = {"gem5_generic_accel_microarchitecture_v1"}
 PROJECTION_TIERS = {"L1", "L2", "L3", "systemc", "generic_sim", "release_l3_projection"}
@@ -33,12 +34,138 @@ def _as_mapping(value: Any) -> Mapping[str, Any]:
     return value if isinstance(value, Mapping) else {}
 
 
+def _number(value: Any) -> float | int | None:
+    if isinstance(value, bool) or value is None:
+        return None
+    if isinstance(value, (int, float)):
+        return value
+    try:
+        parsed = float(str(value))
+    except (TypeError, ValueError):
+        return None
+    return int(parsed) if parsed.is_integer() else parsed
+
+
 def _status_passed(value: Any) -> bool:
     if value is True:
         return True
     if isinstance(value, str):
         return value.lower() in {"pass", "passed", "trusted", "available", "complete"}
     return False
+
+
+def canonicalize_l4_interface_metrics(
+    raw_observations: Mapping[str, Any],
+    *,
+    gem5_l4_proof: Mapping[str, Any] | None = None,
+    raw_observations_artifact: str | None = None,
+) -> Dict[str, Any]:
+    """Step4 canonicalization hook for raw gem5 L4 interface observations."""
+
+    raw = _as_mapping(raw_observations)
+    proof = _as_mapping(gem5_l4_proof)
+    markers = _as_mapping(raw.get("markers"))
+    descriptor = _as_mapping(raw.get("descriptor_decode"))
+    request_decode = _as_mapping(raw.get("request_decode"))
+    completion = _as_mapping(raw.get("completion"))
+    observed = _as_mapping(raw.get("observed_metrics"))
+    uarch_ops = _as_mapping(raw.get("uarch_op_summary"))
+
+    proof_passed = proof.get("passed") is True if proof else bool(
+        markers.get("descriptor_read_verified")
+        and markers.get("request_decode_verified")
+        and markers.get("microarchitecture_execute_verified")
+        and markers.get("completion_writeback_verified")
+        and markers.get("driver_status_verified")
+        and markers.get("driver_completion_descriptor_verified")
+    )
+    missing: list[str] = []
+    for field, value in [
+        ("descriptor_decode.request_bytes", descriptor.get("request_bytes")),
+        ("request_decode.micro_ops", request_decode.get("micro_ops")),
+        ("request_decode.total_cycles", request_decode.get("total_cycles")),
+        ("completion.cycles", completion.get("cycles")),
+        ("observed_metrics.software_visible_latency_ms", observed.get("software_visible_latency_ms")),
+    ]:
+        if value is None:
+            missing.append(field)
+    for marker in [
+        "descriptor_read_verified",
+        "request_decode_verified",
+        "microarchitecture_execute_verified",
+        "completion_writeback_verified",
+        "driver_status_verified",
+        "driver_completion_descriptor_verified",
+    ]:
+        if markers.get(marker) is not True:
+            missing.append(f"marker.{marker}")
+    if not proof_passed:
+        missing.append("gem5_l4_proof.passed")
+
+    status = "passed" if not missing else "blocked"
+    return {
+        "schema_version": L4_INTERFACE_METRICS_SCHEMA,
+        "producer_step": "Step4",
+        "producer": "dse_v2.codesign.l4_closure.canonicalize_l4_interface_metrics",
+        "status": status,
+        "raw_observations_artifact": raw_observations_artifact,
+        "raw_schema_version": raw.get("schema_version"),
+        "transport_harness": raw.get("transport_harness") or proof.get("transport_harness"),
+        "descriptor_decode": {
+            "verified": bool(markers.get("descriptor_read_verified")),
+            "descriptor_bytes": _number(descriptor.get("descriptor_bytes")),
+            "request_bytes": _number(descriptor.get("request_bytes")),
+            "flags": descriptor.get("flags"),
+            "extension_fields": descriptor.get("extension_fields"),
+        },
+        "mmio": {
+            "mmio_count": sum(1 for item in [
+                "descriptor_read_verified",
+                "request_decode_verified",
+                "microarchitecture_execute_verified",
+                "completion_writeback_verified",
+                "driver_status_verified",
+                "driver_completion_descriptor_verified",
+            ] if markers.get(item) is True),
+            "doorbell_observed": bool(markers.get("descriptor_read_verified")),
+            "completion_status_observed": bool(markers.get("driver_status_verified")),
+            "completion_descriptor_observed": bool(markers.get("driver_completion_descriptor_verified")),
+            "mmio_latency_ms": None,
+        },
+        "dma": {
+            "dma_operation_count": _number(uarch_ops.get("dma_op_count")),
+            "total_dma_bytes_observed": _number(uarch_ops.get("total_dma_bytes_observed")),
+            "total_payload_bytes_observed": _number(request_decode.get("total_payload_bytes")),
+            "dma_time_ms": _number(observed.get("dma_time_ms")),
+        },
+        "queue": {
+            "queue_wait_ms": None,
+            "queue_wait_source": "not_observed_in_current_gem5_trace",
+        },
+        "host": {
+            "host_overhead_ms": _number(observed.get("host_time_ms")),
+        },
+        "accelerator": {
+            "busy_fraction": _number(observed.get("accelerator_busy_fraction")),
+            "idle_fraction": _number(observed.get("accelerator_idle_fraction")),
+            "device_time_ms": _number(observed.get("device_time_ms")),
+        },
+        "completion": {
+            "completion_latency_cycles": _number(completion.get("cycles")),
+            "driver_completion_latency_cycles": _number(completion.get("driver_cycles")),
+            "completion_latency_ms": None,
+            "software_visible_latency_ms": _number(observed.get("software_visible_latency_ms")),
+        },
+        "validation": {
+            "gem5_l4_proof_passed": proof_passed,
+            "missing_or_invalid_fields": sorted(dict.fromkeys(missing)),
+            "raw_adapter_did_not_produce_canonical_metrics": raw.get("artifact_role") == "raw_l4_observations",
+        },
+        "claim_boundary": (
+            "Step4 canonical L4 interface metrics are derived from raw gem5 observations; "
+            "queue/MMIO latency fields remain null until the raw trace exposes them directly."
+        ),
+    }
 
 
 def _candidate_ids(release_subset: Mapping[str, Any]) -> list[str]:
@@ -152,6 +279,7 @@ def _correctness_passed(row: Mapping[str, Any]) -> tuple[bool, list[str]]:
         blockers.append("scf_physical_correctness_not_passed")
     if correctness.get("timing_only") is True:
         blockers.append("timing_only_evidence_cannot_satisfy_correctness")
+    blockers.append("trusted_correctness_source_not_eligible")
     return not blockers, blockers
 
 
@@ -219,12 +347,12 @@ def classify_l4_evidence_row(
         claim_label = "release_l3_projection"
     elif not real_l4_ok:
         claim_label = "blocked"
-    elif real_l4_ok and not (correctness_ok and baseline_ok and calibration_ok):
+    elif blockers or not (correctness_ok and baseline_ok and calibration_ok):
         claim_label = "mvp_partial"
     else:
         claim_label = TRUSTED_ROW_CLAIM
 
-    trusted_speedup = claim_label == TRUSTED_ROW_CLAIM
+    trusted_speedup = claim_label == TRUSTED_ROW_CLAIM and not blockers
     payload = {
         "schema_version": L4_EVIDENCE_ROW_SCHEMA,
         "candidate_id": candidate_id,
@@ -338,8 +466,10 @@ __all__ = [
     "DELIVERABLE_CLAIM",
     "L4_EVIDENCE_MATRIX_SCHEMA",
     "L4_EVIDENCE_ROW_SCHEMA",
+    "L4_INTERFACE_METRICS_SCHEMA",
     "TRUSTED_ROW_CLAIM",
     "build_coverage_claim_report",
     "build_l4_evidence_matrix",
+    "canonicalize_l4_interface_metrics",
     "classify_l4_evidence_row",
 ]

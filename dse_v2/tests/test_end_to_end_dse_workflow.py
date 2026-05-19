@@ -207,6 +207,11 @@ def test_end_to_end_cli_writes_feedback_convergence_report_with_blocked_sample(t
 
     assert len(samples["samples"]) == 2
     assert sum(1 for sample in samples["samples"] if sample["trusted_final_eligible"]) == 1
+    blocked_sample = next(sample for sample in samples["samples"] if not sample["trusted_final_eligible"])
+    assert any(
+        blocker["id"] == "missing_step4_adjudication_for_feedback_sample"
+        for blocker in blocked_sample["blockers"]
+    )
     assert convergence["stop_reason"] == "budget_exhausted"
     assert convergence["converged"] is False
     assert report["feedback_loop"]["trusted_sample_count"] == 1

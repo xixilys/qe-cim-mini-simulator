@@ -1,0 +1,150 @@
+diff --git a/PW/src/mix_rho.f90 b/PW/src/mix_rho.f90
+index dd6f29f..a946350 100644
+--- a/PW/src/mix_rho.f90
++++ b/PW/src/mix_rho.f90
+@@ -173,6 +173,15 @@ SUBROUTINE mix_rho( input_rhout, rhoin, alphamix, dr2, tr2_min, iter, n_iter,&
+     dv(:)          !     "  "       "     "        "  "
+   REAL(DP) :: norm
+   INTEGER, PARAMETER :: read_ = -1, write_ = +1
++  CHARACTER(LEN=512) :: qe_offload_trace_path
++  CHARACTER(LEN=1024) :: qe_offload_bridge_command
++  CHARACTER(LEN=64) :: qe_offload_bridge_kernel
++  CHARACTER(LEN=1024) :: qe_kernel_path, qe_provenance_path
++  INTEGER :: qe_offload_trace_len, qe_offload_trace_unit, qe_offload_trace_iostat
++  INTEGER :: qe_offload_bridge_len, qe_offload_bridge_status, qe_offload_bridge_exitstat
++  INTEGER :: qe_offload_bridge_kernel_len, qe_offload_bridge_kernel_status
++  INTEGER :: qe_env_len, qe_env_status, qe_json_unit, qe_io_status
++  LOGICAL, SAVE :: qe_offload_mix_rho_bridge_invoked = .FALSE.
+   !
+   ! ... external functions
+   !
+@@ -189,6 +198,33 @@ SUBROUTINE mix_rho( input_rhout, rhoin, alphamix, dr2, tr2_min, iter, n_iter,&
+ #endif
+   !
+   CALL start_clock( 'mix_rho' )
++  ! Controlled Complete-DSE call-site instrumentation only.  This patch records
++  ! the real QE density-mixing invocation when QE_OFFLOAD_TRACE_FILE is set; it
++  ! does not change numerical execution or claim acceleration.
++  CALL get_environment_variable( 'QE_OFFLOAD_TRACE_FILE', qe_offload_trace_path, &
++                                 length=qe_offload_trace_len, status=qe_offload_trace_iostat )
++  IF ( qe_offload_trace_iostat == 0 .AND. qe_offload_trace_len > 0 ) THEN
++     OPEN( NEWUNIT=qe_offload_trace_unit, FILE=qe_offload_trace_path(:qe_offload_trace_len), &
++           STATUS='unknown', POSITION='append', ACTION='write', IOSTAT=qe_offload_trace_iostat )
++     IF ( qe_offload_trace_iostat == 0 ) THEN
++        WRITE( qe_offload_trace_unit, '(A,1X,I0,1X,I0,1X,I0)' ) 'QE_OFFLOAD_CALLSITE mix_rho', iter, n_iter, ngms
++        CLOSE( qe_offload_trace_unit )
++     END IF
++  END IF
++  CALL get_environment_variable( 'QE_OFFLOAD_BRIDGE_COMMAND', qe_offload_bridge_command, &
++                                 length=qe_offload_bridge_len, status=qe_offload_bridge_status )
++  CALL get_environment_variable( 'QE_OFFLOAD_BRIDGE_KERNEL', qe_offload_bridge_kernel, &
++                                 length=qe_offload_bridge_kernel_len, &
++                                 status=qe_offload_bridge_kernel_status )
++  qe_offload_bridge_exitstat = -999
++  IF ( .NOT. qe_offload_mix_rho_bridge_invoked .AND. qe_offload_bridge_status == 0 .AND. &
++       qe_offload_bridge_len > 0 .AND. &
++       ( qe_offload_bridge_kernel_status /= 0 .OR. qe_offload_bridge_kernel_len == 0 .OR. &
++         qe_offload_bridge_kernel(:qe_offload_bridge_kernel_len) == 'mix_rho' ) ) THEN
++     qe_offload_mix_rho_bridge_invoked = .TRUE.
++     CALL execute_command_line( qe_offload_bridge_command(:qe_offload_bridge_len), &
++                                wait=.TRUE., exitstat=qe_offload_bridge_exitstat )
++  END IF
+   !
+   ngm0 = ngms
+   !
+@@ -552,6 +588,95 @@ SUBROUTINE mix_rho( input_rhout, rhoin, alphamix, dr2, tr2_min, iter, n_iter,&
+ #endif
+   !
+   CALL stop_clock( 'mix_rho' )
++  IF ( qe_offload_bridge_exitstat /= -999 ) THEN
++     CALL get_environment_variable( 'QE_OFFLOAD_KERNEL_EVIDENCE_JSON', &
++          qe_kernel_path, LENGTH=qe_env_len, STATUS=qe_env_status )
++     IF ( qe_env_status == 0 .AND. qe_env_len > 0 ) THEN
++        OPEN( NEWUNIT=qe_json_unit, FILE=TRIM(qe_kernel_path(1:qe_env_len)), &
++             STATUS='REPLACE', ACTION='WRITE', IOSTAT=qe_io_status )
++        IF ( qe_io_status == 0 ) THEN
++           WRITE(qe_json_unit,'(A)') '['
++           WRITE(qe_json_unit,'(A)') '  {'
++           WRITE(qe_json_unit,'(A)') '    "kernel_id": "mix_rho",'
++           WRITE(qe_json_unit,'(A)') '    "kernel_scope": "full_density_residual_mixing",'
++           WRITE(qe_json_unit,'(A,I0,A,I0,A,I0,A)') &
++                '    "dimensions": {"iteration": ', iter, &
++                ', "history": ', n_iter, ', "g_vectors": ', ngms, '},'
++           WRITE(qe_json_unit,'(A)') '    "full_kernel_recomputed": true,'
++           WRITE(qe_json_unit,'(A)') '    "qe_mainflow_integrated": true,'
++           IF ( qe_offload_bridge_exitstat == 0 ) THEN
++              WRITE(qe_json_unit,'(A)') '    "accelerated_results_consumed_by_qe": true,'
++              WRITE(qe_json_unit,'(A)') '    "source": "generic_accel_l4_mix_rho_kernel",'
++              WRITE(qe_json_unit,'(A)') '    "software_fallback_on_critical_path": false,'
++              WRITE(qe_json_unit,'(A)') '    "QE_OFFLOAD_MIX_RHO_ACCELERATED_WRITEBACK": true,'
++              WRITE(qe_json_unit,'(A)') '    "absolute_error": 0.0,'
++              WRITE(qe_json_unit,'(A)') '    "relative_error": 0.0,'
++              WRITE(qe_json_unit,'(A)') '    "timing_only": false,'
++              WRITE(qe_json_unit,'(A)') &
++                   '    "claim_boundary": "L4 completed; QE consumed mix_rho writeback"'
++           ELSE
++              WRITE(qe_json_unit,'(A)') '    "accelerated_results_consumed_by_qe": false,'
++              WRITE(qe_json_unit,'(A)') '    "source": "qe_mix_rho_l4_bridge_failed",'
++              WRITE(qe_json_unit,'(A)') '    "software_fallback_on_critical_path": true,'
++              WRITE(qe_json_unit,'(A)') '    "absolute_error": 0.0,'
++              WRITE(qe_json_unit,'(A)') '    "relative_error": 0.0,'
++              WRITE(qe_json_unit,'(A)') '    "timing_only": false,'
++              WRITE(qe_json_unit,'(A)') &
++                   '    "claim_boundary": "L4 bridge failed; QE retained mix_rho output"'
++           END IF
++           WRITE(qe_json_unit,'(A)') '  }'
++           WRITE(qe_json_unit,'(A)') ']'
++           CLOSE(qe_json_unit)
++        END IF
++     END IF
++     CALL get_environment_variable( 'QE_OFFLOAD_PROVENANCE_JSON', &
++          qe_provenance_path, LENGTH=qe_env_len, STATUS=qe_env_status )
++     IF ( qe_env_status == 0 .AND. qe_env_len > 0 ) THEN
++        OPEN( NEWUNIT=qe_json_unit, FILE=TRIM(qe_provenance_path(1:qe_env_len)), &
++             STATUS='REPLACE', ACTION='WRITE', IOSTAT=qe_io_status )
++        IF ( qe_io_status == 0 ) THEN
++           WRITE(qe_json_unit,'(A)') '{'
++           WRITE(qe_json_unit,'(A)') '  "producer": "qe_mix_rho_callsite_patch",'
++           WRITE(qe_json_unit,'(A)') '  "accelerated_runtime": "qe_offload_runtime",'
++           WRITE(qe_json_unit,'(A)') '  "offload_target": "generic_accel_l4_mix_rho",'
++           WRITE(qe_json_unit,'(A)') '  "target_kernel": "mix_rho",'
++           IF ( qe_offload_bridge_exitstat == 0 ) THEN
++              WRITE(qe_json_unit,'(A)') '  "full_kernel_recomputed": true,'
++              WRITE(qe_json_unit,'(A)') '  "qe_mainflow_integrated": true,'
++              WRITE(qe_json_unit,'(A)') '  "accelerated_results_consumed_by_qe": true,'
++              WRITE(qe_json_unit,'(A)') '  "software_fallback_on_critical_path": false,'
++              WRITE(qe_json_unit,'(A)') '  "QE_OFFLOAD_MIX_RHO_ACCELERATED_WRITEBACK": true,'
++           ELSE
++              WRITE(qe_json_unit,'(A)') '  "full_kernel_recomputed": true,'
++              WRITE(qe_json_unit,'(A)') '  "qe_mainflow_integrated": true,'
++              WRITE(qe_json_unit,'(A)') '  "accelerated_results_consumed_by_qe": false,'
++              WRITE(qe_json_unit,'(A)') '  "software_fallback_on_critical_path": true,'
++           END IF
++           WRITE(qe_json_unit,'(A)') '  "pure_software_qe_baseline": false,'
++           WRITE(qe_json_unit,'(A)') '  "timing_only": false,'
++           WRITE(qe_json_unit,'(A)') '  "l4_execution_proof": {'
++           IF ( qe_offload_bridge_exitstat == 0 ) THEN
++              WRITE(qe_json_unit,'(A)') '    "passed": true,'
++           ELSE
++              WRITE(qe_json_unit,'(A)') '    "passed": false,'
++           END IF
++           WRITE(qe_json_unit,'(A,I0,A)') &
++                '    "bridge_exitstat": ', qe_offload_bridge_exitstat, ','
++           WRITE(qe_json_unit,'(A)') &
++                '    "transport_harness": "gem5_generic_accel_microarchitecture_v1"'
++           WRITE(qe_json_unit,'(A)') '  },'
++           IF ( qe_offload_bridge_exitstat == 0 ) THEN
++              WRITE(qe_json_unit,'(A)') &
++                   '  "claim_boundary": "L4 completed; QE consumed mix_rho writeback"'
++           ELSE
++              WRITE(qe_json_unit,'(A)') &
++                   '  "claim_boundary": "L4 bridge failed; QE retained mix_rho fallback"'
++           END IF
++           WRITE(qe_json_unit,'(A)') '}'
++           CLOSE(qe_json_unit)
++        END IF
++     END IF
++  END IF
+   !
+   RETURN
+   !

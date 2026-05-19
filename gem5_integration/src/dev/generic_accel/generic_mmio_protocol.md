@@ -93,9 +93,9 @@ struct CommandDescriptor {
 | 6 | `RUNTIME_SCHEDULE` | Runtime scheduling payload is present. |
 | 7 | `SIDECAR_DISPATCH` | SystemC/Python sidecar dispatch metadata is present. |
 
-Candidate identity, schedule, QE offload, and sidecar model details remain JSON
-payloads.  The C/gem5 ABI only records generic pointer/size pairs so QE or
-other workload-specific semantics do not become mandatory core fields.
+Candidate identity, schedule, adapter extension payloads, and sidecar model
+details remain JSON payloads.  The C/gem5 ABI only records generic pointer/size
+pairs so workload-specific semantics do not become mandatory core fields.
 
 ## Completion Descriptor Format
 
@@ -148,6 +148,12 @@ the corresponding descriptor flags or JSON payloads are present:
 These markers are integration evidence for `vertical_slice_only` rows.  They do
 not by themselves prove numerical correctness, trusted speedup, or release
 closure.
+
+`extension_payload_trace` is a transport-only signal: it shows that
+adapter-owned metadata moved through the JSON extension lane.  The generic C ABI
+and GenericAccel device do not parse or re-emit workload-specific numeric
+evidence, and the DSE runner must separately validate independent source
+artifacts plus numerical deltas before any correctness claim is eligible.
 
 If any item is missing, the correct result is a blocked verdict, not an
 L4-complete claim.

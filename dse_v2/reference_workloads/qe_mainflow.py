@@ -55,48 +55,160 @@ REQUIRED_PATCH_ROW_FIELDS = (
 
 _QE_SCF_INPUT = """
 &CONTROL
-  calculation = 'scf'
+  calculation = 'scf',
+  prefix = 'si',
+  outdir = './tmp',
+  pseudo_dir = './pseudo',
+  verbosity = 'high',
+  tstress = .true.,
+  tprnfor = .true.
 /
 &SYSTEM
-  ibrav = 2, nat = 2, ntyp = 1,
-  ecutwfc = 30.0,
-  nbnd = 8,
+  ibrav = 2,
+  celldm(1) = 10.26,
+  nat = 2,
+  ntyp = 1,
+  ecutwfc = 12.0,
+  nbnd = 8
 /
 &ELECTRONS
-  conv_thr = 1.0d-8,
+  conv_thr = 1.0d-6,
   mixing_beta = 0.7,
-  diagonalization = 'david'
+  electron_maxstep = 40
 /
+
+ATOMIC_SPECIES
+  Si 28.0855 Si.pz-vbc.UPF
+ATOMIC_POSITIONS alat
+  Si 0.00 0.00 0.00
+  Si 0.25 0.25 0.25
+
 K_POINTS automatic
-  2 2 1 0 0 0
+2 2 2 0 0 0
 """
 
 _QE_NSCF_INPUT = """
 &CONTROL
-  calculation = 'nscf'
+  calculation = 'nscf',
+  prefix = 'si',
+  outdir = './tmp',
+  pseudo_dir = './pseudo',
+  verbosity = 'high',
+  tstress = .true.,
+  tprnfor = .true.
 /
 &SYSTEM
-  ibrav = 2, nat = 2, ntyp = 1,
-  ecutwfc = 30.0,
-  nbnd = 16,
+  ibrav = 2,
+  celldm(1) = 10.26,
+  nat = 2,
+  ntyp = 1,
+  ecutwfc = 12.0,
+  nbnd = 12,
+  occupations = 'tetrahedra'
 /
+&ELECTRONS
+  conv_thr = 1.0d-6,
+  mixing_beta = 0.7,
+  electron_maxstep = 40
+/
+
+ATOMIC_SPECIES
+  Si 28.0855 Si.pz-vbc.UPF
+ATOMIC_POSITIONS alat
+  Si 0.00 0.00 0.00
+  Si 0.25 0.25 0.25
+
 K_POINTS automatic
-  2 2 1 0 0 0
+4 4 4 0 0 0
+"""
+
+# Compact high-symmetry band path for proof campaigns.  The path still
+# exercises a real QE ``bands`` workflow, but uses 13 k-points instead of the
+# earlier 41-point fixture so native-h_psi 36-row campaigns can finish inside
+# the per-stage timeout on the available workstation.
+_QE_BANDS_PW_INPUT = """
+&CONTROL
+  calculation = 'bands',
+  prefix = 'si',
+  outdir = './tmp',
+  pseudo_dir = './pseudo',
+  verbosity = 'high',
+  tstress = .true.,
+  tprnfor = .true.
+/
+&SYSTEM
+  ibrav = 2,
+  celldm(1) = 10.26,
+  nat = 2,
+  ntyp = 1,
+  ecutwfc = 12.0,
+  nbnd = 12
+/
+&ELECTRONS
+  conv_thr = 1.0d-6,
+  mixing_beta = 0.7,
+  electron_maxstep = 40
+/
+
+ATOMIC_SPECIES
+  Si 28.0855 Si.pz-vbc.UPF
+ATOMIC_POSITIONS alat
+  Si 0.00 0.00 0.00
+  Si 0.25 0.25 0.25
+
+K_POINTS crystal_b
+5
+  0.000 0.000 0.000 3
+  0.500 0.000 0.000 3
+  0.500 0.500 0.000 3
+  0.000 0.000 0.000 3
+  0.500 0.500 0.500 1
+"""
+
+_QE_BANDS_X_INPUT = """
+&BANDS
+  prefix = 'si',
+  outdir = './tmp',
+  filband = 'si.bands.dat'
+/
 """
 
 _QE_RELAX_INPUT = """
 &CONTROL
-  calculation = 'relax'
+  calculation = 'relax',
+  prefix = 'si_relax',
+  outdir = './tmp_relax',
+  pseudo_dir = './pseudo',
+  verbosity = 'high',
+  tstress = .true.,
+  tprnfor = .true.,
+  nstep = 2
 /
 &SYSTEM
-  ibrav = 2, nat = 2, ntyp = 1,
-  ecutwfc = 30.0,
-  nbnd = 8,
+  ibrav = 2,
+  celldm(1) = 10.26,
+  nat = 2,
+  ntyp = 1,
+  ecutwfc = 12.0,
+  nbnd = 8
+/
+&ELECTRONS
+  conv_thr = 1.0d-6,
+  mixing_beta = 0.7,
+  electron_maxstep = 40
 /
 &IONS
+  ion_dynamics = 'bfgs'
 /
+
+ATOMIC_SPECIES
+  Si 28.0855 Si.pz-vbc.UPF
+ATOMIC_POSITIONS alat
+  Si 0.00 0.00 0.00
+  Si 0.25 0.25 0.25
+
 K_POINTS automatic
-  2 2 1 0 0 0
+2 2 2 0 0 0
 """
 
 _QE_SCF_LOG = """
@@ -176,13 +288,38 @@ def _case_payload(
     kernel_coverage: Sequence[str],
     physical_quantities: Sequence[str],
     baseline_status: str = "fixture_reference",
+    workflow_stages: Sequence[Mapping[str, Any]] | None = None,
 ) -> Dict[str, Any]:
-    artifacts = [_input_artifact(input_name, input_text, "qe_input")]
-    stage: Dict[str, Any] = {
+    workflow_stage_payloads: List[Dict[str, Any]]
+    if workflow_stages is None:
+        workflow_stage_payloads = [
+            {
+                "stage_id": f"stage_00_{stage_type}",
+                "program": qe_command[0],
+                "stage_type": stage_type,
+                "command": list(qe_command),
+                "input": input_text,
+                "input_path": f"fixtures/qe/{input_name}",
+            }
+        ]
+    else:
+        workflow_stage_payloads = [copy.deepcopy(dict(stage)) for stage in workflow_stages]
+
+    artifacts: List[Dict[str, Any]] = []
+    seen_inputs: set[str] = set()
+    for stage in workflow_stage_payloads:
+        stage_input_path = str(stage.get("input_path") or "")
+        stage_input_text = stage.get("input")
+        if isinstance(stage_input_text, str) and stage_input_path and stage_input_path not in seen_inputs:
+            artifacts.append(_input_artifact(stage_input_path.rsplit("/", 1)[-1], stage_input_text, "qe_input"))
+            seen_inputs.add(stage_input_path)
+
+    stage: Dict[str, Any] = dict(workflow_stage_payloads[-1]) if workflow_stage_payloads else {
         "program": qe_command[0],
         "stage_type": stage_type,
-        "input": input_text if qe_command[0] == "pw.x" else None,
+        "input": input_text,
         "input_path": f"fixtures/qe/{input_name}",
+        "command": list(qe_command),
     }
     if log_text is not None:
         artifacts.append(_input_artifact(input_name.replace(".in", ".out"), log_text, "qe_stdout_fixture"))
@@ -191,6 +328,8 @@ def _case_payload(
     if profile is not None:
         stage["profile"] = dict(profile)
     stage = {key: value for key, value in stage.items() if value is not None}
+    if workflow_stage_payloads:
+        workflow_stage_payloads[-1] = stage
 
     case: Dict[str, Any] = {
         "case_id": case_id,
@@ -206,7 +345,18 @@ def _case_payload(
         },
         "input_artifacts": artifacts,
         "input_hashes": {artifact["path"]: artifact["sha256"] for artifact in artifacts},
-        "step1_source": {"stages": [stage]},
+        "step1_source": {"stages": workflow_stage_payloads},
+        "baseline_sequence": [
+            {
+                "step_id": str(stage.get("stage_id", f"stage_{index:02d}")),
+                "program": str(stage.get("program", qe_command[0])),
+                "command": list(stage.get("command", [stage.get("program", qe_command[0]), "-in", stage.get("input_path", input_name)])),
+                "input_path": str(stage.get("input_path", "")),
+                "input": stage.get("input"),
+                "include_in_performance": True,
+            }
+            for index, stage in enumerate(workflow_stage_payloads)
+        ],
         "expected_outputs": dict(expected_outputs),
         "kernel_coverage": list(kernel_coverage),
         "physical_quantities": list(physical_quantities),
@@ -262,7 +412,7 @@ def default_qe_mainflow_workload_suite(*, status: str = "draft", include_relax: 
                 "total_energy_ry": {"value": -15.850126, "unit": "Ry", "role": "scf_physical_oracle"},
                 "density_residual": {"value": 5.0e-9, "unit": "relative_norm", "role": "convergence_oracle"},
             },
-            kernel_coverage=["h_psi", "s_psi", "diagonalization", "rho_out", "mix_rho", "veff"],
+            kernel_coverage=["h_psi", "s_psi", "diagonalization", "fft", "rho_out", "mix_rho", "veff"],
             physical_quantities=["total_energy_ry", "density_residual", "eigenvalue_summary"],
         ),
         _case_payload(
@@ -277,15 +427,34 @@ def default_qe_mainflow_workload_suite(*, status: str = "draft", include_relax: 
                 "eigenvalue_summary_ry": {"max_abs": 2.0, "min_abs": 0.0, "unit": "Ry", "role": "band_orbital_oracle"},
                 "density_residual": {"value": 1.0e-8, "unit": "relative_norm", "role": "nscf_consistency_oracle"},
             },
-            kernel_coverage=["h_psi", "s_psi", "diagonalization", "subspace_rotation"],
+            kernel_coverage=["h_psi", "s_psi", "diagonalization", "fft", "subspace_rotation"],
             physical_quantities=["eigenvalue_summary", "band_occupations"],
+            workflow_stages=[
+                {
+                    "stage_id": "stage_00_scf_prerequisite",
+                    "program": "pw.x",
+                    "stage_type": "scf",
+                    "command": ["pw.x", "-in", "si_scf.in"],
+                    "input": _QE_SCF_INPUT,
+                    "input_path": "fixtures/qe/si_scf.in",
+                    "dependency_role": "real_qe_prerequisite",
+                },
+                {
+                    "stage_id": "stage_01_nscf",
+                    "program": "pw.x",
+                    "stage_type": "nscf",
+                    "command": ["pw.x", "-in", "si_nscf.in"],
+                    "input": _QE_NSCF_INPUT,
+                    "input_path": "fixtures/qe/si_nscf.in",
+                },
+            ],
         ),
         _case_payload(
             case_id="qe_si_bands_path_v1",
             stage_type="bands",
-            qe_command=["bands.x", "-in", "si_bands.in"],
-            input_name="si_bands.in",
-            input_text="&BANDS\n  prefix = 'si'\n/\n",
+            qe_command=["bands.x", "-in", "si_bands_x.in"],
+            input_name="si_bands_x.in",
+            input_text=_QE_BANDS_X_INPUT,
             log_text=None,
             profile=_BANDS_PROFILE,
             expected_outputs={
@@ -293,6 +462,33 @@ def default_qe_mainflow_workload_suite(*, status: str = "draft", include_relax: 
             },
             kernel_coverage=["diagonalization", "band_path_projection"],
             physical_quantities=["band_path_eigenvalue_summary"],
+            workflow_stages=[
+                {
+                    "stage_id": "stage_00_scf_prerequisite",
+                    "program": "pw.x",
+                    "stage_type": "scf",
+                    "command": ["pw.x", "-in", "si_scf.in"],
+                    "input": _QE_SCF_INPUT,
+                    "input_path": "fixtures/qe/si_scf.in",
+                    "dependency_role": "real_qe_prerequisite",
+                },
+                {
+                    "stage_id": "stage_01_bands_pw",
+                    "program": "pw.x",
+                    "stage_type": "bands",
+                    "command": ["pw.x", "-in", "si_bands_pw.in"],
+                    "input": _QE_BANDS_PW_INPUT,
+                    "input_path": "fixtures/qe/si_bands_pw.in",
+                },
+                {
+                    "stage_id": "stage_02_bands_x",
+                    "program": "bands.x",
+                    "stage_type": "bands",
+                    "command": ["bands.x", "-in", "si_bands_x.in"],
+                    "input": _QE_BANDS_X_INPUT,
+                    "input_path": "fixtures/qe/si_bands_x.in",
+                },
+            ],
         ),
     ]
     relax_policy: Dict[str, Any]
@@ -311,7 +507,7 @@ def default_qe_mainflow_workload_suite(*, status: str = "draft", include_relax: 
                     "max_force_ry_bohr": {"value": 8.0e-5, "unit": "Ry/Bohr", "role": "force_oracle"},
                     "stress_kbar": {"value": 0.05, "unit": "kbar", "role": "stress_oracle"},
                 },
-                kernel_coverage=["h_psi", "rho_out", "mix_rho", "veff", "forces"],
+                kernel_coverage=["h_psi", "fft", "rho_out", "mix_rho", "veff", "forces"],
                 physical_quantities=["total_energy_ry", "density_residual", "forces", "stress"],
             )
         )

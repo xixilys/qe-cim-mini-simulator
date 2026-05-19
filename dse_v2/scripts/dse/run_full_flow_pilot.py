@@ -424,12 +424,21 @@ def _additional_systemc_feedback_samples(
         phase_results = build_phase_results(raw_result, request)
         missing_phases = [phase for phase, result in phase_results.items() if result.get("status") != "available"]
         numerical = build_numerical_validation(request, raw_result)
-        trusted = (
+        raw_sample_passed = (
             int(sample_run.get("returncode", 1)) == 0
             and raw_result.get("status") == "passed"
             and not missing_phases
             and bool(numerical.get("passed", False))
         )
+        # Additional feedback samples are raw Step3 measurements in this CLI.
+        # They deliberately do not pass through sample-local Step4 adjudication
+        # (verdict/claim-validation/evidence-requirements), so treating them as
+        # final-trusted would violate the Step3/Step4/Step5 ownership boundary.
+        # Future callers may still pass adjudicated trusted samples directly to
+        # run_mapping_search(); this helper must keep its own raw samples
+        # blocked/untrusted until that per-sample Step4 path exists.
+        sample_step4_adjudicated = False
+        trusted = raw_sample_passed and sample_step4_adjudicated
         public_result = dict(raw_result)
         public_result.update({
             "backend": "systemc",
@@ -487,10 +496,16 @@ def _additional_systemc_feedback_samples(
             "evidence_ids": evidence_ids,
             "blockers": [] if trusted else [
                 {
+                    "id": "missing_step4_adjudication_for_feedback_sample",
+                    "detail": "Additional feedback samples are raw Step3 measurements and are not final-trusted until per-sample Step4 verdict/claim validation artifacts exist.",
+                    "raw_sample_passed": raw_sample_passed,
+                    "required_artifacts": ["verdict.json", "claim_validation.json", "evidence_requirements.json"],
+                },
+                {
                     "id": "systemc_feedback_sample_untrusted",
-                    "detail": "Additional feedback sample failed returncode, phase coverage, status, or numerical validation gate.",
+                    "detail": "Additional feedback sample failed returncode, phase coverage, status, numerical validation gate, or Step4 adjudication gate.",
                     "missing_required_coverage": missing_phases,
-                        }
+                },
             ],
         })
 

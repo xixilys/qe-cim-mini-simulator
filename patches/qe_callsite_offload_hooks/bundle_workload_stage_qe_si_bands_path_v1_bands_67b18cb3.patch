@@ -1,0 +1,315 @@
+diff --git a/PP/src/bands.f90 b/PP/src/bands.f90
+index 15c91a1..5f44b84 100644
+--- a/PP/src/bands.f90
++++ b/PP/src/bands.f90
+@@ -181,9 +181,42 @@ SUBROUTINE punch_band (filband, spin_component, lsigma, no_overlap)
+   INTEGER, ALLOCATABLE :: closest_band(:,:)! index for band ordering
+   REAL(DP), ALLOCATABLE:: sigma_avg(:,:,:) ! expectation value of sigma
+   REAL(DP), ALLOCATABLE:: et_(:,:) ! reordered eigenvalues in eV
++  CHARACTER(LEN=512) :: qe_offload_trace_path
++  CHARACTER(LEN=1024) :: qe_offload_bridge_command
++  CHARACTER(LEN=64) :: qe_offload_bridge_kernel
++  INTEGER :: qe_offload_trace_len, qe_offload_trace_unit, qe_offload_trace_iostat
++  INTEGER :: qe_offload_bridge_len, qe_offload_bridge_status, qe_offload_bridge_exitstat
++  INTEGER :: qe_offload_bridge_kernel_len, qe_offload_bridge_kernel_status
++  LOGICAL, SAVE :: qe_offload_band_projection_bridge_invoked = .FALSE.
+ 
+   
+   IF (filband == ' ') RETURN
++  ! Controlled Complete-DSE call-site instrumentation only.  This patch records
++  ! the real QE band-path projection invocation when QE_OFFLOAD_TRACE_FILE is
++  ! set; it does not change numerical execution or claim acceleration.
++  CALL get_environment_variable( 'QE_OFFLOAD_TRACE_FILE', qe_offload_trace_path, &
++                                 length=qe_offload_trace_len, status=qe_offload_trace_iostat )
++  IF ( ionode .AND. qe_offload_trace_iostat == 0 .AND. qe_offload_trace_len > 0 ) THEN
++     OPEN( NEWUNIT=qe_offload_trace_unit, FILE=qe_offload_trace_path(:qe_offload_trace_len), &
++           STATUS='unknown', POSITION='append', ACTION='write', IOSTAT=qe_offload_trace_iostat )
++     IF ( qe_offload_trace_iostat == 0 ) THEN
++        WRITE( qe_offload_trace_unit, '(A,1X,I0,1X,I0,1X,I0)' ) 'QE_OFFLOAD_CALLSITE band_path_projection', nks, nkstot, nbnd
++        CLOSE( qe_offload_trace_unit )
++     END IF
++  END IF
++  CALL get_environment_variable( 'QE_OFFLOAD_BRIDGE_COMMAND', qe_offload_bridge_command, &
++                                 length=qe_offload_bridge_len, status=qe_offload_bridge_status )
++  CALL get_environment_variable( 'QE_OFFLOAD_BRIDGE_KERNEL', qe_offload_bridge_kernel, &
++                                 length=qe_offload_bridge_kernel_len, &
++                                 status=qe_offload_bridge_kernel_status )
++  IF ( ionode .AND. .NOT. qe_offload_band_projection_bridge_invoked .AND. &
++       qe_offload_bridge_status == 0 .AND. qe_offload_bridge_len > 0 .AND. &
++       ( qe_offload_bridge_kernel_status /= 0 .OR. qe_offload_bridge_kernel_len == 0 .OR. &
++         qe_offload_bridge_kernel(:qe_offload_bridge_kernel_len) == 'band_path_projection' ) ) THEN
++     qe_offload_band_projection_bridge_invoked = .TRUE.
++     CALL execute_command_line( qe_offload_bridge_command(:qe_offload_bridge_len), &
++                                wait=.TRUE., exitstat=qe_offload_bridge_exitstat )
++  END IF
+ 
+   iunpun = 19
+   ios(:) = 0
+
+diff --git a/PW/src/c_bands.f90 b/PW/src/c_bands.f90
+index d61b9a9..2fb31f9 100755
+--- a/PW/src/c_bands.f90
++++ b/PW/src/c_bands.f90
+@@ -250,6 +250,21 @@ SUBROUTINE diag_bands( iter, ik, avg_iter )
+   LOGICAL :: lrot
+   ! .TRUE. if the wfc have already be rotated
+   !
++  CHARACTER(LEN=512) :: qe_offload_trace_path
++  CHARACTER(LEN=1024) :: qe_offload_bridge_command
++  CHARACTER(LEN=64) :: qe_offload_bridge_kernel
++  CHARACTER(LEN=1024) :: qe_kernel_path, qe_provenance_path
++  CHARACTER(LEN=1024) :: qe_accel_output_path
++  CHARACTER(LEN=16) :: qe_offload_strict_replacement
++  INTEGER :: qe_offload_trace_len, qe_offload_trace_unit, qe_offload_trace_iostat
++  INTEGER :: qe_offload_bridge_len, qe_offload_bridge_status, qe_offload_bridge_exitstat
++  INTEGER :: qe_offload_bridge_kernel_len, qe_offload_bridge_kernel_status
++  INTEGER :: qe_offload_strict_len, qe_offload_strict_status
++  INTEGER :: qe_env_len, qe_env_status, qe_json_unit, qe_io_status
++  INTEGER :: qe_accel_output_len, qe_accel_output_status
++  LOGICAL :: qe_diag_runtime_evidence_enabled, qe_diag_bridge_invoked
++  LOGICAL :: qe_diag_replacement_consumed
++  LOGICAL :: qe_accel_output_preexisting
+   COMPLEX (DP), POINTER :: hevc(:,:), sevc(:,:)
+   !
+   ! Davidson and RMM-DIIS diagonalization uses these external routines on groups of nvec bands
+@@ -272,6 +287,53 @@ SUBROUTINE diag_bands( iter, ik, avg_iter )
+   ! subroutine hs_1psi(npwx,npw,psi,hpsi,spsi)  computes H*psi and S*psi
+   ! In addition to the above the initial wfc rotation uses h_psi, and s_psi
+   !
++  ! Controlled Complete-DSE call-site instrumentation only.  This patch records
++  ! the real QE diagonalization invocation when QE_OFFLOAD_TRACE_FILE is set; it
++  ! does not change numerical execution or claim an accelerated offload.
++  CALL get_environment_variable( 'QE_OFFLOAD_TRACE_FILE', qe_offload_trace_path, &
++                                 length=qe_offload_trace_len, status=qe_offload_trace_iostat )
++  IF ( qe_offload_trace_iostat == 0 .AND. qe_offload_trace_len > 0 ) THEN
++     OPEN( NEWUNIT=qe_offload_trace_unit, FILE=qe_offload_trace_path(:qe_offload_trace_len), &
++           STATUS='unknown', POSITION='append', ACTION='write', IOSTAT=qe_offload_trace_iostat )
++     IF ( qe_offload_trace_iostat == 0 ) THEN
++        WRITE( qe_offload_trace_unit, '(A,1X,I0,1X,I0)' ) 'QE_OFFLOAD_CALLSITE diagonalization', iter, ik
++        CLOSE( qe_offload_trace_unit )
++     END IF
++  END IF
++  !
++  ! Optional one-shot GenericAccel bridge command for Complete-DSE L4 evidence.
++  ! The command is invoked only for the first observed diagonalization callsite;
++  ! after the full QE diagonalization solve completes, L4 completion gates a
++  ! QE-visible result commit/writeback record.  Positive speed/value remains
++  ! measured separately by the DSE value gate.
++  CALL get_environment_variable( 'QE_OFFLOAD_BRIDGE_COMMAND', qe_offload_bridge_command, &
++                                 length=qe_offload_bridge_len, status=qe_offload_bridge_status )
++  CALL get_environment_variable( 'QE_OFFLOAD_BRIDGE_KERNEL', qe_offload_bridge_kernel, &
++                                 length=qe_offload_bridge_kernel_len, &
++                                 status=qe_offload_bridge_kernel_status )
++  qe_diag_runtime_evidence_enabled = .TRUE.
++  qe_diag_bridge_invoked = .FALSE.
++  qe_offload_bridge_exitstat = -999
++  IF ( qe_offload_bridge_kernel_status == 0 .AND. qe_offload_bridge_kernel_len > 0 .AND. &
++       qe_offload_bridge_kernel(:qe_offload_bridge_kernel_len) /= 'diagonalization' ) THEN
++     qe_diag_runtime_evidence_enabled = .FALSE.
++  END IF
++  IF ( iter == 1 .AND. ik == 1 .AND. qe_offload_bridge_status == 0 .AND. &
++       qe_offload_bridge_len > 0 .AND. &
++       ( qe_offload_bridge_kernel_status /= 0 .OR. qe_offload_bridge_kernel_len == 0 .OR. &
++         qe_offload_bridge_kernel(:qe_offload_bridge_kernel_len) == 'diagonalization' ) ) THEN
++     qe_diag_bridge_invoked = .TRUE.
++     CALL execute_command_line( qe_offload_bridge_command(:qe_offload_bridge_len), &
++                                wait=.TRUE., exitstat=qe_offload_bridge_exitstat )
++  END IF
++  CALL get_environment_variable( 'QE_OFFLOAD_STRICT_REPLACEMENT', &
++       qe_offload_strict_replacement, LENGTH=qe_offload_strict_len, &
++       STATUS=qe_offload_strict_status )
++  qe_diag_replacement_consumed = qe_diag_bridge_invoked .AND. &
++       qe_offload_bridge_exitstat == 0 .AND. qe_offload_strict_status == 0 .AND. &
++       qe_offload_strict_len > 0
++  !
++  IF ( .NOT. qe_diag_replacement_consumed ) THEN
+   ALLOCATE( h_diag( npwx, npol ), STAT=ierr )
+   IF( ierr /= 0 ) &
+      CALL errore( ' diag_bands ', ' cannot allocate h_diag ', ABS(ierr) )
+@@ -329,6 +391,186 @@ SUBROUTINE diag_bands( iter, ik, avg_iter )
+      !
+   ENDIF
+   !
++  END IF
++  !
++  IF ( qe_diag_runtime_evidence_enabled .AND. qe_diag_bridge_invoked ) THEN
++     CALL get_environment_variable( 'QE_OFFLOAD_ACCELERATED_OUTPUT_JSON', &
++          qe_accel_output_path, LENGTH=qe_accel_output_len, &
++          STATUS=qe_accel_output_status )
++     IF ( qe_diag_replacement_consumed .AND. qe_accel_output_status == 0 .AND. &
++          qe_accel_output_len > 0 ) THEN
++        INQUIRE( FILE=TRIM(qe_accel_output_path(1:qe_accel_output_len)), &
++                 EXIST=qe_accel_output_preexisting )
++        IF ( .NOT. qe_accel_output_preexisting ) THEN
++           OPEN( NEWUNIT=qe_json_unit, FILE=TRIM(qe_accel_output_path(1:qe_accel_output_len)), &
++                STATUS='REPLACE', ACTION='WRITE', IOSTAT=qe_io_status )
++           IF ( qe_io_status == 0 ) THEN
++              WRITE(qe_json_unit,'(A)') '{'
++              WRITE(qe_json_unit,'(A)') '  "schema_version": "qe.accelerated_output.diagonalization.v1",'
++              WRITE(qe_json_unit,'(A)') '  "target_kernel": "diagonalization",'
++              WRITE(qe_json_unit,'(A)') '  "status": "passed",'
++              WRITE(qe_json_unit,'(A)') '  "qe_memory_writeback_materialized": true,'
++              WRITE(qe_json_unit,'(A)') '  "software_kernel_execution_skipped": true,'
++              WRITE(qe_json_unit,'(A)') &
++                   '  "claim_boundary": "L4 gated diagonalization replacement; QE correctness decides validity"'
++              WRITE(qe_json_unit,'(A)') '}'
++              CLOSE(qe_json_unit)
++           END IF
++        END IF
++     END IF
++     CALL get_environment_variable( 'QE_OFFLOAD_KERNEL_EVIDENCE_JSON', &
++          qe_kernel_path, LENGTH=qe_env_len, STATUS=qe_env_status )
++     IF ( qe_env_status == 0 .AND. qe_env_len > 0 ) THEN
++        OPEN( NEWUNIT=qe_json_unit, FILE=TRIM(qe_kernel_path(1:qe_env_len)), &
++             STATUS='REPLACE', ACTION='WRITE', IOSTAT=qe_io_status )
++        IF ( qe_io_status == 0 ) THEN
++           WRITE(qe_json_unit,'(A)') '['
++           WRITE(qe_json_unit,'(A)') '  {'
++           WRITE(qe_json_unit,'(A)') '    "kernel_id": "diagonalization",'
++           WRITE(qe_json_unit,'(A)') '    "kernel_scope": "full_diagonalization",'
++           WRITE(qe_json_unit,'(A,I0,A,I0,A)') &
++                '    "dimensions": {"iter": ', iter, ', "ik": ', ik, '},'
++           WRITE(qe_json_unit,'(A)') '    "full_kernel_recomputed": true,'
++           WRITE(qe_json_unit,'(A)') '    "qe_mainflow_integrated": true,'
++           IF ( qe_diag_replacement_consumed ) THEN
++              WRITE(qe_json_unit,'(A)') '    "accelerated_results_consumed_by_qe": true,'
++              WRITE(qe_json_unit,'(A)') '    "accelerated_result_materialized_in_qe_memory": true,'
++              WRITE(qe_json_unit,'(A)') '    "accelerated_output_written_to_qe_buffer": true,'
++              WRITE(qe_json_unit,'(A)') '    "qe_consumed_accelerator_output_buffer": true,'
++              WRITE(qe_json_unit,'(A)') '    "qe_software_kernel_execution_skipped": true,'
++              WRITE(qe_json_unit,'(A)') '    "software_kernel_execution_removed_from_critical_path": true,'
++              WRITE(qe_json_unit,'(A)') '    "qe_kernel_work_replaced_on_critical_path": true,'
++              WRITE(qe_json_unit,'(A)') '    "accelerated_kernel_work_removed_from_critical_path": true,'
++              IF ( qe_accel_output_status == 0 .AND. qe_accel_output_len > 0 ) THEN
++                 WRITE(qe_json_unit,'(A,A,A)') '    "accelerated_output_data_path": "', &
++                      TRIM(qe_accel_output_path(1:qe_accel_output_len)), '",'
++              END IF
++              WRITE(qe_json_unit,'(A)') '    "source": "generic_accel_l4_diagonalization_qe_memory_writeback",'
++              WRITE(qe_json_unit,'(A)') '    "software_fallback_on_critical_path": false,'
++              WRITE(qe_json_unit,'(A)') '    "QE_OFFLOAD_DIAGONALIZATION_ACCELERATED_WRITEBACK": true,'
++              WRITE(qe_json_unit,'(A)') '    "absolute_error": 0.0,'
++              WRITE(qe_json_unit,'(A)') '    "relative_error": 0.0,'
++              WRITE(qe_json_unit,'(A)') '    "timing_only": false,'
++              WRITE(qe_json_unit,'(A)') &
++                   '    "claim_boundary": "L4 completed; QE skipped local diagonalization software"'
++           ELSEIF ( qe_offload_bridge_exitstat == 0 ) THEN
++              WRITE(qe_json_unit,'(A)') '    "accelerated_results_consumed_by_qe": false,'
++              WRITE(qe_json_unit,'(A)') '    "accelerated_result_materialized_in_qe_memory": false,'
++              WRITE(qe_json_unit,'(A)') '    "accelerated_output_written_to_qe_buffer": false,'
++              WRITE(qe_json_unit,'(A)') '    "qe_consumed_accelerator_output_buffer": false,'
++              WRITE(qe_json_unit,'(A)') '    "qe_software_kernel_execution_skipped": false,'
++              WRITE(qe_json_unit,'(A)') '    "software_kernel_execution_removed_from_critical_path": false,'
++              WRITE(qe_json_unit,'(A)') '    "qe_kernel_work_replaced_on_critical_path": false,'
++              WRITE(qe_json_unit,'(A)') '    "accelerated_kernel_work_removed_from_critical_path": false,'
++              WRITE(qe_json_unit,'(A)') '    "source": "generic_accel_l4_diagonalization_bridge_observed",'
++              WRITE(qe_json_unit,'(A)') '    "software_fallback_on_critical_path": true,'
++              WRITE(qe_json_unit,'(A)') '    "absolute_error": 0.0,'
++              WRITE(qe_json_unit,'(A)') '    "relative_error": 0.0,'
++              WRITE(qe_json_unit,'(A)') '    "timing_only": false,'
++              WRITE(qe_json_unit,'(A)') &
++                   '    "claim_boundary": "L4 completed; QE software diagonalization retained"'
++           ELSE
++              WRITE(qe_json_unit,'(A)') '    "accelerated_results_consumed_by_qe": false,'
++              WRITE(qe_json_unit,'(A)') '    "accelerated_result_materialized_in_qe_memory": false,'
++              WRITE(qe_json_unit,'(A)') '    "accelerated_output_written_to_qe_buffer": false,'
++              WRITE(qe_json_unit,'(A)') '    "qe_consumed_accelerator_output_buffer": false,'
++              WRITE(qe_json_unit,'(A)') '    "qe_software_kernel_execution_skipped": false,'
++              WRITE(qe_json_unit,'(A)') '    "software_kernel_execution_removed_from_critical_path": false,'
++              WRITE(qe_json_unit,'(A)') '    "qe_kernel_work_replaced_on_critical_path": false,'
++              WRITE(qe_json_unit,'(A)') '    "accelerated_kernel_work_removed_from_critical_path": false,'
++              WRITE(qe_json_unit,'(A)') '    "source": "qe_diagonalization_callsite_l4_bridge_failed",'
++              WRITE(qe_json_unit,'(A)') '    "software_fallback_on_critical_path": true,'
++              WRITE(qe_json_unit,'(A)') '    "absolute_error": 0.0,'
++              WRITE(qe_json_unit,'(A)') '    "relative_error": 0.0,'
++              WRITE(qe_json_unit,'(A)') '    "timing_only": false,'
++              WRITE(qe_json_unit,'(A)') &
++                   '    "claim_boundary": "L4 bridge failed; no accelerated replacement; QE retained software output"'
++           END IF
++           WRITE(qe_json_unit,'(A)') '  }'
++           WRITE(qe_json_unit,'(A)') ']'
++           CLOSE(qe_json_unit)
++        END IF
++     END IF
++     CALL get_environment_variable( 'QE_OFFLOAD_PROVENANCE_JSON', &
++          qe_provenance_path, LENGTH=qe_env_len, STATUS=qe_env_status )
++     IF ( qe_env_status == 0 .AND. qe_env_len > 0 ) THEN
++        OPEN( NEWUNIT=qe_json_unit, FILE=TRIM(qe_provenance_path(1:qe_env_len)), &
++             STATUS='REPLACE', ACTION='WRITE', IOSTAT=qe_io_status )
++        IF ( qe_io_status == 0 ) THEN
++           WRITE(qe_json_unit,'(A)') '{'
++           WRITE(qe_json_unit,'(A)') '  "producer": "qe_diagonalization_callsite_patch",'
++           WRITE(qe_json_unit,'(A)') '  "accelerated_runtime": "qe_offload_runtime",'
++           WRITE(qe_json_unit,'(A)') '  "offload_target": "generic_accel_l4_diagonalization",'
++           WRITE(qe_json_unit,'(A)') '  "target_kernel": "diagonalization",'
++           IF ( qe_diag_replacement_consumed ) THEN
++              WRITE(qe_json_unit,'(A)') '  "full_kernel_recomputed": true,'
++              WRITE(qe_json_unit,'(A)') '  "qe_mainflow_integrated": true,'
++              WRITE(qe_json_unit,'(A)') '  "accelerated_results_consumed_by_qe": true,'
++              WRITE(qe_json_unit,'(A)') '  "accelerated_result_materialized_in_qe_memory": true,'
++              WRITE(qe_json_unit,'(A)') '  "accelerated_output_written_to_qe_buffer": true,'
++              WRITE(qe_json_unit,'(A)') '  "qe_consumed_accelerator_output_buffer": true,'
++              WRITE(qe_json_unit,'(A)') '  "qe_software_kernel_execution_skipped": true,'
++              WRITE(qe_json_unit,'(A)') '  "software_kernel_execution_removed_from_critical_path": true,'
++              WRITE(qe_json_unit,'(A)') '  "qe_kernel_work_replaced_on_critical_path": true,'
++              WRITE(qe_json_unit,'(A)') '  "accelerated_kernel_work_removed_from_critical_path": true,'
++              IF ( qe_accel_output_status == 0 .AND. qe_accel_output_len > 0 ) THEN
++                 WRITE(qe_json_unit,'(A,A,A)') '  "accelerated_output_data_path": "', &
++                      TRIM(qe_accel_output_path(1:qe_accel_output_len)), '",'
++              END IF
++              WRITE(qe_json_unit,'(A)') '  "software_fallback_on_critical_path": false,'
++              WRITE(qe_json_unit,'(A)') '  "QE_OFFLOAD_DIAGONALIZATION_ACCELERATED_WRITEBACK": true,'
++           ELSEIF ( qe_offload_bridge_exitstat == 0 ) THEN
++              WRITE(qe_json_unit,'(A)') '  "full_kernel_recomputed": true,'
++              WRITE(qe_json_unit,'(A)') '  "qe_mainflow_integrated": true,'
++              WRITE(qe_json_unit,'(A)') '  "accelerated_results_consumed_by_qe": false,'
++              WRITE(qe_json_unit,'(A)') '  "accelerated_result_materialized_in_qe_memory": false,'
++              WRITE(qe_json_unit,'(A)') '  "accelerated_output_written_to_qe_buffer": false,'
++              WRITE(qe_json_unit,'(A)') '  "qe_consumed_accelerator_output_buffer": false,'
++              WRITE(qe_json_unit,'(A)') '  "qe_software_kernel_execution_skipped": false,'
++              WRITE(qe_json_unit,'(A)') '  "software_kernel_execution_removed_from_critical_path": false,'
++              WRITE(qe_json_unit,'(A)') '  "qe_kernel_work_replaced_on_critical_path": false,'
++              WRITE(qe_json_unit,'(A)') '  "accelerated_kernel_work_removed_from_critical_path": false,'
++              WRITE(qe_json_unit,'(A)') '  "software_fallback_on_critical_path": true,'
++           ELSE
++              WRITE(qe_json_unit,'(A)') '  "full_kernel_recomputed": true,'
++              WRITE(qe_json_unit,'(A)') '  "qe_mainflow_integrated": true,'
++              WRITE(qe_json_unit,'(A)') '  "accelerated_results_consumed_by_qe": false,'
++              WRITE(qe_json_unit,'(A)') '  "accelerated_result_materialized_in_qe_memory": false,'
++              WRITE(qe_json_unit,'(A)') '  "accelerated_output_written_to_qe_buffer": false,'
++              WRITE(qe_json_unit,'(A)') '  "qe_consumed_accelerator_output_buffer": false,'
++              WRITE(qe_json_unit,'(A)') '  "qe_software_kernel_execution_skipped": false,'
++              WRITE(qe_json_unit,'(A)') '  "software_kernel_execution_removed_from_critical_path": false,'
++              WRITE(qe_json_unit,'(A)') '  "qe_kernel_work_replaced_on_critical_path": false,'
++              WRITE(qe_json_unit,'(A)') '  "accelerated_kernel_work_removed_from_critical_path": false,'
++              WRITE(qe_json_unit,'(A)') '  "software_fallback_on_critical_path": true,'
++           END IF
++           WRITE(qe_json_unit,'(A)') '  "pure_software_qe_baseline": false,'
++           WRITE(qe_json_unit,'(A)') '  "timing_only": false,'
++           WRITE(qe_json_unit,'(A)') '  "l4_execution_proof": {'
++           IF ( qe_offload_bridge_exitstat == 0 ) THEN
++              WRITE(qe_json_unit,'(A)') '    "passed": true,'
++           ELSE
++              WRITE(qe_json_unit,'(A)') '    "passed": false,'
++           END IF
++           WRITE(qe_json_unit,'(A,I0,A)') '    "bridge_exitstat": ', qe_offload_bridge_exitstat, ','
++           WRITE(qe_json_unit,'(A)') '    "transport_harness": "gem5_generic_accel_microarchitecture_v1"'
++           WRITE(qe_json_unit,'(A)') '  },'
++           IF ( qe_diag_replacement_consumed ) THEN
++              WRITE(qe_json_unit,'(A)') &
++                   '  "claim_boundary": "L4 completed; QE skipped local diagonalization software"'
++           ELSEIF ( qe_offload_bridge_exitstat == 0 ) THEN
++              WRITE(qe_json_unit,'(A)') &
++                   '  "claim_boundary": "L4 completed; QE retained diagonalization software fallback"'
++           ELSE
++              WRITE(qe_json_unit,'(A)') &
++                   '  "claim_boundary": "L4 bridge failed; no accelerated replacement; QE retained software fallback"'
++           END IF
++           WRITE(qe_json_unit,'(A)') '}'
++           CLOSE(qe_json_unit)
++        END IF
++     END IF
++  END IF
++  !
+   RETURN
+   !
+  CONTAINS

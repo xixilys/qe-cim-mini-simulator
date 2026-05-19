@@ -11,6 +11,7 @@ simulation can reload without hidden Python process state.
 from __future__ import annotations
 
 import json
+import hashlib
 import math
 from dataclasses import asdict, dataclass, field, is_dataclass
 from pathlib import Path
@@ -86,6 +87,12 @@ STEP2_LOW_FIDELITY_ARTIFACT_KEYS = {
 }
 
 STEP2_CANDIDATE_QUEUE_ARTIFACTS = [
+    "architecture_search_space.json",
+    "architecture_candidate_generation_report.json",
+    "architecture_screening_report.json",
+    "mapping_candidates.jsonl",
+    "screening_results.jsonl",
+    "promotion_decisions.jsonl",
     "architecture_candidate_set.json",
     "step3_simulation_queue.json",
 ]
@@ -144,6 +151,17 @@ def _write_json(path: Path, payload: Mapping[str, Any]) -> None:
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
+def _write_jsonl(path: Path, records: Iterable[Mapping[str, Any]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lines = [json.dumps(_json_safe(record), sort_keys=True) for record in records]
+    path.write_text(("\n".join(lines) + "\n") if lines else "", encoding="utf-8")
+
+
+def _payload_sha256(payload: Any) -> str:
+    data = json.dumps(_json_safe(payload), sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return "sha256:" + hashlib.sha256(data).hexdigest()
+
+
 def _validation_messages(catalog: ArchitectureCatalog, architecture_id: str) -> List[Dict[str, Any]]:
     return [message.to_dict() for message in catalog.validate() if message.item_id in {architecture_id} or message.severity == "error"]
 
@@ -198,6 +216,45 @@ def _step3_searchability(
     return not blockers, blockers
 
 
+
+def _step2_eligibility_fields(
+    *,
+    step3_searchable: bool,
+    step3_blockers: Sequence[Mapping[str, Any]] | Sequence[Any],
+    promoted_for_simulation: Optional[bool] = None,
+) -> Dict[str, Any]:
+    """Return precise Step2/Step3 eligibility names for candidate artifacts.
+
+    `step3_searchable` is retained only as legacy compatibility while the
+    restructure migrates to `step2_screenable`, `step3_evaluable`,
+    `simulation_eligible`, and `simulation_blockers`.
+    """
+    blockers = [dict(item) if isinstance(item, Mapping) else item for item in list(step3_blockers or [])]
+    step2_screenable = bool(step3_searchable)
+    step3_evaluable = bool(step3_searchable)
+    if promoted_for_simulation is None:
+        simulation_eligible = step3_evaluable
+    else:
+        simulation_eligible = bool(promoted_for_simulation and step3_evaluable)
+    simulation_blockers = list(blockers)
+    if promoted_for_simulation is not None and not promoted_for_simulation:
+        simulation_blockers.append({
+            "reason_id": "not_promoted_for_simulation",
+            "detail": "candidate was not promoted by Step2 policy",
+        })
+    if not step3_evaluable and not simulation_blockers:
+        simulation_blockers.append({
+            "reason_id": "not_step3_evaluable",
+            "detail": "candidate failed Step2 screenability or backend eligibility",
+        })
+    return {
+        "step2_screenable": step2_screenable,
+        "step3_evaluable": step3_evaluable,
+        "simulation_eligible": simulation_eligible,
+        "simulation_blockers": [] if simulation_eligible else simulation_blockers,
+    }
+
+
 def build_architecture_artifact(
     catalog: ArchitectureCatalog,
     instance: ArchitectureInstance,
@@ -217,6 +274,10 @@ def build_architecture_artifact(
         selected_binding=selected_binding,
         catalog_has_errors=catalog_has_errors,
         instance=instance,
+    )
+    eligibility_fields = _step2_eligibility_fields(
+        step3_searchable=step3_searchable,
+        step3_blockers=step3_blockers,
     )
     full_workload_eligible = bool(lowering.report.get("full_workload_eligible", False)) and workload_package.is_full_workload()
     diagnostic_boundary = workload_package.claim_boundary in DIAGNOSTIC_CLAIM_BOUNDARIES
@@ -270,6 +331,7 @@ def build_architecture_artifact(
             "selected_binding_trusted_eligible": selected_binding_trusted,
             "step3_searchable": step3_searchable,
             "step3_search_blockers": step3_blockers,
+            **eligibility_fields,
             "full_workload_eligible": full_workload_eligible,
             "diagnostic_boundary": diagnostic_boundary,
         },
@@ -277,6 +339,7 @@ def build_architecture_artifact(
         "trusted_final_eligible": trusted_final_eligible,
         "step3_searchable": step3_searchable,
         "step3_search_blockers": step3_blockers,
+        **eligibility_fields,
         "candidate_only_reasons": reasons,
     }
 
@@ -1490,6 +1553,12 @@ def build_architecture_candidate_set(
             catalog_has_errors=instance_has_errors,
             instance=instance,
         )
+        promoted_for_simulation = bool(promotion_decision.get("promoted_for_simulation", False)) if selected else False
+        eligibility_fields = _step2_eligibility_fields(
+            step3_searchable=step3_searchable,
+            step3_blockers=step3_blockers,
+            promoted_for_simulation=promoted_for_simulation,
+        )
         reasons: List[Dict[str, Any]] = []
         if candidate_reason:
             reasons.append({"reason_id": "architecture_candidate_only", "detail": candidate_reason})
@@ -1503,10 +1572,11 @@ def build_architecture_candidate_set(
             "architecture_instance": instance.to_dict(include_bindings=True),
             "selected_for_step2_mapping": selected,
             "selected_mapping_candidate_id": selected_record.get("candidate_id") if selected else None,
-            "promoted_for_simulation": bool(promotion_decision.get("promoted_for_simulation", False)) if selected else False,
+            "promoted_for_simulation": promoted_for_simulation,
             "catalog_trusted_final_eligible": bool(instance.trusted_final_eligible(catalog.simulation_bindings)),
             "step3_searchable": step3_searchable,
             "step3_search_blockers": step3_blockers,
+            **eligibility_fields,
             "step4_eligible": bool("gem5_systemc" in instance.simulation_bindings and step3_searchable),
             "candidate_only": bool(candidate_reason),
             "candidate_only_reasons": reasons,
@@ -1639,6 +1709,297 @@ def build_step3_simulation_queue(
     }
 
 
+def _step2_control_scope(
+    workload_package: WorkloadPackage,
+    *,
+    trial_seed: str,
+    workload_run_seed: Optional[str] = None,
+) -> Dict[str, str]:
+    """Return deterministic Campaign/WorkloadRun/Trial IDs for Step2 artifacts.
+
+    Older callers do not yet provide a full Campaign ledger.  Until the ledger
+    API is threaded through every Step2 entry point, these deterministic IDs
+    give canonical artifacts a stable control-plane scope without leaking any
+    workload-family-specific fields into the generic Step2 contract.
+    """
+
+    workflow = workload_package.workflow if isinstance(workload_package.workflow, Mapping) else {}
+    source = workload_package.source if isinstance(workload_package.source, Mapping) else {}
+    domain = workload_package.domain_metadata if isinstance(workload_package.domain_metadata, Mapping) else {}
+    campaign_id = str(
+        workflow.get("campaign_id")
+        or source.get("campaign_id")
+        or domain.get("campaign_id")
+        or f"campaign::{workload_package.workload_id}"
+    )
+    workload_run_id = str(
+        workflow.get("workload_run_id")
+        or source.get("workload_run_id")
+        or domain.get("workload_run_id")
+        or workload_run_seed
+        or f"workload_run::{workload_package.workload_id}"
+    )
+    trial_id = str(
+        workflow.get("trial_id")
+        or source.get("trial_id")
+        or domain.get("trial_id")
+        or f"trial::{trial_seed}"
+    )
+    return {
+        "campaign_id": campaign_id,
+        "workload_run_id": workload_run_id,
+        "trial_id": trial_id,
+    }
+
+
+def build_architecture_search_space_artifact(
+    catalog: ArchitectureCatalog,
+    *,
+    workload_package: WorkloadPackage,
+    architecture_ids: Sequence[str],
+    backend: str,
+    objective_directions: Mapping[str, str],
+    random_seed: int,
+    beam_width: int,
+    policy_scope: str,
+    scope: Mapping[str, str],
+) -> Dict[str, Any]:
+    """Build the canonical Step2 parameterized architecture search-space."""
+
+    families: Dict[str, List[str]] = {}
+    for architecture_id in architecture_ids:
+        instance = catalog.instances.get(architecture_id)
+        family_id = instance.family_id if instance is not None else "unknown"
+        families.setdefault(str(family_id), []).append(str(architecture_id))
+    payload: Dict[str, Any] = {
+        "schema_version": "dse.step2.architecture_search_space.v1",
+        **dict(scope),
+        "workload_id": workload_package.workload_id,
+        "workload_family": workload_package.workload_family,
+        "profile_id": workload_package.profile_id,
+        "backend": backend,
+        "policy_scope": policy_scope,
+        "objective_directions": dict(objective_directions),
+        "parameters": {
+            "architecture_ids": [str(item) for item in architecture_ids],
+            "architecture_families": {family: sorted(ids) for family, ids in sorted(families.items())},
+            "beam_width": int(beam_width),
+            "random_seed": int(random_seed),
+        },
+        "constraints": {
+            "claim_boundary": workload_package.claim_boundary,
+            "step2_only": True,
+            "trusted_final_claim": False,
+        },
+        "generation_provenance": {
+            "catalog_instance_count": len(catalog.instances),
+            "selected_architecture_count": len(architecture_ids),
+            "source": "Step2 catalog/domain-policy screening",
+            "replay_inputs": [
+                "architecture_catalog.json",
+                "workload_package.json",
+                "executable_graph.json",
+                "mapping_seed_set.json",
+            ],
+        },
+        "freeze_gate_verdict": {
+            "status": "candidate_generation_only",
+            "completion_evidence": False,
+            "reason": "Search space defines Step2 candidates; Step3+ evidence is required for final claims.",
+        },
+        "trusted_final_claim": False,
+    }
+    payload["search_space_hash"] = _payload_sha256({key: value for key, value in payload.items() if key != "search_space_hash"})
+    return payload
+
+
+def build_step2_search_artifacts(
+    *,
+    catalog: ArchitectureCatalog,
+    workload_package: WorkloadPackage,
+    architecture_ids: Sequence[str],
+    backend: str,
+    objective_directions: Mapping[str, str],
+    random_seed: int,
+    beam_width: int,
+    architecture_candidate_set: Mapping[str, Any],
+    mapping_candidate_records: Mapping[str, Any],
+    low_fidelity_summary: Optional[Mapping[str, Any]],
+    promotion_decision: Optional[Mapping[str, Any]],
+    step3_queue: Mapping[str, Any],
+    scope: Mapping[str, str],
+    policy_scope: str,
+) -> Dict[str, Any]:
+    """Return canonical Step2 search/provenance artifacts.
+
+    These artifacts are deliberately redundant with legacy Step2 handoff files:
+    they provide the canonical replay/audit surface required by the research
+    control plane while older JSON files remain compatibility inputs for
+    existing Step3 tests.
+    """
+
+    search_space = build_architecture_search_space_artifact(
+        catalog,
+        workload_package=workload_package,
+        architecture_ids=architecture_ids,
+        backend=backend,
+        objective_directions=objective_directions,
+        random_seed=random_seed,
+        beam_width=beam_width,
+        policy_scope=policy_scope,
+        scope=scope,
+    )
+    architecture_candidates = [
+        dict(candidate)
+        for candidate in architecture_candidate_set.get("candidates", []) or []
+        if isinstance(candidate, Mapping)
+    ]
+    mapping_candidates = [
+        {
+            "schema_version": "dse.step2.mapping_candidate_record.v1",
+            **dict(scope),
+            "workload_id": workload_package.workload_id,
+            "workload_family": workload_package.workload_family,
+            "candidate_id": str(record.get("candidate_id", f"mapping_candidate_{index}")),
+            "mapping": dict(record.get("mapping", {}) or {}),
+            "parameters": {
+                "architecture_id": str((promotion_decision or {}).get("architecture_id") or ""),
+                "backend": backend,
+                "mapping_policy": mapping_candidate_records.get("algorithm", "workflow_seeded_beam_local_search_v1"),
+            },
+            "provenance": {
+                "source_artifact": "mapping_candidate_records.json",
+                "source_index": index,
+                "algorithm": mapping_candidate_records.get("algorithm"),
+                "beam_width": mapping_candidate_records.get("beam_width"),
+            },
+            "generation_reason": str(record.get("selection_reason") or record.get("state") or "mapping_search_candidate"),
+            "score": record.get("score", record.get("estimated_score", 0.0)),
+            "step2_screenable": not bool(record.get("violations")),
+            "step3_evaluable": bool((promotion_decision or {}).get("promoted_for_simulation", False) and record.get("candidate_id") == (promotion_decision or {}).get("candidate_id")),
+            "simulation_eligible": bool((promotion_decision or {}).get("promoted_for_simulation", False) and record.get("candidate_id") == (promotion_decision or {}).get("candidate_id")),
+            "simulation_blockers": [] if bool((promotion_decision or {}).get("promoted_for_simulation", False) and record.get("candidate_id") == (promotion_decision or {}).get("candidate_id")) else ["not_selected_for_step3_simulation"],
+            "promotion_reasons": [
+                str(reason.get("reason_id") if isinstance(reason, Mapping) else reason)
+                for reason in (promotion_decision or {}).get("reasons", []) or []
+                if isinstance(reason, (Mapping, str))
+            ] if record.get("candidate_id") == (promotion_decision or {}).get("candidate_id") else [],
+            "blocker_reasons": [str(item) for item in record.get("violations", []) or []],
+            "trusted_final_claim": False,
+        }
+        for index, record in enumerate(mapping_candidate_records.get("candidates", []) or [])
+        if isinstance(record, Mapping)
+    ]
+    promoted_mapping_ids = {
+        str(candidate.get("candidate_id"))
+        for candidate in mapping_candidates
+        if candidate.get("simulation_eligible")
+    }
+    screening_results = [
+        {
+            "schema_version": "dse.step2.screening_result_record.v1",
+            **dict(scope),
+            "workload_id": workload_package.workload_id,
+            "workload_family": workload_package.workload_family,
+            "candidate_id": str(candidate.get("candidate_id")),
+            "architecture_id": str(candidate.get("architecture_id", "")),
+            "screening_stage": "architecture_screening",
+            "passed": bool(candidate.get("step2_screenable", False)),
+            "step2_screenable": bool(candidate.get("step2_screenable", False)),
+            "step3_evaluable": bool(candidate.get("step3_evaluable", False)),
+            "simulation_eligible": bool(candidate.get("simulation_eligible", False)),
+            "simulation_blockers": list(candidate.get("simulation_blockers", []) or []),
+            "blocker_reasons": list(candidate.get("candidate_only_reasons", []) or []),
+            "evidence_refs": ["architecture_candidate_set.json"],
+            "trusted_final_claim": False,
+        }
+        for candidate in architecture_candidates
+    ]
+    if low_fidelity_summary:
+        screening_results.append({
+            "schema_version": "dse.step2.screening_result_record.v1",
+            **dict(scope),
+            "workload_id": workload_package.workload_id,
+            "workload_family": workload_package.workload_family,
+            "candidate_id": str((promotion_decision or {}).get("candidate_id") or "selected_mapping"),
+            "architecture_id": str((promotion_decision or {}).get("architecture_id") or ""),
+            "screening_stage": "low_fidelity_screening",
+            "passed": bool(low_fidelity_summary.get("passed", False)),
+            "step2_screenable": bool(low_fidelity_summary.get("passed", False)),
+            "step3_evaluable": bool((promotion_decision or {}).get("promoted_for_simulation", False)),
+            "simulation_eligible": bool((promotion_decision or {}).get("promoted_for_simulation", False)),
+            "simulation_blockers": [] if bool((promotion_decision or {}).get("promoted_for_simulation", False)) else [
+                str(blocker.get("reason_id", blocker))
+                for blocker in low_fidelity_summary.get("blockers", []) or []
+            ],
+            "blocker_reasons": list(low_fidelity_summary.get("blockers", []) or []),
+            "evidence_refs": list(low_fidelity_summary.get("required_artifacts", []) or STEP2_LOW_FIDELITY_ARTIFACTS),
+            "trusted_final_claim": False,
+        })
+    promotion_records = [
+        {
+            "schema_version": "dse.step2.promotion_decision_record.v1",
+            **dict(scope),
+            "workload_id": workload_package.workload_id,
+            "workload_family": workload_package.workload_family,
+            "candidate_id": str((promotion_decision or {}).get("candidate_id") or "selected_mapping"),
+            "mapping_id": str((promotion_decision or {}).get("mapping_id") or ""),
+            "architecture_id": str((promotion_decision or {}).get("architecture_id") or ""),
+            "decision": "promote" if bool((promotion_decision or {}).get("promoted_for_simulation", False)) else "block",
+            "promoted_for_simulation": bool((promotion_decision or {}).get("promoted_for_simulation", False)),
+            "reasons": [
+                str(reason.get("reason_id") if isinstance(reason, Mapping) else reason)
+                for reason in (promotion_decision or {}).get("reasons", []) or []
+                if isinstance(reason, (Mapping, str))
+            ],
+            "required_evidence": list((promotion_decision or {}).get("required_evidence", []) or []),
+            "queue_artifact": "step3_simulation_queue.json",
+            "trusted_final_claim": False,
+        }
+    ] if promotion_decision else []
+    candidate_generation_report = {
+        "schema_version": "dse.step2.architecture_candidate_generation_report.v1",
+        **dict(scope),
+        "workload_id": workload_package.workload_id,
+        "workload_family": workload_package.workload_family,
+        "search_space_artifact": "architecture_search_space.json",
+        "search_space_hash": search_space["search_space_hash"],
+        "policy_scope": policy_scope,
+        "architecture_candidate_count": len(architecture_candidates),
+        "mapping_candidate_count": len(mapping_candidates),
+        "generated_candidate_ids": [str(candidate.get("candidate_id")) for candidate in architecture_candidates],
+        "mapping_candidate_ids": [str(candidate.get("candidate_id")) for candidate in mapping_candidates],
+        "generation_provenance": {
+            "architecture_source": "architecture_catalog.json",
+            "mapping_source": "mapping_candidate_records.json",
+            "jsonl_artifacts": ["mapping_candidates.jsonl"],
+        },
+        "trusted_final_claim": False,
+    }
+    architecture_screening_report = {
+        "schema_version": "dse.step2.architecture_screening_report.v1",
+        **dict(scope),
+        "workload_id": workload_package.workload_id,
+        "workload_family": workload_package.workload_family,
+        "screened_candidate_count": len(screening_results),
+        "promoted_candidate_count": len(promoted_mapping_ids),
+        "promotion_decision_artifact": "promotion_decisions.jsonl",
+        "screening_results_artifact": "screening_results.jsonl",
+        "step3_simulation_queue_artifact": "step3_simulation_queue.json",
+        "step3_queue_entry_count": int(step3_queue.get("entry_count", 0) or 0),
+        "trusted_final_claim": False,
+        "claim_boundary": "Step2 screening/promotions only; final trust requires Step3/Step4 evidence.",
+    }
+    return {
+        "architecture_search_space": search_space,
+        "architecture_candidate_generation_report": candidate_generation_report,
+        "architecture_screening_report": architecture_screening_report,
+        "mapping_candidates_jsonl": mapping_candidates,
+        "screening_results_jsonl": screening_results,
+        "promotion_decisions_jsonl": promotion_records,
+    }
+
+
 def _screening_architecture_candidate_set(
     *,
     workload_package: WorkloadPackage,
@@ -1648,6 +2009,11 @@ def _screening_architecture_candidate_set(
     candidates = []
     for record in records:
         architecture_id = str(record.get("architecture_id", ""))
+        eligibility_fields = _step2_eligibility_fields(
+            step3_searchable=bool(record.get("step3_searchable", record.get("step3_evaluable", False))),
+            step3_blockers=list(record.get("step3_search_blockers", record.get("simulation_blockers", [])) or []),
+            promoted_for_simulation=bool(record.get("promoted_for_simulation", False)),
+        )
         candidates.append({
             "candidate_id": f"architecture::{architecture_id}",
             "architecture_id": architecture_id,
@@ -1659,6 +2025,7 @@ def _screening_architecture_candidate_set(
             "promoted_for_simulation": bool(record.get("promoted_for_simulation", False)),
             "step3_searchable": bool(record.get("step3_searchable", False)),
             "step3_search_blockers": list(record.get("step3_search_blockers", []) or []),
+            **eligibility_fields,
             "step4_eligible": bool(record.get("step4_eligible", False)),
             "candidate_only_reasons": list(record.get("candidate_only_reasons", []) or []),
             "artifact_validation_valid": bool(record.get("artifact_validation_valid", False)),
@@ -2452,6 +2819,23 @@ def run_step2_architecture_mapping_workflow(
         architecture_artifact=architecture_artifact,
         backend=backend,
     )
+    control_scope = _step2_control_scope(workload_package, trial_seed=run_id)
+    canonical_search_artifacts = build_step2_search_artifacts(
+        catalog=catalog,
+        workload_package=workload_package,
+        architecture_ids=sorted(catalog.instances),
+        backend=backend,
+        objective_directions=objective_directions,
+        random_seed=random_seed,
+        beam_width=beam_width,
+        architecture_candidate_set=architecture_candidate_set,
+        mapping_candidate_records=mapping_artifacts["candidate_records"],
+        low_fidelity_summary=low_fidelity_artifacts["low_fidelity_summary"],
+        promotion_decision=promotion_decision,
+        step3_queue=step3_queue,
+        scope=control_scope,
+        policy_scope="generic_catalog_only",
+    )
     design_point.config["architecture_candidate_set"] = {
         "artifact": "architecture_candidate_set.json",
         "selected_architecture_id": instance.architecture_id,
@@ -2467,6 +2851,12 @@ def run_step2_architecture_mapping_workflow(
     design_point.config.setdefault("output_config", {})["candidate_queue_artifacts"] = list(STEP2_CANDIDATE_QUEUE_ARTIFACTS)
     design_point.config.setdefault("replay_metadata", {})["architecture_candidate_set"] = "architecture_candidate_set.json"
     design_point.config.setdefault("replay_metadata", {})["step3_simulation_queue"] = "step3_simulation_queue.json"
+    design_point.config.setdefault("replay_metadata", {})["architecture_search_space"] = "architecture_search_space.json"
+    design_point.config.setdefault("replay_metadata", {})["architecture_candidate_generation_report"] = "architecture_candidate_generation_report.json"
+    design_point.config.setdefault("replay_metadata", {})["architecture_screening_report"] = "architecture_screening_report.json"
+    design_point.config.setdefault("replay_metadata", {})["mapping_candidates_jsonl"] = "mapping_candidates.jsonl"
+    design_point.config.setdefault("replay_metadata", {})["screening_results_jsonl"] = "screening_results.jsonl"
+    design_point.config.setdefault("replay_metadata", {})["promotion_decisions_jsonl"] = "promotion_decisions.jsonl"
 
     status_reasons = list(architecture_artifact.get("candidate_only_reasons", []) or [])
     if selected_violations:
@@ -2533,6 +2923,12 @@ def run_step2_architecture_mapping_workflow(
         "low_fidelity_summary": low_fidelity_artifacts["low_fidelity_summary"],
         "architecture_candidate_set": architecture_candidate_set,
         "step3_simulation_queue": step3_queue,
+        "architecture_search_space": canonical_search_artifacts["architecture_search_space"],
+        "architecture_candidate_generation_report": canonical_search_artifacts["architecture_candidate_generation_report"],
+        "architecture_screening_report": canonical_search_artifacts["architecture_screening_report"],
+        "mapping_candidates_jsonl": canonical_search_artifacts["mapping_candidates_jsonl"],
+        "screening_results_jsonl": canonical_search_artifacts["screening_results_jsonl"],
+        "promotion_decisions_jsonl": canonical_search_artifacts["promotion_decisions_jsonl"],
         "legality_matrix": mapping_artifacts["legality_matrix"],
         "seed_set": mapping_artifacts["seed_set"],
         "candidate_records": mapping_artifacts["candidate_records"],
@@ -2582,6 +2978,9 @@ def run_step2_architecture_mapping_workflow(
             "l2_evaluation_result": "l2_evaluation_result.json",
             "l2_promotion_decision": "l2_promotion_decision.json",
             "low_fidelity_summary": "low_fidelity_screening_summary.json",
+            "architecture_search_space": "architecture_search_space.json",
+            "architecture_candidate_generation_report": "architecture_candidate_generation_report.json",
+            "architecture_screening_report": "architecture_screening_report.json",
             "architecture_candidate_set": "architecture_candidate_set.json",
             "step3_simulation_queue": "step3_simulation_queue.json",
             "legality_matrix": "mapping_legality_matrix.json",
@@ -2605,6 +3004,15 @@ def run_step2_architecture_mapping_workflow(
         for key, filename in name_map.items():
             if key in artifacts:
                 _write_json(output / filename, artifacts[key])
+                artifact_paths[key] = filename
+        jsonl_map = {
+            "mapping_candidates_jsonl": "mapping_candidates.jsonl",
+            "screening_results_jsonl": "screening_results.jsonl",
+            "promotion_decisions_jsonl": "promotion_decisions.jsonl",
+        }
+        for key, filename in jsonl_map.items():
+            if key in artifacts:
+                _write_jsonl(output / filename, artifacts[key])
                 artifact_paths[key] = filename
 
     return Step2WorkflowResult(
@@ -2663,6 +3071,11 @@ def _architecture_screening_record(result: Step2WorkflowResult, run_dir: Path) -
         if result.architecture_instance is not None
         else str(architecture.get("architecture_id", ""))
     )
+    eligibility_fields = _step2_eligibility_fields(
+        step3_searchable=bool(architecture.get("step3_searchable", architecture.get("step3_evaluable", False))),
+        step3_blockers=list(architecture.get("step3_search_blockers", architecture.get("simulation_blockers", [])) or []),
+        promoted_for_simulation=bool(promotion.get("promoted_for_simulation", False)),
+    )
     return {
         "schema_version": "dse.step2.architecture_screening_record.v1",
         "architecture_id": architecture_id,
@@ -2675,6 +3088,7 @@ def _architecture_screening_record(result: Step2WorkflowResult, run_dir: Path) -
         "promoted_for_simulation": bool(promotion.get("promoted_for_simulation", False)),
         "step3_searchable": bool(architecture.get("step3_searchable", False)),
         "step3_search_blockers": list(architecture.get("step3_search_blockers", []) or []),
+        **eligibility_fields,
         "step4_eligible": bool(
             architecture.get("step3_searchable", False)
             and "gem5_systemc" in (
@@ -2716,6 +3130,7 @@ def run_step2_architecture_screening_workflow(
     the same persisted handoff shape expected by Step3.
     """
     catalog = catalog or seed_generic_dse_architecture_catalog()
+    objective_directions = dict(objective_directions or {"latency_ms": "minimize", "energy_j": "minimize", "power_w": "minimize"})
     selected_architecture_ids = list(architecture_ids) if architecture_ids is not None else sorted(catalog.instances)
     root_dir = Path(output_dir) if output_dir is not None else None
     architecture_root = root_dir / "architectures" if root_dir is not None else None
@@ -2756,6 +3171,76 @@ def run_step2_architecture_screening_workflow(
         records=records,
         backend=backend,
     )
+    screening_scope = _step2_control_scope(
+        workload_package,
+        trial_seed=f"{workload_package.workload_id}__architecture_screening",
+    )
+    synthetic_mapping_candidates = {
+        "algorithm": "architecture_screening_v1",
+        "beam_width": beam_width,
+        "candidates": [
+            {
+                "candidate_id": str(record.get("selected_candidate_id") or record.get("architecture_id")),
+                "mapping": {},
+                "state": "promoted" if record.get("promoted_for_simulation") else "blocked",
+                "selection_reason": "architecture_screening_record",
+            }
+            for record in records
+        ],
+    }
+    aggregate_promotion_decision = {
+        "candidate_id": str(promoted_records[0].get("selected_candidate_id") or promoted_records[0].get("architecture_id")),
+        "mapping_id": str(promoted_records[0].get("mapping_id") or ""),
+        "architecture_id": str(promoted_records[0].get("architecture_id") or ""),
+        "promoted_for_simulation": True,
+        "reasons": [{"reason_id": "architecture_screening_promoted"}],
+        "required_evidence": ["simulation_request.json", "simulation_result.json"],
+    } if promoted_records else {
+        "candidate_id": "architecture_screening",
+        "mapping_id": "",
+        "architecture_id": "",
+        "promoted_for_simulation": False,
+        "reasons": [{"reason_id": "no_architecture_promoted"}],
+        "required_evidence": [],
+    }
+    canonical_screening_artifacts = build_step2_search_artifacts(
+        catalog=catalog,
+        workload_package=workload_package,
+        architecture_ids=selected_architecture_ids,
+        backend=backend,
+        objective_directions=objective_directions,
+        random_seed=random_seed,
+        beam_width=beam_width,
+        architecture_candidate_set=architecture_candidate_set,
+        mapping_candidate_records=synthetic_mapping_candidates,
+        low_fidelity_summary=None,
+        promotion_decision=aggregate_promotion_decision,
+        step3_queue=step3_queue,
+        scope=screening_scope,
+        policy_scope="architecture_screening",
+    )
+    canonical_screening_artifacts["promotion_decisions_jsonl"] = [
+        {
+            "schema_version": "dse.step2.promotion_decision_record.v1",
+            **dict(screening_scope),
+            "workload_id": workload_package.workload_id,
+            "workload_family": workload_package.workload_family,
+            "candidate_id": str(record.get("selected_candidate_id") or record.get("architecture_id")),
+            "mapping_id": str(record.get("mapping_id") or ""),
+            "architecture_id": str(record.get("architecture_id") or ""),
+            "decision": "promote" if record.get("promoted_for_simulation") else "block",
+            "promoted_for_simulation": bool(record.get("promoted_for_simulation", False)),
+            "reasons": [
+                str(reason.get("reason_id") if isinstance(reason, Mapping) else reason)
+                for reason in record.get("reasons", []) or record.get("candidate_only_reasons", []) or []
+                if isinstance(reason, (Mapping, str))
+            ],
+            "required_evidence": ["simulation_request.json", "simulation_result.json"],
+            "queue_artifact": "step3_simulation_queue.json",
+            "trusted_final_claim": False,
+        }
+        for record in records
+    ]
     aggregate = {
         "schema_version": "dse.step2.architecture_screening_records.v1",
         "workload_id": workload_package.workload_id,
@@ -2774,6 +3259,12 @@ def run_step2_architecture_screening_workflow(
     }
     artifacts: Dict[str, Any] = {
         "architecture_screening_records": aggregate,
+        "architecture_search_space": canonical_screening_artifacts["architecture_search_space"],
+        "architecture_candidate_generation_report": canonical_screening_artifacts["architecture_candidate_generation_report"],
+        "architecture_screening_report": canonical_screening_artifacts["architecture_screening_report"],
+        "mapping_candidates_jsonl": canonical_screening_artifacts["mapping_candidates_jsonl"],
+        "screening_results_jsonl": canonical_screening_artifacts["screening_results_jsonl"],
+        "promotion_decisions_jsonl": canonical_screening_artifacts["promotion_decisions_jsonl"],
         "architecture_candidate_set": architecture_candidate_set,
         "step3_simulation_queue": step3_queue,
     }
@@ -2781,6 +3272,18 @@ def run_step2_architecture_screening_workflow(
     if root_dir is not None:
         _write_json(root_dir / "architecture_screening_records.json", aggregate)
         artifact_paths["architecture_screening_records"] = "architecture_screening_records.json"
+        _write_json(root_dir / "architecture_search_space.json", canonical_screening_artifacts["architecture_search_space"])
+        artifact_paths["architecture_search_space"] = "architecture_search_space.json"
+        _write_json(root_dir / "architecture_candidate_generation_report.json", canonical_screening_artifacts["architecture_candidate_generation_report"])
+        artifact_paths["architecture_candidate_generation_report"] = "architecture_candidate_generation_report.json"
+        _write_json(root_dir / "architecture_screening_report.json", canonical_screening_artifacts["architecture_screening_report"])
+        artifact_paths["architecture_screening_report"] = "architecture_screening_report.json"
+        _write_jsonl(root_dir / "mapping_candidates.jsonl", canonical_screening_artifacts["mapping_candidates_jsonl"])
+        artifact_paths["mapping_candidates_jsonl"] = "mapping_candidates.jsonl"
+        _write_jsonl(root_dir / "screening_results.jsonl", canonical_screening_artifacts["screening_results_jsonl"])
+        artifact_paths["screening_results_jsonl"] = "screening_results.jsonl"
+        _write_jsonl(root_dir / "promotion_decisions.jsonl", canonical_screening_artifacts["promotion_decisions_jsonl"])
+        artifact_paths["promotion_decisions_jsonl"] = "promotion_decisions.jsonl"
         _write_json(root_dir / "architecture_candidate_set.json", architecture_candidate_set)
         artifact_paths["architecture_candidate_set"] = "architecture_candidate_set.json"
         _write_json(root_dir / "step3_simulation_queue.json", step3_queue)

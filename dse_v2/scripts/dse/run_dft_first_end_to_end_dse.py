@@ -13,6 +13,7 @@ within the requested test scope.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import subprocess
 import sys
@@ -70,6 +71,237 @@ def _now_tag() -> str:
 def _write_json(path: Path, payload: Mapping[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def _sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _artifact_record(path: Path, *, base: Path, required: bool = True) -> Dict[str, Any]:
+    exists = path.exists()
+    record: Dict[str, Any] = {
+        "path": str(path.relative_to(base) if path.is_relative_to(base) else path),
+        "required": required,
+        "exists": exists,
+    }
+    if exists:
+        record["sha256"] = _sha256(path)
+        record["size_bytes"] = path.stat().st_size
+    return record
+
+
+def _write_dft_step3_status(
+    *,
+    step3_dir: Path,
+    architecture_id: str,
+    simulator_returncode: int,
+    timing_verified: bool,
+    sim_request: Mapping[str, Any],
+    sim_result: Mapping[str, Any],
+) -> Dict[str, Any]:
+    status = {
+        "schema_version": "dse.step3.status.v1",
+        "step": "step3",
+        "owner": "simulation_execution",
+        "architecture_id": architecture_id,
+        "status": "passed" if timing_verified else "failed",
+        "simulator_returncode": int(simulator_returncode),
+        "timing_verified": bool(timing_verified),
+        "simulation_request": "simulation_request.json",
+        "simulation_result_raw": "simulation_result.raw.json",
+        "simulation_result_public": "simulation_result.json",
+        "backend_result_status": sim_result.get("status"),
+        "workload_node_count": len((sim_request.get("workload", {}) or {}).get("nodes", {}) or {}) if isinstance(sim_request.get("workload"), Mapping) else None,
+        "claim_boundary": "Step3 owns generic simulation execution only; adjudication and reporting are Step4/Step5-owned.",
+    }
+    _write_json(step3_dir / "step3_status.json", status)
+    return status
+
+
+def _load_json_if_exists(path: Path) -> Dict[str, Any]:
+    if not path.exists():
+        return {}
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    return payload if isinstance(payload, dict) else {}
+
+
+def _write_dft_step4_adjudication_from_step3(
+    *,
+    step4_dir: Path,
+    step3_dir: Path,
+    architecture_id: str,
+    timing_verified: bool,
+    verification: Mapping[str, Any],
+) -> Dict[str, Any]:
+    """Materialize DFT-local Step4 ownership over Step3 timing evidence.
+
+    The generic evidence writer still leaves compatibility artifacts beside the
+    Step3 run.  This DFT runner additionally emits Step4-owned wrappers so the
+    DFT proof path can audit Step3/Step4 ownership without changing generic core.
+    """
+
+    numerical = _load_json_if_exists(step3_dir / "numerical_validation.json")
+    if not numerical:
+        numerical_summary = verification.get("numerical_validation", {}) if isinstance(verification.get("numerical_validation"), Mapping) else {}
+        numerical = {
+            "schema_version": "dse.numerical_validation.v1",
+            "passed": bool(numerical_summary.get("passed", False)),
+            "status": numerical_summary.get("status"),
+            "scope": numerical_summary.get("scope", "step3_runtime_verification"),
+            "summary": numerical_summary.get("summary", {}),
+        }
+    verdict = _load_json_if_exists(step3_dir / "verdict.json")
+    numerical_source = step3_dir / "numerical_validation.json"
+    if not numerical_source.exists() and (step3_dir / "simulator_consistency_check.json").exists():
+        numerical_source = step3_dir / "simulator_consistency_check.json"
+    kernel_numerical = {
+        "schema_version": "dse.kernel_numerical_validation.v1",
+        "step": "step4",
+        "owner": "evidence_adjudication",
+        "architecture_id": architecture_id,
+        "status": "passed" if timing_verified and numerical.get("passed") is True else "failed",
+        "passed": bool(timing_verified and numerical.get("passed") is True),
+        "source_step3_artifact": str(numerical_source),
+        "source_step3_scope": numerical.get("scope"),
+        "summary": numerical.get("summary", {}),
+        "claim_boundary": "Kernel numerical validation is Step4-adjudicated over Step3 simulator outputs; it is not DFT scientific correctness.",
+    }
+    domain_physics = {
+        "schema_version": "dse.dft.domain_physics_validation.v1",
+        "step": "step4",
+        "owner": "domain_profile_adjudication",
+        "architecture_id": architecture_id,
+        "status": "not_claimed",
+        "passed": False,
+        "domain": "dft",
+        "required_external_domain_evidence": [
+            "reference_energy_or_residual_trace",
+            "convergence_tolerance_record",
+            "pseudopotential/input_provenance",
+        ],
+        "claim_boundary": "DFT numerical/physics correctness is not inferred from generic Step3 timing evidence.",
+    }
+    step4_verdict = {
+        **verdict,
+        "schema_version": verdict.get("schema_version", "dse.verdict.v1"),
+        "step": "step4",
+        "owner": "evidence_adjudication",
+        "architecture_id": architecture_id,
+        "step3_simulation_passed": bool(verdict.get("simulation_passed", False)),
+        "kernel_numerical_validation_passed": bool(kernel_numerical["passed"]),
+        "domain_physics_validation_passed": False,
+        "trusted_for_final_ranking": False,
+        "claim_boundary": "Step4 verdict can adjudicate timing/kernel evidence; DFT domain physics remains unclaimed without external evidence.",
+    }
+    claim_validation = {
+        "schema_version": "dse.claim_validation.v1",
+        "step": "step4",
+        "owner": "claim_validation",
+        "architecture_id": architecture_id,
+        "trusted_final_ranking": False,
+        "claim_levels": {
+            "timing_evidence": bool(timing_verified),
+            "kernel_numerical_evidence": bool(kernel_numerical["passed"]),
+            "domain_physics_evidence": False,
+            "software_visible_evidence": False,
+        },
+        "source_step3_dir": str(step3_dir),
+        "claim_boundary": "No DFT deliverable-complete or scientific-correctness claim is made by Step3 timing evidence alone.",
+    }
+    evidence_requirements = {
+        "schema_version": "dse.evidence_requirements.v1",
+        "step": "step4",
+        "owner": "evidence_adjudication",
+        "architecture_id": architecture_id,
+        "requirements": [
+            {"id": "step3_simulation_result", "satisfied": (step3_dir / "simulation_result.raw.json").exists()},
+            {"id": "kernel_numerical_validation", "satisfied": bool(kernel_numerical["passed"])},
+            {"id": "domain_physics_validation", "satisfied": False},
+            {"id": "software_visible_l4_evidence", "satisfied": False},
+        ],
+    }
+    provenance = {
+        "schema_version": "dse.provenance.v1",
+        "step": "step4",
+        "owner": "evidence_adjudication",
+        "architecture_id": architecture_id,
+        "source_step3_artifacts": {
+            "simulation_request": str(step3_dir / "simulation_request.json"),
+            "simulation_result_raw": str(step3_dir / "simulation_result.raw.json"),
+            "simulation_result_public": str(step3_dir / "simulation_result.json"),
+            "step3_status": str(step3_dir / "step3_status.json"),
+            "legacy_numerical_validation": str(step3_dir / "numerical_validation.json"),
+            "simulator_consistency_check": str(step3_dir / "simulator_consistency_check.json"),
+            "legacy_verdict": str(step3_dir / "verdict.json"),
+        },
+    }
+    outputs = {
+        "kernel_numerical_validation.json": kernel_numerical,
+        "domain_physics_validation.json": domain_physics,
+        "verdict.json": step4_verdict,
+        "claim_validation.json": claim_validation,
+        "evidence_requirements.json": evidence_requirements,
+        "provenance.json": provenance,
+        "manifest.json": {
+            "schema_version": "dse.step4.manifest.v1",
+            "step": "step4",
+            "owner": "evidence_adjudication",
+            "architecture_id": architecture_id,
+            "source_step3_dir": str(step3_dir),
+            "claim_boundary": "DFT Step4 adjudication wrapper over Step3 timing artifacts.",
+        },
+    }
+    for name, payload in outputs.items():
+        _write_json(step4_dir / name, payload)
+    artifacts = [
+        _artifact_record(step4_dir / name, base=step4_dir)
+        for name in sorted(outputs)
+    ]
+    artifact_manifest = {
+        "schema_version": "dse.artifact_manifest.v1",
+        "step": "step4",
+        "owner": "evidence_adjudication",
+        "architecture_id": architecture_id,
+        "artifacts": artifacts,
+    }
+    _write_json(step4_dir / "artifact_manifest.json", artifact_manifest)
+    return {
+        "schema_version": "dse.dft.step4_adjudication_summary.v1",
+        "step4_dir": str(step4_dir),
+        "kernel_numerical_validation": str(step4_dir / "kernel_numerical_validation.json"),
+        "domain_physics_validation": str(step4_dir / "domain_physics_validation.json"),
+        "verdict": str(step4_dir / "verdict.json"),
+        "claim_validation": str(step4_dir / "claim_validation.json"),
+        "evidence_requirements": str(step4_dir / "evidence_requirements.json"),
+        "provenance": str(step4_dir / "provenance.json"),
+        "artifact_manifest": str(step4_dir / "artifact_manifest.json"),
+        "legacy_step3_adjudication_artifacts": [
+            str(step3_dir / "numerical_validation.json" if (step3_dir / "numerical_validation.json").exists() else step3_dir / "simulator_consistency_check.json"),
+            str(step3_dir / "verdict.json"),
+            str(step3_dir / "artifact_manifest.json"),
+        ],
+        "claim_boundary": "Step4-owned DFT adjudication artifacts wrap legacy Step3-local compatibility files until generic core migration lands.",
+    }
+
+
+def _step_artifact_ownership_summary(records: Sequence[Mapping[str, Any]], step4: Mapping[str, Any], pareto_artifact: Path) -> Dict[str, Any]:
+    return {
+        "schema_version": "dse.dft.step_artifact_ownership.v1",
+        "status": "aligned_with_dft_wrappers",
+        "step3_owner": "simulation_execution",
+        "step4_owner": "evidence_adjudication_calibration_feedback",
+        "step5_owner": "reporting_claim_presentation",
+        "step3_artifacts": ["simulation_request.json", "simulation_result.raw.json", "simulation_result.json", "manifest.json", "step3_status.json"],
+        "step4_artifacts": ["kernel_numerical_validation.json", "domain_physics_validation.json", "verdict.json", "claim_validation.json", "evidence_requirements.json", "provenance.json", "artifact_manifest.json"],
+        "step5_artifacts": [str(pareto_artifact)],
+        "per_architecture_step4_adjudication": {
+            str(record.get("architecture_id")): record.get("step4_adjudication")
+            for record in records
+            if isinstance(record.get("step4_adjudication"), Mapping)
+        },
+        "l4_step4_artifacts": step4.get("run_dir"),
+        "claim_boundary": "DFT runner labels Step3/4/5 ownership without moving generic core compatibility artifacts.",
+    }
 
 
 def _write_completion_audit(run_dir: Path) -> Dict[str, Any]:
@@ -369,6 +601,21 @@ def _run_step2_and_step3(
             workload_package=step2.workload_package,
             codesign_candidate=step2.artifacts.get("codesign_candidate") if isinstance(step2.artifacts.get("codesign_candidate"), Mapping) else None,
         )
+        step3_status = _write_dft_step3_status(
+            step3_dir=step3_dir,
+            architecture_id=architecture_id,
+            simulator_returncode=int(run.get("returncode", 1)),
+            timing_verified=timing_verified,
+            sim_request=sim_request,
+            sim_result=sim_result,
+        )
+        step4_adjudication = _write_dft_step4_adjudication_from_step3(
+            step4_dir=arch_root / "step4_adjudication",
+            step3_dir=step3_dir,
+            architecture_id=architecture_id,
+            timing_verified=timing_verified,
+            verification=verification,
+        )
         metrics = sim_result.get("metrics", {}) if isinstance(sim_result.get("metrics", {}), Mapping) else {}
         latency_ms = _float_or_none(metrics.get("latency_ms"))
         record.update({
@@ -381,12 +628,16 @@ def _run_step2_and_step3(
                 "result_status": sim_result.get("status"),
                 "evidence_dir": str(step3_dir),
                 "simulation_result": str(step3_dir / "simulation_result.json"),
+                "simulation_result_raw": str(step3_dir / "simulation_result.raw.json"),
+                "step3_status": str(step3_dir / "step3_status.json"),
                 "numerical_validation": str(step3_dir / "numerical_validation.json"),
                 "verdict": str(step3_dir / "verdict.json"),
                 "full_flow_trusted_final_ranking": bool(evidence.get("trusted_for_final_ranking", False)),
                 "trusted_final_boundary_note": "DFT numerical/scientific correctness is not claimed by this timing-only flow",
             },
             "step3_verification": verification,
+            "step3_status": step3_status,
+            "step4_adjudication": step4_adjudication,
             "design_point_id": step2.design_point.design_point_id,
             "workload_package_id": step2.workload_package.workload_id,
             "_step2_result": step2,
@@ -766,7 +1017,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     )
     step4 = _run_step4_gem5(best=best, run_dir=run_dir, args=args, cli_argv=cli_argv)
     pareto_frontier = _build_architecture_pareto_frontier(records, step4)
-    _write_json(run_dir / "architecture_pareto_frontier.json", pareto_frontier)
+    pareto_artifact = run_dir / "architecture_pareto_frontier.json"
+    _write_json(pareto_artifact, pareto_frontier)
+    artifact_ownership = _step_artifact_ownership_summary(records, step4, pareto_artifact)
+    _write_json(run_dir / "dft_artifact_ownership.json", artifact_ownership)
     best_public = _public_best_architecture(best, step4)
     step3_best_public = {
         "architecture_id": best.get("architecture_id"),
@@ -790,8 +1044,14 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         "step1": {"status": step1.status, "run_dir": str(step1_dir), "facts_only": True},
         "step2_step3_records": records,
         "step3_best_architecture": step3_best_public,
+        "artifact_ownership": {
+            "artifact": str(run_dir / "dft_artifact_ownership.json"),
+            "schema_version": artifact_ownership.get("schema_version"),
+            "status": artifact_ownership.get("status"),
+            "claim_boundary": artifact_ownership.get("claim_boundary"),
+        },
         "architecture_pareto_frontier": {
-            "artifact": str(run_dir / "architecture_pareto_frontier.json"),
+            "artifact": str(pareto_artifact),
             "frontier_count": pareto_frontier.get("frontier_count"),
             "candidate_count": pareto_frontier.get("candidate_count"),
             "claim_boundary": pareto_frontier.get("claim_boundary"),

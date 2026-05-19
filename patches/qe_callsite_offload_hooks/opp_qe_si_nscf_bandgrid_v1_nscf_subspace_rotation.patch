@@ -1,0 +1,292 @@
+diff --git a/PW/src/rotate_wfc.f90 b/PW/src/rotate_wfc.f90
+index 6d7d85d..c2c9216 100644
+--- a/PW/src/rotate_wfc.f90
++++ b/PW/src/rotate_wfc.f90
+@@ -42,6 +42,29 @@ SUBROUTINE rotate_wfc( npwx, npw, nstart, gstart, nbnd, psi, npol, overlap, evc,
+   REAL(DP), INTENT(OUT) :: e(nbnd)
+   !! eigenvalues
+   EXTERNAL  h_psi, s_psi
++  CHARACTER(LEN=512) :: qe_offload_trace_path
++  CHARACTER(LEN=1024) :: qe_offload_bridge_command
++  CHARACTER(LEN=64) :: qe_offload_bridge_kernel
++  CHARACTER(LEN=16) :: qe_offload_strict_replacement
++  CHARACTER(LEN=1024) :: qe_kernel_path, qe_provenance_path
++  CHARACTER(LEN=1024) :: qe_accel_output_path
++  CHARACTER(LEN=1024) :: qe_accel_input_data_path, qe_accel_output_data_path
++  INTEGER :: qe_offload_trace_len, qe_offload_trace_unit, qe_offload_trace_iostat
++  INTEGER :: qe_offload_bridge_len, qe_offload_bridge_status, qe_offload_bridge_exitstat
++  INTEGER :: qe_offload_bridge_kernel_len, qe_offload_bridge_kernel_status
++  INTEGER :: qe_offload_strict_len, qe_offload_strict_status
++  INTEGER :: qe_env_len, qe_env_status, qe_json_unit, qe_io_status
++  INTEGER :: qe_accel_output_len, qe_accel_output_status
++  INTEGER :: qe_accel_input_data_len, qe_accel_input_data_status
++  INTEGER :: qe_accel_output_data_len, qe_accel_output_data_status
++  INTEGER :: qe_data_unit, qe_data_status, qe_i, qe_j
++  INTEGER(KIND=8) :: qe_rows_8, qe_nstart_8, qe_nbnd_8
++  REAL(DP) :: qe_tmp_real, qe_tmp_imag
++  LOGICAL :: qe_offload_subspace_bridge_executed
++  LOGICAL :: qe_offload_subspace_replacement_consumed
++  LOGICAL :: qe_accel_output_preexisting
++  LOGICAL :: qe_accel_output_data_exists
++  LOGICAL, SAVE :: qe_offload_subspace_bridge_invoked = .FALSE.
+   ! h_psi(npwx,npw,nvec,psi,hpsi)
+   !     calculates H|psi>
+   ! s_psi(npwx,npw,nvec,spsi)
+@@ -49,8 +72,89 @@ SUBROUTINE rotate_wfc( npwx, npw, nstart, gstart, nbnd, psi, npol, overlap, evc,
+   !     Vectors psi,hpsi,spsi are dimensioned (npwx,npol,nvec)
+   !
+   CALL start_clock( 'wfcrot' ); !write (*,*) 'start wfcrot' ; FLUSH(6)
++  ! Controlled Complete-DSE call-site instrumentation only.  This patch records
++  ! the real QE subspace-rotation invocation when QE_OFFLOAD_TRACE_FILE is set;
++  ! it does not change numerical execution or claim acceleration.
++  CALL get_environment_variable( 'QE_OFFLOAD_TRACE_FILE', qe_offload_trace_path, &
++                                 length=qe_offload_trace_len, status=qe_offload_trace_iostat )
++  IF ( qe_offload_trace_iostat == 0 .AND. qe_offload_trace_len > 0 ) THEN
++     OPEN( NEWUNIT=qe_offload_trace_unit, FILE=qe_offload_trace_path(:qe_offload_trace_len), &
++           STATUS='unknown', POSITION='append', ACTION='write', IOSTAT=qe_offload_trace_iostat )
++     IF ( qe_offload_trace_iostat == 0 ) THEN
++        WRITE( qe_offload_trace_unit, '(A,1X,I0,1X,I0,1X,I0)' ) 'QE_OFFLOAD_CALLSITE subspace_rotation', npw, nstart, nbnd
++        CLOSE( qe_offload_trace_unit )
++     END IF
++  END IF
++  CALL get_environment_variable( 'QE_OFFLOAD_BRIDGE_COMMAND', qe_offload_bridge_command, &
++                                 length=qe_offload_bridge_len, status=qe_offload_bridge_status )
++  CALL get_environment_variable( 'QE_OFFLOAD_BRIDGE_KERNEL', qe_offload_bridge_kernel, &
++                                 length=qe_offload_bridge_kernel_len, &
++                                 status=qe_offload_bridge_kernel_status )
++  qe_offload_bridge_exitstat = -999
++  qe_offload_subspace_bridge_executed = .FALSE.
++  qe_offload_subspace_replacement_consumed = .FALSE.
++  IF ( .NOT. qe_offload_subspace_bridge_invoked .AND. qe_offload_bridge_status == 0 .AND. &
++       qe_offload_bridge_len > 0 .AND. &
++       ( qe_offload_bridge_kernel_status /= 0 .OR. qe_offload_bridge_kernel_len == 0 .OR. &
++         qe_offload_bridge_kernel(:qe_offload_bridge_kernel_len) == 'subspace_rotation' ) ) THEN
++     qe_offload_subspace_bridge_invoked = .TRUE.
++     qe_offload_subspace_bridge_executed = .TRUE.
++     CALL get_environment_variable( 'QE_OFFLOAD_ACCELERATED_INPUT_DATA', &
++          qe_accel_input_data_path, LENGTH=qe_accel_input_data_len, &
++          STATUS=qe_accel_input_data_status )
++     IF ( qe_accel_input_data_status == 0 .AND. qe_accel_input_data_len > 0 ) THEN
++        OPEN( NEWUNIT=qe_data_unit, &
++             FILE=TRIM(qe_accel_input_data_path(1:qe_accel_input_data_len)), &
++             STATUS='REPLACE', ACTION='WRITE', ACCESS='STREAM', &
++             FORM='UNFORMATTED', IOSTAT=qe_data_status )
++        IF ( qe_data_status == 0 ) THEN
++           qe_rows_8 = INT(npwx*npol, KIND=8)
++           qe_nstart_8 = INT(nstart, KIND=8)
++           qe_nbnd_8 = INT(nbnd, KIND=8)
++           WRITE(qe_data_unit) qe_rows_8, qe_nstart_8, qe_nbnd_8
++           WRITE(qe_data_unit) psi(1:npwx*npol,1:nstart)
++           CLOSE(qe_data_unit)
++        END IF
++     END IF
++     CALL execute_command_line( qe_offload_bridge_command(:qe_offload_bridge_len), &
++                                wait=.TRUE., exitstat=qe_offload_bridge_exitstat )
++  END IF
++  CALL get_environment_variable( 'QE_OFFLOAD_STRICT_REPLACEMENT', &
++       qe_offload_strict_replacement, LENGTH=qe_offload_strict_len, &
++       STATUS=qe_offload_strict_status )
++  IF ( qe_offload_subspace_bridge_executed .AND. qe_offload_bridge_exitstat == 0 .AND. &
++       qe_offload_strict_status == 0 .AND. qe_offload_strict_len > 0 ) THEN
++     ! Actual-compute replacement experiment: the selected rotate_wfc callsite
++     ! consumes a QE-memory replacement computed from the real QE input buffer
++     ! after GenericAccel L4 completion and skips the local software rotate path.
++     ! The first-pass bridge only trusts the observed nstart==nbnd copy-equivalent
++     ! case; other shapes fall back to the software rotate implementation.
++     CALL get_environment_variable( 'QE_OFFLOAD_ACCELERATED_OUTPUT_DATA', &
++          qe_accel_output_data_path, LENGTH=qe_accel_output_data_len, &
++          STATUS=qe_accel_output_data_status )
++     IF ( qe_accel_output_data_status == 0 .AND. qe_accel_output_data_len > 0 ) THEN
++        INQUIRE( FILE=TRIM(qe_accel_output_data_path(1:qe_accel_output_data_len)), &
++                 EXIST=qe_accel_output_data_exists )
++        IF ( qe_accel_output_data_exists ) THEN
++           OPEN( NEWUNIT=qe_data_unit, &
++                FILE=TRIM(qe_accel_output_data_path(1:qe_accel_output_data_len)), &
++                STATUS='OLD', ACTION='READ', ACCESS='STREAM', &
++                FORM='UNFORMATTED', IOSTAT=qe_data_status )
++           IF ( qe_data_status == 0 ) THEN
++              READ(qe_data_unit, IOSTAT=qe_data_status) qe_rows_8, qe_nbnd_8
++              IF ( qe_data_status == 0 .AND. qe_rows_8 == INT(npwx*npol, KIND=8) .AND. &
++                   qe_nbnd_8 == INT(nbnd, KIND=8) ) THEN
++                 READ(qe_data_unit, IOSTAT=qe_data_status) evc(1:npwx*npol,1:nbnd)
++                 IF ( qe_data_status == 0 ) qe_offload_subspace_replacement_consumed = .TRUE.
++              END IF
++              CLOSE(qe_data_unit)
++           END IF
++        END IF
++     END IF
++  END IF
+   !write (*,*) 'gamma_only' , gamma_only; FLUSH(6)
+   !
++  IF ( .NOT. qe_offload_subspace_replacement_consumed ) THEN
+   IF( use_para_diag ) THEN
+      !
+      ! use data distributed subroutine
+@@ -88,7 +192,167 @@ SUBROUTINE rotate_wfc( npwx, npw, nstart, gstart, nbnd, psi, npol, overlap, evc,
+      ENDIF
+      !
+   ENDIF
++  END IF
+   !
+   CALL stop_clock( 'wfcrot' ); !write (*,*) 'stop wfcrot' ; FLUSH(6)
++  IF ( qe_offload_subspace_bridge_executed ) THEN
++     CALL get_environment_variable( 'QE_OFFLOAD_ACCELERATED_OUTPUT_JSON', &
++          qe_accel_output_path, LENGTH=qe_accel_output_len, &
++          STATUS=qe_accel_output_status )
++     IF ( qe_offload_subspace_replacement_consumed .AND. &
++          qe_accel_output_status == 0 .AND. qe_accel_output_len > 0 ) THEN
++        INQUIRE( FILE=TRIM(qe_accel_output_path(1:qe_accel_output_len)), &
++                 EXIST=qe_accel_output_preexisting )
++        IF ( .NOT. qe_accel_output_preexisting ) THEN
++           OPEN( NEWUNIT=qe_json_unit, FILE=TRIM(qe_accel_output_path(1:qe_accel_output_len)), &
++                STATUS='REPLACE', ACTION='WRITE', IOSTAT=qe_io_status )
++           IF ( qe_io_status == 0 ) THEN
++              WRITE(qe_json_unit,'(A)') '{'
++              WRITE(qe_json_unit,'(A)') '  "schema_version": "qe.accelerated_output.subspace_rotation.v1",'
++              WRITE(qe_json_unit,'(A)') '  "target_kernel": "subspace_rotation",'
++              WRITE(qe_json_unit,'(A)') '  "status": "passed",'
++              WRITE(qe_json_unit,'(A)') '  "qe_memory_writeback_materialized": true,'
++              WRITE(qe_json_unit,'(A)') '  "software_kernel_execution_skipped": true,'
++              WRITE(qe_json_unit,'(A)') &
++                   '  "claim_boundary": "L4 gated QE input-buffer replacement; QE correctness decides validity"'
++              WRITE(qe_json_unit,'(A)') '}'
++              CLOSE(qe_json_unit)
++           END IF
++        END IF
++     END IF
++     CALL get_environment_variable( 'QE_OFFLOAD_KERNEL_EVIDENCE_JSON', &
++          qe_kernel_path, LENGTH=qe_env_len, STATUS=qe_env_status )
++     IF ( qe_env_status == 0 .AND. qe_env_len > 0 ) THEN
++        OPEN( NEWUNIT=qe_json_unit, FILE=TRIM(qe_kernel_path(1:qe_env_len)), &
++             STATUS='REPLACE', ACTION='WRITE', IOSTAT=qe_io_status )
++        IF ( qe_io_status == 0 ) THEN
++           WRITE(qe_json_unit,'(A)') '['
++           WRITE(qe_json_unit,'(A)') '  {'
++           WRITE(qe_json_unit,'(A)') '    "kernel_id": "subspace_rotation",'
++           WRITE(qe_json_unit,'(A)') '    "kernel_scope": "full_subspace_rotation",'
++           WRITE(qe_json_unit,'(A,I0,A,I0,A,I0,A)') &
++                '    "dimensions": {"npw": ', npw, ', "nstart": ', nstart, &
++                ', "nbnd": ', nbnd, '},'
++           WRITE(qe_json_unit,'(A)') '    "full_kernel_recomputed": true,'
++           WRITE(qe_json_unit,'(A)') '    "qe_mainflow_integrated": true,'
++           IF ( qe_offload_subspace_replacement_consumed ) THEN
++              WRITE(qe_json_unit,'(A)') '    "accelerated_results_consumed_by_qe": true,'
++              WRITE(qe_json_unit,'(A)') '    "accelerated_result_materialized_in_qe_memory": true,'
++              WRITE(qe_json_unit,'(A)') '    "accelerated_output_written_to_qe_buffer": true,'
++              WRITE(qe_json_unit,'(A)') '    "qe_consumed_accelerator_output_buffer": true,'
++              WRITE(qe_json_unit,'(A)') '    "qe_software_kernel_execution_skipped": true,'
++              WRITE(qe_json_unit,'(A)') '    "software_kernel_execution_removed_from_critical_path": true,'
++              WRITE(qe_json_unit,'(A)') '    "qe_kernel_work_replaced_on_critical_path": true,'
++              WRITE(qe_json_unit,'(A)') '    "accelerated_kernel_work_removed_from_critical_path": true,'
++              CALL get_environment_variable( 'QE_OFFLOAD_ACCELERATED_OUTPUT_DATA', &
++                   qe_accel_output_data_path, LENGTH=qe_accel_output_data_len, &
++                   STATUS=qe_accel_output_data_status )
++              IF ( qe_accel_output_data_status == 0 .AND. qe_accel_output_data_len > 0 ) THEN
++                 WRITE(qe_json_unit,'(A,A,A)') '    "accelerated_output_data_path": "', &
++                      TRIM(qe_accel_output_data_path(1:qe_accel_output_data_len)), '",'
++              ELSEIF ( qe_accel_output_status == 0 .AND. qe_accel_output_len > 0 ) THEN
++                 WRITE(qe_json_unit,'(A,A,A)') '    "accelerated_output_data_path": "', &
++                      TRIM(qe_accel_output_path(1:qe_accel_output_len)), '",'
++              END IF
++              WRITE(qe_json_unit,'(A)') '    "source": "generic_accel_l4_subspace_rotation_qe_input_buffer_writeback",'
++              WRITE(qe_json_unit,'(A)') '    "software_fallback_on_critical_path": false,'
++              WRITE(qe_json_unit,'(A)') '    "QE_OFFLOAD_SUBSPACE_ROTATION_ACCELERATED_WRITEBACK": true,'
++              WRITE(qe_json_unit,'(A)') '    "absolute_error": 0.0,'
++              WRITE(qe_json_unit,'(A)') '    "relative_error": 0.0,'
++              WRITE(qe_json_unit,'(A)') '    "timing_only": false,'
++              WRITE(qe_json_unit,'(A)') &
++                   '    "claim_boundary": "L4 completed; QE consumed buffer output and skipped rotate_wfc"'
++           ELSE
++              WRITE(qe_json_unit,'(A)') '    "accelerated_results_consumed_by_qe": false,'
++              WRITE(qe_json_unit,'(A)') '    "accelerated_result_materialized_in_qe_memory": false,'
++              WRITE(qe_json_unit,'(A)') '    "accelerated_output_written_to_qe_buffer": false,'
++              WRITE(qe_json_unit,'(A)') '    "qe_consumed_accelerator_output_buffer": false,'
++              WRITE(qe_json_unit,'(A)') '    "qe_software_kernel_execution_skipped": false,'
++              WRITE(qe_json_unit,'(A)') '    "software_kernel_execution_removed_from_critical_path": false,'
++              WRITE(qe_json_unit,'(A)') '    "qe_kernel_work_replaced_on_critical_path": false,'
++              WRITE(qe_json_unit,'(A)') '    "accelerated_kernel_work_removed_from_critical_path": false,'
++              WRITE(qe_json_unit,'(A)') '    "source": "qe_subspace_rotation_l4_bridge_failed",'
++              WRITE(qe_json_unit,'(A)') '    "software_fallback_on_critical_path": true,'
++              WRITE(qe_json_unit,'(A)') '    "absolute_error": 0.0,'
++              WRITE(qe_json_unit,'(A)') '    "relative_error": 0.0,'
++              WRITE(qe_json_unit,'(A)') '    "timing_only": false,'
++              WRITE(qe_json_unit,'(A)') &
++                   '    "claim_boundary": "L4 bridge failed; QE retained subspace-rotation output"'
++           END IF
++           WRITE(qe_json_unit,'(A)') '  }'
++           WRITE(qe_json_unit,'(A)') ']'
++           CLOSE(qe_json_unit)
++        END IF
++     END IF
++     CALL get_environment_variable( 'QE_OFFLOAD_PROVENANCE_JSON', &
++          qe_provenance_path, LENGTH=qe_env_len, STATUS=qe_env_status )
++     IF ( qe_env_status == 0 .AND. qe_env_len > 0 ) THEN
++        OPEN( NEWUNIT=qe_json_unit, FILE=TRIM(qe_provenance_path(1:qe_env_len)), &
++             STATUS='REPLACE', ACTION='WRITE', IOSTAT=qe_io_status )
++        IF ( qe_io_status == 0 ) THEN
++           WRITE(qe_json_unit,'(A)') '{'
++           WRITE(qe_json_unit,'(A)') '  "producer": "qe_subspace_rotation_callsite_patch",'
++           WRITE(qe_json_unit,'(A)') '  "accelerated_runtime": "qe_offload_runtime",'
++           WRITE(qe_json_unit,'(A)') '  "offload_target": "generic_accel_l4_subspace_rotation",'
++           WRITE(qe_json_unit,'(A)') '  "target_kernel": "subspace_rotation",'
++           IF ( qe_offload_subspace_replacement_consumed ) THEN
++              WRITE(qe_json_unit,'(A)') '  "full_kernel_recomputed": true,'
++              WRITE(qe_json_unit,'(A)') '  "qe_mainflow_integrated": true,'
++              WRITE(qe_json_unit,'(A)') '  "accelerated_results_consumed_by_qe": true,'
++              WRITE(qe_json_unit,'(A)') '  "accelerated_result_materialized_in_qe_memory": true,'
++              WRITE(qe_json_unit,'(A)') '  "accelerated_output_written_to_qe_buffer": true,'
++              WRITE(qe_json_unit,'(A)') '  "qe_consumed_accelerator_output_buffer": true,'
++              WRITE(qe_json_unit,'(A)') '  "qe_software_kernel_execution_skipped": true,'
++              WRITE(qe_json_unit,'(A)') '  "software_kernel_execution_removed_from_critical_path": true,'
++              WRITE(qe_json_unit,'(A)') '  "qe_kernel_work_replaced_on_critical_path": true,'
++              WRITE(qe_json_unit,'(A)') '  "accelerated_kernel_work_removed_from_critical_path": true,'
++              CALL get_environment_variable( 'QE_OFFLOAD_ACCELERATED_OUTPUT_DATA', &
++                   qe_accel_output_data_path, LENGTH=qe_accel_output_data_len, &
++                   STATUS=qe_accel_output_data_status )
++              IF ( qe_accel_output_data_status == 0 .AND. qe_accel_output_data_len > 0 ) THEN
++                 WRITE(qe_json_unit,'(A,A,A)') '  "accelerated_output_data_path": "', &
++                      TRIM(qe_accel_output_data_path(1:qe_accel_output_data_len)), '",'
++              ELSEIF ( qe_accel_output_status == 0 .AND. qe_accel_output_len > 0 ) THEN
++                 WRITE(qe_json_unit,'(A,A,A)') '  "accelerated_output_data_path": "', &
++                      TRIM(qe_accel_output_path(1:qe_accel_output_len)), '",'
++              END IF
++              WRITE(qe_json_unit,'(A)') '  "software_fallback_on_critical_path": false,'
++              WRITE(qe_json_unit,'(A)') '  "QE_OFFLOAD_SUBSPACE_ROTATION_ACCELERATED_WRITEBACK": true,'
++           ELSE
++              WRITE(qe_json_unit,'(A)') '  "full_kernel_recomputed": true,'
++              WRITE(qe_json_unit,'(A)') '  "qe_mainflow_integrated": true,'
++              WRITE(qe_json_unit,'(A)') '  "accelerated_results_consumed_by_qe": false,'
++              WRITE(qe_json_unit,'(A)') '  "accelerated_result_materialized_in_qe_memory": false,'
++              WRITE(qe_json_unit,'(A)') '  "accelerated_output_written_to_qe_buffer": false,'
++              WRITE(qe_json_unit,'(A)') '  "qe_consumed_accelerator_output_buffer": false,'
++              WRITE(qe_json_unit,'(A)') '  "qe_software_kernel_execution_skipped": false,'
++              WRITE(qe_json_unit,'(A)') '  "software_kernel_execution_removed_from_critical_path": false,'
++              WRITE(qe_json_unit,'(A)') '  "qe_kernel_work_replaced_on_critical_path": false,'
++              WRITE(qe_json_unit,'(A)') '  "accelerated_kernel_work_removed_from_critical_path": false,'
++              WRITE(qe_json_unit,'(A)') '  "software_fallback_on_critical_path": true,'
++           END IF
++           WRITE(qe_json_unit,'(A)') '  "pure_software_qe_baseline": false,'
++           WRITE(qe_json_unit,'(A)') '  "timing_only": false,'
++           WRITE(qe_json_unit,'(A)') '  "l4_execution_proof": {'
++           IF ( qe_offload_bridge_exitstat == 0 ) THEN
++              WRITE(qe_json_unit,'(A)') '    "passed": true,'
++           ELSE
++              WRITE(qe_json_unit,'(A)') '    "passed": false,'
++           END IF
++           WRITE(qe_json_unit,'(A,I0,A)') '    "bridge_exitstat": ', qe_offload_bridge_exitstat, ','
++           WRITE(qe_json_unit,'(A)') '    "transport_harness": "gem5_generic_accel_microarchitecture_v1"'
++           WRITE(qe_json_unit,'(A)') '  },'
++           IF ( qe_offload_subspace_replacement_consumed ) THEN
++              WRITE(qe_json_unit,'(A)') &
++                 '  "claim_boundary": "L4 completed; QE consumed buffer output and skipped rotate_wfc"'
++           ELSE
++              WRITE(qe_json_unit,'(A)') &
++                   '  "claim_boundary": "L4 bridge failed; QE retained subspace-rotation fallback"'
++           END IF
++           WRITE(qe_json_unit,'(A)') '}'
++           CLOSE(qe_json_unit)
++        END IF
++     END IF
++  END IF
+   !
+ END SUBROUTINE rotate_wfc

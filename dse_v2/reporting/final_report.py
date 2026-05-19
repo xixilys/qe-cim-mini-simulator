@@ -26,6 +26,9 @@ LOW_FIDELITY_ARTIFACT_KEYS = {
     "low_fidelity_summary": "low_fidelity_screening_summary.json",
 }
 LOW_FIDELITY_ARTIFACT_PATHS = list(LOW_FIDELITY_ARTIFACT_KEYS.values())
+EVIDENCE_ALIASES = {
+    "simulator_consistency_check.json": ["numerical_validation.json"],
+}
 
 CLAIM_REQUIREMENTS: Dict[str, Dict[str, Any]] = {
     "best_architecture": {
@@ -85,7 +88,7 @@ CLAIM_REQUIREMENTS: Dict[str, Dict[str, Any]] = {
     "numerical_correctness": {
         "description": "Numerical equivalence/correctness claim.",
         "trusted_backends": sorted(TRUSTED_BACKENDS),
-        "required_evidence": ["verdict.json", "workload_package.json", "graph_lowering_report.json", "numerical_validation.json"],
+        "required_evidence": ["verdict.json", "workload_package.json", "graph_lowering_report.json", "simulator_consistency_check.json"],
         "notes": [
             "Timing-level shell evidence is insufficient unless explicit numerical checks are cited.",
             "The generic SystemC timing numeric reference does not prove profile-domain correctness.",
@@ -99,7 +102,7 @@ CLAIM_REQUIREMENTS: Dict[str, Dict[str, Any]] = {
             "workload_package.json",
             "graph_lowering_report.json",
             "simulation_result.json",
-            "numerical_validation.json",
+            "simulator_consistency_check.json",
             "gem5_l4_proof.json",
         ],
         "notes": [
@@ -203,6 +206,7 @@ def build_evidence_index(
                 "graph_lowering_report.json",
                 "simulation_request.json",
                 "simulation_result.json",
+                "simulator_consistency_check.json",
                 "numerical_validation.json",
                 "phase_breakdown.csv",
                 "resource_summary.csv",
@@ -283,6 +287,15 @@ def _with_gem5_l4_proof_evidence(
     return ids
 
 
+def _evidence_requirement_present(
+    required_id: str,
+    evidence_ids: Sequence[str],
+    evidence_index: Mapping[str, Mapping[str, Any]],
+) -> bool:
+    candidates = [required_id] + list(EVIDENCE_ALIASES.get(required_id, []))
+    return any(candidate in evidence_ids and evidence_index.get(candidate, {}).get("exists", False) for candidate in candidates)
+
+
 def _verdict_allows_trust(verdict: Mapping[str, Any]) -> bool:
     return bool(verdict.get("trusted_for_final_ranking", False))
 
@@ -309,7 +322,7 @@ def validate_claim(
     missing_required = [
         evidence_id
         for evidence_id in required_evidence
-        if evidence_id not in evidence_ids or not evidence_index.get(evidence_id, {}).get("exists", False)
+        if not _evidence_requirement_present(evidence_id, evidence_ids, evidence_index)
     ]
 
     reasons: List[str] = []
@@ -455,8 +468,15 @@ def _default_claims(
             ),
         })
 
-    numerical_validation = simulation_result.get("numerical_validation", {}) if isinstance(simulation_result.get("numerical_validation", {}), Mapping) else {}
+    numerical_validation = (
+        simulation_result.get("simulator_consistency_check", {})
+        if simulation_result.get("simulator_consistency_check") and isinstance(simulation_result.get("simulator_consistency_check", {}), Mapping)
+        else simulation_result.get("numerical_validation", {})
+        if isinstance(simulation_result.get("numerical_validation", {}), Mapping)
+        else {}
+    )
     if numerical_validation.get("passed") is True:
+        consistency_artifact = str(numerical_validation.get("artifact") or "simulator_consistency_check.json")
         validation_scope = str(numerical_validation.get("scope", ""))
         if validation_scope == "gem5_microarchitecture_timing_internal_consistency":
             claim_id = "gem5_microarchitecture_timing_consistency"
@@ -482,7 +502,7 @@ def _default_claims(
             "status": "simulated" if trusted else "blocked",
             "design_point_id": run_id,
             "evidence_ids": _with_gem5_l4_proof_evidence(
-                ["verdict.json", "workload_package.json", "graph_lowering_report.json", "simulation_result.json", "numerical_validation.json"],
+                ["verdict.json", "workload_package.json", "graph_lowering_report.json", "simulation_result.json", consistency_artifact],
                 backend=backend,
                 trusted=trusted,
                 proof_passed=gem5_l4_proof_passed,
@@ -812,7 +832,8 @@ def generate_final_report(
     workload_graph = _load_json(run_dir / "workload_graph.json")
     graph_lowering = _load_json(run_dir / "graph_lowering_report.json")
     simulation_result = _load_json(run_dir / "simulation_result.json")
-    numerical_validation = _load_json(run_dir / "numerical_validation.json")
+    simulator_consistency_check = _load_json(run_dir / "simulator_consistency_check.json")
+    numerical_validation = simulator_consistency_check or _load_json(run_dir / "numerical_validation.json")
     blockers = _load_json(run_dir / "gem5_systemc_blockers.json")
     codesign_candidate = _load_json(run_dir / "codesign_candidate.json")
     codesign_verdict = _load_json(run_dir / "codesign_verdict.json")
@@ -1075,7 +1096,7 @@ def generate_final_report(
             "evidence_ids": codesign_verdict.get("evidence_ids", []),
         },
         "numerical_validation": {
-            "artifact": "numerical_validation.json",
+            "artifact": "simulator_consistency_check.json" if simulator_consistency_check else "numerical_validation.json",
             "status": numerical_validation.get("status"),
             "passed": bool(numerical_validation.get("passed", False)),
             "scope": numerical_validation.get("scope"),
@@ -1221,22 +1242,107 @@ def write_final_report_artifacts(
     claims: Optional[Iterable[Mapping[str, Any]]] = None,
     artifact_paths: Optional[Iterable[str]] = None,
 ) -> Dict[str, str]:
-    """Generate final_report.json/md plus evidence requirement and claim validation artifacts."""
+    """Compatibility wrapper for Step4 claim validation plus Step5 reports.
+
+    New staged flows should call ``write_step4_claim_validation_artifacts`` from
+    evidence adjudication and ``write_step5_report_artifacts`` from reporting.
+    This wrapper remains for older full-flow callers that still expect one API.
+    """
+    step4_paths = write_step4_claim_validation_artifacts(
+        run_dir,
+        claims=claims,
+        artifact_paths=artifact_paths,
+    )
+    step5_paths = write_step5_report_artifacts(
+        run_dir,
+        claims=claims,
+        artifact_paths=artifact_paths,
+    )
+    return {**step4_paths, **step5_paths}
+
+
+def write_step4_claim_validation_artifacts(
+    run_dir: Path,
+    *,
+    claims: Optional[Iterable[Mapping[str, Any]]] = None,
+    artifact_paths: Optional[Iterable[str]] = None,
+) -> Dict[str, str]:
+    """Generate Step4-owned evidence requirements and claim validation."""
     run_dir = Path(run_dir)
-    report, claim_validation, requirements = generate_final_report(
+    _report, claim_validation, requirements = generate_final_report(
         run_dir,
         claims=claims,
         artifact_paths=artifact_paths,
     )
     _write_json(run_dir / "evidence_requirements.json", requirements)
     _write_json(run_dir / "claim_validation.json", claim_validation)
-    _write_json(run_dir / "final_report.json", report)
-    _write_text(run_dir / "final_report.md", render_markdown_report(report))
     return {
         "evidence_requirements": "evidence_requirements.json",
         "claim_validation": "claim_validation.json",
+    }
+
+
+def write_step5_report_artifacts(
+    run_dir: Path,
+    *,
+    claims: Optional[Iterable[Mapping[str, Any]]] = None,
+    artifact_paths: Optional[Iterable[str]] = None,
+) -> Dict[str, str]:
+    """Generate Step5-owned final report, ranking, and summary artifacts."""
+    run_dir = Path(run_dir)
+    missing_step4 = [
+        artifact
+        for artifact in ("verdict.json", "claim_validation.json", "evidence_requirements.json")
+        if not (run_dir / artifact).exists()
+    ]
+    if missing_step4:
+        raise ValueError(
+            "Step5 report generation requires Step4 adjudication artifacts before final report writing: "
+            + ", ".join(missing_step4)
+        )
+    source_claim_validation = _load_json(run_dir / "claim_validation.json")
+    if not source_claim_validation:
+        raise ValueError("Step5 report generation requires a non-empty Step4 claim_validation.json")
+    report, _claim_validation, _requirements = generate_final_report(
+        run_dir,
+        claims=claims,
+        artifact_paths=artifact_paths,
+    )
+    report.setdefault("run_metadata", {})["source_step4_claim_validation"] = "claim_validation.json"
+    report.setdefault("run_metadata", {})["source_step4_claim_validation_passed"] = bool(source_claim_validation.get("passed", False))
+    report.setdefault("run_metadata", {})["step5_trust_boundary"] = (
+        "Step5 presents Step4 evidence and may report blocked claims; it does not upgrade unpassed Step4 claim validation."
+    )
+    _write_json(run_dir / "final_report.json", report)
+    _write_text(run_dir / "final_report.md", render_markdown_report(report))
+    campaign_summary = {
+        "schema_version": "dse.step5.campaign_summary.v1",
+        "generated_at": _now_iso(),
+        "run_metadata": report.get("run_metadata", {}),
+        "selected_recommendation": report.get("selected_recommendation", {}),
+        "trusted_ranking_count": len(report.get("trusted_ranking", []) or []),
+        "limitations": report.get("limitations", []),
+        "source_step4_artifacts": ["verdict.json", "claim_validation.json", "evidence_requirements.json"],
+    }
+    _write_json(run_dir / "campaign_summary.json", campaign_summary)
+    _write_json(run_dir / "trusted_ranking.json", {
+        "schema_version": "dse.step5.trusted_ranking.v1",
+        "generated_at": _now_iso(),
+        "source_step4_artifacts": ["verdict.json", "claim_validation.json"],
+        "trusted_ranking": report.get("trusted_ranking", []),
+    })
+    _write_json(run_dir / "pareto_frontier.json", {
+        "schema_version": "dse.step5.pareto_frontier.v1",
+        "generated_at": _now_iso(),
+        "source_step4_artifacts": ["verdict.json", "claim_validation.json"],
+        "pareto_alternatives": report.get("pareto_alternatives", []),
+    })
+    return {
         "final_report_json": "final_report.json",
         "final_report_markdown": "final_report.md",
+        "campaign_summary": "campaign_summary.json",
+        "trusted_ranking": "trusted_ranking.json",
+        "pareto_frontier": "pareto_frontier.json",
     }
 
 

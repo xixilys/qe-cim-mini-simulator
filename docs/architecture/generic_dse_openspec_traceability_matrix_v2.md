@@ -19,10 +19,18 @@ The top-level completion unit is the full closed-loop DSE run: workload ingestio
 | `openspec/changes/archive/2026-05-09-enhance-generic-dse-framework-spec/proposal.md` | Archived what/why and impacted capabilities |
 | `openspec/changes/archive/2026-05-09-enhance-generic-dse-framework-spec/design.md` | Archived system decisions, non-goals, risks, migration |
 | `docs/architecture/generic_dse_framework_design_spec_v2.md` | Professional architecture/design manual |
+| `docs/architecture/design_completion_statement.md` | Current top-level wording for design-boundary freeze vs. not-yet-complete claims |
+| `docs/architecture/system_design_frozen_baseline.md` | Consolidated current baseline for implementation handoff |
+| `docs/architecture/implementation_gap_matrix.md` | Requirement/status/blocker matrix for implementation tracking |
+| `docs/architecture/claim_boundary.md` | Allowed/forbidden claim boundary for DSE, L4, QE offload, GPU baseline, and IC/EDA side evidence |
+| `docs/architecture/qe_offload_speed_judgement.md` | Normative speed formula and speed-diagnostic boundary for QE offload value claims |
+| `docs/architecture/traceability_matrix_current.md` | Current cross-reference across docs, PRDs, OpenSpec changes, code/tests, and latest evidence artifacts |
 | `openspec/changes/archive/2026-05-09-enhance-generic-dse-framework-spec/tasks.md` | Archived implementation and validation phasing |
 | `openspec/changes/define-generic-workload-workflows/specs/**/*.md` | Active workload-family workflow requirements for later Step2+ implementation |
 | `openspec/changes/define-step2-architecture-mapping-workflow/specs/**/*.md` | Active Step2 architecture/mapping workflow requirements for catalog, DesignPoint, legality, mapping search, promotion, and feedback handoff |
 | `openspec/changes/define-step3-simulation-evidence-workflow/specs/**/*.md` | Active Step3 simulation/evidence workflow requirements for Step2 handoff replay, full-flow simulation, evidence artifacts, and blocked/untrusted gates |
+| `openspec/changes/complete-step2-l1-l2-screening/` | Active Step2 screening implementation/evidence change; prevents design-complete wording for that area |
+| `openspec/changes/remove-dft-qe-core-adapter/` | Active core-boundary change that keeps QE/DFT outside generic core schemas |
 
 ## Capability-Level Traceability
 
@@ -64,7 +72,7 @@ The top-level completion unit is the full closed-loop DSE run: workload ingestio
 - Architecture families are extensible and binding-aware; legacy four-cluster/CIM designs are reference candidates, not the only default path.
 - Mapping search and feedback are algorithmic, evidence-driven, and budget/convergence bounded.
 - Trusted final rankings require SystemC or gem5+SystemC evidence and claim-to-evidence validation.
-- Generic SystemC timing numeric results require `numerical_validation.json`; this remains scoped separately from QE FP64 physics correctness.
+- Generic SystemC timing consistency results require canonical `simulator_consistency_check.json`; legacy `numerical_validation.json` is compatibility-only and remains scoped separately from QE FP64 physics correctness.
 - Stub, blocked, predicted-only, candidate-only, and unsupported paths remain visible in reports and cannot be promoted to trusted winners.
 - Smoke, diagnostic replay, fixed-timing, prototype, and driver/bring-up paths are explicit final-check failures unless complete full-flow evidence and claim validation are also present.
 - Remaining user choices are recorded as discussion items rather than silently assumed by the design.
