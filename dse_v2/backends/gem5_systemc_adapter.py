@@ -556,9 +556,17 @@ def _ensure_gem5(gem5_binary: Path, root: Path) -> Tuple[Path, List[Dict[str, An
     gem5_binary = Path(gem5_binary)
     gem5_root = _resolve_gem5_root(gem5_binary, root)
     default_binary = gem5_root / "build" / "X86" / "gem5.opt"
+    selected_binary = gem5_binary if gem5_binary.exists() else default_binary
+    if not gem5_root.exists() or not (gem5_root / "SConstruct").exists():
+        return selected_binary, [{
+            "id": "gem5_source_tree_missing",
+            "status": "blocked",
+            "detail": f"gem5 source tree is missing or incomplete: {gem5_root}",
+            "path": str(gem5_root),
+        }]
+
     sync_blockers = _sync_generic_accel_sources(root, gem5_root) if gem5_root.exists() else []
     if sync_blockers:
-        selected_binary = gem5_binary if gem5_binary.exists() else default_binary
         return selected_binary, sync_blockers
 
     vendored_source_dir = gem5_root / "src" / "dev" / "generic_accel"
@@ -569,18 +577,9 @@ def _ensure_gem5(gem5_binary: Path, root: Path) -> Tuple[Path, List[Dict[str, An
         active_source_dir / "SConscript",
         gem5_root / "src" / "dev" / "SConscript",
     ]
-    selected_binary = gem5_binary if gem5_binary.exists() else default_binary
     needs_build = _newer_than_any(selected_binary, build_sources)
     if selected_binary.exists() and not needs_build:
         return selected_binary, []
-
-    if not gem5_root.exists() or not (gem5_root / "SConstruct").exists():
-        return selected_binary, [{
-            "id": "gem5_source_tree_missing",
-            "status": "blocked",
-            "detail": f"gem5 source tree is missing or incomplete: {gem5_root}",
-            "path": str(gem5_root),
-        }]
 
     jobs = str(max(1, min(8, os.cpu_count() or 1)))
     ok, output = _run_command(["scons", str(default_binary.relative_to(gem5_root)), f"-j{jobs}"], cwd=gem5_root, timeout=3600)
