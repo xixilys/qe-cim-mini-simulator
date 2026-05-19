@@ -609,10 +609,88 @@ def _candidate_from_run(
             "energy_j": metrics.get("energy_j"),
             "total_data_movement_mb": metrics.get("total_data_movement_mb"),
             "dma_time_ms": metrics.get("dma_time_ms"),
+            "host_bound_compute_cost_ms": metrics.get("host_bound_compute_cost_ms", metrics.get("host_time_ms")),
+            "transfer_cost_ms": metrics.get("transfer_cost_ms", metrics.get("dma_time_ms")),
+            "synchronization_cost_ms": metrics.get("synchronization_cost_ms", metrics.get("sync_time_ms")),
+            "queueing_cost_ms": metrics.get("queueing_cost_ms", metrics.get("queue_wait_ms")),
+            "layout_cost_ms": metrics.get("layout_cost_ms", metrics.get("layout_transform_ms")),
         },
         "validation": validation,
         "evidence_ids": evidence_ids,
     }
+
+
+def _numeric_or_none(value: Any) -> float | int | None:
+    if isinstance(value, bool) or value is None:
+        return None
+    if isinstance(value, (int, float)):
+        return value
+    try:
+        parsed = float(str(value))
+    except (TypeError, ValueError):
+        return None
+    return int(parsed) if parsed.is_integer() else parsed
+
+
+def _first_metric(metrics: Mapping[str, Any], breakdown: Mapping[str, Any], *names: str) -> float | int | None:
+    for name in names:
+        value = breakdown.get(name, metrics.get(name))
+        parsed = _numeric_or_none(value)
+        if parsed is not None:
+            return parsed
+    return None
+
+
+def _full_scf_evaluated_hybrid_costs(simulation_result: Mapping[str, Any]) -> Dict[str, Any]:
+    metrics = simulation_result.get("metrics", {}) if isinstance(simulation_result.get("metrics", {}), Mapping) else {}
+    breakdown = simulation_result.get("full_scf_cost_breakdown", simulation_result.get("scf_cost_breakdown", {}))
+    breakdown = breakdown if isinstance(breakdown, Mapping) else {}
+    sync = _first_metric(metrics, breakdown, "synchronization_cost_ms", "sync_time_ms")
+    queue = _first_metric(metrics, breakdown, "queueing_cost_ms", "queue_wait_ms")
+    layout = _first_metric(metrics, breakdown, "layout_cost_ms", "layout_transform_ms")
+    aggregate = _first_metric(
+        metrics,
+        breakdown,
+        "synchronization_queueing_layout_cost_ms",
+        "sync_queue_layout_cost_ms",
+    )
+    if aggregate is None:
+        aggregate = sum(value for value in (sync, queue, layout) if value is not None)
+    payload = {
+        "kernel_speedup": _first_metric(metrics, breakdown, "kernel_speedup", "kernel_speedup_x"),
+        "end_to_end_scf_speedup": _first_metric(
+            metrics,
+            breakdown,
+            "end_to_end_scf_speedup",
+            "full_scf_speedup",
+            "scf_speedup",
+        ),
+        "host_bound_compute_cost_ms": _first_metric(
+            metrics,
+            breakdown,
+            "host_bound_compute_cost_ms",
+            "host_time_ms",
+            "host_overhead_ms",
+        ),
+        "transfer_cost_ms": _first_metric(metrics, breakdown, "transfer_cost_ms", "dma_time_ms"),
+        "synchronization_cost_ms": sync,
+        "queueing_cost_ms": queue,
+        "layout_cost_ms": layout,
+        "synchronization_queueing_layout_cost_ms": aggregate,
+        "claim_boundary": (
+            "Full-SCF evaluated hybrid reporting separates kernel speedup from end-to-end SCF speedup "
+            "and keeps host, transfer, synchronization, queueing, and layout costs visible."
+        ),
+    }
+    required = [
+        "kernel_speedup",
+        "end_to_end_scf_speedup",
+        "host_bound_compute_cost_ms",
+        "transfer_cost_ms",
+        "synchronization_queueing_layout_cost_ms",
+    ]
+    payload["required_cost_fields_present"] = all(payload.get(field) is not None for field in required)
+    return payload
 
 
 def _phase_summary(run_dir: Path) -> Dict[str, Any]:
