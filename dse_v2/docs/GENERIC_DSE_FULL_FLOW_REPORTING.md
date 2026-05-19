@@ -74,6 +74,26 @@ current code avoids overclaiming while still producing auditable report artifact
 - A selected recommendation, when present, must be SystemC/gem5+SystemC-backed
   and evidence-linked.
 
+## DFT/QE full-SCF hardware-DSE workstream gates
+
+`dse_v2/codesign/dft_scf_workstreams.py` adds the DFT/QE-specific guardrails
+used by the PRD workstreams without adding QE-only fields to the generic
+control-plane schemas:
+
+- strict Step1 bundles must cover the six required DFT/QE workload classes and
+  carry QE input, pseudopotential, replay command, reference hash, provenance /
+  license, parser/tool version, and proof-class assets;
+- Step2 formal Pareto/frontier filters admit release-tier candidates only and
+  keep exploratory candidates visible as excluded rows;
+- Step3/Step4 hardware claim gates treat unavailable tool logs as blockers, not
+  pass evidence, and reject DC-only FPGA claims or Vivado-only ASIC claims;
+- Step5 full-SCF hybrid reports separate kernel speedup from end-to-end SCF
+  evaluated speedup and include host-bound compute, transfer,
+  synchronization/queueing/layout, I/O, SCF control, convergence,
+  diagonalization, and mixing costs;
+- Wave 1.5 traces are explicitly progress-only and cannot be used as MVP,
+  vertical-slice completion, or final closure claims.
+
 ## Commands
 
 Build the generic timing backend first:

@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Mapping, Sequence
+from typing import Any, Iterable, Mapping, Sequence
 
 from dse_v2.contracts.schema_registry import CONTRACT_VERSION, SCHEMA_REGISTRY
 from dse_v2.contracts.validation import ContractValidationError, validate_instance
@@ -612,3 +612,45 @@ def validate_artifact_catalog(
             raise ContractValidationError(
                 f"{item.canonical_name} has invalid artifact_class {item.artifact_class!r}"
             )
+
+
+def artifact_definition_for(
+    canonical_name: str,
+    catalog: Sequence[ArtifactDefinition] | Mapping[str, ArtifactDefinition] | None = None,
+) -> ArtifactDefinition:
+    """Return the canonical artifact definition for ``canonical_name``."""
+
+    for item in _catalog_sequence(catalog):
+        if item.canonical_name == canonical_name or canonical_name in item.legacy_names:
+            return item
+    raise ContractValidationError(f"unknown artifact {canonical_name!r}")
+
+
+def validate_artifact_write(
+    producer_stage: str,
+    canonical_name: str,
+    catalog: Sequence[ArtifactDefinition] | Mapping[str, ArtifactDefinition] | None = None,
+) -> None:
+    """Validate that ``producer_stage`` is allowed to write ``canonical_name``.
+
+    This is the runtime guard for the Step1--Step5 ownership table: producers
+    may consume artifacts from other stages but cannot silently cross-write
+    another stage's canonical outputs.
+    """
+
+    item = artifact_definition_for(canonical_name, catalog)
+    if item.producer_stage != producer_stage:
+        raise ContractValidationError(
+            f"{producer_stage} cannot write {canonical_name}; canonical producer is {item.producer_stage}"
+        )
+
+
+def validate_artifact_writes(
+    producer_stage: str,
+    canonical_names: Iterable[str],
+    catalog: Sequence[ArtifactDefinition] | Mapping[str, ArtifactDefinition] | None = None,
+) -> None:
+    """Validate a batch of producer-stage artifact writes."""
+
+    for canonical_name in canonical_names:
+        validate_artifact_write(producer_stage, canonical_name, catalog)

@@ -8,7 +8,10 @@ writers migrate to the new artifact tree.
 from dse_v2.contracts.artifact_catalog import (
     ARTIFACT_CATALOG,
     ArtifactDefinition,
+    artifact_definition_for,
+    validate_artifact_write,
     validate_artifact_catalog,
+    validate_artifact_writes,
 )
 from dse_v2.contracts.entities import (
     Activity,
@@ -57,6 +60,9 @@ __all__ = [
     "WorkloadRun",
     "WorkloadRunStatus",
     "get_schema",
+    "artifact_definition_for",
+    "validate_artifact_write",
+    "validate_artifact_writes",
     "validate_artifact_catalog",
     "validate_instance",
     "validate_schema_registry",
