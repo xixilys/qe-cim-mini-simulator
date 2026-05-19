@@ -1181,6 +1181,7 @@ def generate_final_report(
             "summary": numerical_validation.get("summary", {}),
             "domain_correctness_boundary": numerical_validation.get("domain_correctness_boundary"),
         },
+        "full_scf_evaluated_hybrid_costs": _full_scf_evaluated_hybrid_costs(simulation_result),
         "trusted_ranking": trusted_ranking,
         "predicted_only_candidates": predicted_only_candidates,
         "blocked_or_untrusted": blocked_or_untrusted,
