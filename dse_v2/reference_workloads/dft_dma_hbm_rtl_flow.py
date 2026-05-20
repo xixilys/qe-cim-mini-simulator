@@ -171,6 +171,13 @@ synth_design -top dma_hbm_movement_engine -part xc7a35tcsg324-1
 report_utilization -file vivado_utilization.rpt
 report_timing_summary -file vivado_timing_summary.rpt
 write_checkpoint -force dma_hbm_movement_engine_synth.dcp
+opt_design
+place_design
+route_design
+puts "ROUTE_DESIGN COMPLETE"
+report_timing_summary -file vivado_route_timing_summary.rpt
+report_route_status -file vivado_route_status.rpt
+write_checkpoint -force dma_hbm_movement_engine_routed.dcp
 exit
 """
 
@@ -379,9 +386,9 @@ def build_dma_hbm_evidence_rows(
 
     out_dir = Path(out_dir)
     vcs_pass = "DMA_HBM_RTL_PASS" in _read_text(out_dir / "vcs_run.log")
-    vivado_pass = (out_dir / "vivado_utilization.rpt").exists() and "synth_design completed successfully" in _read_text(
-        out_dir / "vivado_stdout.log"
-    )
+    vivado_stdout = _read_text(out_dir / "vivado_stdout.log")
+    vivado_pass = (out_dir / "vivado_utilization.rpt").exists() and "synth_design completed successfully" in vivado_stdout
+    vivado_route_pass = "ROUTE_DESIGN COMPLETE" in vivado_stdout.upper()
     dc_stdout = _read_text(out_dir / "dc_stdout.log")
     dc_area = _read_text(out_dir / "dc_area.rpt")
     dc_timing = _read_text(out_dir / "dc_timing.rpt")
@@ -439,15 +446,15 @@ def build_dma_hbm_evidence_rows(
             failure_evidence=None if vivado_pass else "Vivado synthesis report/pass marker missing",
         ),
         _artifact_row(
-            evidence_type="vivado_synth",
-            status="passed" if vivado_pass else "blocked",
-            artifact=out_dir / "vivado_utilization.rpt",
+            evidence_type="vivado_impl",
+            status="passed" if vivado_route_pass else "blocked",
+            artifact=out_dir / "vivado_route_status.rpt",
             tool="vivado",
-            tool_stage="synth",
+            tool_stage="implementation",
             command="vivado -mode batch -source vivado_synth.tcl",
             environment=environment,
-            claim_boundary="Vivado synthesis/utilization for this microkernel only; no board measurement or full-SCF claim.",
-            failure_evidence=None if vivado_pass else "vivado_utilization.rpt missing or synth_design did not complete",
+            claim_boundary="Vivado implementation-route completion for this microkernel only; no board measurement or full-SCF claim.",
+            failure_evidence=None if vivado_route_pass else "Vivado implementation route completion marker/report missing",
         ),
     ]
     asic_attempt_rows = [

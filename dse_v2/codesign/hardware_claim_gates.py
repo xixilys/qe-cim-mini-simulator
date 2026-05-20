@@ -80,7 +80,7 @@ FPGA_CLAIM_STAGES: Tuple[HardwareClaimStage, ...] = (
         HardwareClaimStage(
             "vivado_fpga_synth_or_impl",
             ("vivado_synth", "vivado_impl", "vivado_implementation"),
-            "FPGA claims require Vivado synthesis or implementation evidence.",
+            "FPGA claims require Vivado synthesis plus implementation-route evidence.",
         ),
     )
 )
@@ -195,6 +195,11 @@ def _public_record(record: Mapping[str, Any]) -> Dict[str, Any]:
         "environment",
         "failure_evidence",
         "completion_eligible",
+        "implementation_route_completed",
+        "route_design_completed",
+        "route_completed",
+        "route_status",
+        "route_checkpoint",
     ]
     public = {field: record[field] for field in fields if field in record}
     public["evidence_type"] = _evidence_type(record)
@@ -300,6 +305,54 @@ def _asic_record_stage_blockers(stage_id: str, record: Mapping[str, Any]) -> lis
     return blockers
 
 
+def _truthy(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return _norm(value) in {"1", "true", "yes", "y", "passed", "complete", "completed"}
+    return bool(value)
+
+
+def _has_vivado_route_evidence(record: Mapping[str, Any]) -> bool:
+    evidence_type = _evidence_type(record)
+    if evidence_type in {"vivado_impl", "vivado_implementation"}:
+        return True
+    if _norm(record.get("tool_stage")) in {
+        "implementation",
+        "impl",
+        "place_route",
+        "place_and_route",
+        "route",
+        "routing",
+    }:
+        return True
+    for field in ("implementation_route_completed", "route_design_completed", "route_completed"):
+        if _truthy(record.get(field)):
+            return True
+    route_status = _norm(record.get("route_status"))
+    if route_status in {"route_design_complete", "route_complete", "implemented", "implementation_complete"}:
+        return True
+    return _has_path_suffix(
+        record,
+        (
+            "vivado_route_status.rpt",
+            "route_status.rpt",
+            "vivado_route_timing_summary.rpt",
+            "_routed.dcp",
+            "routed.dcp",
+        ),
+    )
+
+
+def _fpga_record_stage_blockers(stage_id: str, record: Mapping[str, Any]) -> list[str]:
+    evidence_type = _evidence_type(record)
+    if stage_id != "vivado_fpga_synth_or_impl" and not evidence_type.startswith("vivado_"):
+        return []
+    if evidence_type.startswith("vivado_") and not _has_vivado_route_evidence(record):
+        return ["vivado_implementation_route_required"]
+    return []
+
+
 def _stage_result(
     stage: HardwareClaimStage,
     evidence: Sequence[Mapping[str, Any]],
@@ -314,7 +367,10 @@ def _stage_result(
     for record in matching:
         if not _passed(record):
             continue
-        blockers = _asic_record_stage_blockers(stage.stage_id, record)
+        blockers = [
+            *_asic_record_stage_blockers(stage.stage_id, record),
+            *_fpga_record_stage_blockers(stage.stage_id, record),
+        ]
         if blockers:
             public = _public_record(record)
             public["insufficient_reason"] = blockers[0]
@@ -438,7 +494,9 @@ def validate_hardware_claim_evidence(
         "claim_boundary": (
             "Accelerated-kernel hardware claims require golden correctness, "
             "HLS/RTL simulation, HLS/RTL synthesis, and the claim-specific "
-            "physical tool branch. Wrong-branch, unavailable, failed, "
+            "physical tool branch. FPGA physical evidence requires Vivado "
+            "implementation-route completion, not synth-only diagnostics. "
+            "Wrong-branch, unavailable, failed, "
             "missing, or diagnostic-only evidence is a blocker, not pass "
             "evidence."
         ),

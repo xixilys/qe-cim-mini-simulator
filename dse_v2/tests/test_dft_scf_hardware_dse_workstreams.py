@@ -152,6 +152,33 @@ def test_dc_only_rejected_for_fpga_claim():
     assert "missing_fpga_branch_evidence" in verdict["blocker_ids"]
 
 
+def test_vivado_synth_only_rejected_for_fpga_claim():
+    verdict = adjudicate_hardware_claim_evidence(
+        _base_claim_rows({"evidence_class": "vivado_synth", "status": "passed"}),
+        claim_type="fpga",
+    )
+
+    assert verdict["status"] == "blocked"
+    assert verdict["claim_eligible"] is False
+    assert "missing_fpga_branch_evidence" in verdict["blocker_ids"]
+
+
+def test_vivado_synth_with_route_completion_can_satisfy_fpga_branch():
+    verdict = adjudicate_hardware_claim_evidence(
+        _base_claim_rows(
+            {
+                "evidence_class": "vivado_synth",
+                "status": "passed",
+                "implementation_route_completed": True,
+            }
+        ),
+        claim_type="fpga",
+    )
+
+    assert verdict["status"] == "passed"
+    assert verdict["claim_eligible"] is True
+
+
 def test_vivado_only_rejected_for_asic_claim():
     verdict = adjudicate_hardware_claim_evidence(
         _base_claim_rows({"evidence_class": "vivado_implementation", "status": "passed"}),
@@ -309,7 +336,7 @@ def _fpga_pass_rows(kernel_id: str) -> list[dict]:
         {"kernel_id": kernel_id, "evidence_type": "golden_correctness", "status": "passed"},
         {"kernel_id": kernel_id, "evidence_type": "hls_csim", "status": "passed"},
         {"kernel_id": kernel_id, "evidence_type": "hls_csynth", "status": "passed"},
-        {"kernel_id": kernel_id, "evidence_type": "vivado_synth", "status": "passed"},
+        {"kernel_id": kernel_id, "evidence_type": "vivado_impl", "status": "passed"},
     ]
 
 
@@ -556,7 +583,7 @@ def test_kinetic_add_rtl_flow_is_fail_closed_before_remote_tool_outputs(tmp_path
 def test_kinetic_add_rtl_flow_builds_fpga_matrix_and_keeps_dc_attempt_separate(tmp_path):
     initialize_kinetic_add_rtl_flow(tmp_path)
     (tmp_path / "vcs_run.log").write_text("KINETIC_ADD_RTL_PASS re=39 im=-7\n", encoding="utf-8")
-    (tmp_path / "vivado_stdout.log").write_text("synth_design completed successfully\n", encoding="utf-8")
+    (tmp_path / "vivado_stdout.log").write_text("synth_design completed successfully\nROUTE_DESIGN COMPLETE\n", encoding="utf-8")
     (tmp_path / "vivado_utilization.rpt").write_text("DSPs | 2\n", encoding="utf-8")
     (tmp_path / "dc_stdout.log").write_text(
         "Error: Could not read the following target libraries: your_library.db\n",

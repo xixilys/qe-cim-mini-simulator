@@ -87,7 +87,7 @@ def _remote_tool_attempts(out_dir: Path, *, ssh_target: str, remote_dir: str, ti
                 "source ~/.bashrc; "
                 "LC_ALL=C LANG=C vivado -mode batch -source vivado_synth.tcl "
                 "> vivado_stdout.log 2> vivado_stderr.log; "
-                "tar czf results_vivado.tgz vivado*.log vivado_*.rpt reduction_dot_tree_synth.dcp .Xil "
+                "tar czf results_vivado.tgz vivado*.log vivado_*.rpt reduction_dot_tree_synth.dcp *_routed.dcp vivado_route_status.rpt vivado_route_timing_summary.rpt .Xil "
                 "2>/dev/null || tar czf results_vivado.tgz vivado*.log vivado_*.rpt 2>/dev/null || true"
             ),
             "results_vivado.tgz",

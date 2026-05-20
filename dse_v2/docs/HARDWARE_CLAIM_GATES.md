@@ -368,6 +368,16 @@ candidate-scoped or release-scoped `hardware_completion_eligible=true` are
 historical progress artifacts only and must not be cited as FPGA release
 closure until real Vivado implementation-route evidence is present.
 
+The route-required flow has a fresh single-kernel sanity probe at
+`runs/dse/kinetic_add_route_gate_probe_20260520T205107Z`: IC/EDA access used
+`ssh ic-eda`, Vivado 2019.1 completed `synth_design`, `opt_design`,
+`place_design`, and `route_design` for the `kinetic_add` microkernel, and the
+resulting local matrix has `status=passed` for candidate
+`route_probe_kinetic_add`.  This proves the route-capable lane can generate
+claimable microkernel FPGA evidence, but it is not one of the 36 release
+candidates and it does not close the all-candidate/all-kernel Step5 release
+gate.
+
 ## L4/gem5 binding is not FPGA/ASIC PPA or implicit candidate equivalence
 
 `dft_l4_goal_binding.json` cites a complete-DSE gem5/GenericAccel L4 evidence

@@ -66,6 +66,13 @@ synth_design -top hpsi_local_potential -part xc7a35tcsg324-1
 report_utilization -file vivado_utilization.rpt
 report_timing_summary -file vivado_timing_summary.rpt
 write_checkpoint -force hpsi_local_potential_synth.dcp
+opt_design
+place_design
+route_design
+puts "ROUTE_DESIGN COMPLETE"
+report_timing_summary -file vivado_route_timing_summary.rpt
+report_route_status -file vivado_route_status.rpt
+write_checkpoint -force hpsi_local_potential_routed.dcp
 exit
 """
 
@@ -214,7 +221,9 @@ def _load_status(path: Path) -> str:
 def build_hpsi_local_evidence_rows(out_dir: Path, *, environment: str = "ssh ic-eda") -> Dict[str, Any]:
     out_dir = Path(out_dir)
     vcs_pass = "HPSI_LOCAL_RTL_PASS" in _read_text(out_dir / "vcs_run.log")
-    vivado_pass = (out_dir / "vivado_utilization.rpt").exists() and "synth_design completed successfully" in _read_text(out_dir / "vivado_stdout.log")
+    vivado_stdout = _read_text(out_dir / "vivado_stdout.log")
+    vivado_pass = (out_dir / "vivado_utilization.rpt").exists() and "synth_design completed successfully" in vivado_stdout
+    vivado_route_pass = "ROUTE_DESIGN COMPLETE" in vivado_stdout.upper()
     dc_stdout = _read_text(out_dir / "dc_stdout.log")
     dc_area = _read_text(out_dir / "dc_area.rpt")
     dc_timing = _read_text(out_dir / "dc_timing.rpt")
@@ -242,7 +251,7 @@ def build_hpsi_local_evidence_rows(out_dir: Path, *, environment: str = "ssh ic-
         _artifact_row(evidence_type="golden_correctness", status="passed" if _load_status(out_dir / "golden_correctness.json") == "passed" else "failed", artifact=out_dir / "golden_correctness.json", tool="python", tool_stage="golden", command="compute Hpsi local-potential fixed-point golden outputs", environment="local", claim_boundary="Hpsi local-potential fixed-point correctness only; not full-SCF correctness."),
         _artifact_row(evidence_type="rtl_sim", status="passed" if vcs_pass else "blocked", artifact=out_dir / "vcs_run.log", tool="vcs", tool_stage="rtl_sim", command="vcs -full64 -sverilog hpsi_local_potential.v tb_hpsi_local_potential.v -o simv && ./simv", environment=environment, claim_boundary="VCS RTL simulation for one hpsi_local_potential microkernel testbench; not full-SCF closure.", failure_evidence=None if vcs_pass else "VCS pass marker not found in vcs_run.log"),
         _artifact_row(evidence_type="rtl_synth", status="passed" if vivado_pass else "blocked", artifact=out_dir / "vivado_stdout.log", tool="vivado", tool_stage="synthesis", command="vivado -mode batch -source vivado_synth.tcl", environment=environment, claim_boundary="Vivado synth_design proves FPGA RTL synthesis for this microkernel only.", failure_evidence=None if vivado_pass else "Vivado synthesis report/pass marker missing"),
-        _artifact_row(evidence_type="vivado_synth", status="passed" if vivado_pass else "blocked", artifact=out_dir / "vivado_utilization.rpt", tool="vivado", tool_stage="synth", command="vivado -mode batch -source vivado_synth.tcl", environment=environment, claim_boundary="Vivado synthesis/utilization for this microkernel only; no board measurement or full-SCF claim.", failure_evidence=None if vivado_pass else "vivado_utilization.rpt missing or synth_design did not complete"),
+        _artifact_row(evidence_type="vivado_impl", status="passed" if vivado_route_pass else "blocked", artifact=out_dir / "vivado_route_status.rpt", tool="vivado", tool_stage="implementation", command="vivado -mode batch -source vivado_synth.tcl", environment=environment, claim_boundary="Vivado implementation-route completion for this microkernel only; no board measurement or full-SCF claim.", failure_evidence=None if vivado_route_pass else "Vivado implementation route completion marker/report missing"),
     ]
     asic_attempt_rows = [_artifact_row(evidence_type="dc_synth_timing_area", status="blocked" if dc_blocked else "passed", artifact=out_dir / "dc_stdout.log", tool="dc_shell", tool_stage="synth_timing_area", command="dc_shell -f dc_synth.tcl", environment=environment, claim_boundary="DC attempt audit for hpsi_local_potential; only a real mapped technology-library run with dc_synth.ddc can support ASIC PPA.", failure_evidence=("DC output missing, dc_synth.ddc missing, target library unavailable/not observed, zero/empty timing/area, or gtech/unmapped/unconstrained output; not ASIC PPA evidence" if dc_blocked else None))]
     asic_attempt_rows[0].update(

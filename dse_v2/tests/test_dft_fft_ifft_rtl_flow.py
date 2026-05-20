@@ -123,7 +123,7 @@ def test_fft_ifft_rtl_flow_is_fail_closed_before_remote_tool_outputs(tmp_path):
 def test_fft_ifft_rtl_flow_builds_fpga_matrix_and_cannot_satisfy_other_kernel_ids(tmp_path):
     initialize_fft_ifft_ffft_rtl_flow(tmp_path)
     (tmp_path / "vcs_run.log").write_text("FFT_IFFT_FFFT_RTL_PASS fft_ifft_ffft\n", encoding="utf-8")
-    (tmp_path / "vivado_stdout.log").write_text("synth_design completed successfully\n", encoding="utf-8")
+    (tmp_path / "vivado_stdout.log").write_text("synth_design completed successfully\nROUTE_DESIGN COMPLETE\n", encoding="utf-8")
     (tmp_path / "vivado_utilization.rpt").write_text("LUTs | 32\n", encoding="utf-8")
     (tmp_path / "dc_stdout.log").write_text(
         "Error: Could not read the following target libraries: your_library.db\n",
@@ -188,7 +188,7 @@ def test_fft_ifft_rtl_cli_writes_replayable_blocked_status(tmp_path):
 def test_fft_ifft_asic_dc_blocks_when_valid_reports_target_library_but_ddc_missing(tmp_path):
     initialize_fft_ifft_ffft_rtl_flow(tmp_path)
     (tmp_path / "vcs_run.log").write_text("FFT_IFFT_FFFT_RTL_PASS fft_ifft_ffft\n", encoding="utf-8")
-    (tmp_path / "vivado_stdout.log").write_text("synth_design completed successfully\n", encoding="utf-8")
+    (tmp_path / "vivado_stdout.log").write_text("synth_design completed successfully\nROUTE_DESIGN COMPLETE\n", encoding="utf-8")
     (tmp_path / "vivado_utilization.rpt").write_text("LUTs | 32\nDSPs | 2\n", encoding="utf-8")
     (tmp_path / "dc_stdout.log").write_text(
         "Using target library /libs/fsa0a_c_generic_core_tt1p8v25c.db\ncompile completed\n",

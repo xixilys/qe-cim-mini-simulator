@@ -156,9 +156,9 @@ def test_matching_fpga_and_asic_branches_can_pass_their_own_claims():
         [
             *_common_passed_kernel_evidence(),
             {
-                "evidence_type": "vivado_synth",
+                "evidence_type": "vivado_impl",
                 "status": "passed",
-                "artifact": "vivado_synth.rpt",
+                "artifact": "vivado_route_status.rpt",
             },
         ],
     )
@@ -174,6 +174,43 @@ def test_matching_fpga_and_asic_branches_can_pass_their_own_claims():
     assert fpga["trusted"] is True
     assert asic["status"] == "passed"
     assert asic["trusted"] is True
+
+
+def test_fpga_claim_blocks_vivado_synth_only_without_route_completion():
+    result = validate_hardware_claim_evidence(
+        "fpga",
+        [
+            *_common_passed_kernel_evidence(),
+            {
+                "evidence_type": "vivado_synth",
+                "status": "passed",
+                "artifact": "vivado_utilization.rpt",
+            },
+        ],
+    )
+
+    assert result["status"] == "blocked"
+    assert result["claim_allowed"] is False
+    assert result["missing_or_blocked_stages"] == ["vivado_fpga_synth_or_impl"]
+    assert "vivado_implementation_route_required" in result["reasons"]
+
+
+def test_fpga_claim_allows_vivado_synth_row_with_explicit_route_completion():
+    result = validate_hardware_claim_evidence(
+        "fpga",
+        [
+            *_common_passed_kernel_evidence(),
+            {
+                "evidence_type": "vivado_synth",
+                "status": "passed",
+                "artifact": "vivado_utilization.rpt",
+                "implementation_route_completed": True,
+            },
+        ],
+    )
+
+    assert result["status"] == "passed"
+    assert result["trusted"] is True
 
 
 def test_claim_gate_rejects_cross_kernel_evidence_substitution():

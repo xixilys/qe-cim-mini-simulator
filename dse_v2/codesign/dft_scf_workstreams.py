@@ -46,7 +46,13 @@ CLAIM_BASE_EVIDENCE_GROUPS: Mapping[str, tuple[str, ...]] = {
 }
 
 CLAIM_BRANCH_EVIDENCE_GROUPS: Mapping[str, tuple[str, ...]] = {
-    "fpga": ("vivado_synth", "vivado_implementation", "vivado_impl", "fpga_implementation"),
+    "fpga": (
+        "vivado_implementation",
+        "vivado_impl",
+        "vivado_route",
+        "vivado_place_route",
+        "fpga_implementation",
+    ),
     "asic": ("dc_synth_timing_area", "dc_synth", "dc_timing", "dc_area", "asic_synthesis"),
 }
 
@@ -334,6 +340,18 @@ def _row_status(row: Mapping[str, Any]) -> str:
     return str(row.get("status") or row.get("tool_status") or row.get("result") or "").strip().lower()
 
 
+def _row_has_vivado_route_completion(row: Mapping[str, Any]) -> bool:
+    if _row_class(row) in CLAIM_BRANCH_EVIDENCE_GROUPS["fpga"]:
+        return True
+    for field in ("implementation_route_completed", "route_design_completed", "route_completed"):
+        value = row.get(field)
+        if isinstance(value, bool) and value:
+            return True
+        if isinstance(value, str) and value.strip().lower() in {"1", "true", "yes", "passed", "complete", "completed"}:
+            return True
+    return False
+
+
 def adjudicate_hardware_claim_evidence(
     evidence: Mapping[str, Any],
     *,
@@ -362,6 +380,8 @@ def adjudicate_hardware_claim_evidence(
             continue
         if status in {"", "passed", "pass", "ok", "succeeded", "available"}:
             observed.add(evidence_class)
+            if evidence_class == "vivado_synth" and _row_has_vivado_route_completion(row):
+                observed.add("vivado_implementation")
 
     blockers: List[Dict[str, Any]] = []
     if unavailable_rows:
@@ -399,7 +419,11 @@ def adjudicate_hardware_claim_evidence(
         blockers.append(
             {
                 "id": f"missing_{normalized_claim}_branch_evidence",
-                "reason": f"{normalized_claim.upper()} claim requires its branch-specific synthesis/implementation evidence",
+                "reason": (
+                    f"{normalized_claim.upper()} claim requires its branch-specific "
+                    "physical evidence; FPGA claims require Vivado implementation-route "
+                    "completion, not synth-only evidence"
+                ),
                 "accepted_aliases": list(branch_aliases),
             }
         )
@@ -410,7 +434,7 @@ def adjudicate_hardware_claim_evidence(
         blockers.append(
             {
                 "id": "dc_only_rejected_for_fpga_claim",
-                "reason": "DC-only evidence cannot satisfy an FPGA claim; Vivado synth/implementation evidence is required",
+                "reason": "DC-only evidence cannot satisfy an FPGA claim; Vivado implementation-route evidence is required",
             }
         )
     if normalized_claim == "asic" and has_vivado and not has_dc:
@@ -430,7 +454,12 @@ def adjudicate_hardware_claim_evidence(
         "observed_evidence_classes": sorted(observed),
         "blockers": blockers,
         "blocker_ids": [str(item["id"]) for item in blockers],
-        "claim_boundary": "Kernel acceleration claims require golden correctness, sim, synth, and claim-specific FPGA/ASIC tool evidence.",
+        "claim_boundary": (
+            "Kernel acceleration claims require golden correctness, sim, synth, "
+            "and claim-specific FPGA/ASIC tool evidence. FPGA evidence must "
+            "include Vivado implementation-route completion; synth-only rows "
+            "remain progress evidence."
+        ),
     }
 
 

@@ -130,7 +130,7 @@ def test_transpose_layout_rtl_flow_is_fail_closed_before_remote_tool_outputs(tmp
 def test_transpose_layout_rtl_flow_builds_fpga_matrix_and_cannot_satisfy_other_kernel_ids(tmp_path):
     initialize_transpose_layout_rtl_flow(tmp_path)
     (tmp_path / "vcs_run.log").write_text("TRANSPOSE_LAYOUT_RTL_PASS out=fffcfffe00030001\n", encoding="utf-8")
-    (tmp_path / "vivado_stdout.log").write_text("synth_design completed successfully\n", encoding="utf-8")
+    (tmp_path / "vivado_stdout.log").write_text("synth_design completed successfully\nROUTE_DESIGN COMPLETE\n", encoding="utf-8")
     (tmp_path / "vivado_utilization.rpt").write_text("LUT as Logic | 4\n", encoding="utf-8")
     (tmp_path / "dc_stdout.log").write_text(
         "Error: Could not read the following target libraries: your_library.db\n",
