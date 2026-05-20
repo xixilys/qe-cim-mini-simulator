@@ -96,6 +96,49 @@ def test_step3_step4_step5_canonical_artifact_ownership(tmp_path):
     assert report["claim_validation"]["passed"] is True
 
 
+def test_step5_report_does_not_upgrade_unpassed_step4_claim_validation(tmp_path):
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    (run_dir / "verdict.json").write_text(
+        json.dumps(
+            {
+                "run_id": "step5-fail-closed-source-claim-validation",
+                "backend": "step5_contract",
+                "trusted_for_final_ranking": False,
+            }
+        ),
+        encoding="utf-8",
+    )
+    (run_dir / "claim_validation.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "dse.claim_validation.v1",
+                "passed": False,
+                "fail_closed_reason": "Step4 gate intentionally blocked",
+            }
+        ),
+        encoding="utf-8",
+    )
+    (run_dir / "evidence_requirements.json").write_text(
+        json.dumps({"schema_version": "dse.evidence_requirements.v1", "requirements": []}),
+        encoding="utf-8",
+    )
+
+    paths = write_step5_report_artifacts(run_dir, claims=[])
+    report = _load(run_dir / paths["final_report_json"])
+
+    assert report["run_metadata"]["source_step4_claim_validation_passed"] is False
+    assert report["claim_validation"]["passed"] is False
+    assert report["claim_validation"]["source_step4_claim_validation_passed"] is False
+    assert report["claim_validation"]["fail_closed_reason"].startswith(
+        "Step5 final_report.json cannot upgrade"
+    )
+    assert any(
+        "Step4 gate intentionally blocked" in error
+        for error in report["claim_validation"]["errors"]
+    )
+
+
 def test_step3_workflow_does_not_call_final_report_writer_directly():
     source = inspect.getsource(step3_workflow)
     assert "write_final_report_artifacts(" not in source

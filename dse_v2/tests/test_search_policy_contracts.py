@@ -1,6 +1,8 @@
 from dse_v2.mapping.search_policy import (
     BottleneckGuidedPolicy,
     ComponentCapability,
+    HIERARCHICAL_FUNNEL_STAGES,
+    HierarchicalFunnelSearchPolicy,
     RandomBaselinePolicy,
     SearchProblem,
     SeededBeamSearchPolicy,
@@ -93,3 +95,78 @@ def test_bottleneck_guided_policy_emits_auditable_candidate_records():
     assert {record.generation_reason for record in records} == {"bottleneck_guided_parameter_grid"}
     assert all(record.provenance["workload_run_id"] == "w3" for record in records)
     assert all(record.to_dict()["simulation_eligible"] for record in records)
+
+
+def test_hierarchical_funnel_records_required_stages_and_isolates_exploratory_rows():
+    problem = SearchProblem(
+        problem_id="p4",
+        workload_run_id="w4",
+        objective="maximize throughput",
+        parameters={
+            "candidate_tier": ["release", "exploratory"],
+            "template_family": ["streaming", "wide"],
+            "pe_count": [4],
+        },
+        constraints={
+            "formal_pareto_tier_field": "candidate_tier",
+            "release_tier": "release",
+            "hierarchical_funnel_stages": HIERARCHICAL_FUNNEL_STAGES,
+            "requires_physical_evidence": True,
+        },
+    )
+    policy = HierarchicalFunnelSearchPolicy(bottleneck_keys=("pe_count",))
+
+    records = policy.propose(problem, budget=4)
+    payloads = [record.to_dict() for record in records]
+    release_rows = [payload for payload in payloads if payload["parameters"]["candidate_tier"] == "release"]
+    exploratory_rows = [payload for payload in payloads if payload["parameters"]["candidate_tier"] == "exploratory"]
+
+    assert release_rows
+    assert exploratory_rows
+    assert all(payload["generation_reason"] == "hierarchical_funnel_search" for payload in payloads)
+    assert all(
+        [stage["stage_id"] for stage in payload["provenance"]["funnel_stages"]]
+        == list(HIERARCHICAL_FUNNEL_STAGES)
+        for payload in payloads
+    )
+    assert all(payload["simulation_eligible"] is True for payload in release_rows)
+    assert all("formal_release_pareto_eligible" in payload["promotion_reasons"] for payload in release_rows)
+    assert all(payload["simulation_eligible"] is False for payload in exploratory_rows)
+    assert all("non_release_tier:exploratory" in payload["blocker_reasons"] for payload in exploratory_rows)
+    assert all(
+        payload["provenance"]["release_tier_policy"]["exploratory_rows_can_enter_formal_pareto"] is False
+        for payload in payloads
+    )
+
+
+def test_hierarchical_funnel_observations_change_later_proposal_order():
+    problem = SearchProblem(
+        problem_id="p5",
+        workload_run_id="w5",
+        objective="maximize throughput",
+        parameters={
+            "candidate_tier": ["release"],
+            "template_family": ["baseline", "calibrated"],
+            "pe_count": [1],
+        },
+        constraints={"formal_pareto_tier_field": "candidate_tier", "release_tier": "release"},
+    )
+    policy = HierarchicalFunnelSearchPolicy()
+
+    first_round = policy.propose(problem, budget=2)
+    baseline = next(record for record in first_round if record.parameters["template_family"] == "baseline")
+    policy.observe(
+        baseline.candidate_id,
+        {
+            "step4_verdict": "trusted_pass",
+            "step4_quality_score": 95,
+            "calibrated_score_delta": 100,
+            "promoted": True,
+        },
+    )
+    second_round = policy.propose(problem, budget=1)
+    checkpoint = policy.checkpoint(problem).to_dict()
+
+    assert second_round[0].parameters["template_family"] == "baseline"
+    assert checkpoint["observed_count"] == 1
+    assert checkpoint["best_candidate_id"] == second_round[0].candidate_id

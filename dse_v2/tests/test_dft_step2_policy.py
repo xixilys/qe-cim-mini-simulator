@@ -10,8 +10,12 @@ from dse_v2.mapping.domain_policy import Step2PolicyInput
 from dse_v2.reference_workloads.dft_step2_policy import (
     DFT_ARCHITECTURE_FAMILIES,
     DFT_HARD_REVIEW_FLAGS,
+    DFT_REQUIRED_HARDWARE_TEMPLATE_FAMILY_IDS,
     DFT_SOFT_REVIEW_FLAGS,
     DftStep2ReferencePolicy,
+    build_dft_hierarchical_funnel_search_report,
+    build_dft_hierarchical_search_problem,
+    dft_hardware_template_families,
 )
 
 
@@ -270,3 +274,84 @@ def test_dft_step2_policy_uses_workflow_stage_skeleton_for_fpga_candidate_groups
     assert hints["node_target_preferences"]["uspp"][:2] == ["fpga", "gpu"]
     assert "hybrid_exchange" in hints["data_placement"]["phase_groups"]
     assert "projector_augmentation" in hints["data_placement"]["phase_groups"]
+
+
+def test_dft_release_search_space_contains_required_hardware_template_families():
+    families = dft_hardware_template_families()
+    by_id = {row["template_family_id"]: row for row in families}
+
+    assert set(DFT_REQUIRED_HARDWARE_TEMPLATE_FAMILY_IDS).issubset(by_id)
+    assert by_id["streaming_fft_hpsi_pipeline"]["release_policy"]["lane"] == "release"
+    assert by_id["projector_heavy_gemm_gemv"]["release_policy"]["lane"] == "release"
+    assert by_id["memory_hbm_dma_transpose"]["release_policy"]["lane"] == "release"
+    assert by_id["hybrid_cpu_fpga_scf_sidecar"]["release_policy"]["lane"] == "release"
+    assert by_id["asic_tile_array_template"]["release_policy"]["lane"] == "release"
+    assert by_id["wide_exploratory_noc_hls_variants"]["release_policy"]["lane"] == "exploratory"
+    assert all("candidate_tier" not in row for row in families)
+    assert "fft_ifft_ffft" in by_id["streaming_fft_hpsi_pipeline"]["major_kernel_ids"]
+    assert "nonlocal_projector" in by_id["projector_heavy_gemm_gemv"]["major_kernel_ids"]
+    assert "dma_hbm_movement_engine" in by_id["memory_hbm_dma_transpose"]["major_kernel_ids"]
+    assert "reduction_dot_tree" in by_id["asic_tile_array_template"]["major_kernel_ids"]
+    assert all(row["source_refs"] for row in families)
+    assert all("no hardware acceleration" in row["claim_boundary"] for row in families)
+
+
+def test_dft_hierarchical_funnel_report_keeps_wide_search_out_of_formal_pareto():
+    problem = build_dft_hierarchical_search_problem()
+    report = build_dft_hierarchical_funnel_search_report(budget=32)
+
+    assert "candidate_tier" not in problem.parameters
+    assert "candidate_tier" not in problem.constraints["required_parameters"]
+    assert all("candidate_tier" not in seed for seed in problem.seed_candidates)
+    assert report["status"] == "passed"
+    assert report["funnel_stage_order"] == [
+        "template_legality_enumeration",
+        "analytic_screen",
+        "bottleneck_guided_refinement",
+        "hls_rtl_ppa_calibration",
+        "evidence_eligible_pareto",
+    ]
+    assert report["candidate_generation"]["missing_release_template_family_ids"] == []
+    assert report["candidate_generation"]["exploratory_candidate_ids_in_formal_pareto"] == []
+    assert report["wide_space_policy"]["wide_space_can_enter_formal_pareto_without_release_gate"] is False
+    assert all("candidate_tier" not in record["parameters"] for record in report["all_records"])
+    assert all(
+        record["policy_metadata"]["policy_source"] == "dft_hardware_template_families"
+        for record in report["all_records"]
+    )
+    assert report["formal_pareto_records"]
+    assert all(
+        record["policy_metadata"]["formal_pareto_eligible"] is True
+        and record["policy_metadata"]["template_policy"]["release_policy"]["formal_pareto_allowed"] is True
+        and record["parameters"]["template_family"] in DFT_REQUIRED_HARDWARE_TEMPLATE_FAMILY_IDS
+        and record["parameters"]["precision_mode"] == "fp64_strict"
+        and record["simulation_eligible"] is True
+        for record in report["formal_pareto_records"]
+    )
+    assert report["exploratory_records"]
+    assert all(
+        record["policy_metadata"]["formal_pareto_eligible"] is False
+        or record["parameters"]["template_family"] not in DFT_REQUIRED_HARDWARE_TEMPLATE_FAMILY_IDS
+        or record["parameters"]["precision_mode"] != "fp64_strict"
+        or record["simulation_eligible"] is False
+        for record in report["exploratory_records"]
+    )
+    exhaustive_report = build_dft_hierarchical_funnel_search_report(
+        budget=len(problem.parameter_grid()) + len(problem.seed_candidates)
+    )
+    assert all(
+        "candidate_tier" not in record["parameters"]
+        for record in exhaustive_report["all_records"]
+    )
+    assert any(
+        record["parameters"]["template_family"] == "wide_exploratory_noc_hls_variants"
+        and record["policy_metadata"]["template_policy"]["release_policy"]["lane"] == "exploratory"
+        and record["policy_metadata"]["formal_pareto_eligible"] is False
+        and record["policy_metadata"]["exploratory_queue_allowed"] is True
+        for record in exhaustive_report["exploratory_records"]
+    )
+    assert all(
+        record["parameters"]["template_family"] != "wide_exploratory_noc_hls_variants"
+        for record in exhaustive_report["formal_pareto_records"]
+    )
+    assert "trusted Pareto" in report["claim_boundary"]

@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from dse_v2.codesign.dft_scf_workstreams import (
@@ -15,7 +17,20 @@ from dse_v2.codesign.dft_scf_workstreams import (
     validate_step5_full_scf_cost_report,
     validate_strict_dft_qe_bundle,
 )
+from dse_v2.codesign.dft_hardware_evidence import (
+    MAJOR_SCF_KERNEL_IDS,
+    build_ic_eda_tool_availability_report,
+    build_major_kernel_evidence_matrix,
+    run_tool_probe_commands,
+)
 from dse_v2.contracts import ContractValidationError, validate_artifact_write
+from dse_v2.reference_workloads.dft_kinetic_add_rtl_flow import (
+    build_kinetic_add_evidence_rows,
+    initialize_kinetic_add_rtl_flow,
+    write_kinetic_add_major_kernel_matrix,
+)
+from dse_v2.scripts.dse import probe_dft_ic_eda_tools as ic_eda_probe_cli
+from dse_v2.scripts.dse.build_dft_wave15_trace import build_wave15_trace_artifacts
 
 
 def _strict_case(workload_class: str) -> dict:
@@ -63,20 +78,47 @@ def test_strict_bundle_rejects_missing_assets():
 
     assert validation["status"] == "blocked"
     assert validation["admitted"] is False
-    assert {"case_id": "scf_ground_state_case", "asset": "pseudopotential", "reason": "required strict DFT/QE bundle asset is absent"} in validation["missing_assets"]
+    assert {
+        "case_id": "small_multi_k_scf_case",
+        "asset": "pseudopotential",
+        "reason": "required strict DFT/QE bundle asset is absent",
+    } in validation["missing_assets"]
+
+
+def test_strict_scf_bundle_requires_six_representative_research_classes():
+    assert set(STRICT_DFT_QE_WORKLOAD_CLASSES) == {
+        "small_multi_k_scf",
+        "metal_smearing_scf",
+        "insulator_scf",
+        "slab_vacuum_large_fft_scf",
+        "gamma_only_supercell_scf",
+        "projector_orthogonalization_heavy_scf",
+    }
+    bundle = _strict_bundle()
+    bundle["workload_classes"].remove("slab_vacuum_large_fft_scf")
+    bundle["cases"] = [
+        case
+        for case in bundle["cases"]
+        if case["workload_class"] != "slab_vacuum_large_fft_scf"
+    ]
+
+    validation = validate_strict_dft_qe_bundle(bundle)
+
+    assert validation["admitted"] is False
+    assert validation["missing_workload_classes"] == ["slab_vacuum_large_fft_scf"]
 
 
 def test_exploratory_candidate_excluded_from_formal_pareto():
     release_candidate = {
         "candidate_id": "release-dma-hbm",
-        "candidate_tier": "release",
+        "release_policy": {"lane": "release", "formal_pareto_allowed": True},
         "seed_source": "release_seed_manifest",
         "metrics": {"end_to_end_scf_time_s": 8.0},
         "claim_eligibility": {"formal_pareto": True},
     }
     exploratory_candidate = {
         "candidate_id": "explore-unbounded-ai-core",
-        "candidate_tier": "exploratory",
+        "release_policy": {"lane": "exploratory", "formal_pareto_allowed": False},
         "metrics": {"end_to_end_scf_time_s": 1.0},
         "claim_eligibility": {"formal_pareto": True},
     }
@@ -195,7 +237,7 @@ def test_step_artifact_ownership_rejects_cross_writes():
 def test_wave15_trace_reaches_step5_without_completion_claim():
     candidate = {
         "candidate_id": "release-dma-hbm",
-        "candidate_tier": "release",
+        "release_policy": {"lane": "release", "formal_pareto_allowed": True},
         "seed_source": "release_seed_manifest",
         "trial_id": "trial-prd",
         "metrics": {
@@ -225,7 +267,7 @@ def test_wave15_trace_reaches_step5_without_completion_claim():
         claim_type="fpga",
     )
 
-    assert trace["status"] == "progress_only"
+    assert trace["status"] == "blocked_progress_only"
     assert trace["progress_only"] is True
     assert trace["completion_claim"] is False
     assert trace["mvp_claim"] is False
@@ -234,3 +276,305 @@ def test_wave15_trace_reaches_step5_without_completion_claim():
     assert trace["artifact_chain"][4]["status"] == "passed"
     assert trace["step5_report"]["candidate_claim_eligibility"]["trusted_full_scf_hybrid_claim"] is False
 
+
+def test_wave15_trace_cli_artifacts_are_blocked_progress_only_until_evidence_closes(tmp_path):
+    outputs = build_wave15_trace_artifacts(tmp_path / "wave15")
+
+    out_dir = tmp_path / "wave15"
+    assert set(outputs) == {
+        "strict_workload_bundle",
+        "release_candidate",
+        "tool_evidence",
+        "wave15_trace",
+        "wave15_summary",
+        "wave15_runbook",
+    }
+    trace = json.loads((out_dir / outputs["wave15_trace"]).read_text(encoding="utf-8"))
+    summary = json.loads((out_dir / outputs["wave15_summary"]).read_text(encoding="utf-8"))
+    runbook = (out_dir / outputs["wave15_runbook"]).read_text(encoding="utf-8")
+    assert trace["schema_version"] == "dse.dft_scf.wave15_trace.v1"
+    assert trace["status"] == "blocked_progress_only"
+    assert trace["progress_only"] is True
+    assert trace["completion_claim"] is False
+    assert trace["mvp_claim"] is False
+    assert summary["progress_only"] is True
+    assert summary["status"] == "blocked_progress_only"
+    assert summary["completion_claim"] is False
+    assert [row["step"] for row in summary["step_chain_status"]] == ["step1", "step2", "step3", "step4", "step5"]
+    assert "not final DFT/QE full-SCF hardware DSE closure" in runbook
+
+
+def _fpga_pass_rows(kernel_id: str) -> list[dict]:
+    return [
+        {"kernel_id": kernel_id, "evidence_type": "golden_correctness", "status": "passed"},
+        {"kernel_id": kernel_id, "evidence_type": "hls_csim", "status": "passed"},
+        {"kernel_id": kernel_id, "evidence_type": "hls_csynth", "status": "passed"},
+        {"kernel_id": kernel_id, "evidence_type": "vivado_synth", "status": "passed"},
+    ]
+
+
+def test_claim_gate_requires_complete_ladder_for_each_claimed_kernel():
+    dispositions = [
+        {
+            "kernel_id": kernel_id,
+            "disposition": "host_bound",
+            "host_cost_accounted": True,
+        }
+        for kernel_id in MAJOR_SCF_KERNEL_IDS
+    ]
+    dispositions[0] = {
+        "kernel_id": "fft_ifft_ffft",
+        "disposition": "accelerated_claim",
+        "claim_type": "fpga",
+    }
+
+    passed = build_major_kernel_evidence_matrix(
+        dispositions,
+        evidence_rows=_fpga_pass_rows("fft_ifft_ffft"),
+        candidate_id="cand-wave2",
+    )
+
+    assert passed["status"] == "passed"
+    assert passed["trusted"] is True
+    assert len(passed["kernel_rows"]) == 8
+
+    blocked = build_major_kernel_evidence_matrix(
+        dispositions,
+        evidence_rows=_fpga_pass_rows("transpose_layout_conversion"),
+        candidate_id="cand-wave2",
+    )
+
+    assert blocked["status"] == "blocked"
+    assert "hardware_claim_gate_blocked" in blocked["blocker_ids"]
+    fft_row = next(row for row in blocked["kernel_rows"] if row["kernel_id"] == "fft_ifft_ffft")
+    assert fft_row["hardware_claim_gate"]["missing_or_blocked_stages"] == [
+        "golden_correctness",
+        "hls_or_rtl_sim",
+        "hls_or_rtl_synth",
+        "vivado_fpga_synth_or_impl",
+    ]
+
+
+def test_major_kernel_matrix_rejects_missing_disposition_and_uncosted_host_bound():
+    matrix = build_major_kernel_evidence_matrix(
+        [
+            {
+                "kernel_id": "fft_ifft_ffft",
+                "disposition": "host_bound",
+                "host_cost_accounted": False,
+            }
+        ],
+        candidate_id="cand-incomplete",
+    )
+
+    assert matrix["status"] == "blocked"
+    assert "host_bound_kernel_cost_not_accounted" in matrix["blocker_ids"]
+    assert "missing_major_kernel_disposition" in matrix["blocker_ids"]
+
+
+def test_ic_eda_tool_availability_report_records_real_tool_probe_boundary():
+    report = build_ic_eda_tool_availability_report(
+        [
+            {"tool": "dc_shell", "returncode": 1, "stdout": "dc_shell version - O-2018.06-SP1"},
+            {"tool": "vcs", "returncode": 0, "stdout": "vcs script version : O-2018.09"},
+            {"tool": "vivado", "returncode": 0, "stdout": "Vivado v2019.1 (64-bit)"},
+        ],
+        environment="ssh ic-eda",
+    )
+
+    assert report["status"] == "passed"
+    assert report["all_required_tools_available"] is True
+    assert report["required_tools"] == ["dc_shell", "vcs", "vivado"]
+    assert report["completion_claim"] == "availability_only_not_kernel_ppa"
+    assert report["kernel_ppa_evidence"] is False
+    assert report["hardware_completion_eligible"] is False
+    assert report["deliverable_complete"] is False
+    assert report["tool_rows"][0]["availability_evidence_kind"] == "version_like_output_nonzero_returncode"
+    assert report["tool_rows"][0]["hardware_completion_eligible"] is False
+    assert report["tool_rows"][0]["completion_eligible"] is False
+    assert "not kernel synthesis" in report["claim_boundary"]
+
+
+def test_ic_eda_tool_availability_rejects_command_not_found_even_with_zero_returncode():
+    report = build_ic_eda_tool_availability_report(
+        [
+            {"tool": "dc_shell", "returncode": 0, "stdout": "dc_shell: command not found"},
+            {"tool": "vcs", "returncode": 0, "stdout": "VCS version O-2018.09"},
+            {"tool": "vivado", "returncode": 0, "stdout": "Vivado v2019.1"},
+        ],
+        environment="unit-test",
+    )
+
+    assert report["status"] == "blocked"
+    dc_row = next(row for row in report["tool_rows"] if row["tool"] == "dc_shell")
+    assert dc_row["available"] is False
+    assert dc_row["availability_evidence_kind"] == "not_found_error"
+    assert "dc_shell" in report["blockers"][0]["tools"]
+
+
+def test_ic_eda_tool_availability_blocks_missing_required_tools():
+    report = build_ic_eda_tool_availability_report(
+        [{"tool": "dc_shell", "returncode": 0, "stdout": "dc_shell version"}],
+        environment="ssh ic-eda",
+    )
+
+    assert report["status"] == "blocked"
+    assert report["all_required_tools_available"] is False
+    assert report["blockers"][0]["tools"] == ["vcs", "vivado"]
+
+
+def test_tool_probe_runner_normalizes_command_results():
+    def fake_runner(command):
+        return {"returncode": 0, "stdout": " ".join(command)}
+
+    report = run_tool_probe_commands(
+        {
+            "dc_shell": ["dc_shell", "-version"],
+            "vcs": ["vcs", "-ID"],
+            "vivado": ["vivado", "-version"],
+        },
+        runner=fake_runner,
+        environment="unit-test",
+    )
+
+    assert report["status"] == "passed"
+    assert [row["tool"] for row in report["tool_rows"]] == ["dc_shell", "vcs", "vivado"]
+
+
+def test_ic_eda_probe_cli_falls_back_from_missing_ic_to_ssh_availability_only(
+    tmp_path,
+    monkeypatch,
+):
+    calls = []
+
+    def fake_run(command, *, timeout_s):
+        calls.append(list(command))
+        joined = " ".join(command)
+        if command == ["bash", "-lc", "command -v ic"]:
+            return {"returncode": 1, "stdout": "", "stderr": "ic missing"}
+        if command[0] == "ssh" and "dc_shell" in joined:
+            return {"returncode": 1, "stdout": "/eda/bin/dc_shell\ndc_shell version O-2018.06-SP1\n", "stderr": ""}
+        if command[0] == "ssh" and "vcs" in joined:
+            return {"returncode": 0, "stdout": "/eda/bin/vcs\nvcs script version O-2018.09\n", "stderr": ""}
+        if command[0] == "ssh" and "vivado" in joined:
+            return {"returncode": 0, "stdout": "/eda/bin/vivado\nVivado v2019.1 (64-bit)\n", "stderr": ""}
+        raise AssertionError(f"unexpected command: {command}")
+
+    out_dir = tmp_path / "probe"
+    monkeypatch.setattr(ic_eda_probe_cli, "_run", fake_run)
+    monkeypatch.setattr(
+        "sys.argv",
+        ["probe_dft_ic_eda_tools.py", "--out", str(out_dir), "--timeout-s", "5"],
+    )
+
+    assert ic_eda_probe_cli.main() == 0
+
+    report = json.loads((out_dir / "ic_eda_tool_availability.json").read_text(encoding="utf-8"))
+    attempts = json.loads((out_dir / "ic_eda_tool_attempts.json").read_text(encoding="utf-8"))
+    assert calls[0] == ["bash", "-lc", "command -v ic"]
+    assert report["status"] == "passed"
+    assert report["selected_probe_transport"] == "ssh"
+    assert report["probe_order"] == ["local_ic", "ssh"]
+    assert report["completion_claim"] == "availability_only_not_kernel_ppa"
+    assert report["availability_only_not_kernel_ppa"] is True
+    assert report["kernel_ppa_evidence"] is False
+    assert report["timing_area_evidence"] is False
+    assert report["implementation_evidence"] is False
+    assert report["hardware_completion_eligible"] is False
+    assert report["deliverable_complete"] is False
+    assert {attempt["transport"] for attempt in attempts} == {"local_ic", "ssh"}
+    assert all(attempt["availability_only_not_kernel_ppa"] is True for attempt in attempts)
+    assert any(
+        "source ~/.bashrc; which dc_shell || true; dc_shell -version" in attempt["command"]
+        for attempt in attempts
+    )
+    assert any(
+        "source ~/.bashrc; which vivado || true; LC_ALL=C LANG=C vivado -version" in attempt["command"]
+        for attempt in attempts
+    )
+
+
+def test_ic_eda_probe_cli_exposes_ssh_tool_blockers_without_completion_claim(
+    tmp_path,
+    monkeypatch,
+):
+    def fake_run(command, *, timeout_s):
+        joined = " ".join(command)
+        if command == ["bash", "-lc", "command -v ic"]:
+            return {"returncode": 1, "stdout": "", "stderr": "ic missing"}
+        if command[0] == "ssh" and "vivado" in joined:
+            return {"returncode": 127, "stdout": "", "stderr": "vivado: command not found"}
+        if command[0] == "ssh" and "dc_shell" in joined:
+            return {"returncode": 0, "stdout": "dc_shell version O-2018.06-SP1\n", "stderr": ""}
+        if command[0] == "ssh" and "vcs" in joined:
+            return {"returncode": 0, "stdout": "vcs script version O-2018.09\n", "stderr": ""}
+        raise AssertionError(f"unexpected command: {command}")
+
+    out_dir = tmp_path / "probe_blocked"
+    monkeypatch.setattr(ic_eda_probe_cli, "_run", fake_run)
+    monkeypatch.setattr(
+        "sys.argv",
+        ["probe_dft_ic_eda_tools.py", "--out", str(out_dir), "--timeout-s", "5"],
+    )
+
+    assert ic_eda_probe_cli.main() == 2
+
+    report = json.loads((out_dir / "ic_eda_tool_availability.json").read_text(encoding="utf-8"))
+    assert report["status"] == "blocked"
+    assert report["completion_claim"] == "availability_only_not_kernel_ppa"
+    assert report["kernel_ppa_evidence"] is False
+    assert report["hardware_completion_eligible"] is False
+    assert report["deliverable_complete"] is False
+    assert report["blockers"][0]["id"] == "required_ic_eda_tool_blocked"
+    assert report["blockers"][0]["tools"] == ["vivado"]
+
+
+def test_kinetic_add_rtl_flow_is_fail_closed_before_remote_tool_outputs(tmp_path):
+    initialize_kinetic_add_rtl_flow(tmp_path)
+
+    evidence = build_kinetic_add_evidence_rows(tmp_path)
+    matrix = write_kinetic_add_major_kernel_matrix(
+        tmp_path,
+        candidate_id="unit-kinetic-add-before-tools",
+        evidence_rows=evidence["evidence_rows"],
+    )
+
+    assert (tmp_path / "kinetic_add.v").exists()
+    assert (tmp_path / "tb_kinetic_add.v").exists()
+    assert evidence["fpga_gate_candidate"] is False
+    assert evidence["asic_gate_candidate"] is False
+    assert evidence["asic_attempt_evidence_rows"][0]["status"] == "blocked"
+    assert matrix["status"] == "blocked"
+    kinetic_row = next(row for row in matrix["kernel_rows"] if row["kernel_id"] == "kinetic_add")
+    assert kinetic_row["hardware_claim_gate"]["missing_or_blocked_stages"] == [
+        "hls_or_rtl_sim",
+        "hls_or_rtl_synth",
+        "vivado_fpga_synth_or_impl",
+    ]
+
+
+def test_kinetic_add_rtl_flow_builds_fpga_matrix_and_keeps_dc_attempt_separate(tmp_path):
+    initialize_kinetic_add_rtl_flow(tmp_path)
+    (tmp_path / "vcs_run.log").write_text("KINETIC_ADD_RTL_PASS re=39 im=-7\n", encoding="utf-8")
+    (tmp_path / "vivado_stdout.log").write_text("synth_design completed successfully\n", encoding="utf-8")
+    (tmp_path / "vivado_utilization.rpt").write_text("DSPs | 2\n", encoding="utf-8")
+    (tmp_path / "dc_stdout.log").write_text(
+        "Error: Could not read the following target libraries: your_library.db\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "dc_area.rpt").write_text("Library(s) Used:\n    gtech\nunmapped logic\n", encoding="utf-8")
+
+    evidence = build_kinetic_add_evidence_rows(tmp_path)
+    matrix = write_kinetic_add_major_kernel_matrix(
+        tmp_path,
+        candidate_id="unit-kinetic-add-fpga-smoke",
+        evidence_rows=evidence["evidence_rows"],
+    )
+
+    assert evidence["fpga_gate_candidate"] is True
+    assert evidence["asic_gate_candidate"] is False
+    assert evidence["asic_attempt_evidence_rows"][0]["status"] == "blocked"
+    assert matrix["status"] == "passed"
+    kinetic_row = next(row for row in matrix["kernel_rows"] if row["kernel_id"] == "kinetic_add")
+    assert kinetic_row["claim_allowed"] is True
+    assert kinetic_row["hardware_claim_gate"]["missing_or_blocked_stages"] == []

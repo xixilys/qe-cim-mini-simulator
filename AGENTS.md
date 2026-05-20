@@ -145,6 +145,14 @@ small vertical slice and call it complete.
   HLS/RTL/PPA evidence.  Model-level SystemC/gem5 closure, h_psi-only numerical
   evidence, fixed hand-picked candidates, or unavailable-tool logs are progress
   evidence only and must not be reported as final system completion.
+- Rolling latest source-flow map auto-discovery and ready-candidate counts are
+  scheduling/provenance evidence only.  They may identify all-eight ready
+  source-flow roots and assemble a `source_flow_map.json` (for example via
+  `build_dft_hardware_closure_latest_source_flow_map.py`), but they do not prove
+  parser output, hard-gate adjudication, Vivado/DC closure, full-SCF evaluated
+  hybrid completion, or deliverable completion.  A partial latest map with
+  missing candidate×kernel rows must be reported as partial/blocked, not
+  release-complete.
 - For DFT hardware candidate claims, apply claim-specific tool gates.  Any
   kernel claimed as accelerated must pass golden correctness, HLS C-sim or RTL
   sim, HLS C-synth or RTL synth, then Vivado synthesis/implementation for FPGA

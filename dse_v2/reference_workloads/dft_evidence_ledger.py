@@ -15,6 +15,7 @@ from dse_v2.codesign.evidence_ledger import (
     validate_candidate_evidence_ledger,
     write_json,
 )
+from dse_v2.reference_workloads.dft_full_scf_hybrid import FULL_SCF_HYBRID_ARTIFACT_NAMES
 from dse_v2.reference_workloads.dft_importer_coverage import dft_importer_fixture_coverage_matrix
 
 
@@ -116,6 +117,66 @@ def _source_ref(path: Path, *, base_dir: Path | None = None) -> Dict[str, Any]:
     return payload
 
 
+def _full_scf_hybrid_bundle_record(bundle_dir: Path | None) -> Dict[str, Any]:
+    """Return a fail-closed reference summary for an optional full-SCF bundle."""
+
+    if bundle_dir is None:
+        return {
+            "status": "not_recorded",
+            "present": False,
+            "required_artifacts_present": False,
+            "artifact_refs": {},
+            "completion_claim": False,
+            "claim_boundary": "Full-SCF evaluated-hybrid bundle was not attached to this ledger.",
+        }
+
+    bundle_dir = Path(bundle_dir)
+    artifact_refs: Dict[str, Any] = {}
+    missing: list[str] = []
+    for name in FULL_SCF_HYBRID_ARTIFACT_NAMES:
+        path = bundle_dir / name
+        if path.exists():
+            artifact_refs[name] = _source_ref(path)
+        else:
+            missing.append(name)
+            artifact_refs[name] = {"path": str(path), "exists": False}
+
+    descriptor_path = bundle_dir / "full_scf_accelerator_descriptor.json"
+    descriptor = _load_json(descriptor_path) if descriptor_path.exists() else {}
+    correctness_path = bundle_dir / "full_scf_correctness_report.json"
+    correctness = _load_json(correctness_path) if correctness_path.exists() else {}
+    ppa_path = bundle_dir / "full_scf_ppa_summary.json"
+    ppa = _load_json(ppa_path) if ppa_path.exists() else {}
+    required_present = not missing
+    validation = descriptor.get("validation", {}) if isinstance(descriptor.get("validation", {}), Mapping) else {}
+    return {
+        "status": "present_hash_valid" if required_present else "blocked_missing_artifacts",
+        "present": True,
+        "bundle_dir": str(bundle_dir),
+        "required_artifacts": list(FULL_SCF_HYBRID_ARTIFACT_NAMES),
+        "required_artifacts_present": required_present,
+        "missing_artifacts": missing,
+        "artifact_refs": artifact_refs,
+        "descriptor_id": descriptor.get("descriptor_id"),
+        "candidate_id": descriptor.get("candidate_id"),
+        "campaign_id": descriptor.get("campaign_id"),
+        "workload_run_id": descriptor.get("workload_run_id"),
+        "trial_id": descriptor.get("trial_id"),
+        "prototype_boundary": descriptor.get("prototype_boundary"),
+        "device_residency": descriptor.get("device_residency"),
+        "descriptor_validation_passed": bool(validation.get("passed", False)),
+        "numerical_correctness_claim_eligible": bool(correctness.get("numerical_correctness_claim_eligible", False)),
+        "ppa_claim_eligible": bool(ppa.get("ppa_claim_eligible", False)),
+        "completion_claim": False,
+        "claim_boundary": (
+            "Full-SCF evaluated-hybrid bundle attachment records descriptor, "
+            "runtime schedule, data residency, correctness, and PPA-summary "
+            "accounting artifacts.  It is not numerical correctness, FPGA/ASIC "
+            "PPA closure, all-candidate evidence, or deliverable completion."
+        ),
+    }
+
+
 def _repo_source_ref(relative_path: str) -> Dict[str, Any]:
     path = _REPO_ROOT / relative_path
     return {
@@ -140,25 +201,98 @@ def _candidate_records(candidates: list[Mapping[str, Any]], *, status: str, deta
     ]
 
 
-def _eda_candidate_records(candidates: list[Mapping[str, Any]]) -> list[Dict[str, Any]]:
-    return [
-        {
-            "candidate_id": str(candidate["candidate_id"]),
-            "eda_job_id": f"eda::{candidate['candidate_id']}",
-            "status": "blocked_temporary",
-            "toolchain_status": {
-                "status": "blocked_temporary",
-                "required_tools": ["dc_shell", "vcs", "vivado"],
-                "required_environment": "local IC/EDA environment or verified SSH route",
-                "reason": "real all-candidate DC/VCS/Vivado execution has not been produced for this release candidate",
-            },
-            "claim_boundary": (
-                "Per-candidate EDA job/evidence row only; blocked_temporary "
-                "rows are not synthesis, timing, area, or completion evidence."
-            ),
+def _hardware_matrix_candidate_summary(
+    candidate_id: str,
+    hardware_matrix: Mapping[str, Any] | None,
+) -> Dict[str, Any]:
+    if not isinstance(hardware_matrix, Mapping) or not hardware_matrix:
+        return {
+            "attached": False,
+            "candidate_id_match": False,
+            "matrix_status": "not_recorded",
+            "matrix_trusted": False,
+            "kernel_gate_audit_ready": False,
+            "hardware_gate_claim_eligible": False,
+            "claim_boundary": "No per-candidate major-kernel matrix was attached.",
         }
-        for candidate in candidates
+    matrix_candidate_id = str(hardware_matrix.get("candidate_id") or "")
+    rows = [
+        row for row in hardware_matrix.get("kernel_rows", []) or []
+        if isinstance(row, Mapping)
     ]
+    candidate_id_match = matrix_candidate_id == candidate_id
+    passed_accelerated = [
+        str(row.get("kernel_id"))
+        for row in rows
+        if row.get("status") == "passed"
+        and row.get("disposition") == "accelerated_claim"
+    ]
+    host_bound = [
+        str(row.get("kernel_id"))
+        for row in rows
+        if row.get("status") == "host_bound"
+        or row.get("disposition") == "host_bound"
+    ]
+    blocked = [
+        str(row.get("kernel_id"))
+        for row in rows
+        if row.get("status") == "blocked"
+    ]
+    matrix_trusted = hardware_matrix.get("trusted") is True
+    kernel_gate_audit_ready = bool(candidate_id_match and matrix_trusted)
+    hardware_gate_claim_eligible = bool(kernel_gate_audit_ready and passed_accelerated)
+    return {
+        "attached": True,
+        "matrix_candidate_id": matrix_candidate_id,
+        "candidate_id_match": candidate_id_match,
+        "matrix_status": hardware_matrix.get("status"),
+        "matrix_trusted": matrix_trusted,
+        "major_kernel_count": hardware_matrix.get("major_kernel_count"),
+        "passed_accelerated_kernel_ids": passed_accelerated,
+        "host_bound_kernel_ids": host_bound,
+        "blocked_kernel_ids": blocked,
+        "kernel_gate_audit_ready": kernel_gate_audit_ready,
+        "hardware_gate_claim_eligible": hardware_gate_claim_eligible,
+        "completion_eligible": False,
+        "claim_boundary": (
+            "A matching trusted major-kernel matrix can make the candidate's "
+            "kernel-gate state auditable, but it does not satisfy all-candidate "
+            "SystemC/gem5/numerical/formal/runtime/ASIC closure or release "
+            "completion by itself."
+        ),
+    }
+
+
+def _eda_candidate_records(
+    candidates: list[Mapping[str, Any]],
+    *,
+    hardware_matrix: Mapping[str, Any] | None = None,
+) -> list[Dict[str, Any]]:
+    records: list[Dict[str, Any]] = []
+    for candidate in candidates:
+        candidate_id = str(candidate["candidate_id"])
+        hardware_summary = _hardware_matrix_candidate_summary(candidate_id, hardware_matrix)
+        records.append(
+            {
+                "candidate_id": candidate_id,
+                "eda_job_id": f"eda::{candidate['candidate_id']}",
+                "status": "blocked_temporary",
+                "toolchain_status": {
+                    "status": "blocked_temporary",
+                    "required_tools": ["dc_shell", "vcs", "vivado"],
+                    "required_environment": "local IC/EDA environment or verified SSH route",
+                    "reason": "real all-candidate DC/VCS/Vivado execution has not been produced for this release candidate",
+                },
+                "candidate_hardware_gate_summary": hardware_summary,
+                "claim_boundary": (
+                    "Per-candidate EDA job/evidence row only; blocked_temporary "
+                    "rows are not synthesis, timing, area, or completion evidence. "
+                    "A trusted matrix can be cited for kernel-gate audit, but does "
+                    "not make release completion eligible by itself."
+                ),
+            }
+        )
+    return records
 
 
 FORMAL_PROPERTY_SET = (
@@ -409,6 +543,9 @@ def write_dft_candidate_evidence_artifacts(
     release_artifact_dir: Path,
     mode_coverage_dir: Path | None = None,
     timing_run_dir: Path | None = None,
+    ic_eda_tool_availability_path: Path | None = None,
+    dft_hardware_evidence_matrix_path: Path | None = None,
+    full_scf_hybrid_artifact_dir: Path | None = None,
 ) -> Dict[str, Any]:
     """Emit a closed, hash-validated ledger row for every legal candidate.
 
@@ -425,6 +562,9 @@ def write_dft_candidate_evidence_artifacts(
     feedback_trace_path = release_artifact_dir / "closed_loop_feedback_trace.json"
     for path in [freeze_path, manifest_path, legality_path, search_report_path, feedback_trace_path]:
         if not path.exists():
+            raise FileNotFoundError(path)
+    for path in [ic_eda_tool_availability_path, dft_hardware_evidence_matrix_path]:
+        if path is not None and not path.exists():
             raise FileNotFoundError(path)
 
     freeze = _load_json(freeze_path)
@@ -459,6 +599,57 @@ def write_dft_candidate_evidence_artifacts(
         summary = timing_run_dir / "dft_end_to_end_summary.json"
         if summary.exists():
             release_sources.append(_source_ref(summary))
+
+    ic_eda_tool_availability = (
+        _load_json(ic_eda_tool_availability_path)
+        if ic_eda_tool_availability_path and ic_eda_tool_availability_path.exists()
+        else None
+    )
+    dft_hardware_evidence_matrix = (
+        _load_json(dft_hardware_evidence_matrix_path)
+        if dft_hardware_evidence_matrix_path and dft_hardware_evidence_matrix_path.exists()
+        else None
+    )
+    ic_eda_tool_availability_ref = (
+        _source_ref(ic_eda_tool_availability_path)
+        if ic_eda_tool_availability_path and ic_eda_tool_availability_path.exists()
+        else None
+    )
+    dft_hardware_evidence_matrix_ref = (
+        _source_ref(dft_hardware_evidence_matrix_path)
+        if dft_hardware_evidence_matrix_path and dft_hardware_evidence_matrix_path.exists()
+        else None
+    )
+    full_scf_hybrid_bundle = _full_scf_hybrid_bundle_record(full_scf_hybrid_artifact_dir)
+    full_scf_hybrid_sources = [
+        ref
+        for ref in full_scf_hybrid_bundle.get("artifact_refs", {}).values()
+        if isinstance(ref, Mapping) and ref.get("hash")
+    ]
+    tool_availability_status = (
+        str(ic_eda_tool_availability.get("status"))
+        if isinstance(ic_eda_tool_availability, Mapping)
+        else "not_recorded"
+    )
+    major_kernel_matrix_status = (
+        str(dft_hardware_evidence_matrix.get("status"))
+        if isinstance(dft_hardware_evidence_matrix, Mapping)
+        else "not_recorded"
+    )
+    major_kernel_matrix_trusted = (
+        dft_hardware_evidence_matrix.get("trusted") is True
+        if isinstance(dft_hardware_evidence_matrix, Mapping)
+        else False
+    )
+    attached_hardware_evidence_structurally_ready = (
+        tool_availability_status == "passed" and major_kernel_matrix_trusted
+    )
+    hardware_completion_eligible = False
+    attached_hardware_evidence_sources = [
+        ref
+        for ref in (ic_eda_tool_availability_ref, dft_hardware_evidence_matrix_ref)
+        if ref is not None
+    ]
 
     all_candidates_blocked = _candidate_records(
         legal_candidates,
@@ -501,8 +692,11 @@ def write_dft_candidate_evidence_artifacts(
         "eda_all_candidate_evidence.json",
         evidence_class="eda_all_candidate_evidence",
         status="blocked_temporary",
-        candidate_records=_eda_candidate_records(legal_candidates),
-        source_artifacts=release_sources,
+        candidate_records=_eda_candidate_records(
+            legal_candidates,
+            hardware_matrix=dft_hardware_evidence_matrix,
+        ),
+        source_artifacts=[*release_sources, *attached_hardware_evidence_sources],
         extra={
             "requires_real_tool_attempts_before_completion_claim": True,
             "real_toolchain_policy": {
@@ -517,6 +711,25 @@ def write_dft_candidate_evidence_artifacts(
             },
             "tool_unavailability_failure_policy": dict(TOOL_UNAVAILABLE_FAILURE_POLICY),
             "tool_attempt_evidence": [dict(item) for item in TOOL_ATTEMPT_EVIDENCE],
+            "ic_eda_tool_availability": ic_eda_tool_availability_ref,
+            "dft_hardware_evidence_matrix": dft_hardware_evidence_matrix_ref,
+            "tool_availability_status": tool_availability_status,
+            "major_kernel_matrix_status": major_kernel_matrix_status,
+            "major_kernel_matrix_trusted": major_kernel_matrix_trusted,
+            "attached_hardware_evidence_structurally_ready": attached_hardware_evidence_structurally_ready,
+            "hardware_completion_eligible": hardware_completion_eligible,
+            "hardware_evidence_attachment_policy": {
+                "ic_eda_availability_required_for_planned_tool_runs": True,
+                "major_kernel_matrix_required_for_acceleration_claims": True,
+                "availability_only_not_ppa": True,
+                "matrix_coverage_only_not_full_scf_completion": True,
+                "claim_boundary": (
+                    "Attached IC/EDA availability and major-kernel matrix artifacts "
+                    "make the EDA ledger auditable, but eda_all_candidate_evidence "
+                    "remains blocked_temporary until per-candidate kernel tool "
+                    "artifacts and PPA/timing/area evidence pass."
+                ),
+            },
         },
     )
     formal_path = _write_artifact(
@@ -813,6 +1026,7 @@ def write_dft_candidate_evidence_artifacts(
         "legal_candidate_ids": legal_candidate_ids,
         "release_domain_hashes": dict(release_hashes),
         "release_claim_gate": release_claim_gate,
+        "full_scf_hybrid_bundle": full_scf_hybrid_bundle,
     }
     release_report = {
         "schema_version": "dse.dft.release_report.v1",
@@ -824,6 +1038,7 @@ def write_dft_candidate_evidence_artifacts(
             name: _source_ref(path, base_dir=out_dir)
             for name, path in artifact_class_paths.items()
         },
+        "full_scf_hybrid_bundle": full_scf_hybrid_bundle,
         "summary": (
             "The frozen DFT release domain has closed audit rows and present/hash-valid "
             "evidence artifacts, but expensive all-candidate evidence remains blocked."
@@ -932,6 +1147,35 @@ def write_dft_candidate_evidence_artifacts(
                 "artifact": {"path": "per_candidate_evidence_ledger.json", "field": "tool_attempt_evidence"},
                 "status": "covered",
                 "completion_claim": "blocked_temporary_or_unsupported_only",
+            },
+            {
+                "requirement": "ic_eda_tool_availability_recorded",
+                "artifact": (
+                    ic_eda_tool_availability_ref
+                    if ic_eda_tool_availability_ref
+                    else {"path": None, "reason": "ic_eda_tool_availability_path not provided"}
+                ),
+                "status": "present_hash_valid" if ic_eda_tool_availability_ref else "not_recorded",
+                "completion_claim": "availability_only_not_kernel_ppa",
+            },
+            {
+                "requirement": "major_kernel_evidence_matrix_recorded",
+                "artifact": (
+                    dft_hardware_evidence_matrix_ref
+                    if dft_hardware_evidence_matrix_ref
+                    else {"path": None, "reason": "dft_hardware_evidence_matrix_path not provided"}
+                ),
+                "status": "present_hash_valid" if dft_hardware_evidence_matrix_ref else "not_recorded",
+                "completion_claim": "matrix_coverage_only_not_full_scf_completion",
+            },
+            {
+                "requirement": "full_scf_hybrid_bundle_recorded",
+                "artifact": {
+                    "bundle_dir": full_scf_hybrid_bundle.get("bundle_dir"),
+                    "artifact_refs": full_scf_hybrid_bundle.get("artifact_refs", {}),
+                },
+                "status": full_scf_hybrid_bundle["status"],
+                "completion_claim": "descriptor_accounting_only_not_full_scf_completion",
             },
         ],
         "claim_boundary": (
@@ -1190,6 +1434,7 @@ def write_dft_candidate_evidence_artifacts(
             for name, path in report_artifact_paths.items()
         },
         "source_release_artifacts": release_sources,
+        "source_full_scf_hybrid_artifacts": full_scf_hybrid_sources,
         "manifest_scope": (
             "Hashes all evidence artifact classes and generated report/checklist "
             "artifacts. The manifest hash itself is recorded by the parent status/ledger."
@@ -1214,6 +1459,7 @@ def write_dft_candidate_evidence_artifacts(
             for name, path in report_artifact_paths.items()
         },
         "release_claim_gate": release_claim_gate,
+        "full_scf_hybrid_bundle": full_scf_hybrid_bundle,
         "unsupported_gap_labels": [dict(item) for item in DFT_UNSUPPORTED_GAP_LABELS],
         "tool_unavailability_failure_policy": dict(TOOL_UNAVAILABLE_FAILURE_POLICY),
         "tool_attempt_evidence": [dict(item) for item in TOOL_ATTEMPT_EVIDENCE],
@@ -1261,6 +1507,7 @@ def write_dft_candidate_evidence_artifacts(
             for name, path in report_artifact_paths.items()
         },
         "release_claim_gate": release_claim_gate,
+        "full_scf_hybrid_bundle": full_scf_hybrid_bundle,
         "unsupported_gap_labels": [dict(item) for item in DFT_UNSUPPORTED_GAP_LABELS],
         "tool_unavailability_failure_policy": dict(TOOL_UNAVAILABLE_FAILURE_POLICY),
         "tool_attempt_evidence": [dict(item) for item in TOOL_ATTEMPT_EVIDENCE],

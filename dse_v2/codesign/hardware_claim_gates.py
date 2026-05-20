@@ -10,7 +10,9 @@ evidence.
 
 from __future__ import annotations
 
+from collections.abc import Iterable as IterableABC
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Dict, Iterable, Mapping, Sequence, Tuple
 
 
@@ -176,6 +178,15 @@ def _public_record(record: Mapping[str, Any]) -> Dict[str, Any]:
         "evidence_id",
         "artifact",
         "path",
+        "dc_synth_ddc",
+        "dc_synth_ddc_artifact",
+        "dc_timing_report",
+        "dc_area_report",
+        "dc_target_library",
+        "dc_target_libraries",
+        "dc_target_library_discovery",
+        "target_library",
+        "target_libraries",
         "tool",
         "tool_stage",
         "status",
@@ -191,6 +202,104 @@ def _public_record(record: Mapping[str, Any]) -> Dict[str, Any]:
     return public
 
 
+def _flatten_pathish_values(value: Any) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, (str, Path)):
+        return [str(value)]
+    if isinstance(value, Mapping):
+        values: list[str] = []
+        for key in (
+            "path",
+            "artifact",
+            "file",
+            "filename",
+            "name",
+            "role",
+            "type",
+            "evidence_type",
+        ):
+            if key in value:
+                values.extend(_flatten_pathish_values(value.get(key)))
+        return values
+    if isinstance(value, IterableABC) and not isinstance(value, (bytes, bytearray)):
+        values = []
+        for item in value:
+            values.extend(_flatten_pathish_values(item))
+        return values
+    return [str(value)]
+
+
+def _record_pathish_values(record: Mapping[str, Any]) -> list[str]:
+    values: list[str] = []
+    for key in (
+        "artifact",
+        "path",
+        "dc_synth_ddc",
+        "dc_synth_ddc_artifact",
+        "ddc_artifact",
+        "dc_timing_report",
+        "timing_report",
+        "dc_area_report",
+        "area_report",
+        "artifact_refs",
+        "raw_evidence_refs",
+        "source_refs",
+        "artifacts",
+    ):
+        if key in record:
+            values.extend(_flatten_pathish_values(record.get(key)))
+    return values
+
+
+def _has_path_suffix(record: Mapping[str, Any], suffixes: Sequence[str]) -> bool:
+    normalized_suffixes = tuple(suffix.lower() for suffix in suffixes)
+    for raw in _record_pathish_values(record):
+        text = str(raw).strip().lower()
+        if not text:
+            continue
+        name = Path(text).name.lower()
+        if any(text.endswith(suffix) or name == suffix.lstrip("*") for suffix in normalized_suffixes):
+            return True
+    return False
+
+
+def _library_values(record: Mapping[str, Any]) -> list[str]:
+    values: list[str] = []
+    for key in ("dc_target_library", "target_library", "dc_target_libraries", "target_libraries"):
+        if key in record:
+            values.extend(_flatten_pathish_values(record.get(key)))
+    return values
+
+
+def _has_real_target_library_evidence(record: Mapping[str, Any]) -> bool:
+    discovery = _norm(record.get("dc_target_library_discovery") or record.get("target_library_discovery"))
+    if discovery in {"real_target_library_present", "technology_library_present", "target_library_present"}:
+        return True
+    blocked_markers = ("your_library.db", "gtech", "generic_placeholder", "placeholder")
+    for value in _library_values(record):
+        normalized = str(value).strip().lower()
+        if normalized and not any(marker in normalized for marker in blocked_markers):
+            return True
+    return False
+
+
+def _asic_record_stage_blockers(stage_id: str, record: Mapping[str, Any]) -> list[str]:
+    evidence_type = _evidence_type(record)
+    if not (stage_id.startswith("dc_") or evidence_type.startswith("dc_")):
+        return []
+    blockers: list[str] = []
+    if not _has_real_target_library_evidence(record):
+        blockers.append("asic_dc_target_library_evidence_required")
+    if stage_id == "dc_synth" and not _has_path_suffix(record, ("dc_synth.ddc", ".ddc")):
+        blockers.append("asic_dc_synth_ddc_required")
+    if stage_id == "dc_timing" and not _has_path_suffix(record, ("dc_timing.rpt", "timing.rpt")):
+        blockers.append("asic_dc_timing_report_required")
+    if stage_id == "dc_area" and not _has_path_suffix(record, ("dc_area.rpt", "area.rpt")):
+        blockers.append("asic_dc_area_report_required")
+    return blockers
+
+
 def _stage_result(
     stage: HardwareClaimStage,
     evidence: Sequence[Mapping[str, Any]],
@@ -200,7 +309,19 @@ def _stage_result(
         for record in evidence
         if _evidence_type(record) in set(stage.accepted_evidence_types)
     ]
-    passing = [record for record in matching if _passed(record)]
+    insufficient = []
+    passing = []
+    for record in matching:
+        if not _passed(record):
+            continue
+        blockers = _asic_record_stage_blockers(stage.stage_id, record)
+        if blockers:
+            public = _public_record(record)
+            public["insufficient_reason"] = blockers[0]
+            public["insufficient_reasons"] = blockers
+            insufficient.append(public)
+            continue
+        passing.append(record)
     blocking = [
         record
         for record in matching
@@ -212,7 +333,8 @@ def _stage_result(
         "accepted_evidence_types": list(stage.accepted_evidence_types),
         "passed": bool(passing),
         "passing_evidence": [_public_record(record) for record in passing],
-        "blocking_evidence": [_public_record(record) for record in blocking],
+        "blocking_evidence": [_public_record(record) for record in blocking] + insufficient,
+        "insufficient_evidence": insufficient,
     }
 
 
@@ -236,9 +358,21 @@ def validate_hardware_claim_evidence(
     if normalized_claim_type not in HARDWARE_CLAIM_REQUIREMENTS:
         raise ValueError(f"unsupported hardware claim type: {claim_type}")
 
-    evidence = [
+    raw_evidence = [
         record for record in evidence_records if isinstance(record, Mapping)
     ]
+    normalized_kernel_id = _norm(kernel_id)
+    ignored_kernel_evidence = []
+    evidence = []
+    for record in raw_evidence:
+        record_kernel_id = _norm(
+            record.get("kernel_id") or record.get("kernel") or record.get("kernel_name")
+        )
+        if normalized_kernel_id and record_kernel_id and record_kernel_id != normalized_kernel_id:
+            ignored_kernel_evidence.append(_public_record(record))
+            continue
+        evidence.append(record)
+
     stages = HARDWARE_CLAIM_REQUIREMENTS[normalized_claim_type]
     stage_results = [_stage_result(stage, evidence) for stage in stages]
     missing_stages = [
@@ -265,11 +399,18 @@ def validate_hardware_claim_evidence(
         item.startswith("vivado_") for item in evidence_types
     ):
         reasons.append("vivado_evidence_does_not_satisfy_asic_claim")
+    if ignored_kernel_evidence:
+        reasons.append("cross_kernel_evidence_ignored")
     if any(
         item["normalized_status"] in BLOCKER_STATUSES
         for item in blocking_evidence
     ):
         reasons.append("tool_unavailable_or_blocked_evidence_is_not_pass")
+    reasons.extend(
+        str(reason)
+        for item in blocking_evidence
+        for reason in (item.get("insufficient_reasons") or ([item.get("insufficient_reason")] if item.get("insufficient_reason") else []))
+    )
 
     has_failed_required_record = any(
         item["normalized_status"] in FAIL_STATUSES
@@ -292,6 +433,7 @@ def validate_hardware_claim_evidence(
         "stage_results": stage_results,
         "missing_or_blocked_stages": missing_stages,
         "blocking_evidence": blocking_evidence,
+        "ignored_kernel_evidence": ignored_kernel_evidence,
         "reasons": sorted(dict.fromkeys(reasons)),
         "claim_boundary": (
             "Accelerated-kernel hardware claims require golden correctness, "

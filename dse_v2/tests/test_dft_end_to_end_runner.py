@@ -612,11 +612,12 @@ def test_goal_completion_auditor_keeps_goal_in_progress_until_horizon(tmp_path):
         tamper_probe=tamper_probe,
         monitor_dir=monitor_dir,
         monitor_snapshot=monitor_snapshot,
-        now=datetime(2026, 5, 14, 11, 0, tzinfo=ZoneInfo("Asia/Shanghai")),
+        now=datetime(2026, 5, 31, 11, 0, tzinfo=ZoneInfo("Asia/Shanghai")),
     )
     assert before_horizon["status"] == "in_progress"
-    assert before_horizon["completion_decision"] == "do_not_mark_complete_before_midnight_horizon"
+    assert before_horizon["completion_decision"] == "do_not_mark_complete_before_date_horizon"
     assert before_horizon["in_progress_requirements"][0]["requirement"].startswith("Use date")
+    assert before_horizon["in_progress_requirements"][0]["evidence"]["horizon_local"].startswith("2026-06-01T12:00:00")
 
     after_horizon = build_goal_completion_audit(
         main_run=main_run,
@@ -627,7 +628,7 @@ def test_goal_completion_auditor_keeps_goal_in_progress_until_horizon(tmp_path):
         tamper_probe=tamper_probe,
         monitor_dir=monitor_dir,
         monitor_snapshot=monitor_snapshot,
-        now=datetime(2026, 5, 15, 0, 1, tzinfo=ZoneInfo("Asia/Shanghai")),
+        now=datetime(2026, 6, 1, 12, 1, tzinfo=ZoneInfo("Asia/Shanghai")),
     )
     assert after_horizon["status"] == "complete"
     assert after_horizon["completion_decision"] == "ready_to_mark_complete"

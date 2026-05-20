@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import subprocess
 import sys
@@ -14,6 +15,111 @@ RUNNER = Path("dse_v2/scripts/dse/run_complete_dse_full_l4_matrix.py")
 def _write_json(path: Path, payload) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def _sha256_file(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _minimal_scf_input(class_id: str) -> str:
+    return (
+        "&CONTROL\n"
+        "  calculation = 'scf'\n"
+        f"  prefix = '{class_id}'\n"
+        "/\n"
+        "&SYSTEM\n"
+        "  ibrav = 2, nat = 2, ntyp = 1, ecutwfc = 12.0, nbnd = 8\n"
+        "/\n"
+        "&ELECTRONS\n"
+        "  conv_thr = 1.0d-6\n"
+        "/\n"
+        "ATOMIC_SPECIES\n"
+        "  Si 28.0855 Si.pz-vbc.UPF\n"
+        "ATOMIC_POSITIONS alat\n"
+        "  Si 0.00 0.00 0.00\n"
+        "  Si 0.25 0.25 0.25\n"
+        "K_POINTS automatic\n"
+        "2 2 2 0 0 0\n"
+    )
+
+
+def _write_current_goal_six_scf_suite(tmp_path: Path, *, with_descriptors: bool = True) -> Path:
+    from dse_v2.reference_workloads.dft_current_goal_l4_bridge import (
+        DFT_CURRENT_GOAL_SIX_SCF_WORKLOAD_SUITE_SCHEMA,
+    )
+    from dse_v2.reference_workloads.dft_scf_six_class_suite import REQUIRED_DFT_SCF_CLASS_IDS
+
+    suite_root = tmp_path / "six_scf_bundle"
+    descriptor_root = suite_root / "descriptors"
+    descriptor_root.mkdir(parents=True)
+    cases = []
+    for class_id in REQUIRED_DFT_SCF_CLASS_IDS:
+        case_id = f"{class_id}_case"
+        descriptor_ref = None
+        if with_descriptors:
+            descriptor_path = descriptor_root / f"{class_id}_descriptor.json"
+            _write_json(
+                descriptor_path,
+                {
+                    "schema_version": "dse.dft_scf.six_class_case_descriptor.v1",
+                    "case_id": case_id,
+                    "class_id": class_id,
+                    "workload_class": class_id,
+                    "qe_input": {
+                        "path": f"qe_inputs/{class_id}.in",
+                        "text": _minimal_scf_input(class_id),
+                        "sha256": "not-used-by-runner-for-text-fixture",
+                    },
+                    "qe_command_template": ["${QE_PW_CMD:-pw.x}", "-in", f"qe_inputs/{class_id}.in"],
+                    "proof_class": "synthetic_descriptor_runnable_fixture_not_final_qe_evidence",
+                    "final_real_qe_evidence": False,
+                    "hardware_completion_eligible": False,
+                    "deliverable_complete": False,
+                },
+            )
+            descriptor_ref = {
+                "path": f"descriptors/{class_id}_descriptor.json",
+                "sha256": _sha256_file(descriptor_path),
+                "hash_algorithm": "sha256",
+            }
+        case = {
+            "case_id": case_id,
+            "workload_case_id": case_id,
+            "class_id": class_id,
+            "workload_class": class_id,
+            "proof_class": "synthetic_descriptor_runnable_fixture_not_final_qe_evidence",
+            "reference_output_hash": None,
+            "final_real_qe_evidence": False,
+            "hardware_completion_eligible": False,
+            "deliverable_complete": False,
+        }
+        if descriptor_ref is not None:
+            case["descriptor"] = descriptor_ref
+        cases.append(case)
+
+    manifest_path = suite_root / "workload_suite_manifest.json"
+    _write_json(
+        manifest_path,
+        {
+            "schema_version": DFT_CURRENT_GOAL_SIX_SCF_WORKLOAD_SUITE_SCHEMA,
+            "status": "strict_six_scf_identity_manifest_only_pending_l4_regeneration",
+            "suite_id": "test_dft_current_goal_six_scf_l4_suite",
+            "strict": True,
+            "descriptor_plus_runnable_bundle": True,
+            "expected_workload_count": len(cases),
+            "workload_case_count": len(cases),
+            "case_count": len(cases),
+            "required_class_ids": list(REQUIRED_DFT_SCF_CLASS_IDS),
+            "workload_classes": list(REQUIRED_DFT_SCF_CLASS_IDS),
+            "workload_case_ids": [case["case_id"] for case in cases],
+            "cases": cases,
+            "final_real_qe_evidence": False,
+            "gem5_l4_evidence_present": False,
+            "hardware_completion_eligible": False,
+            "deliverable_complete": False,
+        },
+    )
+    return manifest_path
 
 
 def test_matrix_normalizer_blocks_trusted_source_without_offload_provenance():
@@ -783,3 +889,156 @@ def test_qe_offload_extension_payload_supports_non_hpsi_selected_kernel() -> Non
     assert payload["full_kernel_recomputed"] is True
     assert payload["full_h_psi_recomputed"] is False
     assert payload["hpsi_specific_completion_allowed"] is False
+
+
+def test_current_goal_strict_six_scf_suite_packages_descriptor_refs_and_stays_blocked(tmp_path):
+    release_subset = tmp_path / "release_subset_manifest.json"
+    _write_json(
+        release_subset,
+        {
+            "schema_version": "test.current_goal.release_subset",
+            "legal_candidate_ids": ["cand_000", "cand_001"],
+            "candidates": [
+                {"candidate_id": "cand_000", "legal": True},
+                {"candidate_id": "cand_001", "legal": True},
+            ],
+        },
+    )
+    workload_suite = _write_current_goal_six_scf_suite(tmp_path, with_descriptors=True)
+    out_dir = tmp_path / "matrix"
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(RUNNER),
+            "--out",
+            str(out_dir),
+            "--release-subset",
+            str(release_subset),
+            "--workload-suite",
+            str(workload_suite),
+            "--simulator",
+            str(tmp_path / "missing_generic_sim"),
+            "--gem5-binary",
+            str(tmp_path / "missing_gem5.opt"),
+            "--gem5-config",
+            str(tmp_path / "missing_generic_accel_l4_test.py"),
+            "--gem5-driver",
+            str(tmp_path / "missing_driver"),
+            "--gem5-attempt-policy",
+            "preflight_only",
+        ],
+        cwd=Path(__file__).resolve().parents[2],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+    status = json.loads(completed.stdout)
+    rows = json.loads((out_dir / "evidence_rows.json").read_text(encoding="utf-8"))
+    matrix = json.loads((out_dir / "l4_evidence_matrix.json").read_text(encoding="utf-8"))
+    coverage = json.loads((out_dir / "coverage_claim_report.json").read_text(encoding="utf-8"))
+    validation = json.loads((out_dir / "qe_mainflow_workload_suite_validation.json").read_text(encoding="utf-8"))
+
+    assert status["expected_row_count"] == 12
+    assert rows["expected_row_count"] == 12
+    assert rows["row_count"] == 12
+    assert matrix["expected_row_count"] == 12
+    assert matrix["row_count"] == 12
+    assert coverage["all_rows_present"] is True
+    assert coverage["claims"]["deliverable_complete"] is False
+    assert validation["suite_kind"] == "dft_current_goal_six_scf"
+    assert validation["case_count"] == 6
+    assert all(row["deliverable_complete_eligible"] is False for row in matrix["rows"])
+    assert all(row["accelerated_numeric_evidence"]["status"] == "blocked" for row in rows["rows"])
+    first_case = rows["rows"][0]["workload_case_id"]
+    packaged_case = json.loads(
+        (out_dir / "rows" / "cand_000" / first_case / "workload_case.json").read_text(encoding="utf-8")
+    )
+    assert packaged_case["step1_source"]["stages"][0]["input"].startswith("&CONTROL")
+    assert packaged_case["baseline_sequence"][0]["command"] == ["pw.x", "-in", Path(packaged_case["baseline_sequence"][0]["input_path"]).name]
+
+
+def test_current_goal_strict_six_scf_suite_resolves_repo_relative_source_bundle(tmp_path, monkeypatch):
+    from dse_v2.scripts.dse import run_complete_dse_full_l4_matrix as runner
+
+    monkeypatch.setattr(runner, "REPO_ROOT", tmp_path)
+    source_bundle = _write_current_goal_six_scf_suite(tmp_path / "runs" / "dse" / "six_scf_source", with_descriptors=True)
+    source_payload = json.loads(source_bundle.read_text(encoding="utf-8"))
+    bridge_dir = tmp_path / "bridge"
+    bridge_manifest = bridge_dir / "workload_suite_manifest.json"
+    bridge_payload = dict(source_payload)
+    bridge_payload["source_artifacts"] = {
+        "dft_scf_six_class_bundle_manifest": {
+            "path": "runs/dse/six_scf_source/six_scf_bundle/workload_suite_manifest.json",
+            "exists": True,
+        }
+    }
+    _write_json(bridge_manifest, bridge_payload)
+
+    adapted, validation = runner._adapt_workload_suite_for_runner(
+        bridge_payload,
+        workload_suite_path=bridge_manifest,
+    )
+
+    assert validation["valid"] is True
+    assert all(not blockers for blockers in validation["case_blockers"].values())
+    assert any(str(path).endswith("runs/dse/six_scf_source/six_scf_bundle") for path in validation["source_roots"])
+    assert adapted["cases"][0]["step1_source"]["stages"][0]["input"].startswith("&CONTROL")
+
+
+def test_current_goal_strict_six_scf_suite_missing_qe_input_fails_closed_per_row(tmp_path):
+    release_subset = tmp_path / "release_subset_manifest.json"
+    _write_json(
+        release_subset,
+        {
+            "schema_version": "test.current_goal.release_subset",
+            "legal_candidate_ids": ["cand_000"],
+            "candidates": [{"candidate_id": "cand_000", "legal": True}],
+        },
+    )
+    workload_suite = _write_current_goal_six_scf_suite(tmp_path, with_descriptors=False)
+    out_dir = tmp_path / "matrix"
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(RUNNER),
+            "--out",
+            str(out_dir),
+            "--release-subset",
+            str(release_subset),
+            "--workload-suite",
+            str(workload_suite),
+            "--simulator",
+            str(tmp_path / "missing_generic_sim"),
+            "--gem5-binary",
+            str(tmp_path / "missing_gem5.opt"),
+            "--gem5-config",
+            str(tmp_path / "missing_generic_accel_l4_test.py"),
+            "--gem5-driver",
+            str(tmp_path / "missing_driver"),
+            "--gem5-attempt-policy",
+            "preflight_only",
+        ],
+        cwd=Path(__file__).resolve().parents[2],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+    status = json.loads(completed.stdout)
+    rows = json.loads((out_dir / "evidence_rows.json").read_text(encoding="utf-8"))
+    matrix = json.loads((out_dir / "l4_evidence_matrix.json").read_text(encoding="utf-8"))
+
+    assert status["expected_row_count"] == 6
+    assert rows["expected_row_count"] == 6
+    assert rows["row_count"] == 6
+    assert matrix["expected_row_count"] == 6
+    assert matrix["row_count"] == 6
+    assert all(row["status"] == "blocked" for row in rows["rows"])
+    assert all("current_goal_missing_embedded_descriptor_or_qe_input" in row["blockers"] for row in rows["rows"])
+    assert all(any(blocker.startswith("current_goal_workload_packaging_failed") for blocker in row["blockers"]) for row in rows["rows"])
+    assert all(row["deliverable_complete_eligible"] is False for row in matrix["rows"])

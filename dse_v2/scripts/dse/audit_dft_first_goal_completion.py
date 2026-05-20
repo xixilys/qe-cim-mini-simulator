@@ -3,8 +3,8 @@
 
 This is a prompt-to-artifact audit, not another proxy test.  It recomputes the
 DFT end-to-end run audits, reads the guard/monitor evidence, and reports whether
-the goal is complete, still in progress, or failed.  The midnight horizon is a
-first-class requirement: before the horizon this script must report
+the goal is complete, still in progress, or failed.  The user-specified date
+horizon is a first-class requirement: before the horizon this script must report
 ``in_progress`` even when all technical DSE evidence is green.
 """
 
@@ -28,7 +28,7 @@ from dse_v2.scripts.dse.audit_dft_first_end_to_end_run import audit_run
 
 
 GOAL_AUDIT_SCHEMA = "dse.dft_first.goal_completion_audit.v1"
-DEFAULT_HORIZON_LOCAL = "2026-05-15 00:00:00"
+DEFAULT_HORIZON_LOCAL = "2026-06-01 12:00:00"
 LOCAL_TZ = ZoneInfo("Asia/Shanghai")
 
 REQUIRED_COMMON_CHECKS = {
@@ -276,7 +276,7 @@ def build_goal_completion_audit(
 
     checklist: List[Dict[str, Any]] = [
         _status_item(
-            "Use date and keep validation running until 2026-05-15 00:00 CST without a sleep-based idle loop",
+            f"Use date and keep validation running until {horizon_dt.isoformat()} without a sleep-based idle loop",
             "passed" if horizon_reached and monitor_status == "passed" else monitor_status,
             {
                 "checked_at_local": _date_text(),
@@ -358,7 +358,7 @@ def build_goal_completion_audit(
         "status": status,
         "completion_decision": (
             "ready_to_mark_complete" if status == "complete" else
-            "do_not_mark_complete_before_midnight_horizon" if in_progress else
+            "do_not_mark_complete_before_date_horizon" if in_progress else
             "do_not_mark_complete_failed_requirements"
         ),
         "horizon_reached": horizon_reached,

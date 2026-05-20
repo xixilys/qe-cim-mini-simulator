@@ -187,6 +187,7 @@ unqualified smoke markers, demo markers, or `fallback_from_gem5=true`.  The
 doc-pinned refreshed goal-support guard scan
 `runs/dse/dft_first_goal_support_scans_20260514_131913_fpga_paper_refresh/no_smoke_guard_scan.json`
 passed for both the hardened single-stage QE run and the official multi-stage QE
-run, and the prompt-level audit using the iter600 monitor snapshot remained
-blocked only by the not-yet-reached `2026-05-15 00:00:00 CST` continuous-running
-horizon.
+run.  That historical DFT-first audit was gated by an earlier
+continuous-running horizon; the active DFT/QE full-SCF hardware DSE goal now
+uses the `2026-06-01 12:00:00 CST` date gate and must be audited with the
+current goal-level checklist before completion.

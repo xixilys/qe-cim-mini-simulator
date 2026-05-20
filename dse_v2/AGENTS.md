@@ -4,6 +4,11 @@
 
 `dse_v2/` is the active generic design-space exploration stack.  It owns workload IR, profile/importer packaging, architecture mapping, promotion, evidence generation, and reporting across L1/L2/L3/L4 fidelity.
 
+The reusable core remains domain-neutral.  The current primary proof path is
+DFT/QE full-SCF hardware DSE and co-design, implemented through scoped
+`reference_workloads/` modules, DFT-specific evidence ledgers, and docs rather
+than by adding DFT semantics to core IR, mapping, or generic schema contracts.
+
 ## Main modules
 
 - `core/ir/` — domain-neutral compute graph and task graph IR.
@@ -14,7 +19,8 @@
 - `backends/generic_systemc_bridge.py` — L3 generic simulator bridge.
 - `backends/gem5_systemc_adapter.py` — L4 gem5+SystemC evidence adapter.
 - `evidence/`, `reporting/`, `registry/` — auditable artifacts and experiment tracking.
-- `reference_workloads/` — optional reference workload fixtures; not core schema.
+- `reference_workloads/` — scoped reference workload fixtures/adapters,
+  including the active DFT/QE full-SCF proof path; not core schema.
 
 ## Commands
 
@@ -29,5 +35,8 @@ python3 dse_v2/scripts/dse/run_full_flow_pilot.py --backend systemc --out runs/d
 - Core IR and schemas must stay domain-neutral.
 - Optional workload importers must declare claim boundaries and required coverage through workflow metadata.
 - Do not make a reference importer mandatory for generic DSE execution.
+- DFT/QE-specific workload classes, kernel IDs, candidate families, and
+  full-SCF evidence gates belong in `reference_workloads/`, DFT docs, and
+  DFT-specific reporting sections only.
 - L3/L4 evidence must use `model/generic_sim_backend` and `gem5_integration/src/dev/generic_accel`.
 - Generated results belong under `runs/`, `tmp*/`, or ignored result directories, not active docs.

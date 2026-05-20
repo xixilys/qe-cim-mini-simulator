@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """DFT/QE full-SCF hardware DSE workstream contracts.
 
-This module keeps the DFT/QE-specific admission, candidate tier, evidence-gate,
+This module keeps the DFT/QE-specific admission, release policy, evidence-gate,
 and Wave 1.5 trace helpers out of the domain-neutral control-plane contracts.
 The payloads are intentionally small dictionaries so Step1--Step5 lanes can
 share fail-closed decisions without importing optional QE runtimes.
@@ -15,12 +15,12 @@ from typing import Any, Dict, Iterable, List, Mapping, Sequence
 
 
 STRICT_DFT_QE_WORKLOAD_CLASSES: tuple[str, ...] = (
-    "scf_ground_state",
-    "nscf_band_structure",
-    "density_response_postproc",
-    "ionic_relax",
-    "hybrid_exact_exchange",
-    "large_cell_sparse",
+    "small_multi_k_scf",
+    "metal_smearing_scf",
+    "insulator_scf",
+    "slab_vacuum_large_fft_scf",
+    "gamma_only_supercell_scf",
+    "projector_orthogonalization_heavy_scf",
 )
 
 STRICT_BUNDLE_REQUIRED_ASSETS: tuple[str, ...] = (
@@ -202,24 +202,52 @@ def validate_strict_dft_qe_bundle(bundle: Mapping[str, Any]) -> Dict[str, Any]:
     }
 
 
-def candidate_tier(candidate: Mapping[str, Any]) -> str:
-    """Return the candidate tier normalized to ``release`` or ``exploratory``."""
+def candidate_release_policy(candidate: Mapping[str, Any]) -> Dict[str, Any]:
+    """Return authoritative release/exploratory policy metadata.
 
-    raw = str(
-        candidate.get("candidate_tier")
-        or candidate.get("tier")
-        or candidate.get("release_tier")
-        or ""
-    ).strip().lower()
-    if raw in {"release", "release-tier", "formal", "trusted_release"}:
-        return "release"
-    if raw in {"exploratory", "research", "experimental", "prototype"}:
-        return "exploratory"
-    if candidate.get("exploratory") is True:
-        return "exploratory"
-    if _non_empty(candidate.get("release_id")) and _non_empty(candidate.get("seed_source")):
-        return "release"
-    return "exploratory"
+    Legacy release-lane aliases are intentionally ignored for formal Pareto
+    admission.  Missing policy metadata fails closed to the exploratory lane.
+    """
+
+    policy = candidate.get("release_policy")
+    if isinstance(policy, Mapping):
+        lane = str(policy.get("lane") or "exploratory").strip().lower()
+        formal_allowed = bool(policy.get("formal_pareto_allowed", lane == "release"))
+        return {
+            "lane": "release" if lane == "release" and formal_allowed else "exploratory",
+            "formal_pareto_allowed": lane == "release" and formal_allowed,
+            "exploratory_only": not (lane == "release" and formal_allowed),
+            "authority": str(policy.get("authority") or "candidate.release_policy"),
+            "legacy_candidate_tier_authoritative": False,
+        }
+    metadata = _as_mapping(candidate.get("policy_metadata"))
+    for key in ("release_policy",):
+        nested = metadata.get(key)
+        if isinstance(nested, Mapping):
+            return candidate_release_policy({"release_policy": nested})
+    template_policy = _as_mapping(metadata.get("template_policy"))
+    nested = template_policy.get("release_policy")
+    if isinstance(nested, Mapping):
+        return candidate_release_policy({"release_policy": nested})
+    if metadata.get("formal_pareto_eligible") is True:
+        return {
+            "lane": "release",
+            "formal_pareto_allowed": True,
+            "exploratory_only": False,
+            "authority": "policy_metadata.formal_pareto_eligible",
+            "legacy_candidate_tier_authoritative": False,
+        }
+    return {
+        "lane": "exploratory",
+        "formal_pareto_allowed": False,
+        "exploratory_only": True,
+        "authority": "default_fail_closed_release_policy",
+        "legacy_candidate_tier_authoritative": False,
+    }
+
+
+def candidate_release_lane(candidate: Mapping[str, Any]) -> str:
+    return str(candidate_release_policy(candidate).get("lane", "exploratory"))
 
 
 def formal_pareto_candidates(candidates: Iterable[Mapping[str, Any]]) -> Dict[str, Any]:
@@ -233,11 +261,12 @@ def formal_pareto_candidates(candidates: Iterable[Mapping[str, Any]]) -> Dict[st
     excluded: List[Dict[str, Any]] = []
     for raw_candidate in candidates:
         candidate = dict(raw_candidate)
-        tier = candidate_tier(candidate)
+        release_policy = candidate_release_policy(candidate)
+        release_lane = str(release_policy.get("lane", "exploratory"))
         eligibility = _as_mapping(candidate.get("claim_eligibility"))
         status = str(candidate.get("status", "")).lower()
         reasons: List[str] = []
-        if tier != "release":
+        if release_policy.get("formal_pareto_allowed") is not True:
             reasons.append("exploratory_candidate_excluded_from_formal_pareto")
         if eligibility.get("formal_pareto") is False:
             reasons.append("candidate_claim_eligibility_disallows_formal_pareto")
@@ -247,13 +276,15 @@ def formal_pareto_candidates(candidates: Iterable[Mapping[str, Any]]) -> Dict[st
             excluded.append(
                 {
                     "candidate_id": str(candidate.get("candidate_id", "unknown_candidate")),
-                    "tier": tier,
+                    "release_lane": release_lane,
+                    "release_policy": release_policy,
                     "reasons": reasons,
                     "candidate": candidate,
                 }
             )
             continue
-        candidate["candidate_tier"] = tier
+        candidate["release_policy"] = release_policy
+        candidate["release_lane"] = release_lane
         included.append(candidate)
 
     def _latency(candidate: Mapping[str, Any]) -> float:
@@ -268,7 +299,7 @@ def formal_pareto_candidates(candidates: Iterable[Mapping[str, Any]]) -> Dict[st
         "schema_version": "dse.dft_scf.formal_pareto_candidates.v1",
         "formal_pareto_candidates": sorted(included, key=_latency),
         "excluded_candidates": excluded,
-        "policy": "release-tier candidates only; exploratory candidates are visible but excluded from formal Pareto/frontier claims",
+        "policy": "release_policy.formal_pareto_allowed candidates only; exploratory candidates are visible but excluded from formal Pareto/frontier claims",
     }
 
 
@@ -547,7 +578,8 @@ def build_wave15_trace(
 
     bundle_validation = validate_strict_dft_qe_bundle(strict_bundle)
     candidate = deepcopy(dict(release_candidate))
-    candidate["candidate_tier"] = candidate_tier(candidate)
+    candidate["release_policy"] = candidate_release_policy(candidate)
+    candidate["release_lane"] = candidate_release_lane(candidate)
     candidate_filter = formal_pareto_candidates([candidate])
     claim_gate = adjudicate_hardware_claim_evidence(tool_evidence, claim_type=claim_type)
 
@@ -576,6 +608,7 @@ def build_wave15_trace(
     trace_passed = (
         bool(bundle_validation["admitted"])
         and bool(candidate_filter["formal_pareto_candidates"])
+        and claim_gate["status"] == "passed"
         and cost_validation["passed"]
     )
     return {
@@ -623,4 +656,3 @@ def build_wave15_trace(
         "forbidden_completion_labels_absent": True,
         "claim_boundary": "Wave 1.5 is a progress-only thin trace and must not be reported as MVP, vertical-slice completion, or final closure.",
     }
-

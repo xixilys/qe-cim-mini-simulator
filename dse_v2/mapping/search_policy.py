@@ -11,6 +11,7 @@ promotion/blocker reasons so downstream Step3 admission can be audited.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+import json
 from dataclasses import dataclass, field
 from random import Random
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
@@ -319,10 +320,177 @@ class BottleneckGuidedPolicy(_BasePolicy):
         return [self._record(problem, index, params, "bottleneck_guided_parameter_grid") for index, params in enumerate(ordered[:budget])]
 
 
+HIERARCHICAL_FUNNEL_STAGES: Tuple[str, ...] = (
+    "template_legality_enumeration",
+    "analytic_screen",
+    "bottleneck_guided_refinement",
+    "hls_rtl_ppa_calibration",
+    "evidence_eligible_pareto",
+)
+
+
+def _stable_parameter_key(parameters: Mapping[str, Any]) -> str:
+    return json.dumps(dict(parameters), sort_keys=True, separators=(",", ":"), default=str)
+
+
+class HierarchicalFunnelSearchPolicy(_BasePolicy):
+    """Replayable staged search policy for expensive multi-fidelity funnels.
+
+    The policy is domain-neutral: callers provide generic parameter records,
+    tier names, and constraint metadata.  Workload plugins may map any
+    domain-specific semantics into those parameters, but this class only enforces
+    two generic invariants:
+
+    * every proposal records the same staged funnel in provenance;
+    * exploratory/wide-space rows are prevented from contaminating formal
+      release/Pareto promotion unless the caller explicitly changes the release
+      tier constraint.
+    """
+
+    policy_name = "hierarchical_funnel"
+
+    def __init__(self, bottleneck_keys: Iterable[str] = ()) -> None:
+        super().__init__()
+        self.bottleneck_keys = tuple(bottleneck_keys)
+        self._feedback_bias: Dict[str, float] = {}
+
+    def observe(self, candidate_id: str, metrics: Mapping[str, Any]) -> None:
+        record = self._proposed.get(candidate_id)
+        super().observe(candidate_id, metrics)
+        if record is None:
+            return
+        bias = 0.0
+        if isinstance(metrics.get("calibrated_score_delta"), (int, float)):
+            bias += float(metrics["calibrated_score_delta"])
+        if isinstance(metrics.get("step4_quality_score"), (int, float)):
+            bias += float(metrics["step4_quality_score"]) / 100.0
+        if metrics.get("step4_verdict") in {"trusted_pass", "passed", "promoted"}:
+            bias += 1.0
+        if metrics.get("step4_verdict") in {"failed", "blocked", "rejected"}:
+            bias -= 1.0
+        if "latency_ms" in metrics and isinstance(metrics["latency_ms"], (int, float)):
+            bias -= float(metrics["latency_ms"]) / 1000.0
+        key = _stable_parameter_key(record.parameters)
+        self._feedback_bias[key] = self._feedback_bias.get(key, 0.0) + bias
+
+    def _constraint_blockers(self, problem: SearchProblem, parameters: Mapping[str, Any]) -> List[str]:
+        constraints = dict(problem.constraints or {})
+        blockers: List[str] = []
+        for key in constraints.get("required_parameters", ()) or ():
+            if key not in parameters:
+                blockers.append(f"missing_required_parameter:{key}")
+
+        tier_field = str(constraints.get("formal_pareto_tier_field") or "")
+        release_tier = str(constraints.get("release_tier", "release"))
+        if tier_field in parameters and str(parameters[tier_field]) != release_tier:
+            blockers.append(f"non_release_tier:{parameters[tier_field]}")
+
+        legal_values = constraints.get("legal_values", {}) or {}
+        if isinstance(legal_values, Mapping):
+            for key, values in legal_values.items():
+                if key in parameters and parameters[key] not in set(values or ()):
+                    blockers.append(f"illegal_value:{key}:{parameters[key]}")
+        return blockers
+
+    def _stage_trace(
+        self,
+        problem: SearchProblem,
+        parameters: Mapping[str, Any],
+        blockers: Sequence[str],
+    ) -> List[Dict[str, Any]]:
+        constraints = dict(problem.constraints or {})
+        required_stages = tuple(
+            str(stage)
+            for stage in constraints.get("hierarchical_funnel_stages", HIERARCHICAL_FUNNEL_STAGES)
+        )
+        active_stages = required_stages or HIERARCHICAL_FUNNEL_STAGES
+        stage_trace: List[Dict[str, Any]] = []
+        first_blocked = blockers[0] if blockers else ""
+        for index, stage_id in enumerate(active_stages):
+            status = "passed"
+            reasons: List[str] = [f"stage_order:{index}"]
+            if first_blocked and stage_id in {"template_legality_enumeration", "evidence_eligible_pareto"}:
+                status = "blocked"
+                reasons.append(first_blocked)
+            elif stage_id == "hls_rtl_ppa_calibration" and constraints.get("requires_physical_evidence"):
+                reasons.append("physical_evidence_required_before_trusted_claim")
+            elif stage_id == "evidence_eligible_pareto":
+                reasons.append("formal_pareto_candidate" if not blockers else "formal_pareto_blocked")
+            else:
+                reasons.append("replayable_funnel_stage")
+            stage_trace.append({"stage_id": stage_id, "status": status, "reasons": reasons})
+        return stage_trace
+
+    def _score(self, problem: SearchProblem, parameters: Mapping[str, Any]) -> float:
+        base = _score_candidate(parameters, problem.objective)
+        touched = sum(1 for key in self.bottleneck_keys if key in parameters)
+        return base + touched + self._feedback_bias.get(_stable_parameter_key(parameters), 0.0)
+
+    def _raw_candidates(self, problem: SearchProblem, budget: int) -> List[Mapping[str, Any]]:
+        grid_limit = max(budget * 4, budget, 1)
+        raw: List[Mapping[str, Any]] = [dict(seed) for seed in problem.seed_candidates]
+        raw.extend(problem.parameter_grid(limit=grid_limit))
+        deduped: Dict[str, Mapping[str, Any]] = {}
+        for params in raw:
+            deduped.setdefault(_stable_parameter_key(params), dict(params))
+        return list(deduped.values())
+
+    def propose(self, problem: SearchProblem, budget: int) -> List[SearchCandidateRecord]:
+        if budget <= 0:
+            return []
+        ordered = sorted(
+            self._raw_candidates(problem, budget),
+            key=lambda params: self._score(problem, params),
+            reverse=True,
+        )
+        records: List[SearchCandidateRecord] = []
+        for index, parameters in enumerate(ordered[:budget]):
+            blockers = self._constraint_blockers(problem, parameters)
+            stage_trace = self._stage_trace(problem, parameters, blockers)
+            promotions = [] if blockers else [
+                "promoted_for_simulation",
+                "formal_release_pareto_eligible",
+            ]
+            record = SearchCandidateRecord(
+                candidate_id=f"{problem.problem_id}:{self.policy_name}:{index}",
+                parameters=dict(parameters),
+                provenance={
+                    "policy_name": self.policy_name,
+                    "problem_id": problem.problem_id,
+                    "workload_run_id": problem.workload_run_id,
+                    "candidate_index": index,
+                    "funnel_stage_order": list(HIERARCHICAL_FUNNEL_STAGES),
+                    "funnel_stages": stage_trace,
+                    "release_tier_policy": {
+                        "formal_pareto_tier_field": (
+                            str(problem.constraints["formal_pareto_tier_field"])
+                            if problem.constraints.get("formal_pareto_tier_field")
+                            else None
+                        ),
+                        "release_policy_field": str(
+                            problem.constraints.get("release_policy_field", "release_policy.lane")
+                        ),
+                        "release_tier": str(problem.constraints.get("release_tier", "release")),
+                        "exploratory_rows_can_order_search": True,
+                        "exploratory_rows_can_enter_formal_pareto": False,
+                    },
+                },
+                generation_reason="hierarchical_funnel_search",
+                score=self._score(problem, parameters),
+                promotion_reasons=promotions,
+                blocker_reasons=list(blockers),
+            )
+            self._proposed[record.candidate_id] = record
+            records.append(record)
+        return records
+
+
 __all__ = [
     "BottleneckGuidedPolicy",
     "CapabilityDecision",
     "ComponentCapability",
+    "HIERARCHICAL_FUNNEL_STAGES",
+    "HierarchicalFunnelSearchPolicy",
     "RandomBaselinePolicy",
     "SearchCandidateRecord",
     "SearchCheckpoint",

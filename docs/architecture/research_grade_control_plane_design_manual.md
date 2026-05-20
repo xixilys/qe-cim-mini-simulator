@@ -88,6 +88,21 @@ The phrase “Step3 final report” is stale.  Step3 may provide evidence consum
 | Claim validation | `claim_validation.json` | Step4 | Step5/reporting |
 | Calibration record | `calibration_record.json` | Step4 | Promotion/search feedback/reporting |
 | Feedback update | `feedback_update.json` | Step4 | Step2/search policy |
+| DFT full-SCF evaluated-hybrid bundle | `full_scf_accelerator_descriptor.json` plus schedule/residency/correctness/PPA-summary files | DFT profile helper | Step5/reporting, DFT goal audit |
+| DFT candidate binding map | `dft_candidate_binding_map.json` plus validation/status files | DFT profile helper | Trial ledger, Step5/reporting, DFT goal audit |
+| DFT hardware completion workplan | `dft_hardware_completion_workplan.json` plus validation/status files | DFT profile helper | Step5/reporting, DFT goal audit, manual parallel closure |
+| DFT hardware closure shards | `dft_hardware_closure_shards.json` plus validation/status files | DFT profile helper | Parallel closure assignment, Step5/reporting, DFT goal audit |
+| DFT hardware closure packets | `dft_hardware_closure_packet_index.json` plus validation/status files and per-shard packet/runbook files | DFT profile helper | Parallel closure execution packets, Step5/reporting, DFT goal audit |
+| DFT hardware closure evidence intake | `dft_hardware_closure_evidence_intake.json` plus validation/status files | DFT profile helper | Candidate-specific file-presence intake, Step5/reporting, DFT goal audit |
+| DFT hardware closure adjudication | `dft_hardware_closure_adjudication.json` plus validation/status files | DFT profile helper | Fail-closed hard-gate stage ledger, Step5/reporting, DFT goal audit |
+| DFT hardware closure parsed evidence | `dft_hardware_closure_parsed_evidence_manifest.json` plus validation/status files | DFT profile helper | Parser-output readiness manifest, Step5/reporting, DFT goal audit |
+| DFT hardware closure parser run | `dft_hardware_closure_parser_run.json` plus validation/status files and parsed stage-result files | DFT profile helper | Parser-output materialization from existing raw evidence, Step5/reporting, DFT goal audit |
+| DFT hardware closure gate adjudication | `dft_hardware_closure_gate_adjudication.json` plus validation/status files | DFT profile helper | Per-stage hard-gate verdict accounting, Step5/reporting, DFT goal audit |
+| DFT hardware closure release gate | `dft_hardware_closure_release_gate.json` plus validation/status files | DFT profile helper | Candidate/release hard-gate rollup, Step5/reporting, DFT goal audit |
+| DFT trial state ledger | `dft_trial_state_ledger.json` plus transition/artifact-ref/validation files and `dft_trial_ledger.sqlite` | DFT profile helper | Step5/reporting, DFT goal audit |
+| L4 raw proof | `gem5_l4_proof.json` plus raw logs/traces | L4 adapter | Step4 |
+| L4 canonical metrics | `l4_interface_metrics.json` | Step4 | Step5/reporting, feedback |
+| Final report | `final_report.json`, `final_report.md` | Step5 | Human/release review |
 
 Implementation status note (2026-05-19): `dse_v2/mapping/step2_workflow.py`
 now writes the canonical Step2 search/provenance bundle alongside legacy
@@ -118,10 +133,35 @@ Step5 report generation requires Step4 `verdict.json`,
 `claim_validation.json`, and `evidence_requirements.json` to exist before it
 writes `final_report.json` / `final_report.md`.  Step5 may present blocked
 claims, but it records the source Step4 claim-validation status and cannot
-upgrade a failed Step4 gate into a trusted winner.
-| L4 raw proof | `gem5_l4_proof.json` plus raw logs/traces | L4 adapter | Step4 |
-| L4 canonical metrics | `l4_interface_metrics.json` | Step4 | Step5/reporting, feedback |
-| Final report | `final_report.json`, `final_report.md` | Step5 | Human/release review |
+upgrade a failed Step4 gate into a trusted winner.  If the source
+`claim_validation.json` is unpassed, `final_report.json.claim_validation.passed`
+must also remain `false`; a report-local regenerated claim list may explain
+blocked claims, but it must not turn an unpassed Step4 gate into a report-level
+pass.
+
+DFT full-SCF evaluated-hybrid artifacts are profile-owned evidence that Step5
+may cite, not generic canonical replacements for Step3/Step4/Step5 artifacts.
+The current bundle is `full_scf_accelerator_descriptor.json`,
+`full_scf_runtime_schedule.json`, `full_scf_data_residency_plan.json`,
+`full_scf_correctness_report.json`, and `full_scf_ppa_summary.json`.  These
+artifacts can populate the DFT-specific
+`dft_full_scf_evaluated_hybrid` report section and cost accounting fields, but
+they cannot upgrade Step4 trust, numerical correctness, FPGA/ASIC PPA, or
+deliverable completion by themselves.
+Step5 may load the same bundle either from direct run-directory artifacts or
+from DFT ledger `full_scf_hybrid_bundle.artifact_refs`; the latter is still a
+profile-evidence citation path, not a generic artifact ownership transfer.
+
+DFT trial-state ledgers are also profile-owned citations.  The generic
+contract remains Campaign -> WorkloadRun -> Trial plus hashable ArtifactRefs;
+the DFT helper materializes this as `dft_trial_state_ledger.json`,
+`dft_trial_transition_report.json`, `dft_trial_artifact_refs.json`,
+`dft_trial_state_ledger_validation.json`, and `dft_trial_ledger.sqlite`.
+Those artifacts may be indexed by Step5 under a DFT-specific report section to
+prove ID propagation, legal transition history, artifact-ref continuity, and
+blocker accounting.  They must not redefine generic schemas and must not
+promote numerical correctness, trusted Pareto, FPGA/ASIC PPA, or
+`deliverable_complete` without independent Step3/Step4/Step5 hard gates.
 
 Legacy `numerical_validation.json` is not a trusted canonical artifact name.  Existing runs may mention it as migration history, but new trusted evidence must use the narrower artifact names above.
 

@@ -48,9 +48,9 @@ python3 dse_v2/scripts/dse/audit_dft_first_goal_completion.py \
   --allow-in-progress
 ```
 
-Before the midnight horizon it must report `status=in_progress` and
-`completion_decision=do_not_mark_complete_before_midnight_horizon`. After the
-horizon, re-run without `--allow-in-progress`; it is the final gate before
+Before the active date horizon it must report `status=in_progress` and
+`completion_decision=do_not_mark_complete_before_date_horizon`. After the
+horizon, re-run without `--allow-in-progress`; it is one final gate before
 marking the goal complete.
 
 Latest observed audit result:
@@ -68,7 +68,7 @@ snapshot:  runs/dse/dft_first_monitor_validation_snapshot_20260514_132017_v6/mon
 full iter: 600, latest_full_validation_passed=true, all_full_logs_preserved=true
 audit:     runs/dse/dft_first_goal_completion_audit_20260514_132017_support_refresh_full600/goal_completion_audit.json
 status:    in_progress
-reason:    do_not_mark_complete_before_midnight_horizon
+reason:    do_not_mark_complete_before_date_horizon
 failed:    0
 ```
 
@@ -86,7 +86,7 @@ steps=cmake_configure, cmake_build, ctest_generic_sim, dft_targeted_pytest,
 
 | Requirement | Concrete evidence | Audit / validation gate | Current status |
 |---|---|---|---|
-| Use `date` to check East-8 time while working | shell `date '+%Y-%m-%d %H:%M:%S %Z (%z)'`; doc-pinned local evidence refresh recorded by agent before this note was `2026-05-14 13:20:17 CST (+0800)`. The live monitor may advance beyond that and must be snapshotted again before final completion. | Manual progress evidence; not a DSE correctness signal | Active until the `2026-05-15 00:00:00 CST` horizon recorded in the live monitor |
+| Use `date` to check East-8 time while working | shell `date '+%Y-%m-%d %H:%M:%S %Z (%z)'`; live evidence must be refreshed before any final completion audit. | Manual progress evidence; not a DSE correctness signal | Active until the current goal horizon `2026-06-01 12:00:00 CST` |
 | Focus on QE workloads, not all DFT/VASP | `dft_end_to_end_summary.json` `scope.workload_focus`; runner inputs `--qe-input`, `--qe-log`, `--workflow-json` | `scope_qe_and_domain_neutral` audit check | Passed |
 | Bad QE/workflow source paths fail closed | malformed or missing `--workflow-json` stage paths write `dft_end_to_end_summary.json` with `status=blocked_source_load` and a failing audit instead of an uncaptured traceback or partial success | `test_dft_first_runner_writes_failed_audit_for_bad_workflow_path` | Implemented and tested |
 | Copied run audits remain copy-local | If a run directory is copied, Step1/Step2/Step3/Step4 paths and proof `source_artifacts` from the original summary are rebased into the audited copy before evidence is read, so copied evidence tampering is caught even when the original absolute paths still exist | `test_dft_end_to_end_auditor_uses_copy_local_step1_and_step4_artifacts`; reusable tamper probe `dse_v2/scripts/dse/run_dft_first_real_artifact_tamper_probe.py`; real-run copy tamper probe `runs/dse/dft_first_real_artifact_tamper_probe_20260514_122000_v3_rebased_sources/tamper_probe_result.json` | Implemented and tested |
@@ -111,8 +111,8 @@ steps=cmake_configure, cmake_build, ctest_generic_sim, dft_targeted_pytest,
 | Use public/open-source project and paper anchors | QE/gem5 source anchors in `dft_first_end_to_end_dse.md`; L1/L2 replacement-source matrix in `generic_dse/step2_l1_l2_evaluator_audit.md`; reusable support scan resolved by `$SUPPORT/external_reference_scan.json`, includes QE, pw.x input docs, gem5, SystemC, Timeloop/Accelergy, MAESTRO, and ALADDIN anchors | Documentation/source-scan review; no final-performance claim depends on those sources without measured artifacts | Satisfied |
 | Rebuild goal support scans reproducibly | `dse_v2/scripts/dse/build_dft_first_goal_support_scans.py` emits no-smoke, domain-boundary, and external-reference JSON plus a support manifest | `test_goal_support_scan_builder_emits_reusable_guard_artifacts`; latest support scan should be selected with `ls -td runs/dse/dft_first_goal_support_scans_* \| head -1` and its manifest must have `status=passed` | Passed |
 | Rebuild real artifact tamper probes reproducibly | `dse_v2/scripts/dse/run_dft_first_real_artifact_tamper_probe.py` copies a completed run, mutates Step4 `stats.txt` and `gem5.log`, and verifies the normal end-to-end auditor fails the expected checks | `test_real_artifact_tamper_probe_rejects_mutated_copied_step4_evidence`; real output `runs/dse/dft_first_real_artifact_tamper_probe_20260514_122000_v3_rebased_sources/tamper_probe_result.json` has `probe_status=passed` | Passed |
-| Keep validation running through the active midnight horizon | primary live monitor `runs/dse/dft_first_continuous_monitor_20260514_112555_setsid_v6/monitor_status.json` has horizon `2026-05-15 00:00:00 CST (+0800)`, `no_sleep_command_used=true`, Step4 compile checks enabled, and full-suite log preservation enabled. Historical targeted-pytest failures are retained for auditability and are recovered by later full validations. | Periodic main + official DFT audits, targeted DFT runner pytest every iteration, full pytest/compileall/gem5 config py_compile/GenericAccel compileall/`git diff --check` every 20 iterations; the latest v6 validation snapshot resolved by `$SNAPSHOT` must pass, preserve full-suite logs, and have its latest full validation iteration after the latest failure iteration | Active until 2026-05-15 00:00 CST |
-| Final completion requires a prompt-to-artifact audit, not just green tests | `snapshot_dft_first_monitor_validation.py` produces monitor snapshots from raw monitor events/logs; `audit_dft_first_goal_completion.py` recomputes main and official run audits, checks no-smoke/domain/external/tamper artifacts, checks the v6 monitor/snapshot, scans the monitor script for actual `sleep` commands, treats the midnight horizon as a first-class requirement, and rejects stale full-suite snapshots when the live monitor has advanced too far beyond them | Before the horizon, the latest goal audit is expected to have 7 passed requirements, 1 in-progress midnight-horizon requirement, and `completion_decision=do_not_mark_complete_before_midnight_horizon`; after the horizon, re-run without `--allow-in-progress` and require no failed or in-progress requirements before `update_goal` | Active until 2026-05-15 00:00 CST |
+| Keep validation running through the active date horizon | Current goal-mode horizon is `2026-06-01 12:00:00 CST (+0800)`. Historical monitor evidence remains audit history only; fresh monitor/snapshot evidence is required before final completion. | Periodic main + official DFT audits, targeted DFT runner pytest every iteration, full pytest/compileall/gem5 config py_compile/GenericAccel compileall/`git diff --check` every 20 iterations; the latest validation snapshot must pass, preserve full-suite logs, and have its latest full validation iteration after the latest failure iteration | Active until 2026-06-01 12:00 CST |
+| Final completion requires a prompt-to-artifact audit, not just green tests | `snapshot_dft_first_monitor_validation.py` produces monitor snapshots from raw monitor events/logs; `audit_dft_first_goal_completion.py` recomputes main and official run audits, checks no-smoke/domain/external/tamper artifacts, checks the monitor/snapshot, scans the monitor script for actual `sleep` commands, treats the date horizon as a first-class requirement, and rejects stale full-suite snapshots when the live monitor has advanced too far beyond them | Before the horizon, the goal audit must report `completion_decision=do_not_mark_complete_before_date_horizon`; after the horizon, re-run without `--allow-in-progress` and require no failed or in-progress requirements before `update_goal` | Active until 2026-06-01 12:00 CST |
 
 ## Validation commands
 

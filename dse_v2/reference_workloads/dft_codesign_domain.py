@@ -15,6 +15,9 @@ from dse_v2.codesign.release_domain import (
     build_domain_freeze,
     stable_json_hash,
 )
+from dse_v2.reference_workloads.dft_step2_policy import (
+    build_dft_hierarchical_funnel_search_report,
+)
 
 
 DFT_CODESIGN_RELEASE_ID = "dft_first_seven_axis_release_v1"
@@ -27,14 +30,15 @@ DFT_SEVEN_AXIS_IDS = (
     "interface_descriptor_protocol",
     "evidence_fidelity_promotion_policy",
 )
+DFT_APPLICABILITY_AXIS_IDS = ("dft_phase_hotspot_selection",)
+DFT_EVALUATION_POLICY_AXIS_IDS = ("evidence_fidelity_promotion_policy",)
+DFT_DESIGN_AXIS_IDS = tuple(
+    axis_id
+    for axis_id in DFT_SEVEN_AXIS_IDS
+    if axis_id not in {*DFT_APPLICABILITY_AXIS_IDS, *DFT_EVALUATION_POLICY_AXIS_IDS}
+)
 
 DFT_LEGALITY_CONSTRAINTS = (
-    {
-        "constraint_id": "hybrid_exx_requires_batched_gemm",
-        "when": {"dft_phase_hotspot_selection": "hybrid_exx_fft"},
-        "requires": {"algorithm_variants": "batched_gemm_exx"},
-        "reason": "hybrid_exx_fft requires batched_gemm_exx algorithm template",
-    },
     {
         "constraint_id": "batched_gemm_requires_band_block_layout",
         "when": {"algorithm_variants": "batched_gemm_exx"},
@@ -53,11 +57,23 @@ DFT_LEGALITY_CONSTRAINTS = (
         "requires": {"algorithm_variants": "batched_gemm_exx"},
         "reason": "batched descriptor requires batched_gemm_exx algorithm",
     },
+)
+
+DFT_APPLICABILITY_COMPATIBILITY_RULES = (
     {
-        "constraint_id": "eda_formal_ladder_requires_genericaccel_descriptor",
+        "rule_id": "hybrid_exx_requires_batched_gemm",
+        "when": {"dft_phase_hotspot_selection": "hybrid_exx_fft"},
+        "requires": {"algorithm_variants": "batched_gemm_exx"},
+        "reason": "hybrid_exx_fft applicability requires batched_gemm_exx algorithm template",
+    },
+)
+
+DFT_EVALUATION_POLICY_COMPATIBILITY_RULES = (
+    {
+        "rule_id": "eda_formal_ladder_routes_to_genericaccel_descriptor",
         "when": {"evidence_fidelity_promotion_policy": "systemc_gem5_eda_formal_ladder"},
         "requires": {"interface_descriptor_protocol": "genericaccel_descriptor_v1"},
-        "reason": "EDA/formal ladder currently requires genericaccel_descriptor_v1",
+        "reason": "EDA/formal ladder routes to genericaccel_descriptor_v1 promotion evidence",
     },
 )
 
@@ -118,15 +134,47 @@ def dft_seven_axis_source_ledger() -> list[Dict[str, Any]]:
 
 
 def dft_legality_constraints() -> list[Dict[str, Any]]:
-    """Return DFT legality constraints as data consumed by the generic universe builder."""
+    """Return design-only DFT legality constraints for the generic universe builder."""
     return [
         {
             "schema_version": "dse.dft.legality_constraint.v1",
             **dict(item),
             "axis_ids": sorted({*item["when"], *item["requires"]}),
-            "claim_boundary": "DFT plugin data for generic legality evaluation; not core coupling.",
+            "claim_boundary": "DFT plugin data for generic design legality evaluation; not core coupling.",
         }
         for item in DFT_LEGALITY_CONSTRAINTS
+    ]
+
+
+def dft_applicability_compatibility_rules() -> list[Dict[str, Any]]:
+    """Return applicability/offload-scope compatibility rules, separate from design legality."""
+    return [
+        {
+            "schema_version": "dse.dft.applicability_compatibility_rule.v1",
+            **dict(item),
+            "axis_ids": sorted({*item["when"], *item["requires"]}),
+            "claim_boundary": (
+                "Applicability compatibility can block an offload-scope pairing, "
+                "but it does not change design_legality or stable design identity."
+            ),
+        }
+        for item in DFT_APPLICABILITY_COMPATIBILITY_RULES
+    ]
+
+
+def dft_evaluation_policy_compatibility_rules() -> list[Dict[str, Any]]:
+    """Return evaluation/promotion routing rules, separate from design legality and score."""
+    return [
+        {
+            "schema_version": "dse.dft.evaluation_policy_compatibility_rule.v1",
+            **dict(item),
+            "axis_ids": sorted({*item["when"], *item["requires"]}),
+            "claim_boundary": (
+                "Evaluation policy compatibility schedules or blocks promotion evidence rows; "
+                "it does not change design_legality, design_score, or stable design identity."
+            ),
+        }
+        for item in DFT_EVALUATION_POLICY_COMPATIBILITY_RULES
     ]
 
 
@@ -310,45 +358,250 @@ def dft_domain_freeze() -> Dict[str, Any]:
             "it is not represented as the infinite DFT design space."
         ),
     }
+    freeze["candidate_identity_policy"] = {
+        "schema_version": "dse.dft.candidate_identity_policy.v1",
+        "design_identity_axis_ids": list(DFT_DESIGN_AXIS_IDS),
+        "applicability_axis_ids": list(DFT_APPLICABILITY_AXIS_IDS),
+        "evaluation_policy_axis_ids": list(DFT_EVALUATION_POLICY_AXIS_IDS),
+        "candidate_identity_excludes": [
+            "dft_phase_hotspot_selection",
+            "workload_id",
+            "workload_case_id",
+            "evidence_fidelity_promotion_policy",
+            "release_policy_metadata",
+            "release_or_exploratory_lane",
+            "retry_count",
+            "tool_status",
+            "claim_label",
+        ],
+        "candidate_row_id_boundary": (
+            "candidate_id remains a unique all-axis evaluation-row key for artifact compatibility; "
+            "design_candidate_id is the stable DFT design identity and excludes applicability/evaluation/release policy."
+        ),
+        "evidence_policy_affects_identity": False,
+        "claim_boundary": (
+            "Evaluation/promotion policy can classify or schedule a design but does not create a new stable "
+            "DFT design candidate identity; workload applicability/offload scope is tracked separately."
+        ),
+    }
+    freeze["axis_partitions"] = {
+        "schema_version": "dse.dft.axis_partition.v1",
+        "all_axis_ids": list(DFT_SEVEN_AXIS_IDS),
+        "design_identity_axis_ids": list(DFT_DESIGN_AXIS_IDS),
+        "applicability_axis_ids": list(DFT_APPLICABILITY_AXIS_IDS),
+        "evaluation_policy_axis_ids": list(DFT_EVALUATION_POLICY_AXIS_IDS),
+        "non_identity_axis_ids": list(DFT_APPLICABILITY_AXIS_IDS + DFT_EVALUATION_POLICY_AXIS_IDS),
+        "claim_boundary": (
+            "The seven-axis release preset remains an evaluation-row generator; "
+            "stable design identity, applicability, and evaluation policy are separate partitions."
+        ),
+    }
     freeze["legality_constraints"] = dft_legality_constraints()
+    freeze["applicability_compatibility_rules"] = dft_applicability_compatibility_rules()
+    freeze["evaluation_policy_compatibility_rules"] = dft_evaluation_policy_compatibility_rules()
     freeze["domain_hash"] = stable_json_hash({
         key: value for key, value in freeze.items() if key != "domain_hash"
     })
     return freeze
 
 
-def _legality(assignments: Mapping[str, str]) -> tuple[bool, Sequence[str]]:
-    reasons: list[str] = []
-    for constraint in DFT_LEGALITY_CONSTRAINTS:
-        when = constraint["when"]
-        requires = constraint["requires"]
+def _rule_blockers(assignments: Mapping[str, str], rules: Sequence[Mapping[str, Any]]) -> list[Dict[str, Any]]:
+    blockers: list[Dict[str, Any]] = []
+    for rule in rules:
+        when = rule["when"]
+        requires = rule["requires"]
         if all(assignments.get(axis_id) == value_id for axis_id, value_id in when.items()) and any(
             assignments.get(axis_id) != value_id for axis_id, value_id in requires.items()
         ):
-            reasons.append(str(constraint["reason"]))
-    return not reasons, reasons
+            blockers.append({
+                "rule_id": str(rule.get("constraint_id") or rule.get("rule_id")),
+                "when": dict(when),
+                "requires": dict(requires),
+                "reason": str(rule["reason"]),
+            })
+    return blockers
+
+
+def _design_legality(assignments: Mapping[str, str]) -> Dict[str, Any]:
+    blockers = _rule_blockers(assignments, DFT_LEGALITY_CONSTRAINTS)
+    return {
+        "schema_version": "dse.dft.design_legality.v1",
+        "passed": not blockers,
+        "design_axis_ids": list(DFT_DESIGN_AXIS_IDS),
+        "ignored_axis_ids": list(DFT_APPLICABILITY_AXIS_IDS + DFT_EVALUATION_POLICY_AXIS_IDS),
+        "blockers": blockers,
+        "reasons": [str(blocker["reason"]) for blocker in blockers],
+        "claim_boundary": (
+            "Design legality consumes design axes only; applicability and evaluation policy "
+            "cannot make a stable design candidate legal or illegal."
+        ),
+    }
+
+
+def _legality(assignments: Mapping[str, str]) -> tuple[bool, Sequence[str]]:
+    design_legality = _design_legality(assignments)
+    return bool(design_legality["passed"]), list(design_legality["reasons"])
+
+
+def _applicability_compatibility(assignments: Mapping[str, str]) -> Dict[str, Any]:
+    applicability_assignments = {axis_id: assignments[axis_id] for axis_id in DFT_APPLICABILITY_AXIS_IDS}
+    blockers = _rule_blockers(assignments, DFT_APPLICABILITY_COMPATIBILITY_RULES)
+    return {
+        "schema_version": "dse.dft.applicability_compatibility.v1",
+        "applicability_axis_ids": list(DFT_APPLICABILITY_AXIS_IDS),
+        "design_axis_ids": list(DFT_DESIGN_AXIS_IDS),
+        "applicability_assignments": applicability_assignments,
+        "compatible": not blockers,
+        "blockers": blockers,
+        "reasons": [str(blocker["reason"]) for blocker in blockers],
+        "affects_design_legality": False,
+        "affects_design_score": False,
+        "claim_boundary": (
+            "Applicability compatibility determines whether an offload scope is compatible "
+            "with a design assignment; blockers are not design-legality failures."
+        ),
+    }
+
+
+def _evaluation_policy_routing(assignments: Mapping[str, str]) -> Dict[str, Any]:
+    evaluation_policy_assignments = {axis_id: assignments[axis_id] for axis_id in DFT_EVALUATION_POLICY_AXIS_IDS}
+    blockers = _rule_blockers(assignments, DFT_EVALUATION_POLICY_COMPATIBILITY_RULES)
+    policy = assignments["evidence_fidelity_promotion_policy"]
+    promotion_requirements = {
+        "systemc_then_gem5_non_smoke": ["systemc_timing", "gem5_non_smoke_genericaccel"],
+        "systemc_gem5_eda_formal_ladder": [
+            "systemc_timing",
+            "gem5_non_smoke_genericaccel",
+            "eda_synthesis_or_implementation",
+            "formal_or_equivalence_evidence",
+        ],
+    }[policy]
+    return {
+        "schema_version": "dse.dft.evaluation_policy_routing.v1",
+        "evaluation_policy_axis_ids": list(DFT_EVALUATION_POLICY_AXIS_IDS),
+        "design_axis_ids": list(DFT_DESIGN_AXIS_IDS),
+        "evaluation_policy_assignments": evaluation_policy_assignments,
+        "promotion_requirements": promotion_requirements,
+        "routing_compatible": not blockers,
+        "routing_blockers": blockers,
+        "affects_design_legality": False,
+        "affects_design_score": False,
+        "claim_boundary": (
+            "Evaluation policy routes required evidence and promotion work; routing blockers "
+            "do not change design_legality or design_score."
+        ),
+    }
+
+
+def _partition_assignments(assignments: Mapping[str, str], axis_ids: Sequence[str]) -> Dict[str, str]:
+    return {axis_id: assignments[axis_id] for axis_id in axis_ids}
+
+
+def _partition_id(prefix: str, assignments: Mapping[str, str]) -> str:
+    return prefix + stable_json_hash({"assignments": dict(sorted(assignments.items()))})[:16]
+
+
+def _enrich_candidate_partitions(manifest: Dict[str, Any], legality: Dict[str, Any]) -> None:
+    """Add DFT-specific applicability/evaluation partitions without changing generic core."""
+    for candidate in manifest.get("candidates", []) or []:
+        if not isinstance(candidate, dict):
+            continue
+        assignments = candidate["assignments"]
+        applicability_assignments = _partition_assignments(assignments, DFT_APPLICABILITY_AXIS_IDS)
+        evaluation_policy_assignments = _partition_assignments(assignments, DFT_EVALUATION_POLICY_AXIS_IDS)
+        design_legality = _design_legality(assignments)
+        screening = dict(candidate.get("screening") or {})
+        candidate.update({
+            "design_legality": design_legality,
+            "design_score": screening.get("design_score", screening.get("score")),
+            "applicability_assignments": applicability_assignments,
+            "evaluation_policy_assignments": evaluation_policy_assignments,
+            "applicability_scope_id": _partition_id("appscope_", applicability_assignments),
+            "evaluation_policy_id": _partition_id("evalpol_", evaluation_policy_assignments),
+            "applicability_compatibility": _applicability_compatibility(assignments),
+            "evaluation_policy_routing": _evaluation_policy_routing(assignments),
+        })
+        candidate["promotion_requirements"] = candidate["evaluation_policy_routing"]["promotion_requirements"]
+        candidate["provenance"]["applicability_axis_ids"] = list(DFT_APPLICABILITY_AXIS_IDS)
+        candidate["provenance"]["evaluation_policy_axis_ids"] = list(DFT_EVALUATION_POLICY_AXIS_IDS)
+        candidate["provenance"]["phase_hotspot_affects_identity"] = False
+
+    for row in legality.get("rows", []) or []:
+        if not isinstance(row, dict):
+            continue
+        assignments = row["assignments"]
+        applicability_assignments = _partition_assignments(assignments, DFT_APPLICABILITY_AXIS_IDS)
+        evaluation_policy_assignments = _partition_assignments(assignments, DFT_EVALUATION_POLICY_AXIS_IDS)
+        row.update({
+            "design_legality": _design_legality(assignments),
+            "applicability_assignments": applicability_assignments,
+            "evaluation_policy_assignments": evaluation_policy_assignments,
+            "applicability_scope_id": _partition_id("appscope_", applicability_assignments),
+            "evaluation_policy_id": _partition_id("evalpol_", evaluation_policy_assignments),
+            "applicability_compatibility": _applicability_compatibility(assignments),
+            "evaluation_policy_routing": _evaluation_policy_routing(assignments),
+        })
+        row["promotion_requirements"] = row["evaluation_policy_routing"]["promotion_requirements"]
+        row["provenance"]["applicability_axis_ids"] = list(DFT_APPLICABILITY_AXIS_IDS)
+        row["provenance"]["evaluation_policy_axis_ids"] = list(DFT_EVALUATION_POLICY_AXIS_IDS)
+        row["provenance"]["phase_hotspot_affects_identity"] = False
+
+    manifest["applicability_axis_ids"] = list(DFT_APPLICABILITY_AXIS_IDS)
+    manifest["evaluation_policy_axis_ids"] = list(DFT_EVALUATION_POLICY_AXIS_IDS)
+    manifest["candidate_id_provenance"]["applicability_axis_ids"] = list(DFT_APPLICABILITY_AXIS_IDS)
+    manifest["candidate_id_provenance"]["evaluation_policy_axis_ids"] = list(DFT_EVALUATION_POLICY_AXIS_IDS)
+    manifest["candidate_id_provenance"]["phase_hotspot_affects_identity"] = False
+    manifest["axis_partitions"] = {
+        "design_identity_axis_ids": list(DFT_DESIGN_AXIS_IDS),
+        "applicability_axis_ids": list(DFT_APPLICABILITY_AXIS_IDS),
+        "evaluation_policy_axis_ids": list(DFT_EVALUATION_POLICY_AXIS_IDS),
+    }
+    manifest["universe_hash"] = stable_json_hash({
+        key: value for key, value in manifest.items() if key != "universe_hash"
+    })
+    legality["universe_hash"] = manifest["universe_hash"]
+    legality["axis_partitions"] = manifest["axis_partitions"]
+    legality["legality_semantics"] = {
+        "legal_field": "design_legality.passed",
+        "applicability_compatibility_affects_legal": False,
+        "evaluation_policy_routing_affects_legal": False,
+    }
+    legality["legality_hash"] = stable_json_hash({
+        key: value for key, value in legality.items() if key != "legality_hash"
+    })
 
 
 def _screen(assignments: Mapping[str, str]) -> Dict[str, Any]:
-    axis_terms = {axis_id: 1.0 for axis_id in DFT_SEVEN_AXIS_IDS}
+    axis_terms = {axis_id: 1.0 for axis_id in DFT_DESIGN_AXIS_IDS}
     if assignments["schedule_runtime_policy"] == "overlap_dma_compute":
         axis_terms["schedule_runtime_policy"] = 0.85
     if assignments["hardware_microarchitecture"] == "balanced_generic_systemc_v0":
         axis_terms["hardware_microarchitecture"] = 0.95
-    if assignments["evidence_fidelity_promotion_policy"] == "systemc_gem5_eda_formal_ladder":
-        axis_terms["evidence_fidelity_promotion_policy"] = 1.15
+    design_score = round(sum(axis_terms.values()), 6)
     return {
-        "score_model": "deterministic_axis_weighted_screen_v1",
+        "score_model": "deterministic_design_axis_weighted_screen_v2",
         "axis_terms": axis_terms,
-        "score": round(sum(axis_terms.values()), 6),
-        "all_axes_used": sorted(axis_terms) == sorted(DFT_SEVEN_AXIS_IDS),
+        "design_axis_terms": axis_terms,
+        "score": design_score,
+        "design_score": design_score,
+        "all_axes_used": False,
+        "all_design_axes_used": sorted(axis_terms) == sorted(DFT_DESIGN_AXIS_IDS),
+        "ignored_axis_ids": list(DFT_APPLICABILITY_AXIS_IDS + DFT_EVALUATION_POLICY_AXIS_IDS),
+        "applicability_affects_design_score": False,
+        "evaluation_policy_affects_design_score": False,
         "trusted_final_claim": False,
     }
 
 
 def dft_candidate_universe() -> tuple[Dict[str, Any], Dict[str, Any], Dict[str, Any]]:
     freeze = dft_domain_freeze()
-    manifest, legality = build_candidate_universe(freeze, legality_fn=_legality, score_fn=_screen)
+    manifest, legality = build_candidate_universe(
+        freeze,
+        legality_fn=_legality,
+        score_fn=_screen,
+        identity_axis_ids=DFT_DESIGN_AXIS_IDS,
+    )
+    _enrich_candidate_partitions(manifest, legality)
     return freeze, manifest, legality
 
 
@@ -376,10 +629,29 @@ def build_search_space_report(
     promoted = [
         {
             "candidate_id": candidate["candidate_id"],
+            "candidate_id_kind": candidate.get("candidate_id_kind"),
+            "design_candidate_id": candidate.get("design_candidate_id"),
             "assignments": candidate["assignments"],
+            "identity_assignments": candidate.get("identity_assignments"),
+            "non_identity_assignments": candidate.get("non_identity_assignments"),
+            "applicability_assignments": candidate.get("applicability_assignments"),
+            "evaluation_policy_assignments": candidate.get("evaluation_policy_assignments"),
             "promotion_target": "non_smoke_systemc_gem5_timing",
             "promotion_reason": "legal candidate in frozen seven-axis release domain",
             "all_axes_used": sorted(candidate["assignments"]) == sorted(DFT_SEVEN_AXIS_IDS),
+            "stable_design_identity_excludes_evidence_policy": (
+                "evidence_fidelity_promotion_policy" not in (candidate.get("identity_assignments") or {})
+            ),
+            "stable_design_identity_excludes_applicability": (
+                "dft_phase_hotspot_selection" not in (candidate.get("identity_assignments") or {})
+            ),
+            "design_legality": candidate.get("design_legality"),
+            "design_score": candidate.get("design_score"),
+            "applicability_scope_id": candidate.get("applicability_scope_id"),
+            "evaluation_policy_id": candidate.get("evaluation_policy_id"),
+            "applicability_compatibility": candidate.get("applicability_compatibility"),
+            "evaluation_policy_routing": candidate.get("evaluation_policy_routing"),
+            "promotion_requirements": candidate.get("promotion_requirements"),
             "timing_evidence_status": "pending_or_external_sample",
         }
         for candidate in legal_candidates
@@ -393,10 +665,18 @@ def build_search_space_report(
         "universe_hash": manifest.get("universe_hash"),
         "legality_hash": legality.get("legality_hash"),
         "axis_ids": list(DFT_SEVEN_AXIS_IDS),
+        "design_identity_axis_ids": list(DFT_DESIGN_AXIS_IDS),
+        "applicability_axis_ids": list(DFT_APPLICABILITY_AXIS_IDS),
+        "evaluation_policy_axis_ids": list(DFT_EVALUATION_POLICY_AXIS_IDS),
+        "axis_partitions": dict(freeze.get("axis_partitions") or {}),
+        "candidate_identity_policy": dict(freeze.get("candidate_identity_policy") or {}),
         "axis_usage": {
             axis_id: {
                 "candidate_generation": True,
-                "screening": True,
+                "design_legality": axis_id in DFT_DESIGN_AXIS_IDS,
+                "screening": axis_id in DFT_DESIGN_AXIS_IDS,
+                "applicability_compatibility": axis_id in DFT_APPLICABILITY_AXIS_IDS,
+                "evaluation_policy_routing": axis_id in DFT_EVALUATION_POLICY_AXIS_IDS,
                 "non_smoke_timing_promotion": True,
                 "feedback": True,
                 "values": values,
@@ -406,8 +686,30 @@ def build_search_space_report(
         "candidate_generation": {
             "cartesian_count": manifest.get("cartesian_count"),
             "legal_candidate_count": manifest.get("legal_candidate_count"),
+            "unique_design_candidate_count": manifest.get("unique_design_candidate_count"),
+            "legal_design_candidate_count": manifest.get("legal_design_candidate_count"),
             "all_candidates_have_all_axes": all(
                 sorted(candidate.get("assignments", {})) == sorted(DFT_SEVEN_AXIS_IDS)
+                for candidate in manifest.get("candidates", []) or []
+                if isinstance(candidate, Mapping)
+            ),
+            "all_design_identities_exclude_evaluation_policy": all(
+                "evidence_fidelity_promotion_policy" not in (candidate.get("identity_assignments") or {})
+                for candidate in manifest.get("candidates", []) or []
+                if isinstance(candidate, Mapping)
+            ),
+            "all_design_identities_exclude_applicability": all(
+                "dft_phase_hotspot_selection" not in (candidate.get("identity_assignments") or {})
+                for candidate in manifest.get("candidates", []) or []
+                if isinstance(candidate, Mapping)
+            ),
+            "all_candidates_have_applicability_assignments": all(
+                sorted(candidate.get("applicability_assignments", {})) == sorted(DFT_APPLICABILITY_AXIS_IDS)
+                for candidate in manifest.get("candidates", []) or []
+                if isinstance(candidate, Mapping)
+            ),
+            "all_candidates_have_evaluation_policy_assignments": all(
+                sorted(candidate.get("evaluation_policy_assignments", {})) == sorted(DFT_EVALUATION_POLICY_AXIS_IDS)
                 for candidate in manifest.get("candidates", []) or []
                 if isinstance(candidate, Mapping)
             ),
@@ -427,7 +729,13 @@ def build_search_space_report(
         },
         "screening": {
             "all_legal_candidates_have_axis_terms": all(
-                sorted((candidate.get("screening", {}).get("axis_terms") or {}).keys()) == sorted(DFT_SEVEN_AXIS_IDS)
+                sorted((candidate.get("screening", {}).get("axis_terms") or {}).keys()) == sorted(DFT_DESIGN_AXIS_IDS)
+                for candidate in legal_candidates
+            ),
+            "design_scoring_ignores_applicability_and_evaluation_policy": all(
+                not set(candidate.get("screening", {}).get("axis_terms") or {}).intersection(
+                    {*DFT_APPLICABILITY_AXIS_IDS, *DFT_EVALUATION_POLICY_AXIS_IDS}
+                )
                 for candidate in legal_candidates
             ),
             "priority_queue_policy": {
@@ -449,6 +757,7 @@ def build_search_space_report(
             "candidate_ids": promoted_candidate_ids,
             "all_legal_candidates_once": promoted_candidate_ids == list(manifest.get("legal_candidate_ids", []) or [])
             and len(promoted_candidate_ids) == len(set(promoted_candidate_ids)),
+            "legal_design_candidate_ids": list(manifest.get("legal_design_candidate_ids", []) or []),
             "claim_boundary": (
                 "Queue covers each legal frozen-domain candidate exactly once; "
                 "downstream evidence status still controls completion claims."
@@ -501,12 +810,14 @@ def write_dft_seven_axis_artifacts(out_dir: Path, *, timing_run_dir: Path | None
     freeze, manifest, legality = dft_candidate_universe()
     timing = timing_summary_from_dft_run(timing_run_dir) if timing_run_dir else {}
     report = build_search_space_report(freeze, manifest, legality, timing_evidence_summary=timing)
+    hierarchical_funnel = build_dft_hierarchical_funnel_search_report()
     artifacts = {
         "seven_axis_domain_freeze": out_dir / "seven_axis_domain_freeze.json",
         "candidate_universe_manifest": out_dir / "candidate_universe_manifest.json",
         "candidate_legality_report": out_dir / "candidate_legality_report.json",
         "seven_axis_search_space_report": out_dir / "seven_axis_search_space_report.json",
         "closed_loop_feedback_trace": out_dir / "closed_loop_feedback_trace.json",
+        "hierarchical_funnel_search_report": out_dir / "hierarchical_funnel_search_report.json",
     }
     # Preserve insertion order in artifact JSON so human review sees every
     # candidate assignment in the frozen axis order.  Hashes remain stable
@@ -516,16 +827,25 @@ def write_dft_seven_axis_artifacts(out_dir: Path, *, timing_run_dir: Path | None
     artifacts["candidate_legality_report"].write_text(json.dumps(legality, indent=2) + "\n", encoding="utf-8")
     artifacts["seven_axis_search_space_report"].write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     artifacts["closed_loop_feedback_trace"].write_text(json.dumps(report["feedback_trace"], indent=2) + "\n", encoding="utf-8")
+    artifacts["hierarchical_funnel_search_report"].write_text(
+        json.dumps(hierarchical_funnel, indent=2) + "\n",
+        encoding="utf-8",
+    )
     status = {
         "schema_version": "dse.dft.seven_axis_artifact_status.v1",
-        "status": "passed" if report["status"] == "passed" else "failed",
+        "status": "passed" if report["status"] == "passed" and hierarchical_funnel["status"] == "passed" else "failed",
         "artifacts": {key: str(path) for key, path in artifacts.items()},
         "domain_hash": freeze["domain_hash"],
         "universe_hash": manifest["universe_hash"],
         "legality_hash": legality["legality_hash"],
         "search_space_hash": report["search_space_hash"],
+        "hierarchical_funnel_status": hierarchical_funnel["status"],
         "axis_ids": list(DFT_SEVEN_AXIS_IDS),
+        "design_identity_axis_ids": list(DFT_DESIGN_AXIS_IDS),
+        "applicability_axis_ids": list(DFT_APPLICABILITY_AXIS_IDS),
+        "evaluation_policy_axis_ids": list(DFT_EVALUATION_POLICY_AXIS_IDS),
         "legal_candidate_count": manifest["legal_candidate_count"],
+        "legal_design_candidate_count": manifest["legal_design_candidate_count"],
         "claim_boundary": report["claim_boundary"],
     }
     (out_dir / "status.json").write_text(json.dumps(status, indent=2) + "\n", encoding="utf-8")

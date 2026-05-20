@@ -13,6 +13,11 @@ from dse_v2.mapping.domain_policy import (
     Step2DomainPolicyRegistry,
     Step2PolicyInput,
 )
+from dse_v2.mapping.search_policy import (
+    HIERARCHICAL_FUNNEL_STAGES,
+    HierarchicalFunnelSearchPolicy,
+    SearchProblem,
+)
 
 DFT_STEP2_POLICY_ID = "dft-fpga-reference-v1"
 DFT_DOMAIN_KEY = "dft"
@@ -65,6 +70,177 @@ DFT_ARCHITECTURE_FAMILIES: List[Dict[str, Any]] = [
     },
 ]
 
+DFT_REQUIRED_HARDWARE_TEMPLATE_FAMILY_IDS: Tuple[str, ...] = (
+    "streaming_fft_hpsi_pipeline",
+    "projector_heavy_gemm_gemv",
+    "memory_hbm_dma_transpose",
+    "hybrid_cpu_fpga_scf_sidecar",
+    "asic_tile_array_template",
+)
+
+DFT_EXPLORATORY_TEMPLATE_FAMILY_IDS: Tuple[str, ...] = (
+    "wide_exploratory_noc_hls_variants",
+)
+
+
+def _release_policy(lane: str) -> Dict[str, Any]:
+    """Return authoritative release/exploratory policy metadata.
+
+    This is deliberately metadata, not a search parameter.  Older artifacts used
+    a release/exploratory lane pseudo-parameter; current DFT Step2 artifacts
+    keep the lane here so it cannot enter candidate identity, Trial params, or
+    formal search knobs.
+    """
+
+    normalized = str(lane).strip().lower()
+    if normalized not in {"release", "exploratory"}:
+        normalized = "exploratory"
+    return {
+        "lane": normalized,
+        "formal_pareto_allowed": normalized == "release",
+        "exploratory_only": normalized != "release",
+        "authority": "dft_step2_release_policy_metadata",
+        "candidate_tier_authoritative": False,
+    }
+
+
+DFT_HARDWARE_TEMPLATE_FAMILIES: Tuple[Dict[str, Any], ...] = (
+    {
+        "template_family_id": "streaming_fft_hpsi_pipeline",
+        "label": "Streaming FFT/Hψ pipeline seed",
+        "release_policy": _release_policy("release"),
+        "seed_kind": "literature_fpga_hbm_fft_hls_seed",
+        "major_kernel_ids": [
+            "fft_ifft_ffft",
+            "transpose_layout_conversion",
+            "hpsi_local_potential",
+            "kinetic_add",
+            "dma_hbm_movement_engine",
+        ],
+        "default_knobs": {
+            "fft_engine_count": 2,
+            "hbm_channels": 4,
+            "dma_outstanding": 8,
+            "tile_points": 512,
+            "reduction_tree_radix": 2,
+            "precision_mode": "fp64_strict",
+        },
+        "source_refs": ["S03", "S15", "S17", "S19", "S20", "S25"],
+    },
+    {
+        "template_family_id": "projector_heavy_gemm_gemv",
+        "label": "Projector-heavy GEMM/GEMV seed",
+        "release_policy": _release_policy("release"),
+        "seed_kind": "projector_dense_tile_hls_seed",
+        "major_kernel_ids": [
+            "nonlocal_projector",
+            "complex_gemm_gemv_tile",
+            "reduction_dot_tree",
+            "dma_hbm_movement_engine",
+        ],
+        "default_knobs": {
+            "fft_engine_count": 1,
+            "hbm_channels": 4,
+            "dma_outstanding": 8,
+            "tile_points": 256,
+            "reduction_tree_radix": 4,
+            "precision_mode": "fp64_strict",
+        },
+        "source_refs": ["S09", "S10", "S21", "S22", "S23"],
+    },
+    {
+        "template_family_id": "memory_hbm_dma_transpose",
+        "label": "Memory/HBM DMA transpose seed",
+        "release_policy": _release_policy("release"),
+        "seed_kind": "fpga_hbm_dma_noc_seed",
+        "major_kernel_ids": [
+            "transpose_layout_conversion",
+            "dma_hbm_movement_engine",
+            "fft_ifft_ffft",
+            "reduction_dot_tree",
+        ],
+        "default_knobs": {
+            "fft_engine_count": 2,
+            "hbm_channels": 8,
+            "dma_outstanding": 16,
+            "tile_points": 512,
+            "reduction_tree_radix": 2,
+            "precision_mode": "fp64_strict",
+        },
+        "source_refs": ["S15", "S16", "S17", "S18", "S19", "S24"],
+    },
+    {
+        "template_family_id": "hybrid_cpu_fpga_scf_sidecar",
+        "label": "Hybrid CPU+FPGA full-SCF evaluated sidecar",
+        "release_policy": _release_policy("release"),
+        "seed_kind": "host_orchestrated_full_scf_evaluated_seed",
+        "major_kernel_ids": [
+            "fft_ifft_ffft",
+            "transpose_layout_conversion",
+            "hpsi_local_potential",
+            "kinetic_add",
+            "nonlocal_projector",
+            "complex_gemm_gemv_tile",
+            "reduction_dot_tree",
+            "dma_hbm_movement_engine",
+        ],
+        "default_knobs": {
+            "fft_engine_count": 2,
+            "hbm_channels": 4,
+            "dma_outstanding": 8,
+            "tile_points": 256,
+            "reduction_tree_radix": 4,
+            "precision_mode": "fp64_strict",
+        },
+        "source_refs": ["S03", "S13", "S15", "S22", "GENERIC_DSE_V2"],
+    },
+    {
+        "template_family_id": "asic_tile_array_template",
+        "label": "ASIC tile-array comparison template",
+        "release_policy": _release_policy("release"),
+        "seed_kind": "asic_dc_physical_closure_seed",
+        "major_kernel_ids": [
+            "hpsi_local_potential",
+            "kinetic_add",
+            "nonlocal_projector",
+            "complex_gemm_gemv_tile",
+            "reduction_dot_tree",
+        ],
+        "default_knobs": {
+            "fft_engine_count": 1,
+            "hbm_channels": 2,
+            "dma_outstanding": 4,
+            "tile_points": 256,
+            "reduction_tree_radix": 4,
+            "precision_mode": "fp64_strict",
+        },
+        "source_refs": ["S09", "S10", "S21", "GENERIC_DSE_V2"],
+    },
+    {
+        "template_family_id": "wide_exploratory_noc_hls_variants",
+        "label": "Wide exploratory NoC/HLS variant space",
+        "release_policy": _release_policy("exploratory"),
+        "seed_kind": "wide_space_legality_pruning_only",
+        "major_kernel_ids": [
+            "fft_ifft_ffft",
+            "transpose_layout_conversion",
+            "hpsi_local_potential",
+            "nonlocal_projector",
+            "complex_gemm_gemv_tile",
+            "dma_hbm_movement_engine",
+        ],
+        "default_knobs": {
+            "fft_engine_count": 4,
+            "hbm_channels": 8,
+            "dma_outstanding": 16,
+            "tile_points": 1024,
+            "reduction_tree_radix": 4,
+            "precision_mode": "mixed_precision_exploratory",
+        },
+        "source_refs": ["S15", "S19", "S21", "S22"],
+    },
+)
+
 _SAFE_GENERIC_OP_PREFERENCES: Dict[str, List[str]] = {
     "gemm": ["gpu", "fpga", "host"],
     "batched_gemm": ["gpu", "fpga", "host"],
@@ -78,6 +254,254 @@ _SAFE_GENERIC_OP_PREFERENCES: Dict[str, List[str]] = {
     "dma_load": ["fpga", "gpu", "host"],
     "placeholder": ["host"],
 }
+
+
+def dft_hardware_template_families() -> List[Dict[str, Any]]:
+    """Return DFT-scoped hardware template families for Step2 search seeding.
+
+    The rows are deliberately outside the generic mapping core.  Release rows
+    are seed families allowed to enter formal evidence-gated Pareto ordering;
+    the wide exploratory row may guide discovery but must not be treated as
+    release-tier Pareto evidence.
+    """
+
+    return [
+        {
+            **dict(row),
+            "major_kernel_ids": list(row.get("major_kernel_ids", []) or []),
+            "default_knobs": dict(row.get("default_knobs", {}) or {}),
+            "release_policy": dict(row.get("release_policy", _release_policy("exploratory"))),
+            "source_refs": list(row.get("source_refs", []) or []),
+            "claim_boundary": (
+                "DFT Step2 template seed only; no hardware acceleration or "
+                "PPA claim until the per-kernel evidence ladder closes."
+            ),
+        }
+        for row in DFT_HARDWARE_TEMPLATE_FAMILIES
+    ]
+
+
+def build_dft_hierarchical_search_problem(
+    *,
+    workload_suite_id: str = "dft_scf_six_class_suite_v1",
+) -> SearchProblem:
+    """Build the DFT plugin's initial hierarchical funnel search problem."""
+
+    release_template_ids = list(DFT_REQUIRED_HARDWARE_TEMPLATE_FAMILY_IDS)
+    all_template_ids = release_template_ids + list(DFT_EXPLORATORY_TEMPLATE_FAMILY_IDS)
+    seed_candidates: List[Dict[str, Any]] = []
+    for family in dft_hardware_template_families():
+        knobs = dict(family["default_knobs"])
+        release_policy = dict(family.get("release_policy", _release_policy("exploratory")))
+        seed_candidates.append({
+            "template_family": family["template_family_id"],
+            "seed_kind": family["seed_kind"],
+            "seed_priority": 1000 if release_policy.get("formal_pareto_allowed") is True else -100,
+            "accelerated_kernel_count": len(family["major_kernel_ids"]),
+            **knobs,
+        })
+    return SearchProblem(
+        problem_id=f"{workload_suite_id}:dft_hardware_hierarchical_funnel",
+        workload_run_id=workload_suite_id,
+        objective="maximize evidence_calibrated_full_scf_throughput",
+        parameters={
+            "template_family": all_template_ids,
+            "fft_engine_count": [1, 2, 4],
+            "hbm_channels": [2, 4, 8],
+            "dma_outstanding": [4, 8, 16],
+            "tile_points": [256, 512, 1024],
+            "reduction_tree_radix": [2, 4],
+            "precision_mode": ["fp64_strict", "mixed_precision_exploratory"],
+        },
+        constraints={
+            "required_parameters": [
+                "template_family",
+                "fft_engine_count",
+                "hbm_channels",
+                "dma_outstanding",
+                "tile_points",
+                "reduction_tree_radix",
+                "precision_mode",
+            ],
+            "legal_values": {
+                "template_family": release_template_ids,
+                "precision_mode": ["fp64_strict"],
+            },
+            "hierarchical_funnel_stages": list(HIERARCHICAL_FUNNEL_STAGES),
+            "requires_physical_evidence": True,
+            "major_kernel_gate_required": True,
+            "claim_boundary": (
+                "Wide/template search can order work; formal Pareto remains "
+                "release-tier and per-kernel evidence-gated."
+            ),
+        },
+        seed_candidates=tuple(seed_candidates),
+    )
+
+
+def _dft_search_policy_metadata(
+    parameters: Mapping[str, Any],
+    template_families_by_id: Mapping[str, Mapping[str, Any]],
+    release_template_ids: Iterable[str],
+    legal_precision_modes: Iterable[str],
+) -> Dict[str, Any]:
+    template_family = str(parameters.get("template_family", ""))
+    family = dict(template_families_by_id.get(template_family, {}) or {})
+    release_policy = dict(family.get("release_policy", _release_policy("exploratory")))
+    lane = str(release_policy.get("lane", "exploratory"))
+    release_templates = {str(item) for item in release_template_ids}
+    legal_precisions = {str(item) for item in legal_precision_modes}
+    precision_mode = str(parameters.get("precision_mode", ""))
+    legal_template_family = template_family in release_templates
+    legal_precision_mode = precision_mode in legal_precisions
+    release_queue_eligible = release_policy.get("formal_pareto_allowed") is True and legal_template_family
+    formal_pareto_eligible = release_queue_eligible and legal_precision_mode
+    exploratory_queue_allowed = release_policy.get("exploratory_only") is True or not formal_pareto_eligible
+    return {
+        "template_policy": {
+            "template_family_id": template_family,
+            "release_policy": release_policy,
+            "release_lane": lane,
+            "label": family.get("label"),
+            "seed_kind": family.get("seed_kind"),
+        },
+        "release_policy": release_policy,
+        "release_queue_eligible": release_queue_eligible,
+        "formal_pareto_eligible": formal_pareto_eligible,
+        "exploratory_queue_allowed": exploratory_queue_allowed,
+        "legal_template_family": legal_template_family,
+        "legal_precision_mode": legal_precision_mode,
+        "policy_source": "dft_hardware_template_families",
+    }
+
+
+def _with_dft_policy_metadata(
+    record: Mapping[str, Any],
+    template_families_by_id: Mapping[str, Mapping[str, Any]],
+    release_template_ids: Iterable[str],
+    legal_precision_modes: Iterable[str],
+) -> Dict[str, Any]:
+    enriched = dict(record)
+    parameters = dict(enriched.get("parameters", {}) or {})
+    parameters.pop("candidate_tier", None)
+    enriched["parameters"] = parameters
+    enriched["policy_metadata"] = _dft_search_policy_metadata(
+        parameters,
+        template_families_by_id,
+        release_template_ids,
+        legal_precision_modes,
+    )
+    return enriched
+
+
+def _is_dft_formal_pareto_record(
+    record: Mapping[str, Any],
+    release_template_ids: Iterable[str],
+    legal_precision_modes: Iterable[str],
+) -> bool:
+    parameters = _as_mapping(record.get("parameters"))
+    metadata = _as_mapping(record.get("policy_metadata"))
+    release_templates = {str(item) for item in release_template_ids}
+    legal_precisions = {str(item) for item in legal_precision_modes}
+    return (
+        metadata.get("formal_pareto_eligible") is True
+        and str(parameters.get("template_family", "")) in release_templates
+        and str(parameters.get("precision_mode", "")) in legal_precisions
+        and record.get("simulation_eligible") is True
+    )
+
+
+def build_dft_hierarchical_funnel_search_report(
+    *,
+    workload_suite_id: str = "dft_scf_six_class_suite_v1",
+    budget: int = 32,
+) -> Dict[str, Any]:
+    """Return a replayable DFT hierarchical search report.
+
+    The report is a Step2 planning/search artifact only.  It proves that the
+    initial candidate generator separates release and exploratory rows and that
+    all required template families can enter the evidence-gated release queue;
+    it does not prove that any hardware candidate has closed PPA gates.
+    """
+
+    problem = build_dft_hierarchical_search_problem(workload_suite_id=workload_suite_id)
+    policy = HierarchicalFunnelSearchPolicy(
+        bottleneck_keys=("hbm_channels", "dma_outstanding", "tile_points")
+    )
+    template_families = dft_hardware_template_families()
+    template_families_by_id = {
+        str(family["template_family_id"]): family
+        for family in template_families
+    }
+    release_template_ids = set(DFT_REQUIRED_HARDWARE_TEMPLATE_FAMILY_IDS)
+    legal_precision_modes = {"fp64_strict"}
+    records = [
+        _with_dft_policy_metadata(
+            record.to_dict(),
+            template_families_by_id,
+            release_template_ids,
+            legal_precision_modes,
+        )
+        for record in policy.propose(problem, budget=budget)
+    ]
+    formal_pareto_records = [
+        record for record in records
+        if _is_dft_formal_pareto_record(record, release_template_ids, legal_precision_modes)
+    ]
+    exploratory_records = [
+        record for record in records
+        if not _is_dft_formal_pareto_record(record, release_template_ids, legal_precision_modes)
+    ]
+    covered_release_template_ids = {
+        str(record["parameters"].get("template_family"))
+        for record in formal_pareto_records
+    }
+    exploratory_in_formal = [
+        record["candidate_id"]
+        for record in formal_pareto_records
+        if not record.get("policy_metadata", {}).get("release_queue_eligible")
+        or not record.get("policy_metadata", {}).get("legal_precision_mode")
+    ]
+    missing_release_templates = sorted(release_template_ids - covered_release_template_ids)
+    status = "passed" if not missing_release_templates and not exploratory_in_formal else "blocked"
+    return {
+        "schema_version": "dse.dft.step2.hierarchical_funnel_search_report.v1",
+        "status": status,
+        "workload_suite_id": workload_suite_id,
+        "policy_name": policy.policy_name,
+        "funnel_stage_order": list(HIERARCHICAL_FUNNEL_STAGES),
+        "template_families": template_families,
+        "required_release_template_family_ids": list(DFT_REQUIRED_HARDWARE_TEMPLATE_FAMILY_IDS),
+        "exploratory_template_family_ids": list(DFT_EXPLORATORY_TEMPLATE_FAMILY_IDS),
+        "candidate_generation": {
+            "budget": budget,
+            "records_emitted": len(records),
+            "formal_pareto_record_count": len(formal_pareto_records),
+            "exploratory_record_count": len(exploratory_records),
+            "covered_release_template_family_ids": sorted(covered_release_template_ids),
+            "missing_release_template_family_ids": missing_release_templates,
+            "exploratory_candidate_ids_in_formal_pareto": exploratory_in_formal,
+        },
+        "wide_space_policy": {
+            "wide_space_allowed": True,
+            "wide_space_tier": "exploratory",
+            "wide_space_can_order_future_work": True,
+            "wide_space_can_enter_formal_pareto_without_release_gate": False,
+            "seed_sources": [
+                "literature_fpga_hbm_fft_designs",
+                "existing_fpga_hbm_noc_hls_designs",
+                "repo_genericaccel_and_systemc_seed_paths",
+            ],
+        },
+        "formal_pareto_records": formal_pareto_records,
+        "exploratory_records": exploratory_records,
+        "all_records": records,
+        "claim_boundary": (
+            "Step2 DFT hierarchical search/candidate-generation report only; "
+            "trusted Pareto and speedup require downstream golden, sim, synth, "
+            "Vivado/DC, Step4 adjudication, and Step5 reporting evidence."
+        ),
+    }
 
 
 @dataclass(frozen=True)
@@ -488,10 +912,16 @@ def dft_step2_policy_registry() -> Step2DomainPolicyRegistry:
 __all__ = [
     "DFT_DOMAIN_KEY",
     "DFT_ARCHITECTURE_FAMILIES",
+    "DFT_EXPLORATORY_TEMPLATE_FAMILY_IDS",
     "DFT_HARD_REVIEW_FLAGS",
+    "DFT_HARDWARE_TEMPLATE_FAMILIES",
+    "DFT_REQUIRED_HARDWARE_TEMPLATE_FAMILY_IDS",
     "DFT_SOFT_REVIEW_FLAGS",
     "DFT_STEP2_POLICY_ID",
     "DftStep2ReferencePolicy",
+    "build_dft_hierarchical_funnel_search_report",
+    "build_dft_hierarchical_search_problem",
+    "dft_hardware_template_families",
     "dft_step2_policy_registry",
     "register_dft_step2_policy",
 ]

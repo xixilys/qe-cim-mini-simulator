@@ -108,8 +108,8 @@ def build_domain_freeze(
     return payload
 
 
-def _candidate_id(assignments: Mapping[str, str]) -> str:
-    return "cand_" + stable_json_hash({"assignments": dict(sorted(assignments.items()))})[:16]
+def _candidate_id(assignments: Mapping[str, str], *, prefix: str = "cand_") -> str:
+    return prefix + stable_json_hash({"assignments": dict(sorted(assignments.items()))})[:16]
 
 
 def build_candidate_universe(
@@ -117,6 +117,7 @@ def build_candidate_universe(
     *,
     legality_fn: LegalityFn | None = None,
     score_fn: ScoreFn | None = None,
+    identity_axis_ids: Sequence[str] | None = None,
 ) -> tuple[Dict[str, Any], Dict[str, Any]]:
     axes = list(domain_freeze.get("axes", []) or [])
     axis_values: list[tuple[str, list[str]]] = []
@@ -126,24 +127,44 @@ def build_candidate_universe(
             raise ValueError(f"axis has no values in freeze: {axis.get('axis_id')}")
         axis_values.append((str(axis["axis_id"]), values))
 
+    all_axis_ids = [axis_id for axis_id, _ in axis_values]
+    identity_axis_id_list = list(identity_axis_ids) if identity_axis_ids is not None else list(all_axis_ids)
+    unknown_identity_axes = [axis_id for axis_id in identity_axis_id_list if axis_id not in all_axis_ids]
+    if unknown_identity_axes:
+        raise ValueError(f"identity_axis_ids contains unknown axes: {unknown_identity_axes}")
+    non_identity_axis_ids = [axis_id for axis_id in all_axis_ids if axis_id not in identity_axis_id_list]
+    evidence_policy_affects_identity = not non_identity_axis_ids
+
     candidates: list[Dict[str, Any]] = []
     legality_rows: list[Dict[str, Any]] = []
     for combination in itertools.product(*[values for _, values in axis_values]):
-        assignments = dict(zip([axis_id for axis_id, _ in axis_values], combination))
+        assignments = dict(zip(all_axis_ids, combination))
+        identity_assignments = {axis_id: assignments[axis_id] for axis_id in identity_axis_id_list}
+        non_identity_assignments = {axis_id: assignments[axis_id] for axis_id in non_identity_axis_ids}
         legal, reasons = legality_fn(assignments) if legality_fn else (True, [])
         score = dict(score_fn(assignments)) if score_fn else {}
         candidate_id = _candidate_id(assignments)
+        design_candidate_id = _candidate_id(identity_assignments, prefix="design_cand_")
         provenance = {
             "source": "frozen_release_domain_cartesian_product",
             "release_id": domain_freeze.get("release_id"),
             "domain_hash": domain_freeze.get("domain_hash"),
-            "axis_ids": [axis_id for axis_id, _ in axis_values],
-            "assignment_order": [axis_id for axis_id, _ in axis_values],
-            "candidate_id_rule": "cand_ + sha256(sorted assignment key/value pairs)[:16]",
+            "axis_ids": all_axis_ids,
+            "assignment_order": all_axis_ids,
+            "candidate_id_rule": "cand_ + sha256(sorted all-axis assignment key/value pairs)[:16]",
+            "candidate_id_kind": "evaluation_record_id" if non_identity_axis_ids else "design_candidate_id",
+            "design_candidate_id_rule": "design_cand_ + sha256(sorted identity-axis assignment key/value pairs)[:16]",
+            "identity_axis_ids": identity_axis_id_list,
+            "non_identity_axis_ids": non_identity_axis_ids,
+            "evidence_policy_affects_identity": evidence_policy_affects_identity,
         }
         candidate = {
             "candidate_id": candidate_id,
+            "candidate_id_kind": provenance["candidate_id_kind"],
+            "design_candidate_id": design_candidate_id,
             "assignments": assignments,
+            "identity_assignments": identity_assignments,
+            "non_identity_assignments": non_identity_assignments,
             "legal": bool(legal),
             "illegal_reasons": list(reasons),
             "screening": score,
@@ -153,28 +174,45 @@ def build_candidate_universe(
         candidates.append(candidate)
         legality_rows.append({
             "candidate_id": candidate["candidate_id"],
+            "candidate_id_kind": candidate["candidate_id_kind"],
+            "design_candidate_id": candidate["design_candidate_id"],
             "assignments": assignments,
+            "identity_assignments": identity_assignments,
+            "non_identity_assignments": non_identity_assignments,
             "legal": bool(legal),
             "reasons": list(reasons),
             "provenance": provenance,
         })
 
     legal_candidates = [candidate for candidate in candidates if candidate["legal"]]
+    legal_design_candidate_ids = sorted({candidate["design_candidate_id"] for candidate in legal_candidates})
     manifest: Dict[str, Any] = {
         "schema_version": CANDIDATE_UNIVERSE_SCHEMA,
         "release_id": domain_freeze.get("release_id"),
         "domain_hash": domain_freeze.get("domain_hash"),
-        "axis_ids": [axis_id for axis_id, _ in axis_values],
+        "axis_ids": all_axis_ids,
         "axis_count": len(axis_values),
+        "identity_axis_ids": identity_axis_id_list,
+        "identity_axis_count": len(identity_axis_id_list),
+        "non_identity_axis_ids": non_identity_axis_ids,
+        "non_identity_axis_count": len(non_identity_axis_ids),
         "cartesian_count": len(candidates),
         "legal_candidate_count": len(legal_candidates),
         "illegal_candidate_count": len(candidates) - len(legal_candidates),
+        "unique_design_candidate_count": len({candidate["design_candidate_id"] for candidate in candidates}),
+        "legal_design_candidate_count": len(legal_design_candidate_ids),
         "candidates": candidates,
         "legal_candidate_ids": [candidate["candidate_id"] for candidate in legal_candidates],
+        "legal_design_candidate_ids": legal_design_candidate_ids,
         "candidate_id_provenance": {
             "source": "frozen_release_domain_cartesian_product",
-            "candidate_id_rule": "cand_ + sha256(sorted assignment key/value pairs)[:16]",
-            "assignment_order": [axis_id for axis_id, _ in axis_values],
+            "candidate_id_rule": "cand_ + sha256(sorted all-axis assignment key/value pairs)[:16]",
+            "candidate_id_kind": "evaluation_record_id" if non_identity_axis_ids else "design_candidate_id",
+            "design_candidate_id_rule": "design_cand_ + sha256(sorted identity-axis assignment key/value pairs)[:16]",
+            "assignment_order": all_axis_ids,
+            "identity_axis_ids": identity_axis_id_list,
+            "non_identity_axis_ids": non_identity_axis_ids,
+            "evidence_policy_affects_identity": evidence_policy_affects_identity,
             "domain_hash": domain_freeze.get("domain_hash"),
         },
         "claim_boundary": "candidate universe over frozen finite domain; evidence closure tracked separately",
@@ -193,6 +231,8 @@ def build_candidate_universe(
             "cartesian_count": len(candidates),
             "legal_candidate_count": len(legal_candidates),
             "illegal_candidate_count": len(candidates) - len(legal_candidates),
+            "unique_design_candidate_count": manifest["unique_design_candidate_count"],
+            "legal_design_candidate_count": manifest["legal_design_candidate_count"],
             "all_candidates_classified": len(legality_rows) == len(candidates),
         },
     }

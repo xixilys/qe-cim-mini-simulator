@@ -29,6 +29,107 @@ LOW_FIDELITY_ARTIFACT_PATHS = list(LOW_FIDELITY_ARTIFACT_KEYS.values())
 EVIDENCE_ALIASES = {
     "simulator_consistency_check.json": ["numerical_validation.json"],
 }
+DFT_LEDGER_ARTIFACT_NAMES = {
+    "per_candidate_evidence_ledger.json",
+    "release_report.json",
+    "claim_validation_report.json",
+    "blocker_report.json",
+    "prompt_to_artifact_checklist.json",
+    "eda_all_candidate_evidence.json",
+}
+DFT_FULL_SCF_HYBRID_ARTIFACT_NAMES = {
+    "full_scf_accelerator_descriptor.json",
+    "full_scf_runtime_schedule.json",
+    "full_scf_data_residency_plan.json",
+    "full_scf_correctness_report.json",
+    "full_scf_ppa_summary.json",
+}
+DFT_TRIAL_LEDGER_ARTIFACT_NAMES = {
+    "dft_trial_state_ledger.json",
+    "dft_trial_transition_report.json",
+    "dft_trial_artifact_refs.json",
+    "dft_trial_state_ledger_validation.json",
+}
+DFT_CANDIDATE_BINDING_ARTIFACT_NAMES = {
+    "dft_candidate_binding_map.json",
+    "dft_candidate_binding_map_validation.json",
+    "dft_candidate_binding_map_status.json",
+}
+DFT_HARDWARE_COMPLETION_WORKPLAN_ARTIFACT_NAMES = {
+    "dft_hardware_completion_workplan.json",
+    "dft_hardware_completion_workplan_validation.json",
+    "dft_hardware_completion_workplan_status.json",
+}
+DFT_HARDWARE_CLOSURE_SHARD_ARTIFACT_NAMES = {
+    "dft_hardware_closure_shards.json",
+    "dft_hardware_closure_shards_validation.json",
+    "dft_hardware_closure_shards_status.json",
+}
+DFT_HARDWARE_CLOSURE_PACKET_ARTIFACT_NAMES = {
+    "dft_hardware_closure_packet_index.json",
+    "dft_hardware_closure_packet_index_validation.json",
+    "dft_hardware_closure_packet_index_status.json",
+}
+DFT_HARDWARE_CLOSURE_CANDIDATE_BUNDLE_ARTIFACT_NAMES = {
+    "dft_hardware_closure_candidate_bundle_index.json",
+    "dft_hardware_closure_candidate_bundle_index_validation.json",
+    "dft_hardware_closure_candidate_bundle_status.json",
+}
+DFT_HARDWARE_CLOSURE_UNIT_PROVENANCE_ARTIFACT_NAMES = {
+    "dft_hardware_closure_unit_provenance_index.json",
+    "dft_hardware_closure_unit_provenance_validation.json",
+    "dft_hardware_closure_unit_provenance_status.json",
+}
+DFT_HARDWARE_CLOSURE_SOURCE_FLOW_PLAN_ARTIFACT_NAMES = {
+    "dft_hardware_closure_source_flow_plan.json",
+    "dft_hardware_closure_source_flow_plan_validation.json",
+    "dft_hardware_closure_source_flow_plan_status.json",
+}
+DFT_HARDWARE_CLOSURE_RAW_STAGE_MATERIALIZATION_ARTIFACT_NAMES = {
+    "dft_hardware_closure_raw_stage_materialization.json",
+    "dft_hardware_closure_raw_stage_materialization_validation.json",
+    "dft_hardware_closure_raw_stage_materialization_status.json",
+}
+DFT_HARDWARE_CLOSURE_RAW_TRANSCRIPT_REGISTRATION_ARTIFACT_NAMES = {
+    "dft_hardware_closure_raw_transcript_registration.json",
+    "dft_hardware_closure_raw_transcript_registration_validation.json",
+    "dft_hardware_closure_raw_transcript_registration_status.json",
+}
+DFT_HARDWARE_CLOSURE_EVIDENCE_INTAKE_ARTIFACT_NAMES = {
+    "dft_hardware_closure_evidence_intake.json",
+    "dft_hardware_closure_evidence_intake_validation.json",
+    "dft_hardware_closure_evidence_intake_status.json",
+}
+DFT_HARDWARE_CLOSURE_ADJUDICATION_ARTIFACT_NAMES = {
+    "dft_hardware_closure_adjudication.json",
+    "dft_hardware_closure_adjudication_validation.json",
+    "dft_hardware_closure_adjudication_status.json",
+}
+DFT_HARDWARE_CLOSURE_PARSED_EVIDENCE_ARTIFACT_NAMES = {
+    "dft_hardware_closure_parsed_evidence_manifest.json",
+    "dft_hardware_closure_parsed_evidence_manifest_validation.json",
+    "dft_hardware_closure_parsed_evidence_manifest_status.json",
+}
+DFT_HARDWARE_CLOSURE_PARSER_RUN_ARTIFACT_NAMES = {
+    "dft_hardware_closure_parser_run.json",
+    "dft_hardware_closure_parser_run_validation.json",
+    "dft_hardware_closure_parser_run_status.json",
+}
+DFT_HARDWARE_CLOSURE_GATE_ADJUDICATION_ARTIFACT_NAMES = {
+    "dft_hardware_closure_gate_adjudication.json",
+    "dft_hardware_closure_gate_adjudication_validation.json",
+    "dft_hardware_closure_gate_adjudication_status.json",
+}
+DFT_HARDWARE_CLOSURE_RELEASE_GATE_ARTIFACT_NAMES = {
+    "dft_hardware_closure_release_gate.json",
+    "dft_hardware_closure_release_gate_validation.json",
+    "dft_hardware_closure_release_gate_status.json",
+}
+DFT_L4_GOAL_BINDING_ARTIFACT_NAMES = {
+    "dft_l4_goal_binding.json",
+    "dft_l4_goal_binding_validation.json",
+    "dft_l4_goal_binding_status.json",
+}
 
 CLAIM_REQUIREMENTS: Dict[str, Dict[str, Any]] = {
     "best_architecture": {
@@ -218,6 +319,25 @@ def build_evidence_index(
     else:
         paths = [str(path) for path in artifact_paths]
     paths.extend(LOW_FIDELITY_ARTIFACT_PATHS)
+    paths.extend(f"dft_ledger/{name}" for name in DFT_LEDGER_ARTIFACT_NAMES)
+    paths.extend(DFT_FULL_SCF_HYBRID_ARTIFACT_NAMES)
+    paths.extend(DFT_TRIAL_LEDGER_ARTIFACT_NAMES)
+    paths.extend(DFT_CANDIDATE_BINDING_ARTIFACT_NAMES)
+    paths.extend(DFT_HARDWARE_COMPLETION_WORKPLAN_ARTIFACT_NAMES)
+    paths.extend(DFT_HARDWARE_CLOSURE_SHARD_ARTIFACT_NAMES)
+    paths.extend(DFT_HARDWARE_CLOSURE_PACKET_ARTIFACT_NAMES)
+    paths.extend(DFT_HARDWARE_CLOSURE_CANDIDATE_BUNDLE_ARTIFACT_NAMES)
+    paths.extend(DFT_HARDWARE_CLOSURE_UNIT_PROVENANCE_ARTIFACT_NAMES)
+    paths.extend(DFT_HARDWARE_CLOSURE_SOURCE_FLOW_PLAN_ARTIFACT_NAMES)
+    paths.extend(DFT_HARDWARE_CLOSURE_RAW_STAGE_MATERIALIZATION_ARTIFACT_NAMES)
+    paths.extend(DFT_HARDWARE_CLOSURE_RAW_TRANSCRIPT_REGISTRATION_ARTIFACT_NAMES)
+    paths.extend(DFT_HARDWARE_CLOSURE_EVIDENCE_INTAKE_ARTIFACT_NAMES)
+    paths.extend(DFT_HARDWARE_CLOSURE_ADJUDICATION_ARTIFACT_NAMES)
+    paths.extend(DFT_HARDWARE_CLOSURE_PARSED_EVIDENCE_ARTIFACT_NAMES)
+    paths.extend(DFT_HARDWARE_CLOSURE_PARSER_RUN_ARTIFACT_NAMES)
+    paths.extend(DFT_HARDWARE_CLOSURE_GATE_ADJUDICATION_ARTIFACT_NAMES)
+    paths.extend(DFT_HARDWARE_CLOSURE_RELEASE_GATE_ARTIFACT_NAMES)
+    paths.extend(DFT_L4_GOAL_BINDING_ARTIFACT_NAMES)
 
     index: Dict[str, Dict[str, Any]] = {}
     for rel in sorted(set(paths)):
@@ -641,13 +761,39 @@ def _first_metric(metrics: Mapping[str, Any], breakdown: Mapping[str, Any], *nam
     return None
 
 
-def _full_scf_evaluated_hybrid_costs(simulation_result: Mapping[str, Any]) -> Dict[str, Any]:
+def _full_scf_evaluated_hybrid_costs(
+    simulation_result: Mapping[str, Any],
+    *,
+    descriptor: Optional[Mapping[str, Any]] = None,
+    ppa_summary: Optional[Mapping[str, Any]] = None,
+) -> Dict[str, Any]:
     metrics = simulation_result.get("metrics", {}) if isinstance(simulation_result.get("metrics", {}), Mapping) else {}
     breakdown = simulation_result.get("full_scf_cost_breakdown", simulation_result.get("scf_cost_breakdown", {}))
     breakdown = breakdown if isinstance(breakdown, Mapping) else {}
+    descriptor = descriptor if isinstance(descriptor, Mapping) else {}
+    ppa_summary = ppa_summary if isinstance(ppa_summary, Mapping) else {}
+    descriptor_cost_model = descriptor.get("cost_model", {})
+    descriptor_cost_model = descriptor_cost_model if isinstance(descriptor_cost_model, Mapping) else {}
+    ppa_cost_model = ppa_summary.get("cost_model", {})
+    ppa_cost_model = ppa_cost_model if isinstance(ppa_cost_model, Mapping) else {}
+    cost_model = descriptor_cost_model or ppa_cost_model
     sync = _first_metric(metrics, breakdown, "synchronization_cost_ms", "sync_time_ms")
     queue = _first_metric(metrics, breakdown, "queueing_cost_ms", "queue_wait_ms")
     layout = _first_metric(metrics, breakdown, "layout_cost_ms", "layout_transform_ms")
+    overhead_costs_s = cost_model.get("runtime_overhead_costs_s", {})
+    overhead_costs_s = overhead_costs_s if isinstance(overhead_costs_s, Mapping) else {}
+    if sync is None:
+        sync = _numeric_or_none(overhead_costs_s.get("synchronization"))
+        if sync is not None:
+            sync = float(sync) * 1000.0
+    if queue is None:
+        queue = _numeric_or_none(overhead_costs_s.get("queueing"))
+        if queue is not None:
+            queue = float(queue) * 1000.0
+    if layout is None:
+        layout = _numeric_or_none(overhead_costs_s.get("layout"))
+        if layout is not None:
+            layout = float(layout) * 1000.0
     aggregate = _first_metric(
         metrics,
         breakdown,
@@ -656,27 +802,80 @@ def _full_scf_evaluated_hybrid_costs(simulation_result: Mapping[str, Any]) -> Di
     )
     if aggregate is None:
         aggregate = sum(value for value in (sync, queue, layout) if value is not None)
+    host_bound_cost_s = _numeric_or_none(cost_model.get("host_bound_cost_s"))
+    runtime_overhead_cost_s = _numeric_or_none(cost_model.get("runtime_overhead_cost_s"))
+    accelerated_kernel_cost_s = _numeric_or_none(cost_model.get("accelerated_kernel_cost_s"))
+    evaluated_hybrid_scf_time_s = _numeric_or_none(cost_model.get("evaluated_hybrid_scf_time_s"))
+    baseline_scf_time_s = _numeric_or_none(cost_model.get("baseline_scf_time_s"))
+    descriptor_speedup = _numeric_or_none(cost_model.get("end_to_end_scf_evaluated_speedup"))
+    baseline_accelerated_kernel_cost_s = _numeric_or_none(
+        cost_model.get("baseline_accelerated_kernel_cost_s")
+        or cost_model.get("baseline_kernel_cost_s")
+    )
+    if (
+        baseline_accelerated_kernel_cost_s is None
+        and baseline_scf_time_s is not None
+        and host_bound_cost_s is not None
+    ):
+        residual = float(baseline_scf_time_s) - float(host_bound_cost_s)
+        baseline_accelerated_kernel_cost_s = residual if residual > 0 else None
+    kernel_speedup = _first_metric(metrics, breakdown, "kernel_speedup", "kernel_speedup_x")
+    kernel_speedup_source = "simulation_metrics" if kernel_speedup is not None else None
+    if (
+        kernel_speedup is None
+        and baseline_accelerated_kernel_cost_s is not None
+        and accelerated_kernel_cost_s is not None
+        and float(accelerated_kernel_cost_s) > 0
+    ):
+        kernel_speedup = float(baseline_accelerated_kernel_cost_s) / float(accelerated_kernel_cost_s)
+        kernel_speedup_source = "derived_from_baseline_scf_minus_host_bound_cost"
+    transfer_ms = _first_metric(metrics, breakdown, "transfer_cost_ms", "dma_time_ms")
+    if transfer_ms is None:
+        transfer_s = _numeric_or_none(overhead_costs_s.get("transfer"))
+        if transfer_s is not None:
+            transfer_ms = float(transfer_s) * 1000.0
+    host_ms = _first_metric(
+        metrics,
+        breakdown,
+        "host_bound_compute_cost_ms",
+        "host_time_ms",
+        "host_overhead_ms",
+    )
+    if host_ms is None and host_bound_cost_s is not None:
+        host_ms = float(host_bound_cost_s) * 1000.0
+
     payload = {
-        "kernel_speedup": _first_metric(metrics, breakdown, "kernel_speedup", "kernel_speedup_x"),
+        "kernel_speedup": kernel_speedup,
+        "kernel_speedup_source": kernel_speedup_source,
         "end_to_end_scf_speedup": _first_metric(
             metrics,
             breakdown,
             "end_to_end_scf_speedup",
             "full_scf_speedup",
             "scf_speedup",
-        ),
-        "host_bound_compute_cost_ms": _first_metric(
-            metrics,
-            breakdown,
-            "host_bound_compute_cost_ms",
-            "host_time_ms",
-            "host_overhead_ms",
-        ),
-        "transfer_cost_ms": _first_metric(metrics, breakdown, "transfer_cost_ms", "dma_time_ms"),
+        ) or descriptor_speedup,
+        "host_bound_compute_cost_ms": host_ms,
+        "transfer_cost_ms": transfer_ms,
         "synchronization_cost_ms": sync,
         "queueing_cost_ms": queue,
         "layout_cost_ms": layout,
         "synchronization_queueing_layout_cost_ms": aggregate,
+        "accelerated_kernel_cost_s": accelerated_kernel_cost_s,
+        "baseline_accelerated_kernel_cost_s": baseline_accelerated_kernel_cost_s,
+        "host_bound_compute_cost_s": host_bound_cost_s,
+        "runtime_overhead_cost_s": runtime_overhead_cost_s,
+        "evaluated_hybrid_scf_time_s": evaluated_hybrid_scf_time_s,
+        "baseline_scf_time_s": baseline_scf_time_s,
+        "host_bound_phase_costs_s": cost_model.get("host_bound_phase_costs_s", {}),
+        "accelerated_kernel_costs_s": cost_model.get("accelerated_kernel_costs_s", {}),
+        "runtime_overhead_costs_s": cost_model.get("runtime_overhead_costs_s", {}),
+        "source": (
+            "full_scf_accelerator_descriptor.json"
+            if descriptor_cost_model
+            else "full_scf_ppa_summary.json"
+            if ppa_cost_model
+            else "simulation_result.json"
+        ),
         "claim_boundary": (
             "Full-SCF evaluated hybrid reporting separates kernel speedup from end-to-end SCF speedup "
             "and keeps host, transfer, synchronization, queueing, and layout costs visible."
@@ -691,6 +890,130 @@ def _full_scf_evaluated_hybrid_costs(simulation_result: Mapping[str, Any]) -> Di
     ]
     payload["required_cost_fields_present"] = all(payload.get(field) is not None for field in required)
     return payload
+
+
+def _dft_full_scf_hybrid_section(
+    run_dir: Path,
+    evidence_index: Mapping[str, Mapping[str, Any]],
+    ledger_bundle: Optional[Mapping[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Summarize optional DFT full-SCF evaluated-hybrid artifacts."""
+
+    artifact_refs: Dict[str, Dict[str, Any]] = {}
+    loaded: Dict[str, Dict[str, Any]] = {}
+    artifact_source = "direct_step5_artifacts"
+    for name in sorted(DFT_FULL_SCF_HYBRID_ARTIFACT_NAMES):
+        rel_path, entry = _find_indexed_artifact(evidence_index, name)
+        artifact_refs[name] = {
+            "path": rel_path,
+            "exists": bool(entry.get("exists", False)),
+            "sha256": entry.get("sha256"),
+            "source": artifact_source if rel_path else None,
+        }
+        if rel_path:
+            loaded[name] = _load_json(run_dir / rel_path)
+
+    ledger_bundle = ledger_bundle if isinstance(ledger_bundle, Mapping) else {}
+    ledger_artifact_refs = (
+        ledger_bundle.get("artifact_refs", {})
+        if isinstance(ledger_bundle.get("artifact_refs", {}), Mapping)
+        else {}
+    )
+    ledger_present = bool(ledger_bundle.get("present", False))
+    if not loaded and ledger_present:
+        artifact_source = "dft_evidence_ledger.full_scf_hybrid_bundle"
+        for name in sorted(DFT_FULL_SCF_HYBRID_ARTIFACT_NAMES):
+            ref = ledger_artifact_refs.get(name, {})
+            ref = ref if isinstance(ref, Mapping) else {}
+            path_text = ref.get("path")
+            resolved = _resolve_ledger_artifact_path(
+                run_dir,
+                path_text,
+                bundle_dir=ledger_bundle.get("bundle_dir"),
+            )
+            exists = bool(resolved and resolved.exists() and resolved.is_file())
+            artifact_refs[name] = {
+                "path": str(path_text) if path_text else None,
+                "resolved_path": str(resolved) if resolved else None,
+                "exists": exists,
+                "sha256": ref.get("sha256", ref.get("hash")),
+                "source": artifact_source if path_text else None,
+            }
+            if exists and resolved is not None:
+                loaded[name] = _load_json(resolved)
+
+    descriptor = loaded.get("full_scf_accelerator_descriptor.json", {})
+    runtime_schedule = loaded.get("full_scf_runtime_schedule.json", {})
+    data_residency = loaded.get("full_scf_data_residency_plan.json", {})
+    correctness = loaded.get("full_scf_correctness_report.json", {})
+    ppa_summary = loaded.get("full_scf_ppa_summary.json", {})
+    validation = descriptor.get("validation", {}) if isinstance(descriptor.get("validation", {}), Mapping) else {}
+    required_present = all(
+        artifact_refs[name]["exists"]
+        for name in DFT_FULL_SCF_HYBRID_ARTIFACT_NAMES
+    )
+    present = bool(loaded) or ledger_present
+    return {
+        "schema_version": "dse.final_report.dft_full_scf_evaluated_hybrid.v1",
+        "present": present,
+        "status": (
+            "artifact_bundle_present"
+            if required_present and artifact_source == "direct_step5_artifacts"
+            else "ledger_artifact_bundle_present"
+            if required_present and artifact_source == "dft_evidence_ledger.full_scf_hybrid_bundle"
+            else "partial_artifact_bundle_present"
+            if present
+            else "not_present"
+        ),
+        "source": artifact_source if present else None,
+        "required_artifacts_present": required_present,
+        "artifacts": artifact_refs,
+        "descriptor_id": descriptor.get("descriptor_id") or ledger_bundle.get("descriptor_id"),
+        "candidate_id": descriptor.get("candidate_id") or runtime_schedule.get("candidate_id") or ledger_bundle.get("candidate_id"),
+        "campaign_id": descriptor.get("campaign_id") or runtime_schedule.get("campaign_id") or ledger_bundle.get("campaign_id"),
+        "workload_run_id": descriptor.get("workload_run_id") or runtime_schedule.get("workload_run_id") or ledger_bundle.get("workload_run_id"),
+        "trial_id": descriptor.get("trial_id") or runtime_schedule.get("trial_id") or ledger_bundle.get("trial_id"),
+        "prototype_boundary": descriptor.get("prototype_boundary") or ledger_bundle.get("prototype_boundary"),
+        "device_residency": descriptor.get("device_residency") or data_residency.get("device_residency") or ledger_bundle.get("device_residency"),
+        "completion_claim": False,
+        "descriptor_validation_passed": bool(
+            validation.get("passed", ledger_bundle.get("descriptor_validation_passed", False))
+        ),
+        "correctness_status": correctness.get("status"),
+        "numerical_correctness_claim_eligible": bool(
+            correctness.get(
+                "numerical_correctness_claim_eligible",
+                ledger_bundle.get("numerical_correctness_claim_eligible", False),
+            )
+        ),
+        "ppa_status": ppa_summary.get("status"),
+        "ppa_claim_eligible": bool(
+            ppa_summary.get("ppa_claim_eligible", ledger_bundle.get("ppa_claim_eligible", False))
+        ),
+        "schedule_summary": {
+            "accelerated_kernel_ids": runtime_schedule.get(
+                "accelerated_kernel_ids",
+                descriptor.get("hardware_acceleration_claim_scope", []),
+            ),
+            "host_bound_phase_ids": runtime_schedule.get(
+                "host_bound_phase_ids",
+                descriptor.get("host_bound_phase_scope", []),
+            ),
+            "runtime_overhead_ids": runtime_schedule.get(
+                "runtime_overhead_ids",
+                descriptor.get("runtime_overhead_scope", []),
+            ),
+            "host_orchestrated": bool(runtime_schedule.get("host_orchestrated", False)),
+        },
+        "cost_model": descriptor.get("cost_model", ppa_summary.get("cost_model", {})),
+        "trusted_final_claim": False,
+        "claim_boundary": (
+            "DFT full-SCF evaluated-hybrid artifacts are Step5-visible accounting "
+            "and schedule evidence.  They do not prove full-SCF device residency, "
+            "numerical correctness, or FPGA/ASIC PPA closure unless the separate "
+            "hard gates pass."
+        ),
+    }
 
 
 def _phase_summary(run_dir: Path) -> Dict[str, Any]:
@@ -893,6 +1216,1582 @@ def _low_fidelity_claims(low_fidelity: Mapping[str, Any]) -> List[Dict[str, Any]
     return claims
 
 
+def _find_indexed_artifact(
+    evidence_index: Mapping[str, Mapping[str, Any]],
+    artifact_name: str,
+) -> tuple[str | None, Mapping[str, Any]]:
+    direct = evidence_index.get(artifact_name)
+    if direct and direct.get("exists"):
+        return artifact_name, direct
+    for rel_path, entry in evidence_index.items():
+        if Path(rel_path).name == artifact_name and entry.get("exists"):
+            return rel_path, entry
+    return None, {}
+
+
+def _resolve_ledger_artifact_path(
+    run_dir: Path,
+    path_text: Any,
+    *,
+    bundle_dir: Any = None,
+) -> Path | None:
+    """Resolve artifact refs emitted by an optional ledger-attached bundle.
+
+    Ledger refs are often absolute paths because the bundle may live outside the
+    Step5 run directory.  Some future ledgers may store paths relative to the
+    Step5 directory or relative to their recorded bundle directory, so keep the
+    resolver permissive while the claim logic remains fail-closed on existence.
+    """
+
+    if not path_text:
+        return None
+    raw = Path(str(path_text))
+    candidates: list[Path] = []
+    if raw.is_absolute():
+        candidates.append(raw)
+    else:
+        candidates.append(run_dir / raw)
+        # Historical ledger builders may record paths relative to the current
+        # repository/process working directory rather than the Step5 run dir.
+        candidates.append(raw)
+        bundle_raw = Path(str(bundle_dir)) if bundle_dir else None
+        if bundle_raw:
+            bundle_base = bundle_raw if bundle_raw.is_absolute() else run_dir / bundle_raw
+            candidates.append(bundle_base / raw)
+            if raw.name:
+                candidates.append(bundle_base / raw.name)
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate.resolve()
+    return candidates[0] if candidates else None
+
+
+def _dft_evidence_ledger_section(
+    run_dir: Path,
+    evidence_index: Mapping[str, Mapping[str, Any]],
+) -> Dict[str, Any]:
+    """Summarize optional DFT ledger artifacts for Step5 without upgrading claims."""
+
+    artifact_refs: Dict[str, Dict[str, Any]] = {}
+    loaded: Dict[str, Dict[str, Any]] = {}
+    for name in sorted(DFT_LEDGER_ARTIFACT_NAMES):
+        rel_path, entry = _find_indexed_artifact(evidence_index, name)
+        artifact_refs[name] = {
+            "path": rel_path,
+            "exists": bool(entry.get("exists", False)),
+            "sha256": entry.get("sha256"),
+        }
+        if rel_path:
+            loaded[name] = _load_json(run_dir / rel_path)
+
+    present = bool(loaded)
+    ledger = loaded.get("per_candidate_evidence_ledger.json", {})
+    release_report = loaded.get("release_report.json", {})
+    eda = loaded.get("eda_all_candidate_evidence.json", {})
+    release_claim_gate = (
+        ledger.get("release_claim_gate")
+        if isinstance(ledger.get("release_claim_gate"), Mapping)
+        else release_report.get("release_claim_gate")
+        if isinstance(release_report.get("release_claim_gate"), Mapping)
+        else {}
+    )
+    full_scf_hybrid_bundle = (
+        ledger.get("full_scf_hybrid_bundle")
+        if isinstance(ledger.get("full_scf_hybrid_bundle"), Mapping)
+        else release_report.get("full_scf_hybrid_bundle")
+        if isinstance(release_report.get("full_scf_hybrid_bundle"), Mapping)
+        else {}
+    )
+    deliverable_complete = bool(
+        release_claim_gate.get(
+            "deliverable_complete",
+            release_report.get("deliverable_complete", False),
+        )
+    )
+    ic_eda_availability_ref = (
+        eda.get("ic_eda_tool_availability")
+        if isinstance(eda.get("ic_eda_tool_availability"), Mapping)
+        else {}
+    )
+    ic_eda_availability_path = _resolve_ledger_artifact_path(
+        run_dir,
+        ic_eda_availability_ref.get("path"),
+    )
+    ic_eda_availability = (
+        _load_json(ic_eda_availability_path)
+        if ic_eda_availability_path and ic_eda_availability_path.exists()
+        else {}
+    )
+    raw_availability_completion_claim = ic_eda_availability.get("completion_claim")
+    availability_payload_claim_boundary_valid = bool(
+        ic_eda_availability
+        and raw_availability_completion_claim == "availability_only_not_kernel_ppa"
+        and ic_eda_availability.get("kernel_ppa_evidence") is not True
+        and ic_eda_availability.get("hardware_completion_eligible") is not True
+        and ic_eda_availability.get("deliverable_complete") is not True
+    )
+    eda_summary = {
+        "artifact": artifact_refs.get("eda_all_candidate_evidence.json", {}),
+        "status": eda.get("status"),
+        "tool_availability_status": eda.get("tool_availability_status"),
+        "major_kernel_matrix_status": eda.get("major_kernel_matrix_status"),
+        "major_kernel_matrix_trusted": bool(eda.get("major_kernel_matrix_trusted", False)),
+        "attached_hardware_evidence_structurally_ready": bool(
+            eda.get("attached_hardware_evidence_structurally_ready", False)
+        ),
+        "hardware_completion_eligible": bool(eda.get("hardware_completion_eligible", False)),
+        "ic_eda_tool_availability": eda.get("ic_eda_tool_availability"),
+        "ic_eda_tool_availability_resolved_path": (
+            str(ic_eda_availability_path) if ic_eda_availability_path else None
+        ),
+        "ic_eda_tool_availability_payload_status": ic_eda_availability.get("status"),
+        "ic_eda_tool_availability_all_required_tools_available": ic_eda_availability.get(
+            "all_required_tools_available"
+        ),
+        "ic_eda_tool_availability_required_tools": ic_eda_availability.get("required_tools", []),
+        "ic_eda_tool_availability_tool_count": len(ic_eda_availability.get("tool_rows", []) or [])
+        if isinstance(ic_eda_availability.get("tool_rows", []), list)
+        else 0,
+        "ic_eda_tool_availability_raw_attempt_count": len(ic_eda_availability.get("raw_attempts", []) or [])
+        if isinstance(ic_eda_availability.get("raw_attempts", []), list)
+        else 0,
+        "ic_eda_tool_availability_artifact_role": ic_eda_availability.get("artifact_role"),
+        "ic_eda_tool_availability_raw_completion_claim": raw_availability_completion_claim,
+        "ic_eda_tool_availability_completion_claim": (
+            "availability_only_not_kernel_ppa" if ic_eda_availability else None
+        ),
+        "ic_eda_tool_availability_payload_claim_boundary_valid": (
+            availability_payload_claim_boundary_valid
+        ),
+        "ic_eda_tool_availability_payload_claim_upgrade_detected": bool(
+            ic_eda_availability and not availability_payload_claim_boundary_valid
+        ),
+        "ic_eda_tool_availability_kernel_ppa_evidence": False,
+        "ic_eda_tool_availability_hardware_completion_eligible": False,
+        "ic_eda_tool_availability_deliverable_complete": False,
+        "dft_hardware_evidence_matrix": eda.get("dft_hardware_evidence_matrix"),
+        "claim_boundary": (
+            (eda.get("hardware_evidence_attachment_policy", {}) or {}).get("claim_boundary")
+            if isinstance(eda.get("hardware_evidence_attachment_policy", {}), Mapping)
+            else eda.get("claim_boundary")
+        ),
+    }
+    return {
+        "schema_version": "dse.final_report.dft_evidence_ledger.v1",
+        "present": present,
+        "status": (
+            "audit_artifacts_present"
+            if present
+            else "not_present"
+        ),
+        "artifacts": artifact_refs,
+        "release_id": ledger.get("release_id", release_report.get("release_id")),
+        "legal_candidate_count": ledger.get(
+            "legal_candidate_count",
+            release_report.get("legal_candidate_count"),
+        ),
+        "release_claim_gate": release_claim_gate,
+        "full_scf_hybrid_bundle": full_scf_hybrid_bundle,
+        "deliverable_complete": deliverable_complete,
+        "eda_summary": eda_summary,
+        "trusted_final_claim": False,
+        "completion_claim": "blocked" if present else "not_applicable",
+        "claim_boundary": (
+            "DFT ledger artifacts are cited as Step5 audit/reporting evidence only. "
+            "They do not upgrade Step4 trust, do not prove full-SCF completion, "
+            "and do not create FPGA/ASIC PPA claims unless the per-kernel and "
+            "per-candidate hard evidence gates pass."
+        ),
+    }
+
+
+def _dft_trial_state_ledger_section(
+    run_dir: Path,
+    evidence_index: Mapping[str, Mapping[str, Any]],
+) -> Dict[str, Any]:
+    """Summarize optional DFT trial-state ledger artifacts without claim upgrade."""
+
+    artifact_refs: Dict[str, Dict[str, Any]] = {}
+    loaded: Dict[str, Dict[str, Any]] = {}
+    for name in sorted(DFT_TRIAL_LEDGER_ARTIFACT_NAMES):
+        rel_path, entry = _find_indexed_artifact(evidence_index, name)
+        artifact_refs[name] = {
+            "path": rel_path,
+            "exists": bool(entry.get("exists", False)),
+            "sha256": entry.get("sha256"),
+        }
+        if rel_path:
+            loaded[name] = _load_json(run_dir / rel_path)
+
+    ledger = loaded.get("dft_trial_state_ledger.json", {})
+    validation = loaded.get("dft_trial_state_ledger_validation.json", {})
+    present = bool(ledger)
+    blocked_trial_count = int(ledger.get("blocked_trial_count", 0) or 0) if ledger else 0
+    rejected_trial_count = int(ledger.get("rejected_trial_count", 0) or 0) if ledger else 0
+    deliverable_complete = bool(ledger.get("deliverable_complete", False))
+    completion_eligible = bool(ledger.get("completion_eligible", False))
+    status = (
+        "fail_closed_trial_ledger_present"
+        if present and validation.get("valid", True) is True
+        else "invalid_trial_ledger"
+        if present
+        else "not_present"
+    )
+    return {
+        "schema_version": "dse.final_report.dft_trial_state_ledger.v1",
+        "present": present,
+        "status": status,
+        "artifacts": artifact_refs,
+        "campaign_id": ledger.get("campaign_id"),
+        "workload_run_id": ledger.get("workload_run_id"),
+        "candidate_count": ledger.get("candidate_count"),
+        "release_trial_count": ledger.get("release_trial_count"),
+        "exploratory_trial_count": ledger.get("exploratory_trial_count"),
+        "blocked_trial_count": blocked_trial_count,
+        "rejected_trial_count": rejected_trial_count,
+        "selected_trial_count": ledger.get("selected_trial_count"),
+        "completion_eligible": completion_eligible,
+        "deliverable_complete": deliverable_complete,
+        "validation": {
+            "present": bool(validation),
+            "valid": validation.get("valid"),
+            "error_count": len(validation.get("errors", []) or []) if validation else None,
+            "warning_count": len(validation.get("warnings", []) or []) if validation else None,
+        },
+        "blocked_reasons": list(ledger.get("blocked_reasons", []) or []) if isinstance(ledger.get("blocked_reasons", []), list) else [],
+        "next_actions": list(ledger.get("next_actions", []) or []) if isinstance(ledger.get("next_actions", []), list) else [],
+        "trusted_final_claim": False,
+        "completion_claim": (
+            "blocked" if present and not deliverable_complete else "deliverable_complete" if deliverable_complete else "not_applicable"
+        ),
+        "claim_boundary": (
+            "DFT trial-state ledger artifacts are Campaign/WorkloadRun/Trial "
+            "orchestration and audit evidence only. They prove ID propagation, "
+            "legal transitions, artifact refs, and blockers, but do not upgrade "
+            "Step4 trust, numerical correctness, FPGA/ASIC PPA, trusted Pareto, "
+            "or deliverable completion."
+        ),
+    }
+
+
+def _dft_candidate_binding_map_section(
+    run_dir: Path,
+    evidence_index: Mapping[str, Mapping[str, Any]],
+) -> Dict[str, Any]:
+    """Summarize optional DFT candidate-binding artifacts without claim upgrade."""
+
+    artifact_refs: Dict[str, Dict[str, Any]] = {}
+    loaded: Dict[str, Dict[str, Any]] = {}
+    for name in sorted(DFT_CANDIDATE_BINDING_ARTIFACT_NAMES):
+        rel_path, entry = _find_indexed_artifact(evidence_index, name)
+        artifact_refs[name] = {
+            "path": rel_path,
+            "exists": bool(entry.get("exists", False)),
+            "sha256": entry.get("sha256"),
+        }
+        if rel_path:
+            loaded[name] = _load_json(run_dir / rel_path)
+
+    binding_map = loaded.get("dft_candidate_binding_map.json", {})
+    validation = loaded.get("dft_candidate_binding_map_validation.json", {})
+    present = bool(binding_map)
+    deliverable_complete = bool(binding_map.get("deliverable_complete", False))
+    completion_eligible = bool(binding_map.get("completion_eligible", False))
+    validation_valid = validation.get("valid")
+    status = (
+        "fail_closed_candidate_binding_map_present"
+        if present and validation_valid is True and not deliverable_complete and not completion_eligible
+        else "invalid_candidate_binding_map"
+        if present
+        else "not_present"
+    )
+    return {
+        "schema_version": "dse.final_report.dft_candidate_binding_map.v1",
+        "present": present,
+        "status": status,
+        "artifacts": artifact_refs,
+        "workload_suite_id": binding_map.get("workload_suite_id"),
+        "release_id": binding_map.get("release_id"),
+        "search_candidate_count": binding_map.get("search_candidate_count"),
+        "legal_release_candidate_count": binding_map.get("legal_release_candidate_count"),
+        "bound_candidate_count": binding_map.get("bound_candidate_count"),
+        "unmatched_candidate_count": binding_map.get("unmatched_candidate_count"),
+        "unique_release_candidate_count": binding_map.get("unique_release_candidate_count"),
+        "duplicate_release_candidate_ids": list(binding_map.get("duplicate_release_candidate_ids", []) or [])
+        if isinstance(binding_map.get("duplicate_release_candidate_ids", []), list)
+        else [],
+        "completion_eligible": completion_eligible,
+        "deliverable_complete": deliverable_complete,
+        "validation": {
+            "present": bool(validation),
+            "valid": validation_valid,
+            "error_count": len(validation.get("errors", []) or []) if validation else None,
+        },
+        "trusted_final_claim": False,
+        "completion_claim": (
+            "blocked" if present and not deliverable_complete else "deliverable_complete" if deliverable_complete else "not_applicable"
+        ),
+        "claim_boundary": (
+            binding_map.get("claim_boundary")
+            or "DFT candidate binding maps are heuristic ID-provenance metadata only; they cannot upgrade numerical correctness, trusted Pareto, FPGA/ASIC PPA, or deliverable completion."
+        ),
+    }
+
+
+def _dft_hardware_completion_workplan_section(
+    run_dir: Path,
+    evidence_index: Mapping[str, Mapping[str, Any]],
+) -> Dict[str, Any]:
+    """Summarize optional DFT hardware-completion workplan artifacts."""
+
+    artifact_refs: Dict[str, Dict[str, Any]] = {}
+    loaded: Dict[str, Dict[str, Any]] = {}
+    for name in sorted(DFT_HARDWARE_COMPLETION_WORKPLAN_ARTIFACT_NAMES):
+        rel_path, entry = _find_indexed_artifact(evidence_index, name)
+        artifact_refs[name] = {
+            "path": rel_path,
+            "exists": bool(entry.get("exists", False)),
+            "sha256": entry.get("sha256"),
+        }
+        if rel_path:
+            loaded[name] = _load_json(run_dir / rel_path)
+
+    workplan = loaded.get("dft_hardware_completion_workplan.json", {})
+    validation = loaded.get("dft_hardware_completion_workplan_validation.json", {})
+    present = bool(workplan)
+    hardware_completion_eligible = bool(workplan.get("hardware_completion_eligible", False))
+    deliverable_complete = bool(workplan.get("deliverable_complete", False))
+    validation_valid = validation.get("valid")
+    status = (
+        "fail_closed_hardware_completion_workplan_present"
+        if present and validation_valid is True and not hardware_completion_eligible and not deliverable_complete
+        else "invalid_hardware_completion_workplan"
+        if present
+        else "not_present"
+    )
+    return {
+        "schema_version": "dse.final_report.dft_hardware_completion_workplan.v1",
+        "present": present,
+        "status": status,
+        "artifacts": artifact_refs,
+        "release_id": workplan.get("release_id"),
+        "candidate_count": workplan.get("candidate_count"),
+        "major_kernel_count": workplan.get("major_kernel_count"),
+        "required_stage_ids": list(workplan.get("required_stage_ids", []) or [])
+        if isinstance(workplan.get("required_stage_ids", []), list)
+        else [],
+        "required_work_item_count": workplan.get("required_work_item_count"),
+        "blocked_work_item_count": workplan.get("blocked_work_item_count"),
+        "candidate_specific_evidence_present_count": workplan.get("candidate_specific_evidence_present_count"),
+        "shared_microkernel_smoke_stage_present_count": workplan.get("shared_microkernel_smoke_stage_present_count"),
+        "blocker_ids": list(workplan.get("blocker_ids", []) or []) if isinstance(workplan.get("blocker_ids", []), list) else [],
+        "hardware_completion_eligible": hardware_completion_eligible,
+        "deliverable_complete": deliverable_complete,
+        "validation": {
+            "present": bool(validation),
+            "valid": validation_valid,
+            "error_count": len(validation.get("errors", []) or []) if validation else None,
+        },
+        "trusted_final_claim": False,
+        "completion_claim": (
+            "blocked" if present and not deliverable_complete else "deliverable_complete" if deliverable_complete else "not_applicable"
+        ),
+        "claim_boundary": (
+            workplan.get("claim_boundary")
+            or "DFT hardware completion workplans are execution scheduling evidence only; they cannot upgrade numerical correctness, trusted Pareto, FPGA/ASIC PPA, or deliverable completion."
+        ),
+    }
+
+
+def _dft_hardware_closure_shards_section(
+    run_dir: Path,
+    evidence_index: Mapping[str, Mapping[str, Any]],
+) -> Dict[str, Any]:
+    """Summarize optional DFT hardware closure shard queue artifacts."""
+
+    artifact_refs: Dict[str, Dict[str, Any]] = {}
+    loaded: Dict[str, Dict[str, Any]] = {}
+    for name in sorted(DFT_HARDWARE_CLOSURE_SHARD_ARTIFACT_NAMES):
+        rel_path, entry = _find_indexed_artifact(evidence_index, name)
+        artifact_refs[name] = {
+            "path": rel_path,
+            "exists": bool(entry.get("exists", False)),
+            "sha256": entry.get("sha256"),
+        }
+        if rel_path:
+            loaded[name] = _load_json(run_dir / rel_path)
+
+    shards = loaded.get("dft_hardware_closure_shards.json", {})
+    validation = loaded.get("dft_hardware_closure_shards_validation.json", {})
+    present = bool(shards)
+    hardware_completion_eligible = bool(shards.get("hardware_completion_eligible", False))
+    deliverable_complete = bool(shards.get("deliverable_complete", False))
+    validation_valid = validation.get("valid")
+    status = (
+        "fail_closed_hardware_closure_shards_present"
+        if present and validation_valid is True and not hardware_completion_eligible and not deliverable_complete
+        else "invalid_hardware_closure_shards"
+        if present
+        else "not_present"
+    )
+    return {
+        "schema_version": "dse.final_report.dft_hardware_closure_shards.v1",
+        "present": present,
+        "status": status,
+        "artifacts": artifact_refs,
+        "release_id": shards.get("release_id"),
+        "candidate_count": shards.get("candidate_count"),
+        "major_kernel_count": shards.get("major_kernel_count"),
+        "unit_count": shards.get("unit_count"),
+        "shard_count": shards.get("shard_count"),
+        "max_units_per_shard": shards.get("max_units_per_shard"),
+        "work_item_count": shards.get("work_item_count"),
+        "blocked_work_item_count": shards.get("blocked_work_item_count"),
+        "candidate_specific_bundle_count": shards.get("candidate_specific_bundle_count"),
+        "candidate_specific_evidence_present_count": shards.get("candidate_specific_evidence_present_count"),
+        "hardware_completion_eligible": hardware_completion_eligible,
+        "deliverable_complete": deliverable_complete,
+        "validation": {
+            "present": bool(validation),
+            "valid": validation_valid,
+            "error_count": len(validation.get("errors", []) or []) if validation else None,
+        },
+        "trusted_final_claim": False,
+        "completion_claim": (
+            "blocked" if present and not deliverable_complete else "deliverable_complete" if deliverable_complete else "not_applicable"
+        ),
+        "claim_boundary": (
+            shards.get("claim_boundary")
+            or "DFT hardware closure shards are parallel queue metadata only; they cannot upgrade numerical correctness, trusted Pareto, FPGA/ASIC PPA, or deliverable completion."
+        ),
+    }
+
+
+def _dft_hardware_closure_packets_section(
+    run_dir: Path,
+    evidence_index: Mapping[str, Mapping[str, Any]],
+) -> Dict[str, Any]:
+    """Summarize optional DFT per-shard closure packet/runbook artifacts."""
+
+    artifact_refs: Dict[str, Dict[str, Any]] = {}
+    loaded: Dict[str, Dict[str, Any]] = {}
+    for name in sorted(DFT_HARDWARE_CLOSURE_PACKET_ARTIFACT_NAMES):
+        rel_path, entry = _find_indexed_artifact(evidence_index, name)
+        artifact_refs[name] = {
+            "path": rel_path,
+            "exists": bool(entry.get("exists", False)),
+            "sha256": entry.get("sha256"),
+        }
+        if rel_path:
+            loaded[name] = _load_json(run_dir / rel_path)
+
+    packets = loaded.get("dft_hardware_closure_packet_index.json", {})
+    validation = loaded.get("dft_hardware_closure_packet_index_validation.json", {})
+    present = bool(packets)
+    hardware_completion_eligible = bool(packets.get("hardware_completion_eligible", False))
+    deliverable_complete = bool(packets.get("deliverable_complete", False))
+    validation_valid = validation.get("valid")
+    packet_summaries = packets.get("packets", []) if isinstance(packets.get("packets", []), list) else []
+    command_template_ids = sorted({
+        str(template_id)
+        for packet in packet_summaries
+        if isinstance(packet, Mapping)
+        for template_id in (packet.get("command_template_ids", []) or [])
+    })
+    packet_artifact_refs = [
+        {
+            "packet_id": packet.get("packet_id"),
+            "shard_id": packet.get("shard_id"),
+            "packet_json": packet.get("packet_json"),
+            "runbook_md": packet.get("runbook_md"),
+        }
+        for packet in packet_summaries
+        if isinstance(packet, Mapping)
+    ]
+    status = (
+        "fail_closed_hardware_closure_packets_present"
+        if present and validation_valid is True and not hardware_completion_eligible and not deliverable_complete
+        else "invalid_hardware_closure_packets"
+        if present
+        else "not_present"
+    )
+    return {
+        "schema_version": "dse.final_report.dft_hardware_closure_packets.v1",
+        "present": present,
+        "status": status,
+        "artifacts": artifact_refs,
+        "release_id": packets.get("release_id"),
+        "candidate_count": packets.get("candidate_count"),
+        "major_kernel_count": packets.get("major_kernel_count"),
+        "shard_count": packets.get("shard_count"),
+        "packet_count": packets.get("packet_count"),
+        "unit_count": packets.get("unit_count"),
+        "work_item_count": packets.get("work_item_count"),
+        "blocked_work_item_count": packets.get("blocked_work_item_count"),
+        "expected_evidence_file_count": packets.get("expected_evidence_file_count"),
+        "command_template_ids": command_template_ids,
+        "packet_artifact_refs": packet_artifact_refs,
+        "candidate_specific_bundle_count": packets.get("candidate_specific_bundle_count"),
+        "candidate_specific_evidence_present_count": packets.get("candidate_specific_evidence_present_count"),
+        "hardware_completion_eligible": hardware_completion_eligible,
+        "deliverable_complete": deliverable_complete,
+        "validation": {
+            "present": bool(validation),
+            "valid": validation_valid,
+            "error_count": len(validation.get("errors", []) or []) if validation else None,
+        },
+        "trusted_final_claim": False,
+        "completion_claim": (
+            "invalid_claim_upgrade" if present and deliverable_complete else "blocked" if present else "not_applicable"
+        ),
+        "claim_boundary": (
+            packets.get("claim_boundary")
+            or "DFT hardware closure packets and runbooks are execution instructions only; they cannot upgrade numerical correctness, trusted Pareto, FPGA/ASIC PPA, or deliverable completion."
+        ),
+    }
+
+
+def _dft_hardware_closure_candidate_bundles_section(
+    run_dir: Path,
+    evidence_index: Mapping[str, Mapping[str, Any]],
+) -> Dict[str, Any]:
+    """Summarize optional per-candidate closure bundle-template artifacts."""
+
+    artifact_refs: Dict[str, Dict[str, Any]] = {}
+    loaded: Dict[str, Dict[str, Any]] = {}
+    for name in sorted(DFT_HARDWARE_CLOSURE_CANDIDATE_BUNDLE_ARTIFACT_NAMES):
+        rel_path, entry = _find_indexed_artifact(evidence_index, name)
+        artifact_refs[name] = {
+            "path": rel_path,
+            "exists": bool(entry.get("exists", False)),
+            "sha256": entry.get("sha256"),
+        }
+        if rel_path:
+            loaded[name] = _load_json(run_dir / rel_path)
+
+    bundles = loaded.get("dft_hardware_closure_candidate_bundle_index.json", {})
+    validation = loaded.get("dft_hardware_closure_candidate_bundle_index_validation.json", {})
+    status_artifact = loaded.get("dft_hardware_closure_candidate_bundle_status.json", {})
+    present = bool(bundles)
+    hardware_completion_eligible = bool(bundles.get("hardware_completion_eligible", False))
+    deliverable_complete = bool(bundles.get("deliverable_complete", False))
+    validation_valid = validation.get("valid")
+    bundle_rows = bundles.get("bundles", []) if isinstance(bundles.get("bundles", []), list) else []
+    status = (
+        "fail_closed_candidate_bundle_templates_present"
+        if present
+        and validation_valid is True
+        and not hardware_completion_eligible
+        and not deliverable_complete
+        and int(bundles.get("raw_evidence_file_count", 0) or 0) == 0
+        else "invalid_candidate_bundle_templates"
+        if present
+        else "not_present"
+    )
+    return {
+        "schema_version": "dse.final_report.dft_hardware_closure_candidate_bundles.v1",
+        "present": present,
+        "status": status,
+        "artifacts": artifact_refs,
+        "release_id": bundles.get("release_id"),
+        "candidate_count": bundles.get("candidate_count"),
+        "major_kernel_count": bundles.get("major_kernel_count"),
+        "bundle_count": bundles.get("bundle_count"),
+        "expected_evidence_file_count": bundles.get("expected_evidence_file_count"),
+        "raw_evidence_file_count": bundles.get("raw_evidence_file_count"),
+        "bundle_template_only": present and int(bundles.get("raw_evidence_file_count", 0) or 0) == 0,
+        "bundle_status": status_artifact.get("status"),
+        "bundle_refs": [
+            {
+                "unit_id": row.get("unit_id"),
+                "candidate_id": row.get("candidate_id"),
+                "kernel_id": row.get("kernel_id"),
+                "candidate_bundle": row.get("candidate_bundle"),
+                "expected_evidence_file_count": row.get("expected_evidence_file_count"),
+                "raw_evidence_file_count": row.get("raw_evidence_file_count"),
+                "status": row.get("status"),
+            }
+            for row in bundle_rows[:20]
+            if isinstance(row, Mapping)
+        ],
+        "bundle_ref_count": len(bundle_rows),
+        "hardware_completion_eligible": hardware_completion_eligible,
+        "deliverable_complete": deliverable_complete,
+        "validation": {
+            "present": bool(validation),
+            "valid": validation_valid,
+            "error_count": len(validation.get("errors", []) or []) if validation else None,
+        },
+        "trusted_final_claim": False,
+        "completion_claim": (
+            "invalid_claim_upgrade" if present and deliverable_complete else "blocked" if present else "not_applicable"
+        ),
+        "claim_boundary": (
+            bundles.get("claim_boundary")
+            or "DFT hardware closure candidate bundles are execution metadata and expected-file contracts only; they do not contain raw VCS/HLS, Vivado, DC, timing, area, PPA, or completion evidence."
+        ),
+    }
+
+
+def _dft_hardware_closure_unit_provenance_section(
+    run_dir: Path,
+    evidence_index: Mapping[str, Mapping[str, Any]],
+) -> Dict[str, Any]:
+    """Summarize optional candidate/kernel-scoped unit provenance staging."""
+
+    artifact_refs: Dict[str, Dict[str, Any]] = {}
+    loaded: Dict[str, Dict[str, Any]] = {}
+    for name in sorted(DFT_HARDWARE_CLOSURE_UNIT_PROVENANCE_ARTIFACT_NAMES):
+        rel_path, entry = _find_indexed_artifact(evidence_index, name)
+        artifact_refs[name] = {
+            "path": rel_path,
+            "exists": bool(entry.get("exists", False)),
+            "sha256": entry.get("sha256"),
+        }
+        if rel_path:
+            loaded[name] = _load_json(run_dir / rel_path)
+
+    provenance = loaded.get("dft_hardware_closure_unit_provenance_index.json", {})
+    validation = loaded.get("dft_hardware_closure_unit_provenance_validation.json", {})
+    status_artifact = loaded.get("dft_hardware_closure_unit_provenance_status.json", {})
+    present = bool(provenance)
+    hardware_completion_eligible = bool(provenance.get("hardware_completion_eligible", False))
+    deliverable_complete = bool(provenance.get("deliverable_complete", False))
+    validation_valid = validation.get("valid")
+    raw_stage_count = int(provenance.get("raw_stage_evidence_file_count", 0) or 0)
+    unit_rows = provenance.get("units", []) if isinstance(provenance.get("units", []), list) else []
+    status = (
+        "fail_closed_hardware_closure_unit_provenance_present"
+        if present
+        and validation_valid is True
+        and raw_stage_count == 0
+        and not hardware_completion_eligible
+        and not deliverable_complete
+        else "invalid_hardware_closure_unit_provenance"
+        if present
+        else "not_present"
+    )
+    return {
+        "schema_version": "dse.final_report.dft_hardware_closure_unit_provenance.v1",
+        "present": present,
+        "status": status,
+        "artifacts": artifact_refs,
+        "release_id": provenance.get("release_id"),
+        "candidate_count": provenance.get("candidate_count"),
+        "major_kernel_count": provenance.get("major_kernel_count"),
+        "staged_unit_count": provenance.get("staged_unit_count"),
+        "global_provenance_file_count": provenance.get("global_provenance_file_count"),
+        "raw_stage_evidence_file_count": provenance.get("raw_stage_evidence_file_count"),
+        "error_count": provenance.get("error_count"),
+        "unit_provenance_status": status_artifact.get("status"),
+        "unit_refs": [
+            {
+                "unit_id": row.get("unit_id"),
+                "candidate_id": row.get("candidate_id"),
+                "kernel_id": row.get("kernel_id"),
+                "global_provenance_file_count": row.get("global_provenance_file_count"),
+                "raw_stage_evidence_file_count": row.get("raw_stage_evidence_file_count"),
+                "status": row.get("status"),
+            }
+            for row in unit_rows[:20]
+            if isinstance(row, Mapping)
+        ],
+        "unit_ref_count": len(unit_rows),
+        "hardware_completion_eligible": hardware_completion_eligible,
+        "deliverable_complete": deliverable_complete,
+        "validation": {
+            "present": bool(validation),
+            "valid": validation_valid,
+            "error_count": len(validation.get("errors", []) or []) if validation else None,
+        },
+        "trusted_final_claim": False,
+        "completion_claim": (
+            "invalid_claim_upgrade" if present and deliverable_complete else "blocked" if present else "not_applicable"
+        ),
+        "claim_boundary": (
+            provenance.get("claim_boundary")
+            or "DFT hardware closure unit provenance is candidate/kernel metadata staging only; it contains no raw VCS/HLS, Vivado, DC, timing, area, PPA, Pareto, or deliverable-completion evidence."
+        ),
+    }
+
+
+def _dft_hardware_closure_source_flow_plan_section(
+    run_dir: Path,
+    evidence_index: Mapping[str, Mapping[str, Any]],
+) -> Dict[str, Any]:
+    """Summarize optional candidate/kernel source-flow planning artifacts."""
+
+    artifact_refs: Dict[str, Dict[str, Any]] = {}
+    loaded: Dict[str, Dict[str, Any]] = {}
+    for name in sorted(DFT_HARDWARE_CLOSURE_SOURCE_FLOW_PLAN_ARTIFACT_NAMES):
+        rel_path, entry = _find_indexed_artifact(evidence_index, name)
+        artifact_refs[name] = {
+            "path": rel_path,
+            "exists": bool(entry.get("exists", False)),
+            "sha256": entry.get("sha256"),
+        }
+        if rel_path:
+            loaded[name] = _load_json(run_dir / rel_path)
+
+    plan = loaded.get("dft_hardware_closure_source_flow_plan.json", {})
+    validation = loaded.get("dft_hardware_closure_source_flow_plan_validation.json", {})
+    status_artifact = loaded.get("dft_hardware_closure_source_flow_plan_status.json", {})
+    present = bool(plan)
+    hardware_completion_eligible = bool(plan.get("hardware_completion_eligible", False))
+    deliverable_complete = bool(plan.get("deliverable_complete", False))
+    validation_valid = validation.get("valid")
+    passed_stage_count = int(plan.get("passed_stage_count", 0) or 0)
+    adjudication_result = plan.get("adjudication_result")
+    unit_rows = plan.get("units", []) if isinstance(plan.get("units", []), list) else []
+    source_artifacts = (
+        plan.get("source_artifacts", {})
+        if isinstance(plan.get("source_artifacts", {}), Mapping)
+        else {}
+    )
+    source_flow_map_ref = (
+        source_artifacts.get("source_flow_map", {})
+        if isinstance(source_artifacts.get("source_flow_map", {}), Mapping)
+        else {}
+    )
+    source_flow_errors = [
+        dict(item)
+        for item in (plan.get("errors", []) or [])[:20]
+        if isinstance(item, Mapping)
+    ]
+    source_flow_blocker_counts: Dict[str, int] = {}
+    materialization_eligible_unit_count = 0
+    for row in unit_rows:
+        if not isinstance(row, Mapping):
+            continue
+        if row.get("materialization_eligible") is True and row.get("source_flow_present") is True:
+            materialization_eligible_unit_count += 1
+        for blocker_id in row.get("blocker_ids", []) or []:
+            key = str(blocker_id)
+            source_flow_blocker_counts[key] = source_flow_blocker_counts.get(key, 0) + 1
+    status = (
+        "fail_closed_hardware_closure_source_flow_plan_present"
+        if present
+        and validation_valid is True
+        and adjudication_result == "not_adjudicated_by_source_flow_plan"
+        and passed_stage_count == 0
+        and not hardware_completion_eligible
+        and not deliverable_complete
+        else "invalid_hardware_closure_source_flow_plan"
+        if present
+        else "not_present"
+    )
+    return {
+        "schema_version": "dse.final_report.dft_hardware_closure_source_flow_plan.v1",
+        "present": present,
+        "status": status,
+        "artifacts": artifact_refs,
+        "release_id": plan.get("release_id"),
+        "candidate_count": plan.get("candidate_count"),
+        "major_kernel_count": plan.get("major_kernel_count"),
+        "unit_count": plan.get("unit_count"),
+        "planned_unit_count": plan.get("planned_unit_count"),
+        "materialization_eligible_unit_count": materialization_eligible_unit_count,
+        "source_flow_present_count": plan.get("source_flow_present_count"),
+        "source_flow_missing_count": plan.get("source_flow_missing_count"),
+        "blocked_unit_count": plan.get("blocked_unit_count"),
+        "source_flow_map": {
+            "path": source_flow_map_ref.get("path"),
+            "exists": source_flow_map_ref.get("exists"),
+            "sha256": source_flow_map_ref.get("sha256"),
+        },
+        "error_count": plan.get("error_count"),
+        "errors": source_flow_errors,
+        "blocker_id_counts": dict(sorted(source_flow_blocker_counts.items())),
+        "blocked_wrong_candidate_reuse_count": plan.get("blocked_wrong_candidate_reuse_count"),
+        "blocked_wrong_kernel_reuse_count": plan.get("blocked_wrong_kernel_reuse_count"),
+        "blocked_reused_source_flow_count": plan.get("blocked_reused_source_flow_count"),
+        "blocked_invalid_manifest_count": plan.get("blocked_invalid_manifest_count"),
+        "provenance_mismatch_count": plan.get("provenance_mismatch_count"),
+        "adjudication_result": adjudication_result,
+        "passed_stage_count": passed_stage_count,
+        "source_flow_plan_status": status_artifact.get("status"),
+        "unit_refs": [
+            {
+                "unit_id": row.get("unit_id"),
+                "candidate_id": row.get("candidate_id"),
+                "kernel_id": row.get("kernel_id"),
+                "status": row.get("status"),
+                "source_flow_present": row.get("source_flow_present"),
+                "materialization_eligible": row.get("materialization_eligible"),
+                "source_flow_dir": row.get("source_flow_dir"),
+                "blocker_ids": row.get("blocker_ids", []),
+            }
+            for row in unit_rows[:20]
+            if isinstance(row, Mapping)
+        ],
+        "unit_ref_count": len(unit_rows),
+        "hardware_completion_eligible": hardware_completion_eligible,
+        "deliverable_complete": deliverable_complete,
+        "validation": {
+            "present": bool(validation),
+            "valid": validation_valid,
+            "error_count": len(validation.get("errors", []) or []) if validation else None,
+        },
+        "trusted_final_claim": False,
+        "completion_claim": (
+            "invalid_claim_upgrade" if present and deliverable_complete else "blocked" if present else "not_applicable"
+        ),
+        "claim_boundary": (
+            plan.get("claim_boundary")
+            or "DFT hardware closure source-flow planning binds source-flow directories to exact candidate/kernel units only; it does not copy raw evidence, parse results, adjudicate hard gates, or upgrade PPA/Pareto/completion claims."
+        ),
+    }
+
+
+def _dft_hardware_closure_raw_transcript_registration_section(
+    run_dir: Path,
+    evidence_index: Mapping[str, Mapping[str, Any]],
+) -> Dict[str, Any]:
+    """Summarize optional raw-transcript registration artifacts."""
+
+    artifact_refs: Dict[str, Dict[str, Any]] = {}
+    loaded: Dict[str, Dict[str, Any]] = {}
+    for name in sorted(DFT_HARDWARE_CLOSURE_RAW_TRANSCRIPT_REGISTRATION_ARTIFACT_NAMES):
+        rel_path, entry = _find_indexed_artifact(evidence_index, name)
+        artifact_refs[name] = {
+            "path": rel_path,
+            "exists": bool(entry.get("exists", False)),
+            "sha256": entry.get("sha256"),
+        }
+        if rel_path:
+            loaded[name] = _load_json(run_dir / rel_path)
+
+    registration = loaded.get("dft_hardware_closure_raw_transcript_registration.json", {})
+    validation = loaded.get("dft_hardware_closure_raw_transcript_registration_validation.json", {})
+    status_artifact = loaded.get("dft_hardware_closure_raw_transcript_registration_status.json", {})
+    present = bool(registration)
+    hardware_completion_eligible = bool(registration.get("hardware_completion_eligible", False))
+    deliverable_complete = bool(registration.get("deliverable_complete", False))
+    validation_valid = validation.get("valid")
+    passed_stage_count = int(registration.get("passed_stage_count", 0) or 0)
+    adjudication_result = registration.get("adjudication_result")
+    unit_rows = registration.get("units", []) if isinstance(registration.get("units", []), list) else []
+    status = (
+        "fail_closed_hardware_closure_raw_transcript_registration_present"
+        if present
+        and validation_valid is True
+        and adjudication_result == "not_adjudicated_by_raw_transcript_registration"
+        and passed_stage_count == 0
+        and not hardware_completion_eligible
+        and not deliverable_complete
+        else "invalid_hardware_closure_raw_transcript_registration"
+        if present
+        else "not_present"
+    )
+    return {
+        "schema_version": "dse.final_report.dft_hardware_closure_raw_transcript_registration.v1",
+        "present": present,
+        "status": status,
+        "artifacts": artifact_refs,
+        "release_id": registration.get("release_id"),
+        "candidate_count": registration.get("candidate_count"),
+        "major_kernel_count": registration.get("major_kernel_count"),
+        "unit_count": registration.get("unit_count"),
+        "registered_unit_count": registration.get("registered_unit_count"),
+        "blocked_unit_count": registration.get("blocked_unit_count"),
+        "registered_raw_stage_evidence_file_count": registration.get(
+            "registered_raw_stage_evidence_file_count"
+        ),
+        "present_raw_stage_evidence_file_count": registration.get("present_raw_stage_evidence_file_count"),
+        "missing_raw_stage_evidence_file_count": registration.get("missing_raw_stage_evidence_file_count"),
+        "invalid_raw_stage_evidence_file_count": registration.get("invalid_raw_stage_evidence_file_count"),
+        "adjudication_result": adjudication_result,
+        "passed_stage_count": passed_stage_count,
+        "registration_status": status_artifact.get("status"),
+        "unit_refs": [
+            {
+                "unit_id": row.get("unit_id"),
+                "candidate_id": row.get("candidate_id"),
+                "kernel_id": row.get("kernel_id"),
+                "status": row.get("status"),
+                "registered_raw_stage_evidence_file_count": row.get(
+                    "registered_raw_stage_evidence_file_count"
+                ),
+                "present_raw_stage_evidence_file_count": row.get("present_raw_stage_evidence_file_count"),
+                "missing_raw_stage_evidence_file_count": row.get("missing_raw_stage_evidence_file_count"),
+                "invalid_raw_stage_evidence_file_count": row.get("invalid_raw_stage_evidence_file_count"),
+            }
+            for row in unit_rows[:20]
+            if isinstance(row, Mapping)
+        ],
+        "unit_ref_count": len(unit_rows),
+        "hardware_completion_eligible": hardware_completion_eligible,
+        "deliverable_complete": deliverable_complete,
+        "validation": {
+            "present": bool(validation),
+            "valid": validation_valid,
+            "error_count": len(validation.get("errors", []) or []) if validation else None,
+        },
+        "trusted_final_claim": False,
+        "completion_claim": (
+            "invalid_claim_upgrade" if present and deliverable_complete else "blocked" if present else "not_applicable"
+        ),
+        "claim_boundary": (
+            registration.get("claim_boundary")
+            or "DFT hardware closure raw transcript registration records SHA-256 refs for already-present candidate-specific raw files only; it cannot create evidence, parse results, pass hard gates, or upgrade PPA/Pareto/completion claims."
+        ),
+    }
+
+
+def _dft_hardware_closure_raw_stage_materialization_section(
+    run_dir: Path,
+    evidence_index: Mapping[str, Mapping[str, Any]],
+) -> Dict[str, Any]:
+    """Summarize optional raw-stage materialization artifacts."""
+
+    artifact_refs: Dict[str, Dict[str, Any]] = {}
+    loaded: Dict[str, Dict[str, Any]] = {}
+    for name in sorted(DFT_HARDWARE_CLOSURE_RAW_STAGE_MATERIALIZATION_ARTIFACT_NAMES):
+        rel_path, entry = _find_indexed_artifact(evidence_index, name)
+        artifact_refs[name] = {
+            "path": rel_path,
+            "exists": bool(entry.get("exists", False)),
+            "sha256": entry.get("sha256"),
+        }
+        if rel_path:
+            loaded[name] = _load_json(run_dir / rel_path)
+
+    materialization = loaded.get("dft_hardware_closure_raw_stage_materialization.json", {})
+    validation = loaded.get("dft_hardware_closure_raw_stage_materialization_validation.json", {})
+    status_artifact = loaded.get("dft_hardware_closure_raw_stage_materialization_status.json", {})
+    present = bool(materialization)
+    hardware_completion_eligible = bool(materialization.get("hardware_completion_eligible", False))
+    deliverable_complete = bool(materialization.get("deliverable_complete", False))
+    validation_valid = validation.get("valid")
+    passed_stage_count = int(materialization.get("passed_stage_count", 0) or 0)
+    adjudication_result = materialization.get("adjudication_result")
+    unit_rows = materialization.get("units", []) if isinstance(materialization.get("units", []), list) else []
+    materialization_blocker_ids = sorted(
+        {
+            str(item.get("blocker_id"))
+            for row in unit_rows
+            if isinstance(row, Mapping)
+            for item in row.get("missing_required_raw_stage_files", []) or []
+            if isinstance(item, Mapping) and item.get("blocker_id")
+        }
+    )
+    status = (
+        "fail_closed_hardware_closure_raw_stage_materialization_present"
+        if present
+        and validation_valid is True
+        and adjudication_result == "not_adjudicated_by_raw_stage_materialization"
+        and passed_stage_count == 0
+        and not hardware_completion_eligible
+        and not deliverable_complete
+        else "invalid_hardware_closure_raw_stage_materialization"
+        if present
+        else "not_present"
+    )
+    return {
+        "schema_version": "dse.final_report.dft_hardware_closure_raw_stage_materialization.v1",
+        "present": present,
+        "status": status,
+        "artifacts": artifact_refs,
+        "release_id": materialization.get("release_id"),
+        "candidate_count": materialization.get("candidate_count"),
+        "major_kernel_count": materialization.get("major_kernel_count"),
+        "unit_count": materialization.get("unit_count"),
+        "materialized_unit_count": materialization.get("materialized_unit_count"),
+        "materialized_file_count": materialization.get("materialized_file_count"),
+        "missing_required_raw_stage_file_count": materialization.get("missing_required_raw_stage_file_count"),
+        "materialization_blocker_ids": materialization_blocker_ids,
+        "blocked_unit_count": materialization.get("blocked_unit_count"),
+        "adjudication_result": adjudication_result,
+        "passed_stage_count": passed_stage_count,
+        "materialization_status": status_artifact.get("status"),
+        "unit_refs": [
+            {
+                "unit_id": row.get("unit_id"),
+                "candidate_id": row.get("candidate_id"),
+                "kernel_id": row.get("kernel_id"),
+                "status": row.get("status"),
+                "source_flow_dir": row.get("source_flow_dir"),
+                "materialized_file_count": row.get("materialized_file_count"),
+                "missing_required_raw_stage_file_count": row.get("missing_required_raw_stage_file_count"),
+                "blocker_count": row.get("blocker_count"),
+                "missing_required_raw_stage_files": [
+                    {
+                        "stage_id": item.get("stage_id"),
+                        "path": item.get("path"),
+                        "blocker_id": item.get("blocker_id"),
+                    }
+                    for item in (row.get("missing_required_raw_stage_files", []) or [])[:5]
+                    if isinstance(item, Mapping)
+                ],
+            }
+            for row in unit_rows[:20]
+            if isinstance(row, Mapping)
+        ],
+        "unit_ref_count": len(unit_rows),
+        "hardware_completion_eligible": hardware_completion_eligible,
+        "deliverable_complete": deliverable_complete,
+        "validation": {
+            "present": bool(validation),
+            "valid": validation_valid,
+            "error_count": len(validation.get("errors", []) or []) if validation else None,
+        },
+        "trusted_final_claim": False,
+        "completion_claim": (
+            "invalid_claim_upgrade" if present and deliverable_complete else "blocked" if present else "not_applicable"
+        ),
+        "claim_boundary": (
+            materialization.get("claim_boundary")
+            or "DFT hardware closure raw-stage materialization copies or wraps existing kernel-flow outputs into packet-expected filenames only; registration, parser, gate adjudication, release completion, and PPA claims remain separate."
+        ),
+    }
+
+
+def _dft_hardware_closure_evidence_intake_section(
+    run_dir: Path,
+    evidence_index: Mapping[str, Mapping[str, Any]],
+) -> Dict[str, Any]:
+    """Summarize optional DFT closure evidence intake artifacts."""
+
+    artifact_refs: Dict[str, Dict[str, Any]] = {}
+    loaded: Dict[str, Dict[str, Any]] = {}
+    for name in sorted(DFT_HARDWARE_CLOSURE_EVIDENCE_INTAKE_ARTIFACT_NAMES):
+        rel_path, entry = _find_indexed_artifact(evidence_index, name)
+        artifact_refs[name] = {
+            "path": rel_path,
+            "exists": bool(entry.get("exists", False)),
+            "sha256": entry.get("sha256"),
+        }
+        if rel_path:
+            loaded[name] = _load_json(run_dir / rel_path)
+
+    intake = loaded.get("dft_hardware_closure_evidence_intake.json", {})
+    validation = loaded.get("dft_hardware_closure_evidence_intake_validation.json", {})
+    present = bool(intake)
+    hardware_completion_eligible = bool(intake.get("hardware_completion_eligible", False))
+    deliverable_complete = bool(intake.get("deliverable_complete", False))
+    validation_valid = validation.get("valid")
+    status = (
+        "fail_closed_hardware_closure_evidence_intake_present"
+        if present and validation_valid is True and not hardware_completion_eligible and not deliverable_complete
+        else "invalid_hardware_closure_evidence_intake"
+        if present
+        else "not_present"
+    )
+    return {
+        "schema_version": "dse.final_report.dft_hardware_closure_evidence_intake.v1",
+        "present": present,
+        "status": status,
+        "artifacts": artifact_refs,
+        "release_id": intake.get("release_id"),
+        "candidate_count": intake.get("candidate_count"),
+        "major_kernel_count": intake.get("major_kernel_count"),
+        "packet_count": intake.get("packet_count"),
+        "unit_count": intake.get("unit_count"),
+        "expected_evidence_file_count": intake.get("expected_evidence_file_count"),
+        "present_evidence_file_count": intake.get("present_evidence_file_count"),
+        "missing_evidence_file_count": intake.get("missing_evidence_file_count"),
+        "candidate_bundle_count": intake.get("candidate_bundle_count"),
+        "adjudication_status": intake.get("adjudication_status"),
+        "hardware_completion_eligible": hardware_completion_eligible,
+        "deliverable_complete": deliverable_complete,
+        "validation": {
+            "present": bool(validation),
+            "valid": validation_valid,
+            "error_count": len(validation.get("errors", []) or []) if validation else None,
+        },
+        "trusted_final_claim": False,
+        "completion_claim": (
+            "blocked" if present and not deliverable_complete else "deliverable_complete" if deliverable_complete else "not_applicable"
+        ),
+        "claim_boundary": (
+            intake.get("claim_boundary")
+            or "DFT hardware closure evidence intake checks file presence only; it cannot upgrade numerical correctness, trusted Pareto, FPGA/ASIC PPA, or deliverable completion."
+        ),
+    }
+
+
+def _dft_hardware_closure_adjudication_section(
+    run_dir: Path,
+    evidence_index: Mapping[str, Mapping[str, Any]],
+) -> Dict[str, Any]:
+    """Summarize optional DFT hardware closure adjudication artifacts."""
+
+    artifact_refs: Dict[str, Dict[str, Any]] = {}
+    loaded: Dict[str, Dict[str, Any]] = {}
+    for name in sorted(DFT_HARDWARE_CLOSURE_ADJUDICATION_ARTIFACT_NAMES):
+        rel_path, entry = _find_indexed_artifact(evidence_index, name)
+        artifact_refs[name] = {
+            "path": rel_path,
+            "exists": bool(entry.get("exists", False)),
+            "sha256": entry.get("sha256"),
+        }
+        if rel_path:
+            loaded[name] = _load_json(run_dir / rel_path)
+
+    adjudication = loaded.get("dft_hardware_closure_adjudication.json", {})
+    validation = loaded.get("dft_hardware_closure_adjudication_validation.json", {})
+    present = bool(adjudication)
+    hardware_completion_eligible = bool(adjudication.get("hardware_completion_eligible", False))
+    deliverable_complete = bool(adjudication.get("deliverable_complete", False))
+    validation_valid = validation.get("valid")
+    status = (
+        "fail_closed_hardware_closure_adjudication_present"
+        if present and validation_valid is True and not hardware_completion_eligible and not deliverable_complete
+        else "invalid_hardware_closure_adjudication"
+        if present
+        else "not_present"
+    )
+    return {
+        "schema_version": "dse.final_report.dft_hardware_closure_adjudication.v1",
+        "present": present,
+        "status": status,
+        "artifacts": artifact_refs,
+        "release_id": adjudication.get("release_id"),
+        "candidate_count": adjudication.get("candidate_count"),
+        "major_kernel_count": adjudication.get("major_kernel_count"),
+        "packet_count": adjudication.get("packet_count"),
+        "unit_count": adjudication.get("unit_count"),
+        "stage_count": adjudication.get("stage_count"),
+        "passed_stage_count": adjudication.get("passed_stage_count"),
+        "blocked_stage_count": adjudication.get("blocked_stage_count"),
+        "files_present_unadjudicated_stage_count": adjudication.get("files_present_unadjudicated_stage_count"),
+        "expected_evidence_file_count": adjudication.get("expected_evidence_file_count"),
+        "present_evidence_file_count": adjudication.get("present_evidence_file_count"),
+        "missing_evidence_file_count": adjudication.get("missing_evidence_file_count"),
+        "candidate_bundle_count": adjudication.get("candidate_bundle_count"),
+        "adjudication_result": adjudication.get("adjudication_result"),
+        "hardware_completion_eligible": hardware_completion_eligible,
+        "deliverable_complete": deliverable_complete,
+        "validation": {
+            "present": bool(validation),
+            "valid": validation_valid,
+            "error_count": len(validation.get("errors", []) or []) if validation else None,
+        },
+        "trusted_final_claim": False,
+        "completion_claim": (
+            "invalid_claim_upgrade" if present and deliverable_complete else "blocked" if present else "not_applicable"
+        ),
+        "claim_boundary": (
+            adjudication.get("claim_boundary")
+            or "DFT hardware closure adjudication is a fail-closed stage ledger; it cannot upgrade numerical correctness, trusted Pareto, FPGA/ASIC PPA, or deliverable completion without parsed candidate-specific evidence."
+        ),
+    }
+
+
+def _dft_hardware_closure_parsed_evidence_section(
+    run_dir: Path,
+    evidence_index: Mapping[str, Mapping[str, Any]],
+) -> Dict[str, Any]:
+    """Summarize optional DFT closure parsed-evidence manifest artifacts."""
+
+    artifact_refs: Dict[str, Dict[str, Any]] = {}
+    loaded: Dict[str, Dict[str, Any]] = {}
+    for name in sorted(DFT_HARDWARE_CLOSURE_PARSED_EVIDENCE_ARTIFACT_NAMES):
+        rel_path, entry = _find_indexed_artifact(evidence_index, name)
+        artifact_refs[name] = {
+            "path": rel_path,
+            "exists": bool(entry.get("exists", False)),
+            "sha256": entry.get("sha256"),
+        }
+        if rel_path:
+            loaded[name] = _load_json(run_dir / rel_path)
+
+    manifest = loaded.get("dft_hardware_closure_parsed_evidence_manifest.json", {})
+    validation = loaded.get("dft_hardware_closure_parsed_evidence_manifest_validation.json", {})
+    present = bool(manifest)
+    hardware_completion_eligible = bool(manifest.get("hardware_completion_eligible", False))
+    deliverable_complete = bool(manifest.get("deliverable_complete", False))
+    validation_valid = validation.get("valid")
+    status = (
+        "fail_closed_hardware_closure_parsed_evidence_present"
+        if present and validation_valid is True and not hardware_completion_eligible and not deliverable_complete
+        else "invalid_hardware_closure_parsed_evidence"
+        if present
+        else "not_present"
+    )
+    return {
+        "schema_version": "dse.final_report.dft_hardware_closure_parsed_evidence.v1",
+        "present": present,
+        "status": status,
+        "artifacts": artifact_refs,
+        "release_id": manifest.get("release_id"),
+        "candidate_count": manifest.get("candidate_count"),
+        "major_kernel_count": manifest.get("major_kernel_count"),
+        "packet_count": manifest.get("packet_count"),
+        "unit_count": manifest.get("unit_count"),
+        "stage_count": manifest.get("stage_count"),
+        "expected_parsed_result_count": manifest.get("expected_parsed_result_count"),
+        "present_parsed_result_count": manifest.get("present_parsed_result_count"),
+        "missing_parsed_result_count": manifest.get("missing_parsed_result_count"),
+        "valid_parsed_result_count": manifest.get("valid_parsed_result_count"),
+        "invalid_parsed_result_count": manifest.get("invalid_parsed_result_count"),
+        "parsed_verdict_counts": manifest.get("parsed_verdict_counts"),
+        "adjudication_result": manifest.get("adjudication_result"),
+        "passed_stage_count": manifest.get("passed_stage_count"),
+        "hardware_completion_eligible": hardware_completion_eligible,
+        "deliverable_complete": deliverable_complete,
+        "validation": {
+            "present": bool(validation),
+            "valid": validation_valid,
+            "error_count": len(validation.get("errors", []) or []) if validation else None,
+        },
+        "trusted_final_claim": False,
+        "completion_claim": (
+            "invalid_claim_upgrade" if present and deliverable_complete else "blocked" if present else "not_applicable"
+        ),
+        "claim_boundary": (
+            manifest.get("claim_boundary")
+            or "DFT hardware closure parsed-evidence manifests are parser/readiness evidence only; they cannot upgrade hard-gate, PPA, Pareto, or deliverable claims."
+        ),
+    }
+
+
+def _dft_hardware_closure_parser_run_section(
+    run_dir: Path,
+    evidence_index: Mapping[str, Mapping[str, Any]],
+) -> Dict[str, Any]:
+    """Summarize optional DFT closure parser-run artifacts."""
+
+    artifact_refs: Dict[str, Dict[str, Any]] = {}
+    loaded: Dict[str, Dict[str, Any]] = {}
+    for name in sorted(DFT_HARDWARE_CLOSURE_PARSER_RUN_ARTIFACT_NAMES):
+        rel_path, entry = _find_indexed_artifact(evidence_index, name)
+        artifact_refs[name] = {
+            "path": rel_path,
+            "exists": bool(entry.get("exists", False)),
+            "sha256": entry.get("sha256"),
+        }
+        if rel_path:
+            loaded[name] = _load_json(run_dir / rel_path)
+
+    parser_run = loaded.get("dft_hardware_closure_parser_run.json", {})
+    validation = loaded.get("dft_hardware_closure_parser_run_validation.json", {})
+    present = bool(parser_run)
+    hardware_completion_eligible = bool(parser_run.get("hardware_completion_eligible", False))
+    deliverable_complete = bool(parser_run.get("deliverable_complete", False))
+    validation_valid = validation.get("valid")
+    parser_rows = parser_run.get("parser_rows", []) if isinstance(parser_run.get("parser_rows", []), list) else []
+    parser_stage_blocker_ids = sorted(
+        {
+            str(blocker_id)
+            for row in parser_rows
+            if isinstance(row, Mapping)
+            for blocker_id in row.get("stage_blocker_ids", []) or []
+            if blocker_id
+        }
+    )
+    parser_status_counts: Dict[str, int] = {}
+    dc_target_library_discovery_counts: Dict[str, int] = {}
+    dc_target_libraries: set[str] = set()
+    for row in parser_rows:
+        if not isinstance(row, Mapping):
+            continue
+        row_status = str(row.get("status", "unknown") or "unknown")
+        parser_status_counts[row_status] = parser_status_counts.get(row_status, 0) + 1
+        if str(row.get("stage_id", "")) != "dc_asic_synth_timing_area":
+            continue
+        parsed_ref = row.get("parsed_result", {}) if isinstance(row.get("parsed_result", {}), Mapping) else {}
+        parsed_path_text = str(parsed_ref.get("path", ""))
+        if not parsed_path_text:
+            continue
+        parsed_path = run_dir / parsed_path_text
+        if not parsed_path.exists():
+            parsed_path = run_dir / "parsed_hard_gate_results" / parsed_path_text
+        parsed_payload = _load_json(parsed_path)
+        metrics = parsed_payload.get("metrics", {}) if isinstance(parsed_payload.get("metrics", {}), Mapping) else {}
+        discovery = str(metrics.get("dc_target_library_discovery", "") or "")
+        if discovery:
+            dc_target_library_discovery_counts[discovery] = dc_target_library_discovery_counts.get(discovery, 0) + 1
+        for library in metrics.get("dc_target_libraries", []) or []:
+            if library:
+                dc_target_libraries.add(str(library))
+    status = (
+        "fail_closed_hardware_closure_parser_run_present"
+        if present and validation_valid is True and not hardware_completion_eligible and not deliverable_complete
+        else "invalid_hardware_closure_parser_run"
+        if present
+        else "not_present"
+    )
+    return {
+        "schema_version": "dse.final_report.dft_hardware_closure_parser_run.v1",
+        "present": present,
+        "status": status,
+        "artifacts": artifact_refs,
+        "release_id": parser_run.get("release_id"),
+        "candidate_count": parser_run.get("candidate_count"),
+        "major_kernel_count": parser_run.get("major_kernel_count"),
+        "packet_count": parser_run.get("packet_count"),
+        "unit_count": parser_run.get("unit_count"),
+        "stage_count": parser_run.get("stage_count"),
+        "parsed_result_written_count": parser_run.get("parsed_result_written_count"),
+        "blocked_stage_count": parser_run.get("blocked_stage_count"),
+        "verdict_counts": parser_run.get("verdict_counts"),
+        "parser_status_counts": parser_status_counts,
+        "stage_blocker_ids": parser_stage_blocker_ids,
+        "dc_target_library_discovery_counts": dc_target_library_discovery_counts,
+        "dc_target_libraries": sorted(dc_target_libraries),
+        "adjudication_result": parser_run.get("adjudication_result"),
+        "passed_stage_count": parser_run.get("passed_stage_count"),
+        "hardware_completion_eligible": hardware_completion_eligible,
+        "deliverable_complete": deliverable_complete,
+        "validation": {
+            "present": bool(validation),
+            "valid": validation_valid,
+            "error_count": len(validation.get("errors", []) or []) if validation else None,
+        },
+        "trusted_final_claim": False,
+        "completion_claim": (
+            "invalid_claim_upgrade" if present and deliverable_complete else "blocked" if present else "not_applicable"
+        ),
+        "claim_boundary": (
+            parser_run.get("claim_boundary")
+            or "DFT hardware closure parser runs produce parser outputs from existing raw evidence only; they cannot adjudicate hard gates or upgrade completion claims."
+        ),
+    }
+
+
+def _dft_hardware_closure_gate_adjudication_section(
+    run_dir: Path,
+    evidence_index: Mapping[str, Mapping[str, Any]],
+) -> Dict[str, Any]:
+    """Summarize optional DFT hard-gate adjudication artifacts."""
+
+    artifact_refs: Dict[str, Dict[str, Any]] = {}
+    loaded: Dict[str, Dict[str, Any]] = {}
+    for name in sorted(DFT_HARDWARE_CLOSURE_GATE_ADJUDICATION_ARTIFACT_NAMES):
+        rel_path, entry = _find_indexed_artifact(evidence_index, name)
+        artifact_refs[name] = {
+            "path": rel_path,
+            "exists": bool(entry.get("exists", False)),
+            "sha256": entry.get("sha256"),
+        }
+        if rel_path:
+            loaded[name] = _load_json(run_dir / rel_path)
+
+    gate_adjudication = loaded.get("dft_hardware_closure_gate_adjudication.json", {})
+    validation = loaded.get("dft_hardware_closure_gate_adjudication_validation.json", {})
+    present = bool(gate_adjudication)
+    hardware_completion_eligible = bool(gate_adjudication.get("hardware_completion_eligible", False))
+    deliverable_complete = bool(gate_adjudication.get("deliverable_complete", False))
+    validation_valid = validation.get("valid")
+    status = (
+        "fail_closed_hardware_closure_gate_adjudication_present"
+        if present and validation_valid is True and not hardware_completion_eligible and not deliverable_complete
+        else "invalid_hardware_closure_gate_adjudication"
+        if present
+        else "not_present"
+    )
+    return {
+        "schema_version": "dse.final_report.dft_hardware_closure_gate_adjudication.v1",
+        "present": present,
+        "status": status,
+        "artifacts": artifact_refs,
+        "release_id": gate_adjudication.get("release_id"),
+        "candidate_count": gate_adjudication.get("candidate_count"),
+        "major_kernel_count": gate_adjudication.get("major_kernel_count"),
+        "packet_count": gate_adjudication.get("packet_count"),
+        "unit_count": gate_adjudication.get("unit_count"),
+        "stage_count": gate_adjudication.get("stage_count"),
+        "stage_gate_passed_count": gate_adjudication.get("stage_gate_passed_count"),
+        "blocked_stage_count": gate_adjudication.get("blocked_stage_count"),
+        "failed_stage_count": gate_adjudication.get("failed_stage_count"),
+        "unit_gate_passed_count": gate_adjudication.get("unit_gate_passed_count"),
+        "blocked_unit_count": gate_adjudication.get("blocked_unit_count"),
+        "failed_unit_count": gate_adjudication.get("failed_unit_count"),
+        "adjudication_result": gate_adjudication.get("adjudication_result"),
+        "hardware_completion_eligible": hardware_completion_eligible,
+        "deliverable_complete": deliverable_complete,
+        "validation": {
+            "present": bool(validation),
+            "valid": validation_valid,
+            "error_count": len(validation.get("errors", []) or []) if validation else None,
+        },
+        "trusted_final_claim": False,
+        "completion_claim": (
+            "invalid_claim_upgrade" if present and deliverable_complete else "blocked" if present else "not_applicable"
+        ),
+        "claim_boundary": (
+            gate_adjudication.get("claim_boundary")
+            or "DFT hardware closure gate adjudication records per-stage verdicts only; it cannot upgrade release completion, trusted Pareto, FPGA PPA, or ASIC PPA claims by itself."
+        ),
+    }
+
+
+def _dft_hardware_closure_release_gate_section(
+    run_dir: Path,
+    evidence_index: Mapping[str, Mapping[str, Any]],
+) -> Dict[str, Any]:
+    """Summarize optional DFT hardware closure release-gate artifacts."""
+
+    artifact_refs: Dict[str, Dict[str, Any]] = {}
+    loaded: Dict[str, Dict[str, Any]] = {}
+    for name in sorted(DFT_HARDWARE_CLOSURE_RELEASE_GATE_ARTIFACT_NAMES):
+        rel_path, entry = _find_indexed_artifact(evidence_index, name)
+        artifact_refs[name] = {
+            "path": rel_path,
+            "exists": bool(entry.get("exists", False)),
+            "sha256": entry.get("sha256"),
+        }
+        if rel_path:
+            loaded[name] = _load_json(run_dir / rel_path)
+
+    release_gate = loaded.get("dft_hardware_closure_release_gate.json", {})
+    validation = loaded.get("dft_hardware_closure_release_gate_validation.json", {})
+    present = bool(release_gate)
+    hardware_completion_eligible = bool(release_gate.get("hardware_completion_eligible", False))
+    deliverable_complete = bool(release_gate.get("deliverable_complete", False))
+    validation_valid = validation.get("valid")
+    status = (
+        "fail_closed_hardware_closure_release_gate_present"
+        if present and validation_valid is True and not deliverable_complete
+        else "invalid_hardware_closure_release_gate"
+        if present
+        else "not_present"
+    )
+    return {
+        "schema_version": "dse.final_report.dft_hardware_closure_release_gate.v1",
+        "present": present,
+        "status": status,
+        "artifacts": artifact_refs,
+        "release_id": release_gate.get("release_id"),
+        "candidate_count": release_gate.get("candidate_count"),
+        "major_kernel_count": release_gate.get("major_kernel_count"),
+        "packet_count": release_gate.get("packet_count"),
+        "unit_count": release_gate.get("unit_count"),
+        "stage_count": release_gate.get("stage_count"),
+        "stage_gate_passed_count": release_gate.get("stage_gate_passed_count"),
+        "blocked_stage_count": release_gate.get("blocked_stage_count"),
+        "failed_stage_count": release_gate.get("failed_stage_count"),
+        "expected_unit_count": release_gate.get("expected_unit_count"),
+        "actual_unit_count": release_gate.get("actual_unit_count"),
+        "duplicate_unit_count": release_gate.get("duplicate_unit_count"),
+        "candidate_count_complete": release_gate.get("candidate_count_complete"),
+        "unit_count_complete": release_gate.get("unit_count_complete"),
+        "per_candidate_kernel_coverage_complete": release_gate.get("per_candidate_kernel_coverage_complete"),
+        "unit_gate_passed_count": release_gate.get("unit_gate_passed_count"),
+        "blocked_unit_count": release_gate.get("blocked_unit_count"),
+        "failed_unit_count": release_gate.get("failed_unit_count"),
+        "candidate_gate_passed_count": release_gate.get("candidate_gate_passed_count"),
+        "blocked_candidate_count": release_gate.get("blocked_candidate_count"),
+        "failed_candidate_count": release_gate.get("failed_candidate_count"),
+        "release_gate_result": release_gate.get("release_gate_result"),
+        "hardware_completion_eligible": hardware_completion_eligible,
+        "deliverable_complete": deliverable_complete,
+        "validation": {
+            "present": bool(validation),
+            "valid": validation_valid,
+            "error_count": len(validation.get("errors", []) or []) if validation else None,
+        },
+        "trusted_final_claim": False,
+        "completion_claim": (
+            "invalid_claim_upgrade" if present and deliverable_complete else "blocked" if present else "not_applicable"
+        ),
+        "claim_boundary": (
+            release_gate.get("claim_boundary")
+            or "DFT hardware closure release gates roll up candidate/kernel gates but cannot directly mark deliverable completion."
+        ),
+    }
+
+
+def _dft_l4_goal_binding_section(
+    run_dir: Path,
+    evidence_index: Mapping[str, Mapping[str, Any]],
+) -> Dict[str, Any]:
+    """Summarize optional L4/gem5 binding artifacts without upgrading claims."""
+
+    artifact_refs: Dict[str, Dict[str, Any]] = {}
+    loaded: Dict[str, Dict[str, Any]] = {}
+    for name in sorted(DFT_L4_GOAL_BINDING_ARTIFACT_NAMES):
+        rel_path, entry = _find_indexed_artifact(evidence_index, name)
+        artifact_refs[name] = {
+            "path": rel_path,
+            "exists": bool(entry.get("exists", False)),
+            "sha256": entry.get("sha256"),
+        }
+        if rel_path:
+            loaded[name] = _load_json(run_dir / rel_path)
+
+    binding = loaded.get("dft_l4_goal_binding.json", {})
+    validation = loaded.get("dft_l4_goal_binding_validation.json", {})
+    status_artifact = loaded.get("dft_l4_goal_binding_status.json", {})
+    present = bool(binding)
+    current = binding.get("current_goal_binding", {}) if isinstance(binding.get("current_goal_binding", {}), Mapping) else {}
+    l4_matrix = binding.get("l4_matrix", {}) if isinstance(binding.get("l4_matrix", {}), Mapping) else {}
+    row_level_proofs = (
+        binding.get("row_level_proofs", {})
+        if isinstance(binding.get("row_level_proofs", {}), Mapping)
+        else {}
+    )
+    final_closure_eligible = bool(binding.get("final_closure_eligible", False))
+    deliverable_complete = bool(binding.get("deliverable_complete", False))
+    validation_valid = validation.get("valid")
+    status = (
+        "fail_closed_l4_goal_binding_present"
+        if present and validation_valid is True and not deliverable_complete
+        else "invalid_l4_goal_binding"
+        if present
+        else "not_present"
+    )
+    return {
+        "schema_version": "dse.final_report.dft_l4_goal_binding.v1",
+        "present": present,
+        "status": status,
+        "artifacts": artifact_refs,
+        "binding_status": binding.get("status"),
+        "l4_root": binding.get("l4_root"),
+        "step5_run": binding.get("step5_run"),
+        "l4_software_visible_proof_present": bool(binding.get("l4_software_visible_proof_present", False)),
+        "final_closure_eligible": final_closure_eligible,
+        "deliverable_complete": deliverable_complete,
+        "l4_matrix": {
+            "coverage_status": l4_matrix.get("coverage_status"),
+            "row_count": l4_matrix.get("row_count"),
+            "expected_row_count": l4_matrix.get("expected_row_count"),
+            "blocked_row_count": l4_matrix.get("blocked_row_count"),
+            "candidate_count": l4_matrix.get("candidate_count"),
+            "workload_case_count": l4_matrix.get("workload_case_count"),
+            "matrix_hash": l4_matrix.get("matrix_hash"),
+        },
+        "row_level_proofs": {
+            "expected_gem5_l4_proof_count": row_level_proofs.get("expected_gem5_l4_proof_count"),
+            "present_gem5_l4_proof_count": row_level_proofs.get("present_gem5_l4_proof_count"),
+        },
+        "current_goal_binding": {
+            "candidate_mapping_policy": current.get("candidate_mapping_policy"),
+            "workload_mapping_policy": current.get("workload_mapping_policy"),
+            "step5_candidate_count": current.get("step5_candidate_count"),
+            "candidate_crosswalk_count": current.get("candidate_crosswalk_count"),
+            "candidate_structured_crosswalk_count": current.get("candidate_structured_crosswalk_count"),
+            "candidate_identity_binding_explicit": bool(current.get("candidate_identity_binding_explicit", False)),
+            "candidate_keys_exact": bool(current.get("candidate_keys_exact", False)),
+            "mapped_l4_candidates_unique": bool(current.get("mapped_l4_candidates_unique", False)),
+            "workload_crosswalk_count": current.get("workload_crosswalk_count"),
+            "workload_structured_crosswalk_count": current.get("workload_structured_crosswalk_count"),
+            "workload_identity_binding_explicit": bool(current.get("workload_identity_binding_explicit", False)),
+            "workload_keys_exact": bool(current.get("workload_keys_exact", False)),
+            "current_goal_l4_bound": bool(current.get("current_goal_l4_bound", False)),
+        },
+        "validation": {
+            "present": bool(validation),
+            "valid": validation_valid,
+            "error_count": len(validation.get("errors", []) or []) if validation else None,
+            "warning_count": len(validation.get("warnings", []) or []) if validation else None,
+            "warnings": validation.get("warnings", []) if validation else [],
+        },
+        "blockers": list(binding.get("blockers", []) or []) if isinstance(binding.get("blockers", []), list) else [],
+        "status_artifact": {
+            "status": status_artifact.get("status"),
+            "binding_status": status_artifact.get("binding_status"),
+        },
+        "trusted_final_claim": False,
+        "completion_claim": "blocked" if present and not final_closure_eligible else "l4_bound" if final_closure_eligible else "not_applicable",
+        "claim_boundary": (
+            binding.get("claim_boundary")
+            or "L4/gem5 binding is software-visible proof only and does not upgrade FPGA/ASIC or full-SCF completion claims."
+        ),
+    }
+
+
 def generate_final_report(
     run_dir: Path,
     *,
@@ -944,6 +2843,83 @@ def generate_final_report(
     low_fidelity_screening = _low_fidelity_screening_section(
         run_dir,
         evidence_index=evidence_index,
+    )
+    dft_evidence_ledger = _dft_evidence_ledger_section(
+        run_dir,
+        evidence_index,
+    )
+    dft_trial_state_ledger = _dft_trial_state_ledger_section(
+        run_dir,
+        evidence_index,
+    )
+    dft_candidate_binding_map = _dft_candidate_binding_map_section(
+        run_dir,
+        evidence_index,
+    )
+    dft_hardware_completion_workplan = _dft_hardware_completion_workplan_section(
+        run_dir,
+        evidence_index,
+    )
+    dft_hardware_closure_shards = _dft_hardware_closure_shards_section(
+        run_dir,
+        evidence_index,
+    )
+    dft_hardware_closure_packets = _dft_hardware_closure_packets_section(
+        run_dir,
+        evidence_index,
+    )
+    dft_hardware_closure_candidate_bundles = _dft_hardware_closure_candidate_bundles_section(
+        run_dir,
+        evidence_index,
+    )
+    dft_hardware_closure_unit_provenance = _dft_hardware_closure_unit_provenance_section(
+        run_dir,
+        evidence_index,
+    )
+    dft_hardware_closure_source_flow_plan = _dft_hardware_closure_source_flow_plan_section(
+        run_dir,
+        evidence_index,
+    )
+    dft_hardware_closure_raw_stage_materialization = _dft_hardware_closure_raw_stage_materialization_section(
+        run_dir,
+        evidence_index,
+    )
+    dft_hardware_closure_raw_transcript_registration = _dft_hardware_closure_raw_transcript_registration_section(
+        run_dir,
+        evidence_index,
+    )
+    dft_hardware_closure_evidence_intake = _dft_hardware_closure_evidence_intake_section(
+        run_dir,
+        evidence_index,
+    )
+    dft_hardware_closure_adjudication = _dft_hardware_closure_adjudication_section(
+        run_dir,
+        evidence_index,
+    )
+    dft_hardware_closure_parsed_evidence = _dft_hardware_closure_parsed_evidence_section(
+        run_dir,
+        evidence_index,
+    )
+    dft_hardware_closure_parser_run = _dft_hardware_closure_parser_run_section(
+        run_dir,
+        evidence_index,
+    )
+    dft_hardware_closure_gate_adjudication = _dft_hardware_closure_gate_adjudication_section(
+        run_dir,
+        evidence_index,
+    )
+    dft_hardware_closure_release_gate = _dft_hardware_closure_release_gate_section(
+        run_dir,
+        evidence_index,
+    )
+    dft_l4_goal_binding = _dft_l4_goal_binding_section(
+        run_dir,
+        evidence_index,
+    )
+    dft_full_scf_hybrid = _dft_full_scf_hybrid_section(
+        run_dir,
+        evidence_index,
+        ledger_bundle=dft_evidence_ledger.get("full_scf_hybrid_bundle", {}),
     )
 
     claim_list = list(claims) if claims is not None else _default_claims(
@@ -1084,6 +3060,114 @@ def generate_final_report(
         limitations.append("Graph lowering report is not full-workload eligible; final trusted claims are blocked for this run.")
     if low_fidelity_screening.get("present"):
         limitations.append("Step2 L1/L2 screening is low-fidelity candidate-generation evidence only; it is excluded from trusted final ranking.")
+    if dft_evidence_ledger.get("present"):
+        limitations.append(
+            "DFT evidence ledger artifacts are audit/reporting evidence only; "
+            "they do not prove full-SCF completion or FPGA/ASIC PPA claims."
+        )
+        dft_eda_summary = (
+            dft_evidence_ledger.get("eda_summary", {})
+            if isinstance(dft_evidence_ledger.get("eda_summary", {}), Mapping)
+            else {}
+        )
+        if dft_eda_summary.get("ic_eda_tool_availability_completion_claim"):
+            limitations.append(
+                "IC/EDA tool availability is cited only as reachability/planning evidence; "
+                "it is not candidate-specific kernel PPA, timing, area, or implementation evidence."
+            )
+    if dft_trial_state_ledger.get("present"):
+        limitations.append(
+            "DFT trial-state ledger artifacts prove ID propagation and state/audit continuity only; "
+            "they do not prove numerical correctness, trusted Pareto, or FPGA/ASIC PPA closure."
+        )
+    if dft_candidate_binding_map.get("present"):
+        limitations.append(
+            "DFT candidate binding maps relate hierarchical search IDs to frozen release IDs only; "
+            "they are heuristic provenance and do not prove numerical correctness, trusted Pareto, or FPGA/ASIC PPA closure."
+        )
+    if dft_hardware_completion_workplan.get("present"):
+        limitations.append(
+            "DFT hardware completion workplans enumerate candidate-specific kernel closure work only; "
+            "they do not prove candidate-specific numerical correctness, trusted Pareto, or FPGA/ASIC PPA closure."
+        )
+    if dft_hardware_closure_shards.get("present"):
+        limitations.append(
+            "DFT hardware closure shards are parallel queue metadata only; "
+            "they do not attach candidate-specific RTL/HLS bundles or prove Vivado/DC closure."
+        )
+    if dft_hardware_closure_packets.get("present"):
+        limitations.append(
+            "DFT hardware closure packets and runbooks are execution instructions only; "
+            "they do not attach candidate-specific evidence or upgrade hardware completion claims."
+        )
+    if dft_hardware_closure_candidate_bundles.get("present"):
+        limitations.append(
+            "DFT hardware closure candidate bundles are template contracts for expected source/evidence placement only; "
+            "they do not contain raw tool results or upgrade correctness, PPA, trusted ranking, or completion claims."
+        )
+    if dft_hardware_closure_unit_provenance.get("present"):
+        limitations.append(
+            "DFT hardware closure unit provenance stages candidate/kernel source/tool/command/transcript metadata only; "
+            "it does not contain raw tool results or upgrade correctness, PPA, trusted ranking, or completion claims."
+        )
+    if dft_hardware_closure_source_flow_plan.get("present"):
+        limitations.append(
+            "DFT hardware closure source-flow plans bind candidate/kernel units to validated source-flow directories "
+            "before materialization only; they do not copy evidence, adjudicate hard gates, or upgrade PPA/completion claims."
+        )
+    if dft_hardware_closure_raw_stage_materialization.get("present"):
+        limitations.append(
+            "DFT hardware closure raw-stage materialization copies or wraps existing kernel-flow outputs into "
+            "candidate-specific packet filenames only; registration, parsing, gate adjudication, and PPA/completion "
+            "claims remain separate."
+        )
+    if dft_hardware_closure_raw_transcript_registration.get("present"):
+        limitations.append(
+            "DFT hardware closure raw transcript registration records SHA-256 refs for already-present "
+            "candidate-specific raw files only; it does not create evidence, parse results, adjudicate hard gates, "
+            "or upgrade completion claims."
+        )
+    if dft_hardware_closure_evidence_intake.get("present"):
+        limitations.append(
+            "DFT hardware closure evidence intake checks file presence only; "
+            "it does not adjudicate correctness, Vivado/DC PPA, or deliverable completion."
+        )
+    if dft_hardware_closure_adjudication.get("present"):
+        limitations.append(
+            "DFT hardware closure adjudication is a fail-closed stage ledger only; "
+            "it does not pass hard gates without parsed candidate-specific evidence."
+        )
+    if dft_hardware_closure_parsed_evidence.get("present"):
+        limitations.append(
+            "DFT hardware closure parsed-evidence manifests are parser/readiness evidence only; "
+            "they do not adjudicate hard gates or upgrade completion claims."
+        )
+    if dft_hardware_closure_parser_run.get("present"):
+        limitations.append(
+            "DFT hardware closure parser runs consume already-present candidate-specific raw files only; "
+            "they write parser outputs but do not adjudicate hard gates or upgrade completion claims."
+        )
+    if dft_hardware_closure_gate_adjudication.get("present"):
+        limitations.append(
+            "DFT hardware closure gate adjudication records per-stage hard-gate verdicts only; "
+            "it does not by itself upgrade release completion, trusted Pareto, FPGA PPA, or ASIC PPA claims."
+        )
+    if dft_hardware_closure_release_gate.get("present"):
+        limitations.append(
+            "DFT hardware closure release gates roll up candidate/kernel gate status only; "
+            "they cannot directly mark deliverable completion or trusted Pareto winners."
+        )
+    if dft_l4_goal_binding.get("present"):
+        limitations.append(
+            "DFT L4/gem5 goal binding cites software-visible GenericAccel evidence only; "
+            "it does not prove wave36 candidate identity, six-SCF workload closure, FPGA/ASIC PPA, "
+            "or full deliverable completion unless explicit current-goal crosswalks pass."
+        )
+    if dft_full_scf_hybrid.get("present"):
+        limitations.append(
+            "DFT full-SCF evaluated-hybrid artifacts expose schedule/cost accounting only; "
+            "they do not prove full-SCF device residency, numerical correctness, or FPGA/ASIC PPA closure."
+        )
     workload_family = manifest.get("workload_family", workload_package.get("workload_family"))
     if numerical_validation.get("passed"):
         limitations.append(
@@ -1160,6 +3244,25 @@ def generate_final_report(
             "convergence": convergence_status,
         },
         "low_fidelity_screening": low_fidelity_screening,
+        "dft_evidence_ledger": dft_evidence_ledger,
+        "dft_trial_state_ledger": dft_trial_state_ledger,
+        "dft_candidate_binding_map": dft_candidate_binding_map,
+        "dft_hardware_completion_workplan": dft_hardware_completion_workplan,
+        "dft_hardware_closure_shards": dft_hardware_closure_shards,
+        "dft_hardware_closure_packets": dft_hardware_closure_packets,
+        "dft_hardware_closure_candidate_bundles": dft_hardware_closure_candidate_bundles,
+        "dft_hardware_closure_unit_provenance": dft_hardware_closure_unit_provenance,
+        "dft_hardware_closure_source_flow_plan": dft_hardware_closure_source_flow_plan,
+        "dft_hardware_closure_raw_stage_materialization": dft_hardware_closure_raw_stage_materialization,
+        "dft_hardware_closure_raw_transcript_registration": dft_hardware_closure_raw_transcript_registration,
+        "dft_hardware_closure_evidence_intake": dft_hardware_closure_evidence_intake,
+        "dft_hardware_closure_adjudication": dft_hardware_closure_adjudication,
+        "dft_hardware_closure_parsed_evidence": dft_hardware_closure_parsed_evidence,
+        "dft_hardware_closure_parser_run": dft_hardware_closure_parser_run,
+        "dft_hardware_closure_gate_adjudication": dft_hardware_closure_gate_adjudication,
+        "dft_hardware_closure_release_gate": dft_hardware_closure_release_gate,
+        "dft_l4_goal_binding": dft_l4_goal_binding,
+        "dft_full_scf_evaluated_hybrid": dft_full_scf_hybrid,
         "codesign": {
             "candidate_artifact": "codesign_candidate.json" if codesign_candidate else None,
             "verdict_artifact": "codesign_verdict.json" if codesign_verdict else None,
@@ -1181,7 +3284,16 @@ def generate_final_report(
             "summary": numerical_validation.get("summary", {}),
             "domain_correctness_boundary": numerical_validation.get("domain_correctness_boundary"),
         },
-        "full_scf_evaluated_hybrid_costs": _full_scf_evaluated_hybrid_costs(simulation_result),
+        "full_scf_evaluated_hybrid_costs": _full_scf_evaluated_hybrid_costs(
+            simulation_result,
+            descriptor=dft_full_scf_hybrid.get("cost_model") and {
+                "cost_model": dft_full_scf_hybrid.get("cost_model"),
+            },
+            ppa_summary=_load_json(run_dir / str(dft_full_scf_hybrid.get("artifacts", {}).get("full_scf_ppa_summary.json", {}).get("path")))
+            if dft_full_scf_hybrid.get("present")
+            and dft_full_scf_hybrid.get("artifacts", {}).get("full_scf_ppa_summary.json", {}).get("path")
+            else None,
+        ),
         "trusted_ranking": trusted_ranking,
         "predicted_only_candidates": predicted_only_candidates,
         "blocked_or_untrusted": blocked_or_untrusted,
@@ -1277,6 +3389,472 @@ def render_markdown_report(report: Mapping[str, Any]) -> str:
         ])
     else:
         lines.append("- No L1/L2 screening artifacts found in this run directory.")
+
+    dft_ledger = report.get("dft_evidence_ledger", {})
+    dft_ledger = dft_ledger if isinstance(dft_ledger, Mapping) else {}
+    eda_summary = dft_ledger.get("eda_summary", {}) if isinstance(dft_ledger.get("eda_summary", {}), Mapping) else {}
+    ledger_full_scf = (
+        dft_ledger.get("full_scf_hybrid_bundle", {})
+        if isinstance(dft_ledger.get("full_scf_hybrid_bundle", {}), Mapping)
+        else {}
+    )
+    lines.extend([
+        "",
+        "## DFT Evidence Ledger",
+        f"- Present: `{dft_ledger.get('present')}`",
+        f"- Deliverable complete: `{dft_ledger.get('deliverable_complete')}`",
+        f"- EDA status: `{eda_summary.get('status')}`",
+        f"- IC/EDA availability status: `{eda_summary.get('tool_availability_status')}`",
+        f"- IC/EDA availability payload status: `{eda_summary.get('ic_eda_tool_availability_payload_status')}`",
+        f"- IC/EDA availability completion claim: `{eda_summary.get('ic_eda_tool_availability_completion_claim')}`",
+        f"- IC/EDA availability kernel PPA evidence: `{eda_summary.get('ic_eda_tool_availability_kernel_ppa_evidence')}`",
+        f"- IC/EDA availability raw attempts: `{eda_summary.get('ic_eda_tool_availability_raw_attempt_count')}`",
+        f"- Major-kernel matrix status: `{eda_summary.get('major_kernel_matrix_status')}`",
+        f"- Major-kernel matrix trusted: `{eda_summary.get('major_kernel_matrix_trusted')}`",
+        f"- Hardware completion eligible: `{eda_summary.get('hardware_completion_eligible')}`",
+        f"- Full-SCF hybrid bundle status: `{ledger_full_scf.get('status')}`",
+        f"- Full-SCF hybrid bundle completion claim: `{ledger_full_scf.get('completion_claim')}`",
+        "- Boundary: this citation does not upgrade Step4/Step5 trust, does not prove full-SCF completion, and does not create FPGA/ASIC PPA claims.",
+    ])
+    if not dft_ledger.get("present"):
+        lines.append("- No DFT evidence ledger artifacts were indexed for this Step5 run.")
+
+    dft_trial_ledger = report.get("dft_trial_state_ledger", {})
+    dft_trial_ledger = dft_trial_ledger if isinstance(dft_trial_ledger, Mapping) else {}
+    validation = (
+        dft_trial_ledger.get("validation", {})
+        if isinstance(dft_trial_ledger.get("validation", {}), Mapping)
+        else {}
+    )
+    lines.extend([
+        "",
+        "## DFT Trial State Ledger",
+        f"- Present: `{dft_trial_ledger.get('present')}`",
+        f"- Status: `{dft_trial_ledger.get('status')}`",
+        f"- Campaign/workload: `{dft_trial_ledger.get('campaign_id')}` / `{dft_trial_ledger.get('workload_run_id')}`",
+        f"- Candidate count: `{dft_trial_ledger.get('candidate_count')}`",
+        f"- Blocked/rejected/selected trials: `{dft_trial_ledger.get('blocked_trial_count')}` / `{dft_trial_ledger.get('rejected_trial_count')}` / `{dft_trial_ledger.get('selected_trial_count')}`",
+        f"- Validation valid: `{validation.get('valid')}`",
+        f"- Completion eligible: `{dft_trial_ledger.get('completion_eligible')}`",
+        f"- Deliverable complete: `{dft_trial_ledger.get('deliverable_complete')}`",
+        "- Boundary: trial state is orchestration/audit provenance only; it cannot upgrade Step4 trust, numerical correctness, trusted Pareto, or FPGA/ASIC PPA claims.",
+    ])
+    if not dft_trial_ledger.get("present"):
+        lines.append("- No DFT trial-state ledger was indexed for this Step5 run.")
+
+    dft_binding = report.get("dft_candidate_binding_map", {})
+    dft_binding = dft_binding if isinstance(dft_binding, Mapping) else {}
+    binding_validation = (
+        dft_binding.get("validation", {})
+        if isinstance(dft_binding.get("validation", {}), Mapping)
+        else {}
+    )
+    lines.extend([
+        "",
+        "## DFT Candidate Binding Map",
+        f"- Present: `{dft_binding.get('present')}`",
+        f"- Status: `{dft_binding.get('status')}`",
+        f"- Workload/release: `{dft_binding.get('workload_suite_id')}` / `{dft_binding.get('release_id')}`",
+        f"- Search/bound/unmatched candidates: `{dft_binding.get('search_candidate_count')}` / `{dft_binding.get('bound_candidate_count')}` / `{dft_binding.get('unmatched_candidate_count')}`",
+        f"- Unique release candidates: `{dft_binding.get('unique_release_candidate_count')}`",
+        f"- Duplicate release IDs: `{', '.join(str(item) for item in (dft_binding.get('duplicate_release_candidate_ids', []) or [])) or 'none'}`",
+        f"- Validation valid: `{binding_validation.get('valid')}`",
+        f"- Completion eligible: `{dft_binding.get('completion_eligible')}`",
+        f"- Deliverable complete: `{dft_binding.get('deliverable_complete')}`",
+        "- Boundary: binding maps are heuristic ID provenance only; they cannot upgrade Step4 trust, numerical correctness, trusted Pareto, or FPGA/ASIC PPA claims.",
+    ])
+    if not dft_binding.get("present"):
+        lines.append("- No DFT candidate binding map was indexed for this Step5 run.")
+
+    dft_workplan = report.get("dft_hardware_completion_workplan", {})
+    dft_workplan = dft_workplan if isinstance(dft_workplan, Mapping) else {}
+    workplan_validation = (
+        dft_workplan.get("validation", {})
+        if isinstance(dft_workplan.get("validation", {}), Mapping)
+        else {}
+    )
+    lines.extend([
+        "",
+        "## DFT Hardware Completion Workplan",
+        f"- Present: `{dft_workplan.get('present')}`",
+        f"- Status: `{dft_workplan.get('status')}`",
+        f"- Release/candidates/kernels: `{dft_workplan.get('release_id')}` / `{dft_workplan.get('candidate_count')}` / `{dft_workplan.get('major_kernel_count')}`",
+        f"- Required/blocked work items: `{dft_workplan.get('required_work_item_count')}` / `{dft_workplan.get('blocked_work_item_count')}`",
+        f"- Candidate-specific evidence rows present: `{dft_workplan.get('candidate_specific_evidence_present_count')}`",
+        f"- Shared smoke stages observed: `{dft_workplan.get('shared_microkernel_smoke_stage_present_count')}`",
+        f"- Validation valid: `{workplan_validation.get('valid')}`",
+        f"- Hardware completion eligible: `{dft_workplan.get('hardware_completion_eligible')}`",
+        f"- Deliverable complete: `{dft_workplan.get('deliverable_complete')}`",
+        "- Boundary: workplans schedule candidate-specific Vivado/DC/kernel closure work; they cannot upgrade Step4 trust, numerical correctness, trusted Pareto, or FPGA/ASIC PPA claims.",
+    ])
+    if not dft_workplan.get("present"):
+        lines.append("- No DFT hardware completion workplan was indexed for this Step5 run.")
+
+    dft_shards = report.get("dft_hardware_closure_shards", {})
+    dft_shards = dft_shards if isinstance(dft_shards, Mapping) else {}
+    shard_validation = (
+        dft_shards.get("validation", {})
+        if isinstance(dft_shards.get("validation", {}), Mapping)
+        else {}
+    )
+    lines.extend([
+        "",
+        "## DFT Hardware Closure Shards",
+        f"- Present: `{dft_shards.get('present')}`",
+        f"- Status: `{dft_shards.get('status')}`",
+        f"- Release/candidates/kernels: `{dft_shards.get('release_id')}` / `{dft_shards.get('candidate_count')}` / `{dft_shards.get('major_kernel_count')}`",
+        f"- Units/shards: `{dft_shards.get('unit_count')}` / `{dft_shards.get('shard_count')}`",
+        f"- Work items blocked: `{dft_shards.get('blocked_work_item_count')}` / `{dft_shards.get('work_item_count')}`",
+        f"- Candidate-specific bundles/evidence: `{dft_shards.get('candidate_specific_bundle_count')}` / `{dft_shards.get('candidate_specific_evidence_present_count')}`",
+        f"- Validation valid: `{shard_validation.get('valid')}`",
+        f"- Hardware completion eligible: `{dft_shards.get('hardware_completion_eligible')}`",
+        f"- Deliverable complete: `{dft_shards.get('deliverable_complete')}`",
+        "- Boundary: shard queues assign closure work; they cannot upgrade Step4 trust, numerical correctness, trusted Pareto, or FPGA/ASIC PPA claims.",
+    ])
+    if not dft_shards.get("present"):
+        lines.append("- No DFT hardware closure shard queue was indexed for this Step5 run.")
+
+    dft_packets = report.get("dft_hardware_closure_packets", {})
+    dft_packets = dft_packets if isinstance(dft_packets, Mapping) else {}
+    packet_validation = (
+        dft_packets.get("validation", {})
+        if isinstance(dft_packets.get("validation", {}), Mapping)
+        else {}
+    )
+    lines.extend([
+        "",
+        "## DFT Hardware Closure Packets",
+        f"- Present: `{dft_packets.get('present')}`",
+        f"- Status: `{dft_packets.get('status')}`",
+        f"- Release/candidates/kernels: `{dft_packets.get('release_id')}` / `{dft_packets.get('candidate_count')}` / `{dft_packets.get('major_kernel_count')}`",
+        f"- Shards/packets/units: `{dft_packets.get('shard_count')}` / `{dft_packets.get('packet_count')}` / `{dft_packets.get('unit_count')}`",
+        f"- Work items blocked: `{dft_packets.get('blocked_work_item_count')}` / `{dft_packets.get('work_item_count')}`",
+        f"- Expected candidate-specific evidence files: `{dft_packets.get('expected_evidence_file_count')}`",
+        f"- Command templates: `{', '.join(str(item) for item in (dft_packets.get('command_template_ids', []) or [])) or 'none'}`",
+        f"- Packet/runbook refs: `{len(dft_packets.get('packet_artifact_refs', []) or [])}`",
+        f"- Candidate-specific bundles/evidence: `{dft_packets.get('candidate_specific_bundle_count')}` / `{dft_packets.get('candidate_specific_evidence_present_count')}`",
+        f"- Validation valid: `{packet_validation.get('valid')}`",
+        f"- Hardware completion eligible: `{dft_packets.get('hardware_completion_eligible')}`",
+        f"- Deliverable complete: `{dft_packets.get('deliverable_complete')}`",
+        "- Boundary: closure packets/runbooks give exact execution instructions and expected filenames; they cannot upgrade Step4 trust, numerical correctness, trusted Pareto, or FPGA/ASIC PPA claims.",
+    ])
+    if not dft_packets.get("present"):
+        lines.append("- No DFT hardware closure packet index was indexed for this Step5 run.")
+
+    dft_bundles = report.get("dft_hardware_closure_candidate_bundles", {})
+    dft_bundles = dft_bundles if isinstance(dft_bundles, Mapping) else {}
+    bundle_validation = (
+        dft_bundles.get("validation", {})
+        if isinstance(dft_bundles.get("validation", {}), Mapping)
+        else {}
+    )
+    lines.extend([
+        "",
+        "## DFT Hardware Closure Candidate Bundles",
+        f"- Present: `{dft_bundles.get('present')}`",
+        f"- Status: `{dft_bundles.get('status')}`",
+        f"- Release/candidates/kernels: `{dft_bundles.get('release_id')}` / `{dft_bundles.get('candidate_count')}` / `{dft_bundles.get('major_kernel_count')}`",
+        f"- Bundle refs/templates: `{dft_bundles.get('bundle_ref_count')}` / `{dft_bundles.get('bundle_count')}`",
+        f"- Expected/raw evidence files: `{dft_bundles.get('expected_evidence_file_count')}` / `{dft_bundles.get('raw_evidence_file_count')}`",
+        f"- Bundle template only: `{dft_bundles.get('bundle_template_only')}`",
+        f"- Validation valid: `{bundle_validation.get('valid')}`",
+        f"- Hardware completion eligible: `{dft_bundles.get('hardware_completion_eligible')}`",
+        f"- Deliverable complete: `{dft_bundles.get('deliverable_complete')}`",
+        "- Boundary: candidate bundles are expected-file/source placement contracts only; they cannot adjudicate or upgrade golden, RTL/HLS, Vivado, DC, PPA, trusted Pareto, or completion claims.",
+    ])
+    if not dft_bundles.get("present"):
+        lines.append("- No DFT hardware closure candidate-bundle index was indexed for this Step5 run.")
+
+    dft_unit_provenance = report.get("dft_hardware_closure_unit_provenance", {})
+    dft_unit_provenance = dft_unit_provenance if isinstance(dft_unit_provenance, Mapping) else {}
+    unit_provenance_validation = (
+        dft_unit_provenance.get("validation", {})
+        if isinstance(dft_unit_provenance.get("validation", {}), Mapping)
+        else {}
+    )
+    lines.extend([
+        "",
+        "## DFT Hardware Closure Unit Provenance",
+        f"- Present: `{dft_unit_provenance.get('present')}`",
+        f"- Status: `{dft_unit_provenance.get('status')}`",
+        f"- Release/candidates/kernels: `{dft_unit_provenance.get('release_id')}` / `{dft_unit_provenance.get('candidate_count')}` / `{dft_unit_provenance.get('major_kernel_count')}`",
+        f"- Staged units: `{dft_unit_provenance.get('staged_unit_count')}`",
+        f"- Provenance/raw stage files: `{dft_unit_provenance.get('global_provenance_file_count')}` / `{dft_unit_provenance.get('raw_stage_evidence_file_count')}`",
+        f"- Unit refs indexed: `{dft_unit_provenance.get('unit_ref_count')}`",
+        f"- Validation valid: `{unit_provenance_validation.get('valid')}`",
+        f"- Hardware completion eligible: `{dft_unit_provenance.get('hardware_completion_eligible')}`",
+        f"- Deliverable complete: `{dft_unit_provenance.get('deliverable_complete')}`",
+        "- Boundary: unit provenance stages candidate/kernel metadata only; it contains no raw VCS/HLS/Vivado/DC logs, parsed results, PPA, trusted Pareto, or completion evidence.",
+    ])
+    if not dft_unit_provenance.get("present"):
+        lines.append("- No DFT hardware closure unit-provenance index was indexed for this Step5 run.")
+
+    dft_source_flow_plan = report.get("dft_hardware_closure_source_flow_plan", {})
+    dft_source_flow_plan = dft_source_flow_plan if isinstance(dft_source_flow_plan, Mapping) else {}
+    source_flow_plan_validation = (
+        dft_source_flow_plan.get("validation", {})
+        if isinstance(dft_source_flow_plan.get("validation", {}), Mapping)
+        else {}
+    )
+    lines.extend([
+        "",
+        "## DFT Hardware Closure Source Flow Plan",
+        f"- Present: `{dft_source_flow_plan.get('present')}`",
+        f"- Status: `{dft_source_flow_plan.get('status')}`",
+        f"- Release/candidates/kernels: `{dft_source_flow_plan.get('release_id')}` / `{dft_source_flow_plan.get('candidate_count')}` / `{dft_source_flow_plan.get('major_kernel_count')}`",
+        f"- Planned units: `{dft_source_flow_plan.get('planned_unit_count')}`",
+        f"- Materialization-eligible units: `{dft_source_flow_plan.get('materialization_eligible_unit_count')}`",
+        f"- Source-flow present/missing/blocked units: `{dft_source_flow_plan.get('source_flow_present_count')}` / `{dft_source_flow_plan.get('source_flow_missing_count')}` / `{dft_source_flow_plan.get('blocked_unit_count')}`",
+        f"- Source-flow map: `{(dft_source_flow_plan.get('source_flow_map') or {}).get('path')}` (exists: `{(dft_source_flow_plan.get('source_flow_map') or {}).get('exists')}`)",
+        f"- Source-flow plan errors: `{dft_source_flow_plan.get('error_count')}`",
+        f"- Source-flow blocker ids: `{dft_source_flow_plan.get('blocker_id_counts')}`",
+        f"- Wrong-candidate/wrong-kernel/reused-source blockers: `{dft_source_flow_plan.get('blocked_wrong_candidate_reuse_count')}` / `{dft_source_flow_plan.get('blocked_wrong_kernel_reuse_count')}` / `{dft_source_flow_plan.get('blocked_reused_source_flow_count')}`",
+        f"- Invalid manifest/provenance mismatch counts: `{dft_source_flow_plan.get('blocked_invalid_manifest_count')}` / `{dft_source_flow_plan.get('provenance_mismatch_count')}`",
+        f"- Adjudication result: `{dft_source_flow_plan.get('adjudication_result')}`",
+        f"- Passed stage count: `{dft_source_flow_plan.get('passed_stage_count')}`",
+        f"- Validation valid: `{source_flow_plan_validation.get('valid')}`",
+        f"- Hardware completion eligible: `{dft_source_flow_plan.get('hardware_completion_eligible')}`",
+        f"- Deliverable complete: `{dft_source_flow_plan.get('deliverable_complete')}`",
+        "- Boundary: source-flow planning validates candidate/kernel provenance before materialization only; it does not copy raw files, parse results, adjudicate gates, certify PPA, or complete the release.",
+    ])
+    if not dft_source_flow_plan.get("present"):
+        lines.append("- No DFT hardware closure source-flow plan artifact was indexed for this Step5 run.")
+
+    dft_raw_materialization = report.get("dft_hardware_closure_raw_stage_materialization", {})
+    dft_raw_materialization = dft_raw_materialization if isinstance(dft_raw_materialization, Mapping) else {}
+    raw_materialization_validation = (
+        dft_raw_materialization.get("validation", {})
+        if isinstance(dft_raw_materialization.get("validation", {}), Mapping)
+        else {}
+    )
+    lines.extend([
+        "",
+        "## DFT Hardware Closure Raw Stage Materialization",
+        f"- Present: `{dft_raw_materialization.get('present')}`",
+        f"- Status: `{dft_raw_materialization.get('status')}`",
+        f"- Release/candidates/kernels: `{dft_raw_materialization.get('release_id')}` / `{dft_raw_materialization.get('candidate_count')}` / `{dft_raw_materialization.get('major_kernel_count')}`",
+        f"- Units materialized/total/blocked: `{dft_raw_materialization.get('materialized_unit_count')}` / `{dft_raw_materialization.get('unit_count')}` / `{dft_raw_materialization.get('blocked_unit_count')}`",
+        f"- Materialized raw files: `{dft_raw_materialization.get('materialized_file_count')}`",
+        f"- Missing required raw-stage files: `{dft_raw_materialization.get('missing_required_raw_stage_file_count')}`",
+        f"- Materialization blocker ids: `{dft_raw_materialization.get('materialization_blocker_ids')}`",
+        f"- Adjudication result: `{dft_raw_materialization.get('adjudication_result')}`",
+        f"- Passed stage count: `{dft_raw_materialization.get('passed_stage_count')}`",
+        f"- Validation valid: `{raw_materialization_validation.get('valid')}`",
+        f"- Hardware completion eligible: `{dft_raw_materialization.get('hardware_completion_eligible')}`",
+        f"- Deliverable complete: `{dft_raw_materialization.get('deliverable_complete')}`",
+        "- Boundary: raw-stage materialization copies/wraps existing source-flow outputs only; registration, parser, adjudication, release completion, and PPA claims remain separate.",
+    ])
+    if not dft_raw_materialization.get("present"):
+        lines.append("- No DFT hardware closure raw-stage materialization artifact was indexed for this Step5 run.")
+
+    dft_raw_registration = report.get("dft_hardware_closure_raw_transcript_registration", {})
+    dft_raw_registration = dft_raw_registration if isinstance(dft_raw_registration, Mapping) else {}
+    raw_registration_validation = (
+        dft_raw_registration.get("validation", {})
+        if isinstance(dft_raw_registration.get("validation", {}), Mapping)
+        else {}
+    )
+    lines.extend([
+        "",
+        "## DFT Hardware Closure Raw Transcript Registration",
+        f"- Present: `{dft_raw_registration.get('present')}`",
+        f"- Status: `{dft_raw_registration.get('status')}`",
+        f"- Release/candidates/kernels: `{dft_raw_registration.get('release_id')}` / `{dft_raw_registration.get('candidate_count')}` / `{dft_raw_registration.get('major_kernel_count')}`",
+        f"- Units registered/total/blocked: `{dft_raw_registration.get('registered_unit_count')}` / `{dft_raw_registration.get('unit_count')}` / `{dft_raw_registration.get('blocked_unit_count')}`",
+        f"- Raw refs registered/present/missing/invalid: `{dft_raw_registration.get('registered_raw_stage_evidence_file_count')}` / `{dft_raw_registration.get('present_raw_stage_evidence_file_count')}` / `{dft_raw_registration.get('missing_raw_stage_evidence_file_count')}` / `{dft_raw_registration.get('invalid_raw_stage_evidence_file_count')}`",
+        f"- Adjudication result: `{dft_raw_registration.get('adjudication_result')}`",
+        f"- Passed stage count: `{dft_raw_registration.get('passed_stage_count')}`",
+        f"- Validation valid: `{raw_registration_validation.get('valid')}`",
+        f"- Hardware completion eligible: `{dft_raw_registration.get('hardware_completion_eligible')}`",
+        f"- Deliverable complete: `{dft_raw_registration.get('deliverable_complete')}`",
+        "- Boundary: raw-transcript registration hashes and indexes already-present candidate-specific raw files only; parser and hard-gate adjudication remain separate.",
+    ])
+    if not dft_raw_registration.get("present"):
+        lines.append("- No DFT hardware closure raw-transcript registration artifact was indexed for this Step5 run.")
+
+    dft_intake = report.get("dft_hardware_closure_evidence_intake", {})
+    dft_intake = dft_intake if isinstance(dft_intake, Mapping) else {}
+    intake_validation = (
+        dft_intake.get("validation", {})
+        if isinstance(dft_intake.get("validation", {}), Mapping)
+        else {}
+    )
+    lines.extend([
+        "",
+        "## DFT Hardware Closure Evidence Intake",
+        f"- Present: `{dft_intake.get('present')}`",
+        f"- Status: `{dft_intake.get('status')}`",
+        f"- Release/candidates/kernels: `{dft_intake.get('release_id')}` / `{dft_intake.get('candidate_count')}` / `{dft_intake.get('major_kernel_count')}`",
+        f"- Packets/units: `{dft_intake.get('packet_count')}` / `{dft_intake.get('unit_count')}`",
+        f"- Evidence files present/missing/expected: `{dft_intake.get('present_evidence_file_count')}` / `{dft_intake.get('missing_evidence_file_count')}` / `{dft_intake.get('expected_evidence_file_count')}`",
+        f"- Candidate bundles present: `{dft_intake.get('candidate_bundle_count')}`",
+        f"- Adjudication status: `{dft_intake.get('adjudication_status')}`",
+        f"- Validation valid: `{intake_validation.get('valid')}`",
+        f"- Hardware completion eligible: `{dft_intake.get('hardware_completion_eligible')}`",
+        f"- Deliverable complete: `{dft_intake.get('deliverable_complete')}`",
+        "- Boundary: evidence intake checks candidate-specific file presence only; it cannot adjudicate or upgrade correctness, FPGA/ASIC PPA, trusted Pareto, or completion claims.",
+    ])
+    if not dft_intake.get("present"):
+        lines.append("- No DFT hardware closure evidence intake was indexed for this Step5 run.")
+
+    dft_adjudication = report.get("dft_hardware_closure_adjudication", {})
+    dft_adjudication = dft_adjudication if isinstance(dft_adjudication, Mapping) else {}
+    adjudication_validation = (
+        dft_adjudication.get("validation", {})
+        if isinstance(dft_adjudication.get("validation", {}), Mapping)
+        else {}
+    )
+    lines.extend([
+        "",
+        "## DFT Hardware Closure Adjudication",
+        f"- Present: `{dft_adjudication.get('present')}`",
+        f"- Status: `{dft_adjudication.get('status')}`",
+        f"- Release/candidates/kernels: `{dft_adjudication.get('release_id')}` / `{dft_adjudication.get('candidate_count')}` / `{dft_adjudication.get('major_kernel_count')}`",
+        f"- Packets/units/stages: `{dft_adjudication.get('packet_count')}` / `{dft_adjudication.get('unit_count')}` / `{dft_adjudication.get('stage_count')}`",
+        f"- Stages passed/blocked/files-present-unadjudicated: `{dft_adjudication.get('passed_stage_count')}` / `{dft_adjudication.get('blocked_stage_count')}` / `{dft_adjudication.get('files_present_unadjudicated_stage_count')}`",
+        f"- Evidence files present/missing/expected: `{dft_adjudication.get('present_evidence_file_count')}` / `{dft_adjudication.get('missing_evidence_file_count')}` / `{dft_adjudication.get('expected_evidence_file_count')}`",
+        f"- Candidate bundles present: `{dft_adjudication.get('candidate_bundle_count')}`",
+        f"- Adjudication result: `{dft_adjudication.get('adjudication_result')}`",
+        f"- Validation valid: `{adjudication_validation.get('valid')}`",
+        f"- Hardware completion eligible: `{dft_adjudication.get('hardware_completion_eligible')}`",
+        f"- Deliverable complete: `{dft_adjudication.get('deliverable_complete')}`",
+        "- Boundary: closure adjudication is a fail-closed stage ledger; it cannot pass golden/sim/synth/Vivado/DC gates without parsed candidate-specific evidence.",
+    ])
+    if not dft_adjudication.get("present"):
+        lines.append("- No DFT hardware closure adjudication ledger was indexed for this Step5 run.")
+
+    dft_parsed = report.get("dft_hardware_closure_parsed_evidence", {})
+    dft_parsed = dft_parsed if isinstance(dft_parsed, Mapping) else {}
+    parsed_validation = (
+        dft_parsed.get("validation", {})
+        if isinstance(dft_parsed.get("validation", {}), Mapping)
+        else {}
+    )
+    lines.extend([
+        "",
+        "## DFT Hardware Closure Parsed Evidence",
+        f"- Present: `{dft_parsed.get('present')}`",
+        f"- Status: `{dft_parsed.get('status')}`",
+        f"- Release/candidates/kernels: `{dft_parsed.get('release_id')}` / `{dft_parsed.get('candidate_count')}` / `{dft_parsed.get('major_kernel_count')}`",
+        f"- Packets/units/stages: `{dft_parsed.get('packet_count')}` / `{dft_parsed.get('unit_count')}` / `{dft_parsed.get('stage_count')}`",
+        f"- Parsed results present/missing/expected: `{dft_parsed.get('present_parsed_result_count')}` / `{dft_parsed.get('missing_parsed_result_count')}` / `{dft_parsed.get('expected_parsed_result_count')}`",
+        f"- Parsed results valid/invalid: `{dft_parsed.get('valid_parsed_result_count')}` / `{dft_parsed.get('invalid_parsed_result_count')}`",
+        f"- Parsed verdict counts: `{dft_parsed.get('parsed_verdict_counts')}`",
+        f"- Adjudication result: `{dft_parsed.get('adjudication_result')}`",
+        f"- Passed stage count: `{dft_parsed.get('passed_stage_count')}`",
+        f"- Validation valid: `{parsed_validation.get('valid')}`",
+        f"- Hardware completion eligible: `{dft_parsed.get('hardware_completion_eligible')}`",
+        f"- Deliverable complete: `{dft_parsed.get('deliverable_complete')}`",
+        "- Boundary: parsed evidence manifests validate parser outputs only; a separate adjudicator must still decide golden/sim/synth/Vivado/DC gates.",
+    ])
+    if not dft_parsed.get("present"):
+        lines.append("- No DFT hardware closure parsed-evidence manifest was indexed for this Step5 run.")
+
+    dft_parser_run = report.get("dft_hardware_closure_parser_run", {})
+    dft_parser_run = dft_parser_run if isinstance(dft_parser_run, Mapping) else {}
+    parser_run_validation = (
+        dft_parser_run.get("validation", {})
+        if isinstance(dft_parser_run.get("validation", {}), Mapping)
+        else {}
+    )
+    lines.extend([
+        "",
+        "## DFT Hardware Closure Parser Run",
+        f"- Present: `{dft_parser_run.get('present')}`",
+        f"- Status: `{dft_parser_run.get('status')}`",
+        f"- Release/candidates/kernels: `{dft_parser_run.get('release_id')}` / `{dft_parser_run.get('candidate_count')}` / `{dft_parser_run.get('major_kernel_count')}`",
+        f"- Packets/units/stages: `{dft_parser_run.get('packet_count')}` / `{dft_parser_run.get('unit_count')}` / `{dft_parser_run.get('stage_count')}`",
+        f"- Parsed results written: `{dft_parser_run.get('parsed_result_written_count')}`",
+        f"- Blocked stage count: `{dft_parser_run.get('blocked_stage_count')}`",
+        f"- Parsed verdict counts: `{dft_parser_run.get('verdict_counts')}`",
+        f"- Parser status counts: `{dft_parser_run.get('parser_status_counts')}`",
+        f"- Stage blocker ids: `{dft_parser_run.get('stage_blocker_ids')}`",
+        f"- DC target-library discovery counts: `{dft_parser_run.get('dc_target_library_discovery_counts')}`",
+        f"- DC target libraries: `{dft_parser_run.get('dc_target_libraries')}`",
+        f"- Adjudication result: `{dft_parser_run.get('adjudication_result')}`",
+        f"- Passed stage count: `{dft_parser_run.get('passed_stage_count')}`",
+        f"- Validation valid: `{parser_run_validation.get('valid')}`",
+        f"- Hardware completion eligible: `{dft_parser_run.get('hardware_completion_eligible')}`",
+        f"- Deliverable complete: `{dft_parser_run.get('deliverable_complete')}`",
+        "- Boundary: parser runs materialize parser-output files only from existing candidate-specific raw evidence; a separate adjudicator must still decide every golden/sim/synth/Vivado/DC gate.",
+    ])
+    if not dft_parser_run.get("present"):
+        lines.append("- No DFT hardware closure parser-run artifact was indexed for this Step5 run.")
+
+    dft_gate_adj = report.get("dft_hardware_closure_gate_adjudication", {})
+    dft_gate_adj = dft_gate_adj if isinstance(dft_gate_adj, Mapping) else {}
+    gate_adj_validation = (
+        dft_gate_adj.get("validation", {})
+        if isinstance(dft_gate_adj.get("validation", {}), Mapping)
+        else {}
+    )
+    lines.extend([
+        "",
+        "## DFT Hardware Closure Gate Adjudication",
+        f"- Present: `{dft_gate_adj.get('present')}`",
+        f"- Status: `{dft_gate_adj.get('status')}`",
+        f"- Release/candidates/kernels: `{dft_gate_adj.get('release_id')}` / `{dft_gate_adj.get('candidate_count')}` / `{dft_gate_adj.get('major_kernel_count')}`",
+        f"- Packets/units/stages: `{dft_gate_adj.get('packet_count')}` / `{dft_gate_adj.get('unit_count')}` / `{dft_gate_adj.get('stage_count')}`",
+        f"- Stage gates passed/blocked/failed: `{dft_gate_adj.get('stage_gate_passed_count')}` / `{dft_gate_adj.get('blocked_stage_count')}` / `{dft_gate_adj.get('failed_stage_count')}`",
+        f"- Unit gates passed/blocked/failed: `{dft_gate_adj.get('unit_gate_passed_count')}` / `{dft_gate_adj.get('blocked_unit_count')}` / `{dft_gate_adj.get('failed_unit_count')}`",
+        f"- Adjudication result: `{dft_gate_adj.get('adjudication_result')}`",
+        f"- Validation valid: `{gate_adj_validation.get('valid')}`",
+        f"- Hardware completion eligible: `{dft_gate_adj.get('hardware_completion_eligible')}`",
+        f"- Deliverable complete: `{dft_gate_adj.get('deliverable_complete')}`",
+        "- Boundary: gate adjudication may record per-stage parsed-evidence verdicts, but release completion/trusted Pareto/FPGA/ASIC PPA require later all-unit claim closure.",
+    ])
+    if not dft_gate_adj.get("present"):
+        lines.append("- No DFT hardware closure gate-adjudication artifact was indexed for this Step5 run.")
+
+    dft_release_gate = report.get("dft_hardware_closure_release_gate", {})
+    dft_release_gate = dft_release_gate if isinstance(dft_release_gate, Mapping) else {}
+    release_gate_validation = (
+        dft_release_gate.get("validation", {})
+        if isinstance(dft_release_gate.get("validation", {}), Mapping)
+        else {}
+    )
+    lines.extend([
+        "",
+        "## DFT Hardware Closure Release Gate",
+        f"- Present: `{dft_release_gate.get('present')}`",
+        f"- Status: `{dft_release_gate.get('status')}`",
+        f"- Release/candidates/kernels: `{dft_release_gate.get('release_id')}` / `{dft_release_gate.get('candidate_count')}` / `{dft_release_gate.get('major_kernel_count')}`",
+        f"- Units/stages: `{dft_release_gate.get('unit_count')}` / `{dft_release_gate.get('stage_count')}`",
+        f"- Stage gates passed/blocked/failed: `{dft_release_gate.get('stage_gate_passed_count')}` / `{dft_release_gate.get('blocked_stage_count')}` / `{dft_release_gate.get('failed_stage_count')}`",
+        f"- Unit gates passed/blocked/failed: `{dft_release_gate.get('unit_gate_passed_count')}` / `{dft_release_gate.get('blocked_unit_count')}` / `{dft_release_gate.get('failed_unit_count')}`",
+        f"- Candidate gates passed/blocked/failed: `{dft_release_gate.get('candidate_gate_passed_count')}` / `{dft_release_gate.get('blocked_candidate_count')}` / `{dft_release_gate.get('failed_candidate_count')}`",
+        f"- Release gate result: `{dft_release_gate.get('release_gate_result')}`",
+        f"- Validation valid: `{release_gate_validation.get('valid')}`",
+        f"- Hardware completion eligible: `{dft_release_gate.get('hardware_completion_eligible')}`",
+        f"- Deliverable complete: `{dft_release_gate.get('deliverable_complete')}`",
+        "- Boundary: release-gate rollup can make hardware completion eligibility auditable after all unit gates pass, but final deliverable completion remains a separate goal/release claim.",
+    ])
+    if not dft_release_gate.get("present"):
+        lines.append("- No DFT hardware closure release-gate artifact was indexed for this Step5 run.")
+
+    dft_hybrid = report.get("dft_full_scf_evaluated_hybrid", {})
+    dft_hybrid = dft_hybrid if isinstance(dft_hybrid, Mapping) else {}
+    hybrid_schedule = (
+        dft_hybrid.get("schedule_summary", {})
+        if isinstance(dft_hybrid.get("schedule_summary", {}), Mapping)
+        else {}
+    )
+    lines.extend([
+        "",
+        "## DFT Full-SCF Evaluated Hybrid",
+        f"- Present: `{dft_hybrid.get('present')}`",
+        f"- Required artifact bundle present: `{dft_hybrid.get('required_artifacts_present')}`",
+        f"- Prototype boundary: `{dft_hybrid.get('prototype_boundary')}`",
+        f"- Device residency: `{dft_hybrid.get('device_residency')}`",
+        f"- Descriptor validation passed: `{dft_hybrid.get('descriptor_validation_passed')}`",
+        f"- Numerical correctness claim eligible: `{dft_hybrid.get('numerical_correctness_claim_eligible')}`",
+        f"- PPA claim eligible: `{dft_hybrid.get('ppa_claim_eligible')}`",
+        f"- Accelerated kernels: `{', '.join(str(item) for item in (hybrid_schedule.get('accelerated_kernel_ids', []) or []))}`",
+        f"- Host-bound phases: `{', '.join(str(item) for item in (hybrid_schedule.get('host_bound_phase_ids', []) or []))}`",
+        "- Boundary: evaluated-hybrid artifacts expose schedule/cost accounting only; they do not prove device residency, numerical correctness, or FPGA/ASIC PPA closure.",
+    ])
+    if not dft_hybrid.get("present"):
+        lines.append("- No full-SCF evaluated-hybrid artifact bundle was indexed for this Step5 run.")
 
     feedback = report.get("feedback_loop", {}) or {}
     convergence = feedback.get("convergence", {}) or {}
@@ -1387,11 +3965,36 @@ def write_step5_report_artifacts(
         claims=claims,
         artifact_paths=artifact_paths,
     )
+    source_step4_passed = bool(source_claim_validation.get("passed", False))
     report.setdefault("run_metadata", {})["source_step4_claim_validation"] = "claim_validation.json"
-    report.setdefault("run_metadata", {})["source_step4_claim_validation_passed"] = bool(source_claim_validation.get("passed", False))
+    report.setdefault("run_metadata", {})["source_step4_claim_validation_passed"] = source_step4_passed
     report.setdefault("run_metadata", {})["step5_trust_boundary"] = (
         "Step5 presents Step4 evidence and may report blocked claims; it does not upgrade unpassed Step4 claim validation."
     )
+    if not source_step4_passed:
+        claim_validation = dict(report.get("claim_validation", {}))
+        errors = list(claim_validation.get("errors", []) or [])
+        source_reason = str(
+            source_claim_validation.get("fail_closed_reason")
+            or source_claim_validation.get("reason")
+            or "source_step4_claim_validation_failed"
+        )
+        error = f"source_step4_claim_validation: {source_reason}"
+        if error not in errors:
+            errors.append(error)
+        claim_validation.update(
+            {
+                "passed": False,
+                "source_step4_claim_validation": "claim_validation.json",
+                "source_step4_claim_validation_passed": False,
+                "fail_closed_reason": (
+                    "Step5 final_report.json cannot upgrade an unpassed source "
+                    "Step4 claim_validation.json."
+                ),
+                "errors": errors,
+            }
+        )
+        report["claim_validation"] = claim_validation
     _write_json(run_dir / "final_report.json", report)
     _write_text(run_dir / "final_report.md", render_markdown_report(report))
     campaign_summary = {
@@ -1401,6 +4004,29 @@ def write_step5_report_artifacts(
         "selected_recommendation": report.get("selected_recommendation", {}),
         "trusted_ranking_count": len(report.get("trusted_ranking", []) or []),
         "limitations": report.get("limitations", []),
+        "dft_evidence_ledger_summary": report.get("dft_evidence_ledger", {}),
+        "dft_trial_state_ledger_summary": report.get("dft_trial_state_ledger", {}),
+        "dft_candidate_binding_map_summary": report.get("dft_candidate_binding_map", {}),
+        "dft_hardware_completion_workplan_summary": report.get("dft_hardware_completion_workplan", {}),
+        "dft_hardware_closure_shards_summary": report.get("dft_hardware_closure_shards", {}),
+        "dft_hardware_closure_packets_summary": report.get("dft_hardware_closure_packets", {}),
+        "dft_hardware_closure_candidate_bundles_summary": report.get("dft_hardware_closure_candidate_bundles", {}),
+        "dft_hardware_closure_unit_provenance_summary": report.get("dft_hardware_closure_unit_provenance", {}),
+        "dft_hardware_closure_source_flow_plan_summary": report.get("dft_hardware_closure_source_flow_plan", {}),
+        "dft_hardware_closure_raw_stage_materialization_summary": report.get(
+            "dft_hardware_closure_raw_stage_materialization", {}
+        ),
+        "dft_hardware_closure_raw_transcript_registration_summary": report.get(
+            "dft_hardware_closure_raw_transcript_registration", {}
+        ),
+        "dft_hardware_closure_evidence_intake_summary": report.get("dft_hardware_closure_evidence_intake", {}),
+        "dft_hardware_closure_adjudication_summary": report.get("dft_hardware_closure_adjudication", {}),
+        "dft_hardware_closure_parsed_evidence_summary": report.get("dft_hardware_closure_parsed_evidence", {}),
+        "dft_hardware_closure_parser_run_summary": report.get("dft_hardware_closure_parser_run", {}),
+        "dft_hardware_closure_gate_adjudication_summary": report.get("dft_hardware_closure_gate_adjudication", {}),
+        "dft_hardware_closure_release_gate_summary": report.get("dft_hardware_closure_release_gate", {}),
+        "dft_l4_goal_binding_summary": report.get("dft_l4_goal_binding", {}),
+        "dft_full_scf_evaluated_hybrid_summary": report.get("dft_full_scf_evaluated_hybrid", {}),
         "source_step4_artifacts": ["verdict.json", "claim_validation.json", "evidence_requirements.json"],
     }
     _write_json(run_dir / "campaign_summary.json", campaign_summary)

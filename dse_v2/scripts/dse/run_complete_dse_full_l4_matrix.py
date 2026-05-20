@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import copy
+import hashlib
 import json
 import os
 import re
@@ -65,6 +66,12 @@ from dse_v2.reference_workloads.qe_mainflow import (  # noqa: E402
     package_qe_mainflow_case,
     validate_qe_mainflow_workload_suite,
 )
+from dse_v2.reference_workloads.dft_current_goal_l4_bridge import (  # noqa: E402
+    DFT_CURRENT_GOAL_SIX_SCF_WORKLOAD_SUITE_SCHEMA,
+)
+from dse_v2.reference_workloads.dft_scf_six_class_suite import (  # noqa: E402
+    REQUIRED_DFT_SCF_CLASS_IDS,
+)
 
 
 RUN_SCHEMA = "dse.codesign.complete_dse_full_l4_matrix_run.v1"
@@ -102,6 +109,14 @@ def _write_json(path: Path, payload: Any) -> None:
 def _write_text(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
+
+
+def _sha256_text(text: str) -> str:
+    return hashlib.sha256(text.strip().encode("utf-8")).hexdigest()
+
+
+def _sha256_file(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def _matrix_gate_count(matrix: Mapping[str, Any], gate_name: str) -> int:
@@ -243,6 +258,283 @@ def _case_index(workload_suite: Mapping[str, Any]) -> dict[str, Mapping[str, Any
         for case in workload_suite.get("cases", []) or []
         if isinstance(case, Mapping) and (case.get("case_id") or case.get("workload_case_id"))
     }
+
+
+def _is_current_goal_six_scf_suite(workload_suite: Mapping[str, Any]) -> bool:
+    return workload_suite.get("schema_version") == DFT_CURRENT_GOAL_SIX_SCF_WORKLOAD_SUITE_SCHEMA
+
+
+def _resolve_ref_path(ref_path: Any, roots: Sequence[Path]) -> Path | None:
+    if not ref_path:
+        return None
+    path = Path(str(ref_path))
+    if path.is_absolute():
+        return path
+    for root in roots:
+        candidate = root / path
+        if candidate.exists():
+            return candidate
+    return roots[0] / path if roots else path
+
+
+def _source_roots_for_workload_suite(workload_suite: Mapping[str, Any], workload_suite_path: Path) -> list[Path]:
+    roots = [workload_suite_path.parent]
+    source_artifacts = workload_suite.get("source_artifacts", {})
+    if isinstance(source_artifacts, Mapping):
+        bundle_ref = source_artifacts.get("dft_scf_six_class_bundle_manifest")
+        if isinstance(bundle_ref, Mapping) and bundle_ref.get("path"):
+            bundle_path = _resolve_ref_path(
+                bundle_ref.get("path"),
+                [workload_suite_path.parent, REPO_ROOT, Path.cwd()],
+            )
+            roots.append(bundle_path.parent)
+    unique: list[Path] = []
+    for root in roots:
+        resolved = root.resolve() if root.exists() else root
+        if resolved not in unique:
+            unique.append(resolved)
+    return unique
+
+
+def _load_descriptor_payload_from_case(
+    case: Mapping[str, Any],
+    *,
+    roots: Sequence[Path],
+) -> tuple[Dict[str, Any] | None, list[str], Path | None]:
+    blockers: list[str] = []
+    for key in ("descriptor_payload", "embedded_descriptor"):
+        payload = case.get(key)
+        if isinstance(payload, Mapping):
+            return copy.deepcopy(dict(payload)), blockers, None
+
+    descriptor = case.get("descriptor")
+    if isinstance(descriptor, Mapping) and (
+        "qe_input" in descriptor
+        or "schema_version" in descriptor
+        or "run_command" in descriptor
+        or "qe_command_template" in descriptor
+    ):
+        return copy.deepcopy(dict(descriptor)), blockers, None
+
+    if isinstance(descriptor, Mapping) and descriptor.get("path"):
+        descriptor_path = _resolve_ref_path(descriptor.get("path"), roots)
+        if descriptor_path is None or not descriptor_path.is_file():
+            blockers.append(f"current_goal_descriptor_file_missing:{descriptor.get('path')}")
+            return None, blockers, descriptor_path
+        expected_sha = descriptor.get("sha256")
+        if expected_sha:
+            actual_sha = _sha256_file(descriptor_path)
+            if str(expected_sha) != actual_sha:
+                blockers.append(f"current_goal_descriptor_sha256_mismatch:{descriptor.get('path')}")
+                return None, blockers, descriptor_path
+        try:
+            payload = _load_json(descriptor_path)
+        except Exception as exc:
+            blockers.append(f"current_goal_descriptor_unreadable:{descriptor.get('path')}:{type(exc).__name__}")
+            return None, blockers, descriptor_path
+        if not isinstance(payload, Mapping):
+            blockers.append(f"current_goal_descriptor_not_object:{descriptor.get('path')}")
+            return None, blockers, descriptor_path
+        return copy.deepcopy(dict(payload)), blockers, descriptor_path
+
+    if isinstance(case.get("qe_input"), Mapping):
+        return copy.deepcopy(dict(case)), blockers, None
+
+    blockers.append("current_goal_missing_embedded_descriptor_or_qe_input")
+    return None, blockers, None
+
+
+def _qe_input_from_descriptor(case: Mapping[str, Any], descriptor: Mapping[str, Any] | None) -> tuple[str | None, str | None, list[str]]:
+    blockers: list[str] = []
+    candidates = []
+    if isinstance(case.get("qe_input"), Mapping):
+        candidates.append(case["qe_input"])
+    if isinstance(descriptor, Mapping) and isinstance(descriptor.get("qe_input"), Mapping):
+        candidates.append(descriptor["qe_input"])
+    for qe_input in candidates:
+        text = qe_input.get("text")
+        path = qe_input.get("path") or qe_input.get("input_path")
+        if isinstance(text, str) and text.strip():
+            return text, str(path or f"{case.get('case_id') or case.get('workload_case_id')}.in"), blockers
+    blockers.append("current_goal_missing_qe_input_text")
+    return None, None, blockers
+
+
+def _normalize_qe_program_from_template(command: Any) -> str:
+    if isinstance(command, (list, tuple)) and command:
+        first = str(command[0])
+        if first.startswith("${QE_PW_CMD:-") and first.endswith("}"):
+            return first[len("${QE_PW_CMD:-") : -1] or "pw.x"
+        if first and "$" not in first and "{" not in first:
+            return first
+    return "pw.x"
+
+
+def _adapt_current_goal_case_for_qe_runner(
+    case: Mapping[str, Any],
+    *,
+    roots: Sequence[Path],
+) -> tuple[Dict[str, Any], list[str]]:
+    case_id = str(case.get("case_id") or case.get("workload_case_id") or "")
+    class_id = str(case.get("class_id") or case.get("workload_class") or "")
+    blockers: list[str] = []
+    if not case_id:
+        blockers.append("current_goal_case_id_missing")
+    if not class_id:
+        blockers.append("current_goal_class_id_missing")
+    elif class_id not in REQUIRED_DFT_SCF_CLASS_IDS:
+        blockers.append(f"current_goal_unexpected_class_id:{class_id}")
+
+    descriptor, descriptor_blockers, descriptor_path = _load_descriptor_payload_from_case(case, roots=roots)
+    blockers.extend(descriptor_blockers)
+    input_text, input_path, input_blockers = _qe_input_from_descriptor(case, descriptor)
+    blockers.extend(input_blockers)
+
+    adapted = copy.deepcopy(dict(case))
+    if descriptor is not None:
+        adapted["embedded_descriptor"] = descriptor
+    if descriptor_path is not None:
+        adapted["descriptor_materialized_path"] = str(descriptor_path)
+    adapted["_matrix_runner_current_goal_case"] = True
+    adapted["_matrix_runner_source_roots"] = [str(root) for root in roots]
+    adapted.setdefault("case_id", case_id)
+    adapted.setdefault("workload_case_id", case_id)
+    adapted.setdefault("class_id", class_id)
+    adapted.setdefault("workload_class", class_id)
+    adapted["stage_type"] = "scf"
+    adapted["workflow_class"] = "scf"
+    adapted.setdefault("kernel_coverage", [
+        "h_psi",
+        "s_psi",
+        "fft",
+        "projector",
+        "reduction",
+        "dma",
+    ])
+    adapted.setdefault("physical_quantities", [
+        "total_energy_ry",
+        "density_residual",
+        "eigenvalue_summary_error_ry",
+    ])
+    adapted.setdefault("expected_outputs", {})
+    adapted.setdefault("baseline_run_provenance", {
+        "status": "pending_real_qe_baseline",
+        "source": "dft_current_goal_strict_six_scf_manifest",
+    })
+    adapted.setdefault("tolerance_reference", {"required_fields": ["kernel_absolute_tolerance"]})
+    adapted.setdefault("blocker_status", {
+        "structural_status": "ready" if not blockers else "blocked",
+        "trusted_closure_status": "blocked_until_real_qe_gem5_and_accelerated_numeric_evidence",
+    })
+    adapted.setdefault("candidate_identity_participation", False)
+    adapted.setdefault("adapter_boundary", {"generic_core_required_qe_fields": []})
+
+    if input_text is not None:
+        concrete_input_path = input_path or f"{case_id}.in"
+        input_name = Path(concrete_input_path).name
+        qe_program = _normalize_qe_program_from_template(
+            (descriptor or {}).get("qe_command_template") if isinstance(descriptor, Mapping) else None
+        )
+        command = [qe_program, "-in", input_name]
+        adapted["qe_command"] = command
+        adapted["input_hashes"] = {str(concrete_input_path): _sha256_text(input_text)}
+        adapted["step1_source"] = {
+            "source_kind": "dft_current_goal_six_scf_qe_input",
+            "stages": [
+                {
+                    "stage_id": "stage_00_scf",
+                    "program": qe_program,
+                    "stage_type": "scf",
+                    "command": command,
+                    "input": input_text,
+                    "input_path": concrete_input_path,
+                    "parameters": {
+                        "class_id": class_id,
+                        "current_goal_strict_six_scf": True,
+                    },
+                }
+            ],
+        }
+        adapted["baseline_sequence"] = [
+            {
+                "step_id": "stage_00_scf",
+                "program": qe_program,
+                "command": command,
+                "input": input_text,
+                "input_path": concrete_input_path,
+                "include_in_performance": True,
+            }
+        ]
+
+    adapted["_matrix_runner_blockers"] = sorted(dict.fromkeys(blockers))
+    return adapted, adapted["_matrix_runner_blockers"]
+
+
+def _adapt_workload_suite_for_runner(
+    workload_suite: Mapping[str, Any],
+    *,
+    workload_suite_path: Path,
+) -> tuple[Dict[str, Any], Dict[str, Any]]:
+    if not _is_current_goal_six_scf_suite(workload_suite):
+        validation = validate_qe_mainflow_workload_suite(workload_suite)
+        return copy.deepcopy(dict(workload_suite)), {
+            **validation,
+            "suite_kind": "qe_mainflow",
+        }
+
+    roots = _source_roots_for_workload_suite(workload_suite, workload_suite_path)
+    suite_blockers: list[str] = []
+    if workload_suite.get("strict") is not True:
+        suite_blockers.append("current_goal_six_scf_strict_flag_not_true")
+    cases_raw = workload_suite.get("cases", [])
+    if not isinstance(cases_raw, list):
+        suite_blockers.append("current_goal_cases_not_list")
+        cases_raw = []
+    declared_ids = [str(item) for item in workload_suite.get("workload_case_ids", []) or []]
+    adapted_cases: list[Dict[str, Any]] = []
+    case_blockers: dict[str, list[str]] = {}
+    for index, raw_case in enumerate(cases_raw):
+        if not isinstance(raw_case, Mapping):
+            suite_blockers.append(f"current_goal_case_not_object:{index}")
+            continue
+        adapted, blockers = _adapt_current_goal_case_for_qe_runner(raw_case, roots=roots)
+        case_id = str(adapted.get("case_id") or adapted.get("workload_case_id") or f"case_{index}")
+        adapted_cases.append(adapted)
+        case_blockers[case_id] = blockers
+    class_ids = [str(case.get("class_id") or "") for case in adapted_cases]
+    case_ids = [str(case.get("case_id") or case.get("workload_case_id") or "") for case in adapted_cases]
+    required = set(REQUIRED_DFT_SCF_CLASS_IDS)
+    if len(adapted_cases) != len(REQUIRED_DFT_SCF_CLASS_IDS) or set(class_ids) != required:
+        suite_blockers.append("current_goal_six_scf_suite_not_exact")
+    if len(set(case_ids)) != len(case_ids) or any(not case_id for case_id in case_ids):
+        suite_blockers.append("current_goal_workload_case_ids_missing_or_duplicate")
+    if declared_ids and declared_ids != case_ids:
+        suite_blockers.append("current_goal_workload_case_ids_do_not_match_cases")
+
+    adapted_suite = copy.deepcopy(dict(workload_suite))
+    adapted_suite["cases"] = adapted_cases
+    adapted_suite["workload_case_ids"] = case_ids
+    adapted_suite["_matrix_runner_suite_kind"] = "dft_current_goal_six_scf"
+    adapted_suite["_matrix_runner_blockers"] = sorted(dict.fromkeys(suite_blockers))
+    validation = {
+        "schema_version": "dse.dft.current_goal_l4.six_scf_workload_suite_runner_validation.v1",
+        "suite_kind": "dft_current_goal_six_scf",
+        "valid": not suite_blockers and not any(case_blockers.values()),
+        "strict": workload_suite.get("strict") is True,
+        "case_count": len(adapted_cases),
+        "case_ids": case_ids,
+        "class_ids": class_ids,
+        "required_class_ids": list(REQUIRED_DFT_SCF_CLASS_IDS),
+        "source_roots": [str(root) for root in roots],
+        "suite_blockers": sorted(dict.fromkeys(suite_blockers)),
+        "case_blockers": case_blockers,
+        "trusted_closure_ready": False,
+        "claim_boundary": (
+            "Current-goal six-SCF manifests are accepted as workload inputs only. "
+            "They do not satisfy QE baseline, gem5, accelerated numeric, correctness, or deliverable-complete gates."
+        ),
+    }
+    return adapted_suite, validation
 
 
 def _safe_path_component(value: str) -> str:
@@ -628,11 +920,62 @@ def _write_qe_case_inputs(case: Mapping[str, Any], baseline_dir: Path) -> None:
             _write_text(baseline_dir / Path(str(input_path)).name, input_text)
 
 
-def _copy_qe_pseudos(baseline_dir: Path, qe_pseudo_dir: Path | None) -> Dict[str, Any]:
+def _case_pseudo_refs(case: Mapping[str, Any]) -> list[Mapping[str, Any]]:
+    refs: list[Mapping[str, Any]] = []
+    for key in ("pseudo_refs", "pseudopotentials"):
+        raw = case.get(key)
+        if isinstance(raw, list):
+            refs.extend(item for item in raw if isinstance(item, Mapping))
+    descriptor = case.get("embedded_descriptor")
+    if isinstance(descriptor, Mapping):
+        for key in ("pseudo_refs", "pseudopotentials"):
+            raw = descriptor.get(key)
+            if isinstance(raw, list):
+                refs.extend(item for item in raw if isinstance(item, Mapping))
+    deduped: dict[str, Mapping[str, Any]] = {}
+    for ref in refs:
+        name = str(ref.get("file_name") or Path(str(ref.get("path") or "")).name or "")
+        if name:
+            deduped[name] = ref
+    return list(deduped.values())
+
+
+def _copy_qe_pseudos(
+    baseline_dir: Path,
+    qe_pseudo_dir: Path | None,
+    *,
+    case: Mapping[str, Any] | None = None,
+) -> Dict[str, Any]:
     pseudo_dir = baseline_dir / "pseudo"
     pseudo_dir.mkdir(parents=True, exist_ok=True)
     copied: list[str] = []
     blockers: list[str] = []
+    case_refs = _case_pseudo_refs(case or {})
+    source_roots = [Path(str(root)) for root in (case or {}).get("_matrix_runner_source_roots", []) or []]
+    for ref in case_refs:
+        pseudo_name = str(ref.get("file_name") or Path(str(ref.get("path") or "")).name)
+        if not pseudo_name:
+            continue
+        source: Path | None = None
+        if ref.get("path"):
+            source = _resolve_ref_path(ref.get("path"), source_roots or [baseline_dir])
+        if (source is None or not source.exists()) and qe_pseudo_dir is not None:
+            candidate = qe_pseudo_dir / pseudo_name
+            if candidate.exists():
+                source = candidate
+        if source is not None and source.exists():
+            shutil.copy2(source, pseudo_dir / pseudo_name)
+            copied.append(pseudo_name)
+        else:
+            blockers.append(f"missing_qe_pseudopotential:{pseudo_name}")
+    if case_refs:
+        return {
+            "qe_pseudo_dir": str(qe_pseudo_dir) if qe_pseudo_dir else None,
+            "baseline_pseudo_dir": str(pseudo_dir),
+            "copied": copied,
+            "blockers": sorted(dict.fromkeys(blockers)),
+            "pseudo_source": "workload_case_pseudo_refs",
+        }
     if qe_pseudo_dir is None or not qe_pseudo_dir.exists():
         blockers.append("missing_qe_pseudo_dir")
         return {
@@ -1112,7 +1455,7 @@ def _run_qe_baseline(
     sequence = _baseline_sequence(case)
     _write_json(baseline_dir / "workload_case.json", case)
     _write_qe_case_inputs(case, baseline_dir)
-    pseudo_report = _copy_qe_pseudos(baseline_dir, qe_pseudo_dir)
+    pseudo_report = _copy_qe_pseudos(baseline_dir, qe_pseudo_dir, case=case)
     gpu_runtime_context = _gpu_runtime_context()
 
     if not command and not sequence:
@@ -1882,6 +2225,102 @@ def _build_evidence_row(
     return row
 
 
+def _build_packaging_blocked_evidence_row(
+    *,
+    candidate_id: str,
+    workload_case_id: str,
+    row_id: str,
+    candidate: Mapping[str, Any],
+    workload_case: Mapping[str, Any],
+    baseline: Mapping[str, Any],
+    row_dir: Path,
+    blockers: Sequence[str],
+) -> Dict[str, Any]:
+    row_dir.mkdir(parents=True, exist_ok=True)
+    _write_json(row_dir / "candidate_record.json", candidate)
+    _write_json(row_dir / "workload_case.json", workload_case)
+    explicit_blockers = sorted(dict.fromkeys(str(item) for item in blockers))
+    correctness = {
+        "schema_version": "dse.qe_correctness_row.v1",
+        "status": "blocked",
+        "trusted_claim_eligible": False,
+        "requested_claim_status": "blocked",
+        "kernel_gate": {"status": "blocked", "checks": [], "blockers": explicit_blockers},
+        "scf_physical_gate": {"status": "blocked", "blockers": explicit_blockers},
+        "downgrade_blocks": explicit_blockers,
+        "claim_boundary": "Workload packaging failed closed; no QE/gem5/correctness pass is inferred.",
+    }
+    accelerated = {
+        "schema_version": QE_ACCELERATED_NUMERIC_EVIDENCE_SCHEMA,
+        "row_id": row_id,
+        "candidate_id": candidate_id,
+        "workload_case_id": workload_case_id,
+        "source_kind": "missing",
+        "source": "not_provided",
+        "accelerated_output_status": "missing",
+        "trusted_accelerated_numeric_source": False,
+        "kernel_evidence": [],
+        "physical_evidence": {},
+        "blockers": [
+            *explicit_blockers,
+            "missing_accelerated_qe_kernel_numeric_outputs",
+            "missing_accelerated_qe_scf_physical_outputs",
+        ],
+        "status": "blocked",
+        "claim_boundary": "No accelerated/offloaded QE numeric output artifact exists for this packaging-blocked row.",
+    }
+    l4_attempt = {
+        "schema_version": "dse.codesign.l4_gem5_row_attempt.v1",
+        "status": "blocked",
+        "backend": "gem5_systemc",
+        "evidence_tier": "L4",
+        "attempted_real_gem5": False,
+        "gem5_l4_proof": {
+            "passed": False,
+            "proof_status": "blocked",
+            "missing_evidence": ["workload_package_not_materialized"],
+        },
+        "blockers": [{"id": item, "status": "blocked", "detail": item} for item in explicit_blockers],
+        "claim_boundary": "No real gem5 L4 attempt is made for rows whose workload cannot be packaged.",
+    }
+    calibration = {
+        "schema_version": "dse.codesign.l4_trace_counter_calibration.v1",
+        "status": "blocked",
+        "trace_counter_consistent": False,
+        "blockers": ["workload_package_not_materialized", "l4_gem5_proof_not_passed"],
+    }
+    performance = {
+        "schema_version": "dse.codesign.performance_classification.v1",
+        "status": "blocked",
+        "claim_label": "blocked",
+        "blockers": ["workload_package_not_materialized", "missing_passed_l4_metrics_for_speedup"],
+    }
+    _write_json(row_dir / "qe_correctness_for_l4_closure.json", correctness)
+    _write_json(row_dir / "qe_accelerated_numeric_evidence.json", accelerated)
+    row = _build_evidence_row(
+        candidate_id=candidate_id,
+        workload_case_id=workload_case_id,
+        row_id=row_id,
+        l3_status={
+            "schema_version": "dse.codesign.l3_systemc_row_summary.v1",
+            "status": "blocked",
+            "blockers": ["workload_package_not_materialized"],
+        },
+        l3_correctness=correctness,
+        closure_correctness=correctness,
+        accelerated_numeric_evidence=accelerated,
+        baseline=baseline,
+        l4_attempt=l4_attempt,
+        calibration=calibration,
+        performance=performance,
+        row_dir=row_dir,
+    )
+    row["status"] = "blocked"
+    row["blockers"] = sorted(dict.fromkeys([*row.get("blockers", []), *explicit_blockers]))
+    _write_json(row_dir / "evidence_row.json", row)
+    return row
+
+
 def _build_accelerated_evidence_requirements(
     *,
     out_dir: Path,
@@ -2179,8 +2618,11 @@ def run(argv: Sequence[str] | None = None) -> int:
     release_subset_path = args.release_subset or _materialize_default_search_space(out_dir / "search_space")
     workload_suite_path = args.workload_suite or _materialize_default_workload_suite(out_dir)
     release_subset = _load_json(release_subset_path)
-    workload_suite = _load_json(workload_suite_path)
-    suite_validation = validate_qe_mainflow_workload_suite(workload_suite)
+    raw_workload_suite = _load_json(workload_suite_path)
+    workload_suite, suite_validation = _adapt_workload_suite_for_runner(
+        raw_workload_suite,
+        workload_suite_path=workload_suite_path,
+    )
     _write_json(out_dir / "qe_mainflow_workload_suite_validation.json", suite_validation)
     accelerated_numeric_index, accelerated_numeric_index_report = _load_accelerated_numeric_evidence(
         args.accelerated_numeric_evidence
@@ -2256,7 +2698,36 @@ def run(argv: Sequence[str] | None = None) -> int:
             _write_json(row_dir / "candidate_record.json", candidate)
             _write_json(row_dir / "workload_case.json", workload_case)
 
-            workload_package = package_qe_mainflow_case(workload_case)
+            row_structural_blockers = sorted(dict.fromkeys(
+                [
+                    *[str(item) for item in workload_suite.get("_matrix_runner_blockers", []) or []],
+                    *[str(item) for item in workload_case.get("_matrix_runner_blockers", []) or []],
+                ]
+            ))
+            try:
+                workload_package = package_qe_mainflow_case(workload_case)
+            except Exception as exc:
+                packaging_blockers = sorted(dict.fromkeys([
+                    *row_structural_blockers,
+                    f"current_goal_workload_packaging_failed:{type(exc).__name__}:{exc}",
+                ]))
+                baseline = baselines.get(workload_case_id, {
+                    "status": "blocked",
+                    "baseline_status": "missing_workload_case_baseline",
+                    "pure_software_qe_baseline": False,
+                    "blockers": ["missing_workload_case_baseline"],
+                })
+                evidence_rows.append(_build_packaging_blocked_evidence_row(
+                    candidate_id=candidate_id,
+                    workload_case_id=workload_case_id,
+                    row_id=row_id,
+                    candidate=candidate,
+                    workload_case=workload_case,
+                    baseline=baseline,
+                    row_dir=row_dir,
+                    blockers=packaging_blockers,
+                ))
+                continue
             node_op_types = {node_id: node.op_type for node_id, node in workload_package.graph.nodes.items()}
             design_point = _build_design_point(
                 candidate_id=candidate_id,
@@ -2330,6 +2801,10 @@ def run(argv: Sequence[str] | None = None) -> int:
                 performance=performance,
                 row_dir=row_dir,
             )
+            if row_structural_blockers:
+                row["blockers"] = sorted(dict.fromkeys([*row.get("blockers", []), *row_structural_blockers]))
+                row["current_goal_workload_structural_blockers"] = row_structural_blockers
+                _write_json(row_dir / "evidence_row.json", row)
             evidence_rows.append(row)
 
     evidence_payload = {

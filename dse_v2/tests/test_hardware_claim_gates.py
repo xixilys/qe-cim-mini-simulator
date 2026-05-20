@@ -108,6 +108,48 @@ def test_vivado_only_rejected_for_asic_claim():
     assert "vivado_evidence_does_not_satisfy_asic_claim" in result["reasons"]
 
 
+def _dc_passed_kernel_evidence():
+    return {
+        "evidence_type": "dc_synth_timing_area",
+        "status": "passed",
+        "tool": "dc_shell",
+        "artifact": "dc_qor.rpt",
+        "dc_synth_ddc": "dc_synth.ddc",
+        "dc_timing_report": "dc_timing.rpt",
+        "dc_area_report": "dc_area.rpt",
+        "dc_target_library_discovery": "real_target_library_present",
+        "dc_target_libraries": ["fsa0a_c_generic_core_tt1p8v25c"],
+    }
+
+
+def test_asic_claim_requires_dc_synth_ddc_and_real_target_library():
+    result = validate_hardware_claim_evidence(
+        "asic",
+        [
+            *_common_passed_kernel_evidence(),
+            {
+                "evidence_type": "dc_synth_timing_area",
+                "status": "passed",
+                "tool": "dc_shell",
+                "artifact": "dc_ppa.rpt",
+                "dc_timing_report": "dc_timing.rpt",
+                "dc_area_report": "dc_area.rpt",
+            },
+        ],
+    )
+
+    assert result["status"] == "blocked"
+    assert result["trusted"] is False
+    assert result["claim_allowed"] is False
+    assert result["missing_or_blocked_stages"] == [
+        "dc_synth",
+        "dc_timing",
+        "dc_area",
+    ]
+    assert "asic_dc_synth_ddc_required" in result["reasons"]
+    assert "asic_dc_target_library_evidence_required" in result["reasons"]
+
+
 def test_matching_fpga_and_asic_branches_can_pass_their_own_claims():
     fpga = validate_hardware_claim_evidence(
         "fpga",
@@ -124,12 +166,7 @@ def test_matching_fpga_and_asic_branches_can_pass_their_own_claims():
         "asic",
         [
             *_common_passed_kernel_evidence(),
-            {
-                "evidence_type": "dc_synth_timing_area",
-                "status": "passed",
-                "tool": "dc_shell",
-                "artifact": "dc_ppa.rpt",
-            },
+            _dc_passed_kernel_evidence(),
         ],
     )
 
@@ -137,3 +174,38 @@ def test_matching_fpga_and_asic_branches_can_pass_their_own_claims():
     assert fpga["trusted"] is True
     assert asic["status"] == "passed"
     assert asic["trusted"] is True
+
+
+def test_claim_gate_rejects_cross_kernel_evidence_substitution():
+    result = validate_hardware_claim_evidence(
+        "fpga",
+        [
+            {
+                "kernel_id": "nonlocal_projector",
+                "evidence_type": "golden_correctness",
+                "status": "passed",
+            },
+            {
+                "kernel_id": "nonlocal_projector",
+                "evidence_type": "hls_csim",
+                "status": "passed",
+            },
+            {
+                "kernel_id": "nonlocal_projector",
+                "evidence_type": "hls_csynth",
+                "status": "passed",
+            },
+            {
+                "kernel_id": "fft_ifft_ffft",
+                "evidence_type": "vivado_synth",
+                "status": "passed",
+            },
+        ],
+        kernel_id="nonlocal_projector",
+    )
+
+    assert result["status"] == "blocked"
+    assert result["claim_allowed"] is False
+    assert result["missing_or_blocked_stages"] == ["vivado_fpga_synth_or_impl"]
+    assert "cross_kernel_evidence_ignored" in result["reasons"]
+    assert result["ignored_kernel_evidence"][0]["evidence_type"] == "vivado_synth"

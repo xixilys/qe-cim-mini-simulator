@@ -13,11 +13,20 @@ from dse_v2.codesign.evidence_ledger import (
     REQUIRED_ROW_FIELDS,
     validate_candidate_evidence_ledger,
 )
+from dse_v2.codesign.dft_hardware_evidence import (
+    MAJOR_SCF_KERNEL_IDS,
+    build_ic_eda_tool_availability_report,
+    build_major_kernel_evidence_matrix,
+)
 from dse_v2.reference_workloads.dft_codesign_domain import write_dft_seven_axis_artifacts
 from dse_v2.reference_workloads.dft_evidence_ledger import (
     DFT_EVIDENCE_ARTIFACT_CLASSES,
     DFT_UNSUPPORTED_GAP_LABELS,
     write_dft_candidate_evidence_artifacts,
+)
+from dse_v2.reference_workloads.dft_full_scf_hybrid import (
+    build_full_scf_evaluated_hybrid_payload,
+    write_full_scf_evaluated_hybrid_artifacts,
 )
 
 
@@ -31,9 +40,12 @@ def test_dft_candidate_evidence_ledger_has_closed_hash_valid_row_for_every_legal
     assert status["status"] == "passed"
     assert status["all_rows_closed"] is True
     ledger = json.loads((out_dir / "per_candidate_evidence_ledger.json").read_text())
+    release_manifest = json.loads((release_dir / "candidate_universe_manifest.json").read_text())
     validation = validate_candidate_evidence_ledger(out_dir / "per_candidate_evidence_ledger.json")
     assert validation["valid"] is True
-    assert ledger["row_count"] == ledger["legal_candidate_count"] == 36
+    expected_legal_candidate_ids = set(release_manifest["legal_candidate_ids"])
+    assert ledger["row_count"] == ledger["legal_candidate_count"] == release_manifest["legal_candidate_count"]
+    assert set(ledger["legal_candidate_ids"]) == expected_legal_candidate_ids
     assert set(ledger["evidence_artifact_classes"]) == set(DFT_EVIDENCE_ARTIFACT_CLASSES)
     assert tuple(ledger["claim_status_policy"]) == CLAIM_STATUS_POLICY
     assert CLAIM_STATUS_POLICY == (
@@ -90,7 +102,8 @@ def test_dft_candidate_evidence_ledger_has_closed_hash_valid_row_for_every_legal
         assert attempt["completion_eligible"] is False
 
     candidate_ids = [row["candidate_id"] for row in ledger["rows"]]
-    assert len(candidate_ids) == len(set(candidate_ids)) == 36
+    assert len(candidate_ids) == len(set(candidate_ids)) == len(expected_legal_candidate_ids)
+    assert set(candidate_ids) == expected_legal_candidate_ids
     legal_id_set = set(ledger["legal_candidate_ids"])
     requirement_matrix = json.loads((out_dir / "requirement_evidence_matrix.json").read_text())
     assert requirement_matrix["status"] == "passed"
@@ -339,6 +352,189 @@ def test_dft_candidate_evidence_ledger_has_closed_hash_valid_row_for_every_legal
             assert ref["path"]
             assert ref["hash"]
             assert (out_dir / ref["path"]).exists()
+
+
+def test_dft_candidate_evidence_ledger_attaches_ic_eda_and_major_kernel_matrix_without_false_completion(tmp_path):
+    release_dir = tmp_path / "release"
+    write_dft_seven_axis_artifacts(release_dir)
+    manifest = json.loads((release_dir / "candidate_universe_manifest.json").read_text(encoding="utf-8"))
+    matrix_candidate_id = next(
+        str(candidate["candidate_id"])
+        for candidate in manifest["candidates"]
+        if candidate.get("legal") is True
+    )
+    hardware_dir = tmp_path / "hardware"
+    hardware_dir.mkdir()
+    tool_report = build_ic_eda_tool_availability_report(
+        [
+            {
+                "tool": "dc_shell",
+                "returncode": 1,
+                "stdout": "dc_shell version O-2018.06-SP1",
+                "stderr": "",
+                "command": "ssh ic-eda dc_shell -version",
+            },
+            {
+                "tool": "vcs",
+                "returncode": 0,
+                "stdout": "VCS version O-2018.09",
+                "stderr": "",
+                "command": "ssh ic-eda vcs -ID",
+            },
+            {
+                "tool": "vivado",
+                "returncode": 0,
+                "stdout": "Vivado v2019.1",
+                "stderr": "",
+                "command": "ssh ic-eda vivado -version",
+            },
+        ],
+        environment="ssh ic-eda",
+    )
+    matrix = build_major_kernel_evidence_matrix(
+        [
+            {
+                "kernel_id": kernel_id,
+                "disposition": "host_bound",
+                "host_cost_accounted": True,
+            }
+            for kernel_id in MAJOR_SCF_KERNEL_IDS
+        ],
+        candidate_id=matrix_candidate_id,
+    )
+    tool_path = hardware_dir / "ic_eda_tool_availability.json"
+    matrix_path = hardware_dir / "dft_hardware_evidence_matrix.json"
+    tool_path.write_text(json.dumps(tool_report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    matrix_path.write_text(json.dumps(matrix, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    out_dir = tmp_path / "ledger"
+
+    status = write_dft_candidate_evidence_artifacts(
+        out_dir,
+        release_artifact_dir=release_dir,
+        ic_eda_tool_availability_path=tool_path,
+        dft_hardware_evidence_matrix_path=matrix_path,
+    )
+
+    assert status["status"] == "passed"
+    eda = json.loads((out_dir / "eda_all_candidate_evidence.json").read_text())
+    assert eda["status"] == "blocked_temporary"
+    assert eda["tool_availability_status"] == "passed"
+    assert eda["major_kernel_matrix_status"] == "passed"
+    assert eda["major_kernel_matrix_trusted"] is True
+    assert eda["attached_hardware_evidence_structurally_ready"] is True
+    assert eda["hardware_completion_eligible"] is False
+    assert eda["ic_eda_tool_availability"]["path"] == str(tool_path)
+    assert tool_report["completion_claim"] == "availability_only_not_kernel_ppa"
+    assert tool_report["kernel_ppa_evidence"] is False
+    assert tool_report["hardware_completion_eligible"] is False
+    assert eda["dft_hardware_evidence_matrix"]["path"] == str(matrix_path)
+    assert {source["path"] for source in eda["source_artifacts"]} >= {
+        str(tool_path),
+        str(matrix_path),
+    }
+    assert eda["hardware_evidence_attachment_policy"]["availability_only_not_ppa"] is True
+    assert eda["hardware_evidence_attachment_policy"]["matrix_coverage_only_not_full_scf_completion"] is True
+    assert "remains blocked_temporary" in eda["hardware_evidence_attachment_policy"]["claim_boundary"]
+    candidate_records = {record["candidate_id"]: record for record in eda["candidate_records"]}
+    matching_summary = candidate_records[matrix_candidate_id]["candidate_hardware_gate_summary"]
+    assert matching_summary["attached"] is True
+    assert matching_summary["candidate_id_match"] is True
+    assert matching_summary["kernel_gate_audit_ready"] is True
+    assert matching_summary["matrix_trusted"] is True
+    assert matching_summary["hardware_gate_claim_eligible"] is False
+    assert matching_summary["completion_eligible"] is False
+    assert set(matching_summary["host_bound_kernel_ids"]) == set(MAJOR_SCF_KERNEL_IDS)
+    nonmatching_summary = next(
+        record["candidate_hardware_gate_summary"]
+        for candidate_id, record in candidate_records.items()
+        if candidate_id != matrix_candidate_id
+    )
+    assert nonmatching_summary["attached"] is True
+    assert nonmatching_summary["candidate_id_match"] is False
+    assert nonmatching_summary["kernel_gate_audit_ready"] is False
+    assert nonmatching_summary["hardware_gate_claim_eligible"] is False
+    checklist = json.loads((out_dir / "prompt_to_artifact_checklist.json").read_text())
+    checklist_rows = {row["requirement"]: row for row in checklist["checklist"]}
+    assert checklist_rows["ic_eda_tool_availability_recorded"]["status"] == "present_hash_valid"
+    assert checklist_rows["ic_eda_tool_availability_recorded"]["completion_claim"] == (
+        "availability_only_not_kernel_ppa"
+    )
+    assert checklist_rows["major_kernel_evidence_matrix_recorded"]["status"] == "present_hash_valid"
+    assert checklist_rows["major_kernel_evidence_matrix_recorded"]["completion_claim"] == (
+        "matrix_coverage_only_not_full_scf_completion"
+    )
+    release_report = json.loads((out_dir / "release_report.json").read_text())
+    assert release_report["deliverable_complete"] is False
+    ledger = json.loads((out_dir / "per_candidate_evidence_ledger.json").read_text())
+    assert ledger["release_claim_gate"]["deliverable_complete"] is False
+
+
+def test_dft_candidate_evidence_ledger_attaches_full_scf_hybrid_bundle_without_false_completion(tmp_path):
+    release_dir = tmp_path / "release"
+    write_dft_seven_axis_artifacts(release_dir)
+    manifest = json.loads((release_dir / "candidate_universe_manifest.json").read_text(encoding="utf-8"))
+    candidate_id = next(
+        str(candidate["candidate_id"])
+        for candidate in manifest["candidates"]
+        if candidate.get("legal") is True
+    )
+    bundle_dir = tmp_path / "full_scf_hybrid_bundle"
+    payload = build_full_scf_evaluated_hybrid_payload(
+        candidate_id=candidate_id,
+        campaign_id="campaign-ledger-full-scf",
+        workload_run_id="workload-ledger-full-scf",
+        trial_id="trial-ledger-full-scf",
+        accelerated_kernel_costs_s={kernel_id: 1.0 for kernel_id in MAJOR_SCF_KERNEL_IDS},
+        host_bound_costs_s={
+            "io": 1.0,
+            "scf_control": 2.0,
+            "convergence": 3.0,
+            "diagonalization": 4.0,
+            "mixing": 5.0,
+        },
+        overhead_costs_s={
+            "transfer": 0.5,
+            "synchronization": 0.25,
+            "queueing": 0.125,
+            "layout": 0.75,
+        },
+        baseline_scf_time_s=100.0,
+    )
+    write_full_scf_evaluated_hybrid_artifacts(bundle_dir, payload)
+    out_dir = tmp_path / "ledger"
+
+    write_dft_candidate_evidence_artifacts(
+        out_dir,
+        release_artifact_dir=release_dir,
+        full_scf_hybrid_artifact_dir=bundle_dir,
+    )
+
+    ledger = json.loads((out_dir / "per_candidate_evidence_ledger.json").read_text(encoding="utf-8"))
+    release_report = json.loads((out_dir / "release_report.json").read_text(encoding="utf-8"))
+    checklist = json.loads((out_dir / "prompt_to_artifact_checklist.json").read_text(encoding="utf-8"))
+    hash_manifest = json.loads((out_dir / "artifact_hash_manifest.json").read_text(encoding="utf-8"))
+    bundle = ledger["full_scf_hybrid_bundle"]
+    assert bundle["status"] == "present_hash_valid"
+    assert bundle["required_artifacts_present"] is True
+    assert bundle["candidate_id"] == candidate_id
+    assert bundle["completion_claim"] is False
+    assert bundle["numerical_correctness_claim_eligible"] is False
+    assert bundle["ppa_claim_eligible"] is False
+    assert set(bundle["artifact_refs"]) == {
+        "full_scf_accelerator_descriptor.json",
+        "full_scf_runtime_schedule.json",
+        "full_scf_data_residency_plan.json",
+        "full_scf_correctness_report.json",
+        "full_scf_ppa_summary.json",
+    }
+    assert release_report["full_scf_hybrid_bundle"]["completion_claim"] is False
+    assert ledger["release_claim_gate"]["deliverable_complete"] is False
+    checklist_rows = {row["requirement"]: row for row in checklist["checklist"]}
+    assert checklist_rows["full_scf_hybrid_bundle_recorded"]["status"] == "present_hash_valid"
+    assert checklist_rows["full_scf_hybrid_bundle_recorded"]["completion_claim"] == (
+        "descriptor_accounting_only_not_full_scf_completion"
+    )
+    assert len(hash_manifest["source_full_scf_hybrid_artifacts"]) == 5
 
 
 def test_dft_candidate_evidence_ledger_rejects_missing_row_and_hash_tamper(tmp_path):

@@ -3,7 +3,7 @@
     "name": "Generic DSE / TLM / SystemC / gem5 exploration stack",
     "version": "2.0.0",
     "status": "active",
-    "description": "Domain-neutral design-space exploration for heterogeneous accelerator systems. Application-specific historical assets are removed from the active working tree and are not the mainline."
+    "description": "Domain-neutral design-space exploration for heterogeneous accelerator systems with an active DFT/QE full-SCF reference proof path kept outside reusable core contracts."
   },
   "mainline_scope": [
     "generic workload profiles and importers",
@@ -12,8 +12,9 @@
     "SystemC generic simulator evidence",
     "gem5 GenericAccel integration evidence"
   ],
-  "removed_legacy_scope": {
-    "policy": "restore only explicitly needed reference artifacts from history; do not reintroduce as core DSE assumptions"
+  "reference_scope": {
+    "active_proof_path": "DFT/QE full-SCF hardware DSE via scoped reference_workloads/profile artifacts",
+    "policy": "restore or recreate only explicitly needed reference artifacts; do not reintroduce them as core DSE assumptions"
   },
   "active_paths": {
     "workload_core": "dse_v2/core/workload/",

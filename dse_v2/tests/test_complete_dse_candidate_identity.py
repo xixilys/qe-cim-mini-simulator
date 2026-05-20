@@ -15,6 +15,12 @@ from dse_v2.codesign.complete_dse_search_space import (
     canonical_candidate_identity,
     complete_dse_candidate_id,
 )
+from dse_v2.reference_workloads.dft_codesign_domain import (
+    DFT_APPLICABILITY_AXIS_IDS,
+    DFT_DESIGN_AXIS_IDS,
+    DFT_EVALUATION_POLICY_AXIS_IDS,
+    dft_candidate_universe,
+)
 
 
 def _first_identity_layers():
@@ -105,6 +111,27 @@ def test_evaluation_context_does_not_affect_candidate_id():
     assert provenance["evidence_fidelity_affects_identity"] is False
     assert provenance["promotion_policy_affects_identity"] is False
     assert provenance["tool_status_affects_identity"] is False
+
+
+def test_dft_applicability_and_evaluation_partitions_do_not_affect_design_candidate_id():
+    _, manifest, _ = dft_candidate_universe()
+
+    assert "dft_phase_hotspot_selection" not in DFT_DESIGN_AXIS_IDS
+    assert "evidence_fidelity_promotion_policy" not in DFT_DESIGN_AXIS_IDS
+    assert manifest["applicability_axis_ids"] == list(DFT_APPLICABILITY_AXIS_IDS)
+    assert manifest["evaluation_policy_axis_ids"] == list(DFT_EVALUATION_POLICY_AXIS_IDS)
+
+    by_identity: dict[str, list[dict]] = {}
+    for candidate in manifest["candidates"]:
+        key = str(sorted(candidate["identity_assignments"].items()))
+        by_identity.setdefault(key, []).append(candidate)
+
+    rows = next(group for group in by_identity.values() if len(group) == 4)
+    assert len({row["design_candidate_id"] for row in rows}) == 1
+    assert len({row["applicability_scope_id"] for row in rows}) == 2
+    assert len({row["evaluation_policy_id"] for row in rows}) == 2
+    assert all("dft_phase_hotspot_selection" not in row["identity_assignments"] for row in rows)
+    assert all("evidence_fidelity_promotion_policy" not in row["identity_assignments"] for row in rows)
 
 
 def test_missing_or_contaminated_identity_layers_block_stable_id_emission():

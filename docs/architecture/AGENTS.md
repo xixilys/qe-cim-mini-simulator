@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Architecture docs define the generic accelerator DSE system: design-space axes, architecture templates, mapping boundaries, and promotion/evidence contracts.
+Architecture docs define the generic accelerator DSE system: design-space axes, architecture templates, mapping boundaries, and promotion/evidence contracts.  Scoped proof-path manuals, such as the active DFT/QE full-SCF hardware DSE manual, may live here when they keep adapter/profile boundaries explicit and do not redefine reusable core contracts.
 
 ## Active content
 
@@ -12,6 +12,7 @@ Architecture docs define the generic accelerator DSE system: design-space axes, 
 - `generic_dse/` — design-point, evaluation-result, and promotion notes.
 - `architecture_templates/` — reusable architecture candidate JSON templates.
 - `architecture_template_schema_v1.json` — schema for architecture templates.
+- `dft_scf_hardware_dse_design_manual.md` — active DFT/QE full-SCF proof-path manual and claim-gate guide.
 
 ## Editing rules
 
