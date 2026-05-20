@@ -378,8 +378,33 @@ def _parse_stage(stage_id: str, paths: list[Path]) -> tuple[str, Dict[str, Any],
         wns = _first_float(r"\bWNS\s*[:=]?\s*(-?\d+(?:\.\d+)?)", text)
         if wns is not None:
             metrics["wns_ns"] = wns
+        route_payloads = [
+            payload
+            for payload in payloads
+            if payload.get("stage_id") == "vivado_fpga_synth_or_impl"
+            or "implementation_route_completed" in payload
+        ]
+        route_completed_by_payload = any(
+            payload.get("implementation_route_completed") is True
+            for payload in route_payloads
+        )
         status_text = text.upper()
-        if "ROUTE_DESIGN COMPLETE" in status_text or "TIMING MET" in status_text:
+        route_completed_by_log = "ROUTE_DESIGN COMPLETE" in status_text
+        timing_met_by_log = "TIMING MET" in status_text
+        route_completed = route_completed_by_payload or route_completed_by_log
+        metrics["implementation_route_completed"] = route_completed
+        metrics["implementation_route_completed_source"] = (
+            "vivado_route_status_json"
+            if route_completed_by_payload
+            else "vivado_log_marker"
+            if route_completed_by_log
+            else "not_observed"
+        )
+        if not route_payloads and not route_completed_by_log:
+            return "blocked", metrics, parser_id, ["vivado_route_status_missing"]
+        if not route_completed:
+            return "blocked", metrics, parser_id, ["vivado_implementation_route_not_completed"]
+        if route_completed or timing_met_by_log:
             vote = vote or "passed"
         if wns is not None and wns < 0:
             vote = "failed"

@@ -380,8 +380,10 @@ def _synth_payloads(
     candidate_id: str,
     kernel_id: str,
 ) -> Dict[str, Mapping[str, Any]]:
+    vivado_stdout = _read_text(source_flow_dir / "vivado_stdout.log")
     vivado_status = _text_status(source_flow_dir / "vivado_stdout.log", pass_markers=("SYNTH_DESIGN COMPLETED SUCCESSFULLY",))
-    passed = vivado_status == "passed"
+    synth_passed = vivado_status == "passed"
+    route_completed = "ROUTE_DESIGN COMPLETE" in vivado_stdout.upper()
     common = {
         "candidate_id": candidate_id,
         "kernel_id": kernel_id,
@@ -399,30 +401,33 @@ def _synth_payloads(
             "schema_version": "dse.dft.hardware_closure.raw_hls_or_rtl_synth_report.v1",
             **common,
             "stage_id": "hls_or_rtl_synth",
-            "status": "passed" if passed else "blocked",
-            "verdict": "passed" if passed else "inconclusive",
-            "passed": passed,
+            "status": "passed" if synth_passed else "blocked",
+            "verdict": "passed" if synth_passed else "inconclusive",
+            "passed": synth_passed,
             "synth_tool": "vivado",
-            "synth_design_completed": passed,
+            "synth_design_completed": synth_passed,
         },
         "hls_or_rtl_synth_utilization.json": {
             "schema_version": "dse.dft.hardware_closure.raw_hls_or_rtl_synth_utilization.v1",
             **common,
             "stage_id": "hls_or_rtl_synth",
-            "status": "passed" if passed else "blocked",
-            "verdict": "passed" if passed else "inconclusive",
-            "passed": passed,
+            "status": "passed" if synth_passed else "blocked",
+            "verdict": "passed" if synth_passed else "inconclusive",
+            "passed": synth_passed,
         },
         "vivado_route_status.json": {
             "schema_version": "dse.dft.hardware_closure.raw_vivado_route_status.v1",
             **common,
             "stage_id": "vivado_fpga_synth_or_impl",
-            "status": "passed" if passed else "blocked",
-            "verdict": "passed" if passed else "inconclusive",
-            "passed": passed,
-            "synth_design_completed": passed,
-            "implementation_route_completed": False,
-            "route_claim_boundary": "Vivado synth_design evidence only unless implementation_route_completed is true.",
+            "status": "passed" if route_completed else "blocked",
+            "verdict": "passed" if route_completed else "blocked",
+            "passed": route_completed,
+            "synth_design_completed": synth_passed,
+            "implementation_route_completed": route_completed,
+            "route_claim_boundary": (
+                "Vivado synth_design evidence alone is not enough for the FPGA "
+                "claim gate; implementation route completion is required."
+            ),
         },
     }
 

@@ -526,7 +526,9 @@ and `source_bundle_manifest.json`) and blocks shared microkernel smoke manifests
 that do not declare candidate-specific closure for the exact candidate/kernel.
 Step5 reports parser `stage_blocker_ids`, `parser_status_counts`, discovered DC
 target-library identity/status when present in parser metrics, and the verdict
-count rollup.  Missing `dc_synth.ddc` is surfaced as
+count rollup.  Missing Vivado implementation-route completion is surfaced as
+`vivado_implementation_route_not_completed` even when `synth_design` completed
+successfully; missing `dc_synth.ddc` is surfaced as
 `missing_dc_synth_ddc_design_database`; a complete raw DC file set whose logs
 show missing/placeholder target libraries, gtech-only final mapping, unmapped
 output, unconstrained timing, or non-physical zero cell area parses as

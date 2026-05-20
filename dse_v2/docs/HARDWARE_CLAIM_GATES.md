@@ -11,7 +11,12 @@ Every hardware claim must pass:
 2. HLS C-simulation or RTL simulation;
 3. HLS C-synthesis or RTL synthesis;
 4. the claim-specific physical branch:
-   - FPGA: Vivado synthesis or implementation;
+   - FPGA: Vivado synthesis **and** implementation-route completion.  A
+     `synth_design` pass, utilization report, or timing summary without an
+     explicit `implementation_route_completed=true` payload or
+     `ROUTE_DESIGN COMPLETE` log marker is synth-only progress evidence and
+     must block the FPGA claim gate with
+     `vivado_implementation_route_not_completed`;
    - ASIC: Design Compiler synthesis, timing, area, and the packet-required
      `dc_synth.ddc` design database from a real target-library run.  A combined
      `dc_synth_timing_area` artifact is insufficient without the `.ddc` and
@@ -125,9 +130,12 @@ should close the remaining exact candidate/kernel units and let the aggregate
 Step5 rollup report counts and blockers; aggregate reporting does not relax the
 per-unit gate or the ASIC `dc_synth.ddc`/real-target-library requirement.
 
-Each runner generates only its own kernel RTL, VCS testbench, Vivado synthesis
-TCL, DC TCL, evidence rows, and major-kernel matrix.  Passing rows may satisfy
-only the matching microkernel gate when golden/VCS/Vivado evidence passes.  The
+Each runner generates only its own kernel RTL, VCS testbench, Vivado
+synthesis/implementation TCL, DC TCL, evidence rows, and major-kernel matrix.
+Passing rows may satisfy only the matching microkernel gate when
+golden/VCS/Vivado evidence passes.  For the FPGA physical branch, Vivado
+`synth_design` alone is not a gate pass; the parser must also observe
+implementation-route completion as described in the required chain above.  The
 FFT/iFFT/fFFT lane covers deterministic 4-point fixed-width complex FFT,
 normalized iFFT, and real fFFT smoke semantics only; it does not satisfy Hψ,
 reduction, kinetic, projector, GEMM/GEMV, transpose, DMA/HBM, production FFT, or
@@ -350,14 +358,15 @@ or deliverable gates.
 The current checkpoint
 `runs/dse/wave36_latest_source_flow_map_auto_ready_20260520T061756Z` maps all
 288 intended units (36 release candidates × 8 major kernels), while
-`runs/dse/wave36_step5_real_source_flow_all288_20260520T061902Z` passed 1440
-stage gates, 288 unit gates, and 36 candidate gates in the hardware Step5
-release-gate roll-up.  This is still not deliverable completion:
-`hardware_completion_eligible=true` is scoped to the candidate×kernel hard-gate
-matrix, `deliverable_complete=false` remains mandatory, and the goal audit
-may count that current release-gate eligibility as the hardware-completion
-evidence source while still staying in progress/blocked until L4 current-goal
-binding and release-claim gates close.
+`runs/dse/wave36_step5_real_source_flow_all288_20260520T061902Z` has been
+refreshed under the route-required Vivado parser.  The current roll-up has 1152
+passed stage gates and 288 blocked Vivado FPGA stages, all blocked by
+`vivado_implementation_route_not_completed`; it has 0 passed unit gates, 0
+passed candidate gates, `hardware_completion_eligible=false`, and
+`deliverable_complete=false`.  Older synth-only checkpoints that reported
+candidate-scoped or release-scoped `hardware_completion_eligible=true` are
+historical progress artifacts only and must not be cited as FPGA release
+closure until real Vivado implementation-route evidence is present.
 
 ## L4/gem5 binding is not FPGA/ASIC PPA or implicit candidate equivalence
 

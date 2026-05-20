@@ -201,6 +201,10 @@ def test_raw_stage_materialization_feeds_registration_parser_and_gate_fail_close
     assert parsed_by_stage["hls_or_rtl_sim"]["status"] == "parsed_result_written_pending_adjudication"
     assert parsed_by_stage["hls_or_rtl_synth"]["status"] == "parsed_result_written_pending_adjudication"
     assert parsed_by_stage["vivado_fpga_synth_or_impl"]["status"] == "parsed_result_written_pending_adjudication"
+    assert parsed_by_stage["vivado_fpga_synth_or_impl"]["parsed_result"]["verdict"] == "blocked"
+    assert parsed_by_stage["vivado_fpga_synth_or_impl"]["parsed_blocker_ids"] == [
+        "vivado_implementation_route_not_completed"
+    ]
     assert parsed_by_stage["dc_asic_synth_timing_area"]["status"] == "blocked_missing_raw_stage_evidence"
     assert parsed_by_stage["dc_asic_synth_timing_area"]["stage_blocker_ids"] == [
         "missing_dc_synth_ddc_design_database"
@@ -228,7 +232,7 @@ def test_raw_stage_materialization_feeds_registration_parser_and_gate_fail_close
     )
     gate = json.loads((run_dir / "dft_hardware_closure_gate_adjudication.json").read_text())
     release = json.loads((run_dir / "dft_hardware_closure_release_gate.json").read_text())
-    assert gate["stage_gate_passed_count"] == 4
+    assert gate["stage_gate_passed_count"] == 3
     assert gate["unit_gate_passed_count"] == 0
     assert release["release_gate_result"] == "blocked_incomplete_hardware_release_gate"
     assert release["hardware_completion_eligible"] is False
