@@ -106,6 +106,34 @@ FFT_IFFT_VERILOG = r"""module fft_ifft_ffft #(
         endcase
     end
 endmodule
+
+module fft_ifft_ffft_impl_wrapper (
+    input  [15:0] seed,
+    input  [1:0] mode,
+    output [31:0] checksum
+);
+    wire signed [15:0] x0_re = seed;
+    wire signed [15:0] x0_im = {seed[14:0], seed[15]};
+    wire signed [15:0] x1_re = seed ^ 16'h1357;
+    wire signed [15:0] x1_im = {seed[7:0], seed[15:8]} ^ 16'h2468;
+    wire signed [15:0] x2_re = ~seed;
+    wire signed [15:0] x2_im = seed + 16'sd3;
+    wire signed [15:0] x3_re = seed - 16'sd5;
+    wire signed [15:0] x3_im = {seed[0], seed[15:1]};
+    wire signed [18:0] y0_re, y0_im, y1_re, y1_im, y2_re, y2_im, y3_re, y3_im;
+
+    fft_ifft_ffft dut (
+        .mode(mode),
+        .x0_re(x0_re), .x0_im(x0_im), .x1_re(x1_re), .x1_im(x1_im),
+        .x2_re(x2_re), .x2_im(x2_im), .x3_re(x3_re), .x3_im(x3_im),
+        .y0_re(y0_re), .y0_im(y0_im), .y1_re(y1_re), .y1_im(y1_im),
+        .y2_re(y2_re), .y2_im(y2_im), .y3_re(y3_re), .y3_im(y3_im)
+    );
+
+    assign checksum =
+        {13'd0, y0_re} ^ {13'd0, y0_im} ^ {13'd0, y1_re} ^ {13'd0, y1_im} ^
+        {13'd0, y2_re} ^ {13'd0, y2_im} ^ {13'd0, y3_re} ^ {13'd0, y3_im};
+endmodule
 """
 
 FFT_IFFT_TESTBENCH = r"""module tb_fft_ifft_ffft;
@@ -167,7 +195,9 @@ endmodule
 """
 
 VIVADO_SYNTH_TCL = """read_verilog fft_ifft_ffft.v
-synth_design -top fft_ifft_ffft -part xc7a35tcsg324-1
+# Use a low-I/O implementation wrapper for place/route so package pin count
+# does not mask the microkernel's FPGA implementation evidence.
+synth_design -top fft_ifft_ffft_impl_wrapper -part xc7a35tcsg324-1
 report_utilization -file vivado_utilization.rpt
 report_timing_summary -file vivado_timing_summary.rpt
 write_checkpoint -force fft_ifft_ffft_synth.dcp

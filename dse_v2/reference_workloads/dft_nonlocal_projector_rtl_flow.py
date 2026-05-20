@@ -55,6 +55,30 @@ NONLOCAL_PROJECTOR_VERILOG = r"""module nonlocal_projector #(
     assign out2 = beta2 * coeff;
     assign out3 = beta3 * coeff;
 endmodule
+
+module nonlocal_projector_impl_wrapper (
+    input  [15:0] seed,
+    output [31:0] checksum
+);
+    wire signed [15:0] beta0 = seed;
+    wire signed [15:0] beta1 = seed ^ 16'h00d7;
+    wire signed [15:0] beta2 = {seed[7:0], seed[15:8]};
+    wire signed [15:0] beta3 = ~seed;
+    wire signed [15:0] psi0 = seed + 16'sd5;
+    wire signed [15:0] psi1 = seed - 16'sd9;
+    wire signed [15:0] psi2 = {seed[0], seed[15:1]};
+    wire signed [15:0] psi3 = seed ^ 16'h5aa5;
+    wire signed [33:0] coeff;
+    wire signed [49:0] out0, out1, out2, out3;
+
+    nonlocal_projector dut (
+        .beta0(beta0), .beta1(beta1), .beta2(beta2), .beta3(beta3),
+        .psi0(psi0), .psi1(psi1), .psi2(psi2), .psi3(psi3),
+        .coeff(coeff), .out0(out0), .out1(out1), .out2(out2), .out3(out3)
+    );
+
+    assign checksum = coeff[31:0] ^ out0[31:0] ^ out1[31:0] ^ out2[31:0] ^ out3[31:0];
+endmodule
 """
 
 NONLOCAL_PROJECTOR_TESTBENCH = r"""module tb_nonlocal_projector;
@@ -82,7 +106,9 @@ endmodule
 """
 
 VIVADO_SYNTH_TCL = """read_verilog nonlocal_projector.v
-synth_design -top nonlocal_projector -part xc7a35tcsg324-1
+# Use a low-I/O implementation wrapper for place/route so package pin count
+# does not mask the microkernel's FPGA implementation evidence.
+synth_design -top nonlocal_projector_impl_wrapper -part xc7a35tcsg324-1
 report_utilization -file vivado_utilization.rpt
 report_timing_summary -file vivado_timing_summary.rpt
 write_checkpoint -force nonlocal_projector_synth.dcp

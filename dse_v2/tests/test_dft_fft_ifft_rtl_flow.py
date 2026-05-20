@@ -87,7 +87,12 @@ def test_fft_ifft_rtl_flow_generates_deterministic_sources_and_golden(tmp_path):
     assert initialized["manifest"]["kernel_id"] == FFT_IFFT_KERNEL_ID
     assert (tmp_path / "fft_ifft_ffft.v").exists()
     assert (tmp_path / "tb_fft_ifft_ffft.v").exists()
-    assert "module fft_ifft_ffft" in (tmp_path / "fft_ifft_ffft.v").read_text(encoding="utf-8")
+    rtl_text = (tmp_path / "fft_ifft_ffft.v").read_text(encoding="utf-8")
+    vivado_tcl = (tmp_path / "vivado_synth.tcl").read_text(encoding="utf-8")
+    assert "module fft_ifft_ffft" in rtl_text
+    assert "module fft_ifft_ffft_impl_wrapper" in rtl_text
+    assert "synth_design -top fft_ifft_ffft_impl_wrapper" in vivado_tcl
+    assert "route_design" in vivado_tcl
     assert "FFT_IFFT_FFFT_RTL_PASS" in (tmp_path / "tb_fft_ifft_ffft.v").read_text(encoding="utf-8")
     golden = json.loads((tmp_path / "golden_correctness.json").read_text(encoding="utf-8"))
     assert golden["kernel_id"] == FFT_IFFT_KERNEL_ID

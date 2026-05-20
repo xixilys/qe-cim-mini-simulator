@@ -378,6 +378,20 @@ claimable microkernel FPGA evidence, but it is not one of the 36 release
 candidates and it does not close the all-candidate/all-kernel Step5 release
 gate.
 
+The current per-major-kernel route probe is
+`runs/dse/all8_route_probe_20260520T211323Z/all8_route_probe_summary.json`.
+It ran the eight major SCF microkernel RTL flows through real `ssh ic-eda`
+VCS, Vivado 2019.1, and Design Compiler attempts.  All eight local matrices
+reported `status=passed`, `fpga_gate_candidate=true`, and
+`asic_gate_candidate=true`, with `blocked_count=0`.  The FFT/iFFT/fFFT,
+Hψ-local-potential, and nonlocal-projector Vivado implementations use
+low-top-level-I/O route wrappers that instantiate the microkernel under test;
+this avoids package pin-count overflow during `place_design` without relaxing
+the required `synth_design -> opt_design -> place_design -> route_design` gate.
+This evidence is still microkernel-scoped only.  It is not a 36-candidate
+Step5 release closure, not board measurement, and not a full-SCF end-to-end
+hardware completion claim.
+
 ## L4/gem5 binding is not FPGA/ASIC PPA or implicit candidate equivalence
 
 `dft_l4_goal_binding.json` cites a complete-DSE gem5/GenericAccel L4 evidence

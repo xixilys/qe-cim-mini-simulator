@@ -88,7 +88,12 @@ def test_nonlocal_projector_rtl_flow_generates_deterministic_sources_and_golden(
     assert initialized["manifest"]["semantics"] == ["beta_projection_coeff", "projector_apply"]
     assert (tmp_path / "nonlocal_projector.v").exists()
     assert (tmp_path / "tb_nonlocal_projector.v").exists()
-    assert "module nonlocal_projector" in (tmp_path / "nonlocal_projector.v").read_text(encoding="utf-8")
+    rtl_text = (tmp_path / "nonlocal_projector.v").read_text(encoding="utf-8")
+    vivado_tcl = (tmp_path / "vivado_synth.tcl").read_text(encoding="utf-8")
+    assert "module nonlocal_projector" in rtl_text
+    assert "module nonlocal_projector_impl_wrapper" in rtl_text
+    assert "synth_design -top nonlocal_projector_impl_wrapper" in vivado_tcl
+    assert "route_design" in vivado_tcl
     assert "NONLOCAL_PROJECTOR_RTL_PASS" in (tmp_path / "tb_nonlocal_projector.v").read_text(encoding="utf-8")
     golden = json.loads((tmp_path / "golden_correctness.json").read_text(encoding="utf-8"))
     assert golden["kernel_id"] == NONLOCAL_PROJECTOR_KERNEL_ID

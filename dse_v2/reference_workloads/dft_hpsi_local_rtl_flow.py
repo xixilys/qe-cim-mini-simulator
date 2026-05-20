@@ -36,6 +36,29 @@ HPSI_LOCAL_VERILOG = r"""module hpsi_local_potential #(
     assign hpsi2 = psi2 * v2;
     assign hpsi3 = psi3 * v3;
 endmodule
+
+module hpsi_local_potential_impl_wrapper (
+    input  [15:0] seed,
+    output [31:0] checksum
+);
+    wire signed [15:0] psi0 = seed;
+    wire signed [15:0] psi1 = seed ^ 16'h00f3;
+    wire signed [15:0] psi2 = {seed[7:0], seed[15:8]};
+    wire signed [15:0] psi3 = ~seed;
+    wire signed [15:0] v0 = seed + 16'sd7;
+    wire signed [15:0] v1 = seed - 16'sd11;
+    wire signed [15:0] v2 = {seed[0], seed[15:1]};
+    wire signed [15:0] v3 = seed ^ 16'h3c5a;
+    wire signed [31:0] hpsi0, hpsi1, hpsi2, hpsi3;
+
+    hpsi_local_potential dut (
+        .psi0(psi0), .psi1(psi1), .psi2(psi2), .psi3(psi3),
+        .v0(v0), .v1(v1), .v2(v2), .v3(v3),
+        .hpsi0(hpsi0), .hpsi1(hpsi1), .hpsi2(hpsi2), .hpsi3(hpsi3)
+    );
+
+    assign checksum = hpsi0 ^ hpsi1 ^ hpsi2 ^ hpsi3;
+endmodule
 """
 
 HPSI_LOCAL_TESTBENCH = r"""module tb_hpsi_local_potential;
@@ -62,7 +85,9 @@ endmodule
 """
 
 VIVADO_SYNTH_TCL = """read_verilog hpsi_local_potential.v
-synth_design -top hpsi_local_potential -part xc7a35tcsg324-1
+# Use a low-I/O implementation wrapper for place/route so package pin count
+# does not mask the microkernel's FPGA implementation evidence.
+synth_design -top hpsi_local_potential_impl_wrapper -part xc7a35tcsg324-1
 report_utilization -file vivado_utilization.rpt
 report_timing_summary -file vivado_timing_summary.rpt
 write_checkpoint -force hpsi_local_potential_synth.dcp
