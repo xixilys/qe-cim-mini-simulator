@@ -142,6 +142,42 @@ def _source_flow(source_dir: Path) -> Path:
     return source_dir
 
 
+def test_raw_stage_materialization_keeps_vivado_synth_passed_with_failed_nets_progress(tmp_path: Path) -> None:
+    run_dir = tmp_path / "run"
+    source_dir = _source_flow(tmp_path / "source_flow")
+    _write_text(
+        source_dir / "vivado_stdout.log",
+        "\n".join(
+            [
+                "synth_design completed successfully",
+                "Number of Failed Nets               = 1748",
+                "Number of Failed Nets               = 0",
+                "route_design completed successfully",
+                "ROUTE_DESIGN COMPLETE",
+            ]
+        ),
+    )
+    packet_index = _prepare_run(run_dir)
+
+    status = write_dft_hardware_closure_raw_stage_materialization(
+        run_dir,
+        closure_packet_index_path=packet_index,
+        source_flow_dir=source_dir,
+        evidence_root=run_dir,
+        candidate_ids=["cand-a"],
+        kernel_ids=["complex_gemm_gemv_tile"],
+    )
+
+    assert status["status"] == "passed"
+    evidence_dir = run_dir / "candidate_specific_evidence" / "cand-a" / "complex_gemm_gemv_tile"
+    synth_report = json.loads((evidence_dir / "hls_or_rtl_synth_report.json").read_text())
+    route_status = json.loads((evidence_dir / "vivado_route_status.json").read_text())
+    assert synth_report["passed"] is True
+    assert synth_report["synth_design_completed"] is True
+    assert route_status["passed"] is True
+    assert route_status["implementation_route_completed"] is True
+
+
 def test_raw_stage_materialization_feeds_registration_parser_and_gate_fail_closed(tmp_path: Path) -> None:
     run_dir = tmp_path / "run"
     source_dir = _source_flow(tmp_path / "source_flow")

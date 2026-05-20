@@ -376,6 +376,114 @@ def test_parser_run_failure_markers_dominate_passing_json(tmp_path: Path) -> Non
     assert row["parsed_result"]["verdict"] == "failed"
 
 
+def test_parser_run_synth_payload_ignores_benign_vivado_failed_nets_progress(tmp_path: Path) -> None:
+    run_dir = tmp_path / "run"
+    packet_index = _packetized_run(run_dir)
+    unit = _unit_from_packet(run_dir)
+    _write_candidate_bundle(run_dir, unit)
+    _write_global_provenance_files(run_dir, unit)
+    raw_paths = []
+    for expected in unit["expected_evidence_files"]:
+        if expected["stage_id"] != "hls_or_rtl_synth":
+            continue
+        path = run_dir / expected["path"]
+        if path.suffix == ".json":
+            raw_paths.append(_write_json(path, {"passed": True, "verdict": "passed", "status": "passed"}))
+        else:
+            raw_paths.append(
+                _write_text(
+                    path,
+                    "\n".join(
+                        [
+                            "synth_design completed successfully",
+                            "Number of Failed Nets               = 584",
+                            "Number of Failed Nets               = 0",
+                            "route_design completed successfully",
+                            "ROUTE_DESIGN COMPLETE",
+                        ]
+                    ),
+                )
+            )
+    _write_raw_transcript_refs(run_dir, unit, "hls_or_rtl_synth", raw_paths)
+    write_dft_hardware_closure_evidence_intake(
+        run_dir,
+        closure_packet_index_path=packet_index,
+        evidence_root=run_dir,
+    )
+
+    parser_run = build_dft_hardware_closure_parser_run(
+        closure_evidence_intake_path=run_dir / "dft_hardware_closure_evidence_intake.json",
+        evidence_root=run_dir,
+        parsed_root=run_dir,
+    )
+
+    row = next(row for row in parser_run["parser_rows"] if row["stage_id"] == "hls_or_rtl_synth")
+    assert row["status"] == "parsed_result_written_pending_adjudication"
+    assert row["parsed_result"]["verdict"] == "passed"
+
+
+def test_parser_run_vivado_route_status_ignores_intermediate_failed_nets_progress(tmp_path: Path) -> None:
+    run_dir = tmp_path / "run"
+    packet_index = _packetized_run(run_dir)
+    unit = _unit_from_packet(run_dir)
+    _write_candidate_bundle(run_dir, unit)
+    _write_global_provenance_files(run_dir, unit)
+    raw_paths = []
+    for expected in unit["expected_evidence_files"]:
+        if expected["stage_id"] != "vivado_fpga_synth_or_impl":
+            continue
+        path = run_dir / expected["path"]
+        if path.name == "vivado_route_status.json":
+            raw_paths.append(
+                _write_json(
+                    path,
+                    {
+                        "schema_version": "unit-test.vivado_route_status.v1",
+                        "stage_id": "vivado_fpga_synth_or_impl",
+                        "status": "passed",
+                        "verdict": "passed",
+                        "passed": True,
+                        "synth_design_completed": True,
+                        "implementation_route_completed": True,
+                    },
+                )
+            )
+        else:
+            raw_paths.append(
+                _write_text(
+                    path,
+                    "\n".join(
+                        [
+                            "synth_design completed successfully",
+                            "Number of Failed Nets               = 1748",
+                            "Number of Failed Nets               = 0",
+                            "route_design completed successfully",
+                            "ROUTE_DESIGN COMPLETE",
+                        ]
+                    ),
+                )
+            )
+    _write_raw_transcript_refs(run_dir, unit, "vivado_fpga_synth_or_impl", raw_paths)
+    write_dft_hardware_closure_evidence_intake(
+        run_dir,
+        closure_packet_index_path=packet_index,
+        evidence_root=run_dir,
+    )
+
+    parser_run = build_dft_hardware_closure_parser_run(
+        closure_evidence_intake_path=run_dir / "dft_hardware_closure_evidence_intake.json",
+        evidence_root=run_dir,
+        parsed_root=run_dir,
+    )
+
+    row = next(row for row in parser_run["parser_rows"] if row["stage_id"] == "vivado_fpga_synth_or_impl")
+    assert row["status"] == "parsed_result_written_pending_adjudication"
+    assert row["parsed_result"]["verdict"] == "passed"
+    parsed = json.loads((run_dir / row["parsed_result"]["path"]).read_text())
+    assert parsed["metrics"]["implementation_route_completed"] is True
+    assert parsed["metrics"]["implementation_route_completed_source"] == "vivado_route_status_json"
+
+
 def test_parser_run_blocks_vivado_synth_only_without_impl_route(tmp_path: Path) -> None:
     run_dir = tmp_path / "run"
     packet_index = _packetized_run(run_dir)

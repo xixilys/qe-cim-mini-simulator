@@ -152,6 +152,24 @@ def _text_status(path: Path, *, pass_markers: Sequence[str] = _PASS_MARKERS) -> 
     return "unknown"
 
 
+def _vivado_synth_status(path: Path) -> str:
+    """Return Vivado synth status without treating route-progress diagnostics as failure.
+
+    Successful implementation logs can include router progress lines such as
+    ``Number of Failed Nets = N`` before final routing succeeds.  Those are not
+    synthesis failures and must not make the synth-stage payload fail.
+    """
+
+    text = _read_text(path).upper()
+    if not text:
+        return "missing"
+    if "SYNTH_DESIGN FAILED" in text:
+        return "failed"
+    if "SYNTH_DESIGN COMPLETED SUCCESSFULLY" in text:
+        return "passed"
+    return _text_status(path, pass_markers=("SYNTH_DESIGN COMPLETED SUCCESSFULLY",))
+
+
 def _write_wrapper(path: Path, payload: Mapping[str, Any]) -> None:
     write_json(path, payload)
 
@@ -381,7 +399,7 @@ def _synth_payloads(
     kernel_id: str,
 ) -> Dict[str, Mapping[str, Any]]:
     vivado_stdout = _read_text(source_flow_dir / "vivado_stdout.log")
-    vivado_status = _text_status(source_flow_dir / "vivado_stdout.log", pass_markers=("SYNTH_DESIGN COMPLETED SUCCESSFULLY",))
+    vivado_status = _vivado_synth_status(source_flow_dir / "vivado_stdout.log")
     synth_passed = vivado_status == "passed"
     route_completed = "ROUTE_DESIGN COMPLETE" in vivado_stdout.upper()
     common = {

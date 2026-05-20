@@ -392,6 +392,19 @@ This evidence is still microkernel-scoped only.  It is not a 36-candidate
 Step5 release closure, not board measurement, and not a full-SCF end-to-end
 hardware completion claim.
 
+The first current-code candidate-stamped route-to-Step5 replay is
+`runs/dse/wave36_step5_current_route_cand_0715923dc14b29cd_all8_20260520T214150Z`
+using source flows from
+`runs/dse/wave36_real_source_flow_current_route_cand_0715923dc14b29cd_all8_20260520T212706Z`.
+For exact release candidate `cand_0715923dc14b29cd`, all eight kernel units
+materialized candidate-specific raw evidence, parsed 40/40 hard-gate stage
+results as passed, passed 8/8 unit gates, and produced
+`release_gate_result=hardware_completion_eligible_pending_deliverable_claim`.
+This checkpoint proves the route-required current source-flow lane can close one
+candidate without wrong-candidate reuse.  It still leaves 280/288 units in the
+36-candidate release packet without current source-flow evidence, so it must not
+be cited as full release, trusted Pareto, or deliverable completion.
+
 ## L4/gem5 binding is not FPGA/ASIC PPA or implicit candidate equivalence
 
 `dft_l4_goal_binding.json` cites a complete-DSE gem5/GenericAccel L4 evidence
