@@ -18,6 +18,55 @@ def _write_json(path: Path, payload) -> None:
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
+def _semantic_closure_section(*, overall_passed: bool = True) -> dict:
+    check_ids = [
+        "phase_hotspot_identity",
+        "evaluation_policy_legality",
+        "candidate_tier_absence",
+        "coverage_vector_derivation",
+        "reference_hash_admission",
+    ]
+    source_artifacts = {
+        name: {
+            "path": f"semantic_sources/{name}.json",
+            "exists": True,
+            "required": True,
+            "sha256": f"{index:064x}",
+            "hash_algorithm": "sha256",
+        }
+        for index, name in enumerate(
+            [
+                "domain_freeze",
+                "candidate_universe_manifest",
+                "candidate_legality_report",
+                "hierarchical_funnel_search_report",
+                "dft_candidate_binding_map",
+                "dft_trial_state_ledger",
+                "dft_scf_six_class_bundle_manifest",
+                "reference_admission_ledger",
+            ],
+            start=1,
+        )
+    }
+    return {
+        "schema_version": "dse.dft_scf.semantic_audit_closure.v1",
+        "overall_passed": overall_passed,
+        "source_hash_backed": True,
+        "source_artifacts": source_artifacts,
+        "checks": [
+            {
+                "check_id": check_id,
+                "passed": overall_passed,
+                "blockers": [] if overall_passed else ["test_forced_semantic_blocker"],
+                "evidence_refs": list(source_artifacts),
+                "claim_boundary": "semantic closure only, not hardware completion",
+            }
+            for check_id in check_ids
+        ],
+        "claim_boundary": "semantic audit closure only; not final DFT hardware-DSE completion",
+    }
+
+
 def _base_report(*, deliverable_complete: bool = False, trusted_winner: bool = False) -> dict:
     return {
         "schema_version": "dse.final_report.v1",
@@ -25,6 +74,7 @@ def _base_report(*, deliverable_complete: bool = False, trusted_winner: bool = F
             "trusted_winner": trusted_winner,
             "selection_status": "trusted" if trusted_winner else "no_trusted_recommendation",
         },
+        "dft_audit_semantic_closure": _semantic_closure_section(),
         "dft_evidence_ledger": {
             "present": True,
             "status": "audit_artifacts_present",
@@ -525,6 +575,49 @@ def test_dft_scf_goal_audit_blocks_l4_visibility_without_current_goal_crosswalk(
     assert "L4/gem5 proof is explicitly bound to current DFT candidates and workloads" in blocked_requirements
     assert audit["failed_requirements"] == []
 
+
+
+def test_dft_scf_goal_audit_requires_semantic_closure_artifact(tmp_path):
+    report = _base_report(deliverable_complete=True, trusted_winner=True)
+    report.pop("dft_audit_semantic_closure")
+    report_path = tmp_path / "final_report.json"
+    _write_json(report_path, report)
+
+    audit = build_dft_scf_hardware_goal_completion_audit(
+        final_report=report_path,
+        now=datetime(2026, 6, 1, 12, 1, tzinfo=ZoneInfo("Asia/Shanghai")),
+    )
+
+    blocked_requirements = {item["requirement"] for item in audit["blocked_requirements"]}
+    assert audit["status"] == "in_progress"
+    assert "DFT semantic audit closure artifact is source-hash backed and passed" in blocked_requirements
+    assert audit["summary"]["dft_audit_semantic_closure_valid"] is False
+
+
+def test_dft_scf_goal_audit_rejects_failed_semantic_closure(tmp_path):
+    report = _base_report(deliverable_complete=True, trusted_winner=True)
+    report["dft_audit_semantic_closure"] = _semantic_closure_section(overall_passed=False)
+    report_path = tmp_path / "final_report.json"
+    _write_json(report_path, report)
+
+    audit = build_dft_scf_hardware_goal_completion_audit(
+        final_report=report_path,
+        now=datetime(2026, 6, 1, 12, 1, tzinfo=ZoneInfo("Asia/Shanghai")),
+    )
+
+    blocked = [
+        item
+        for item in audit["blocked_requirements"]
+        if item["requirement"] == "DFT semantic audit closure artifact is source-hash backed and passed"
+    ]
+    assert blocked
+    assert set(blocked[0]["evidence"]["failed_checks"]) == {
+        "phase_hotspot_identity",
+        "evaluation_policy_legality",
+        "candidate_tier_absence",
+        "coverage_vector_derivation",
+        "reference_hash_admission",
+    }
 
 def test_dft_scf_goal_audit_can_pass_after_horizon_with_closed_evidence(tmp_path):
     report_path = tmp_path / "final_report.json"

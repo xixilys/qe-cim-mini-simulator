@@ -69,6 +69,142 @@ def _as_string_list(value: Any) -> list[str]:
     return [str(item) for item in value if str(item)]
 
 
+def _default_evaluation_routing() -> Dict[str, Any]:
+    return {
+        "schema_version": "dse.dft.release_gate_evaluation_policy_routing.v1",
+        "status": "not_attached",
+        "routing_recorded": False,
+        "routing_compatible": True,
+        "evaluation_policy_id": None,
+        "evaluation_policy_assignments": {},
+        "promotion_requirements": [],
+        "routing_blockers": [],
+        "routing_blocker_count": 0,
+        "affects_design_legality": False,
+        "affects_design_score": False,
+        "claim_eligibility_blocker": False,
+        "claim_boundary": (
+            "No evaluation-routing ledger was attached to the release gate. "
+            "The release gate therefore preserves historical hard-gate behavior; "
+            "when routing is attached, blockers affect claim eligibility only."
+        ),
+    }
+
+
+def _normalise_evaluation_routing(raw_routing: Any) -> Dict[str, Any]:
+    if not isinstance(raw_routing, Mapping):
+        return _default_evaluation_routing()
+    blockers = [
+        dict(item)
+        for item in raw_routing.get("routing_blockers", []) or []
+        if isinstance(item, Mapping)
+    ]
+    routing_compatible = bool(raw_routing.get("routing_compatible", not blockers)) and not blockers
+    evaluation_assignments = (
+        raw_routing.get("evaluation_policy_assignments")
+        if isinstance(raw_routing.get("evaluation_policy_assignments"), Mapping)
+        else {}
+    )
+    promotion_requirements = raw_routing.get("promotion_requirements", [])
+    if not isinstance(promotion_requirements, list):
+        promotion_requirements = []
+    return {
+        "schema_version": "dse.dft.release_gate_evaluation_policy_routing.v1",
+        "status": "compatible" if routing_compatible else "blocked_for_claim_eligibility",
+        "routing_recorded": True,
+        "routing_compatible": routing_compatible,
+        "evaluation_policy_id": raw_routing.get("evaluation_policy_id"),
+        "evaluation_policy_assignments": dict(evaluation_assignments),
+        "promotion_requirements": [str(item) for item in promotion_requirements],
+        "routing_blockers": blockers,
+        "routing_blocker_count": len(blockers),
+        "affects_design_legality": False,
+        "affects_design_score": False,
+        "claim_eligibility_blocker": not routing_compatible,
+        "claim_boundary": (
+            "Evaluation routing schedules or blocks evidence/promotion work. "
+            "Routing blockers affect candidate/release claim eligibility only; "
+            "they do not change design legality, design score, or stable design identity."
+        ),
+    }
+
+
+def _evaluation_routing_by_candidate(
+    *,
+    gate: Mapping[str, Any],
+    per_candidate_evidence_ledger_path: Path | None = None,
+) -> Dict[str, Dict[str, Any]]:
+    """Load candidate routing from an attached ledger or gate rows."""
+
+    routing_by_candidate: Dict[str, Dict[str, Any]] = {}
+    ledger = _load_json(per_candidate_evidence_ledger_path) if per_candidate_evidence_ledger_path else {}
+    for row in ledger.get("rows", []) or []:
+        if isinstance(row, Mapping) and row.get("candidate_id"):
+            routing_by_candidate[str(row["candidate_id"])] = _normalise_evaluation_routing(
+                row.get("evaluation_policy_routing")
+            )
+    embedded = gate.get("evaluation_policy_routing_by_candidate", {})
+    if isinstance(embedded, Mapping):
+        for candidate_id, routing in embedded.items():
+            routing_by_candidate.setdefault(
+                str(candidate_id),
+                _normalise_evaluation_routing(routing),
+            )
+    for row in gate.get("unit_rows", []) or []:
+        if isinstance(row, Mapping) and row.get("candidate_id") and row.get("evaluation_policy_routing"):
+            routing_by_candidate.setdefault(
+                str(row["candidate_id"]),
+                _normalise_evaluation_routing(row.get("evaluation_policy_routing")),
+            )
+    return routing_by_candidate
+
+
+def _evaluation_routing_summary(candidate_rows: list[Mapping[str, Any]]) -> Dict[str, Any]:
+    blocked_ids = [
+        str(row.get("candidate_id"))
+        for row in candidate_rows
+        if isinstance(row.get("evaluation_policy_routing", {}), Mapping)
+        and row["evaluation_policy_routing"].get("routing_compatible") is not True
+    ]
+    blocker_rows = [
+        {
+            "candidate_id": str(row.get("candidate_id")),
+            "routing_blockers": list(row["evaluation_policy_routing"].get("routing_blockers", []) or []),
+            "affects_design_legality": False,
+        }
+        for row in candidate_rows
+        if isinstance(row.get("evaluation_policy_routing", {}), Mapping)
+        and row["evaluation_policy_routing"].get("routing_blockers")
+    ]
+    return {
+        "schema_version": "dse.dft.release_gate_evaluation_policy_routing_summary.v1",
+        "candidate_count": len(candidate_rows),
+        "routing_recorded_candidate_count": sum(
+            1
+            for row in candidate_rows
+            if isinstance(row.get("evaluation_policy_routing", {}), Mapping)
+            and row["evaluation_policy_routing"].get("routing_recorded") is True
+        ),
+        "routing_compatible_candidate_count": sum(
+            1
+            for row in candidate_rows
+            if isinstance(row.get("evaluation_policy_routing", {}), Mapping)
+            and row["evaluation_policy_routing"].get("routing_compatible") is True
+        ),
+        "routing_blocked_candidate_count": len(blocked_ids),
+        "routing_blocked_candidate_ids": blocked_ids,
+        "routing_blocker_count": sum(len(row["routing_blockers"]) for row in blocker_rows),
+        "routing_blocker_rows": blocker_rows,
+        "affects_design_legality": False,
+        "affects_design_score": False,
+        "claim_boundary": (
+            "Evaluation-routing blockers are release/candidate claim blockers "
+            "only. They do not rewrite candidate hardware-gate pass/fail facts "
+            "or design-legality decisions."
+        ),
+    }
+
+
 def _expected_kernel_ids(gate: Mapping[str, Any], unit_rows: list[Mapping[str, Any]]) -> list[str]:
     """Return the most specific expected kernel id list available.
 
@@ -231,7 +367,9 @@ def _candidate_rollups(
     *,
     major_kernel_count: int | None = None,
     expected_kernel_ids: list[str] | None = None,
+    evaluation_routing_by_candidate: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> list[Dict[str, Any]]:
+    evaluation_routing_by_candidate = evaluation_routing_by_candidate or {}
     grouped: Dict[str, list[Dict[str, Any]]] = {}
     for row in unit_rows:
         grouped.setdefault(str(row.get("candidate_id", "")), []).append(row)
@@ -351,6 +489,18 @@ def _candidate_rollups(
             and blocked == 0
             and kernel_coverage_complete
         )
+        evaluation_routing = _normalise_evaluation_routing(
+            evaluation_routing_by_candidate.get(candidate_id)
+        )
+        routing_compatible = evaluation_routing["routing_compatible"] is True
+        claim_eligibility_blockers = [
+            {
+                "blocker_id": "candidate_evaluation_policy_routing_blocked",
+                "reason": "evaluation policy routing blocks release/hardware claim eligibility",
+                "routing_blockers": evaluation_routing["routing_blockers"],
+                "affects_design_legality": False,
+            }
+        ] if not routing_compatible else []
         if failed:
             status = "failed_candidate_hardware_gate"
             blocker_id = "candidate_has_failed_unit_gate"
@@ -382,6 +532,10 @@ def _candidate_rollups(
                 "candidate_hardware_gate_passed": ready,
                 "status": status,
                 "blocker_id": blocker_id,
+                "evaluation_policy_routing": evaluation_routing,
+                "candidate_claim_eligible": bool(ready and routing_compatible),
+                "claim_eligibility_blockers": claim_eligibility_blockers,
+                "routing_affects_design_legality": False,
                 "kernel_rows": kernel_rows,
                 "candidate_kernel_blockers": candidate_kernel_blockers,
                 "hardware_completion_eligible": False,
@@ -457,6 +611,7 @@ def _release_ready(
         and coverage.get("per_candidate_kernel_coverage_complete") is True
         and all(row.get("unit_gate_passed") for row in unit_rows)
         and all(row.get("candidate_hardware_gate_passed") for row in candidate_rows)
+        and all(row.get("candidate_claim_eligible") for row in candidate_rows)
     )
 
 
@@ -497,20 +652,28 @@ def _hardware_eligibility_blockers(
             }
         )
     for candidate in candidate_rows:
-        if candidate.get("candidate_hardware_gate_passed") is True:
-            continue
-        blockers.append(
-            {
-                "blocker_id": candidate.get("blocker_id") or "candidate_hardware_gate_not_passed",
-                "reason": "candidate hardware gate did not pass",
-                "candidate_id": candidate.get("candidate_id"),
-                "missing_kernel_ids": candidate.get("missing_kernel_ids"),
-                "missing_kernel_count": candidate.get("missing_kernel_count"),
-                "duplicate_kernel_ids": candidate.get("duplicate_kernel_ids"),
-                "blocked_unit_count": candidate.get("blocked_unit_count"),
-                "failed_unit_count": candidate.get("failed_unit_count"),
-            }
-        )
+        if candidate.get("candidate_hardware_gate_passed") is not True:
+            blockers.append(
+                {
+                    "blocker_id": candidate.get("blocker_id") or "candidate_hardware_gate_not_passed",
+                    "reason": "candidate hardware gate did not pass",
+                    "candidate_id": candidate.get("candidate_id"),
+                    "missing_kernel_ids": candidate.get("missing_kernel_ids"),
+                    "missing_kernel_count": candidate.get("missing_kernel_count"),
+                    "duplicate_kernel_ids": candidate.get("duplicate_kernel_ids"),
+                    "blocked_unit_count": candidate.get("blocked_unit_count"),
+                    "failed_unit_count": candidate.get("failed_unit_count"),
+                }
+            )
+        if candidate.get("candidate_claim_eligible") is not True:
+            blockers.extend(
+                {
+                    **dict(blocker),
+                    "candidate_id": candidate.get("candidate_id"),
+                }
+                for blocker in candidate.get("claim_eligibility_blockers", []) or []
+                if isinstance(blocker, Mapping)
+            )
     return blockers
 
 
@@ -534,6 +697,7 @@ def _deliverable_completion_blockers(hardware_completion_eligible: bool) -> list
 def build_dft_hardware_closure_release_gate(
     *,
     gate_adjudication_path: Path,
+    per_candidate_evidence_ledger_path: Path | None = None,
 ) -> Dict[str, Any]:
     """Return candidate/release closure rollup from hard-gate adjudication."""
 
@@ -545,11 +709,17 @@ def build_dft_hardware_closure_release_gate(
         if isinstance(row, Mapping)
     ]
     expected_kernel_ids = _expected_kernel_ids(gate, unit_rows)
+    evaluation_routing_by_candidate = _evaluation_routing_by_candidate(
+        gate=gate,
+        per_candidate_evidence_ledger_path=per_candidate_evidence_ledger_path,
+    )
     candidate_rows = _candidate_rollups(
         unit_rows,
         major_kernel_count=gate.get("major_kernel_count"),
         expected_kernel_ids=expected_kernel_ids,
+        evaluation_routing_by_candidate=evaluation_routing_by_candidate,
     )
+    evaluation_policy_routing_summary = _evaluation_routing_summary(candidate_rows)
     coverage = _release_coverage(
         unit_rows,
         candidate_rows,
@@ -582,7 +752,20 @@ def build_dft_hardware_closure_release_gate(
     return {
         "schema_version": DFT_HARDWARE_CLOSURE_RELEASE_GATE_SCHEMA,
         "status": status,
-        "source_artifacts": {"gate_adjudication": _source_ref(gate_path)},
+        "source_artifacts": {
+            "gate_adjudication": _source_ref(gate_path),
+            "per_candidate_evidence_ledger": (
+                _source_ref(per_candidate_evidence_ledger_path)
+                if per_candidate_evidence_ledger_path is not None
+                else {
+                    "path": None,
+                    "exists": False,
+                    "sha256": None,
+                    "hash_algorithm": "sha256",
+                    "status": "not_attached",
+                }
+            ),
+        },
         "release_id": gate.get("release_id"),
         "candidate_count": gate.get("candidate_count"),
         "major_kernel_count": gate.get("major_kernel_count"),
@@ -612,6 +795,9 @@ def build_dft_hardware_closure_release_gate(
         "release_gate_result": release_gate_result,
         "hardware_completion_eligible": hardware_completion_eligible,
         "deliverable_complete": False,
+        "evaluation_policy_routing_summary": evaluation_policy_routing_summary,
+        "routing_blocker_count": evaluation_policy_routing_summary["routing_blocker_count"],
+        "routing_blocked_candidate_ids": evaluation_policy_routing_summary["routing_blocked_candidate_ids"],
         "hardware_eligibility_blockers": hardware_blockers,
         "deliverable_completion_blockers": deliverable_blockers,
         "candidate_kernel_blockers": [
@@ -662,16 +848,26 @@ def validate_dft_hardware_closure_release_gate(payload_or_path: Mapping[str, Any
         errors.append({"field": "candidate_gate_passed_count", "message": "candidate pass count does not match rows"})
     all_units_passed = bool(units) and unit_passed == len(units) and unit_failed == 0 and unit_blocked == 0
     all_candidates_passed = bool(candidates) and candidate_passed == len(candidates)
+    all_candidate_claims_eligible = bool(candidates) and all(
+        isinstance(row, Mapping)
+        and row.get("candidate_claim_eligible") is True
+        for row in candidates
+    )
     coverage_complete = (
         payload.get("candidate_count_complete") is True
         and payload.get("unit_count_complete") is True
         and int(payload.get("duplicate_unit_count", 0) or 0) == 0
         and payload.get("per_candidate_kernel_coverage_complete") is True
     )
-    if payload.get("hardware_completion_eligible") is True and not (all_units_passed and all_candidates_passed and coverage_complete):
-        errors.append({"field": "hardware_completion_eligible", "message": "hardware completion eligibility requires every expected candidate×kernel unit to pass exactly once"})
+    if payload.get("hardware_completion_eligible") is True and not (
+        all_units_passed
+        and all_candidates_passed
+        and all_candidate_claims_eligible
+        and coverage_complete
+    ):
+        errors.append({"field": "hardware_completion_eligible", "message": "hardware completion eligibility requires every expected candidate×kernel unit to pass exactly once and every candidate claim to be routing-eligible"})
     if payload.get("hardware_completion_eligible") is False and all_units_passed and all_candidates_passed:
-        if coverage_complete:
+        if coverage_complete and all_candidate_claims_eligible:
             errors.append({"field": "hardware_completion_eligible", "message": "hardware completion eligibility must be true when every expected unit and candidate gate passes"})
     expected_unit_count = payload.get("expected_unit_count")
     if expected_unit_count is not None and int(expected_unit_count or 0) != len(units):
@@ -714,6 +910,14 @@ def validate_dft_hardware_closure_release_gate(payload_or_path: Mapping[str, Any
             errors.append({"field": f"candidate_rows[{candidate_index}].kernel_coverage_complete", "message": "candidate pass requires complete per-kernel coverage"})
         if candidate_ready and candidate.get("candidate_kernel_blockers"):
             errors.append({"field": f"candidate_rows[{candidate_index}].candidate_kernel_blockers", "message": "candidate pass cannot include kernel blockers"})
+        routing = candidate.get("evaluation_policy_routing", {})
+        routing_compatible = not isinstance(routing, Mapping) or routing.get("routing_compatible") is True
+        if candidate.get("candidate_claim_eligible") is True and not candidate_ready:
+            errors.append({"field": f"candidate_rows[{candidate_index}].candidate_claim_eligible", "message": "claim eligibility requires candidate hardware gate pass"})
+        if candidate.get("candidate_claim_eligible") is True and not routing_compatible:
+            errors.append({"field": f"candidate_rows[{candidate_index}].candidate_claim_eligible", "message": "claim eligibility cannot be true while evaluation routing is blocked"})
+        if isinstance(routing, Mapping) and routing.get("affects_design_legality") is not False:
+            errors.append({"field": f"candidate_rows[{candidate_index}].evaluation_policy_routing.affects_design_legality", "message": "evaluation routing must not affect design legality"})
     return {
         "schema_version": DFT_HARDWARE_CLOSURE_RELEASE_GATE_VALIDATION_SCHEMA,
         "valid": not errors,
@@ -728,11 +932,13 @@ def write_dft_hardware_closure_release_gate(
     out_dir: Path,
     *,
     gate_adjudication_path: Path,
+    per_candidate_evidence_ledger_path: Path | None = None,
 ) -> Dict[str, Any]:
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     payload = build_dft_hardware_closure_release_gate(
         gate_adjudication_path=gate_adjudication_path,
+        per_candidate_evidence_ledger_path=per_candidate_evidence_ledger_path,
     )
     write_json(out_dir / "dft_hardware_closure_release_gate.json", payload)
     validation = validate_dft_hardware_closure_release_gate(payload)
@@ -750,6 +956,8 @@ def write_dft_hardware_closure_release_gate(
         "release_gate_result": payload["release_gate_result"],
         "hardware_completion_eligible": payload["hardware_completion_eligible"],
         "deliverable_complete": False,
+        "routing_blocker_count": payload["routing_blocker_count"],
+        "routing_blocked_candidate_ids": payload["routing_blocked_candidate_ids"],
         "hardware_eligibility_blocker_count": len(payload.get("hardware_eligibility_blockers", []) or []),
         "deliverable_completion_blocker_count": len(payload.get("deliverable_completion_blockers", []) or []),
         "claim_boundary": _CLAIM_BOUNDARY,

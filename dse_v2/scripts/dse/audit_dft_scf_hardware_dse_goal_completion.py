@@ -11,6 +11,7 @@ must remain in progress even if all technical evidence is green.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import subprocess
 import sys
@@ -30,6 +31,117 @@ def _load_json(path: Path) -> Dict[str, Any]:
         return {}
     payload = json.loads(path.read_text(encoding="utf-8"))
     return payload if isinstance(payload, dict) else {}
+
+
+
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with open(path, "rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _resolve_semantic_source_path(ref_path: Any, *, run_dir: Optional[Path], closure_path: Optional[Path]) -> Optional[Path]:
+    if not ref_path:
+        return None
+    path = Path(str(ref_path))
+    if path.is_absolute():
+        return path
+    candidates = []
+    if run_dir is not None:
+        candidates.append(Path(run_dir) / path)
+    if closure_path is not None:
+        candidates.append(Path(closure_path).parent / path)
+    candidates.append(path)
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    return candidates[0] if candidates else path
+
+
+def _load_semantic_closure_payload(
+    *,
+    run_dir: Optional[Path],
+    report: Mapping[str, Any],
+    semantic_closure_path: Optional[Path],
+) -> Dict[str, Any]:
+    path: Optional[Path] = semantic_closure_path
+    if path is None and run_dir is not None:
+        path = Path(run_dir) / "dft_audit_semantic_closure.json"
+    if path is not None and path.exists():
+        payload = _load_json(path)
+        source = {"kind": "file", "path": str(path), "sha256": _sha256(path)}
+    else:
+        payload = _mapping(report.get("dft_audit_semantic_closure"))
+        path = None
+        source = {"kind": "final_report_section", "path": None, "sha256": None}
+    checks = _list_of_mappings(payload.get("checks"))
+    check_ids = {str(item.get("check_id")) for item in checks if item.get("check_id")}
+    required_check_ids = {
+        "phase_hotspot_identity",
+        "evaluation_policy_legality",
+        "candidate_tier_absence",
+        "coverage_vector_derivation",
+        "reference_hash_admission",
+    }
+    source_artifacts = _mapping(payload.get("source_artifacts"))
+    source_hash_errors: list[str] = []
+    required_source_count = 0
+    hashed_required_source_count = 0
+    embedded_report_section = path is None
+    for label, ref_any in source_artifacts.items():
+        ref = _mapping(ref_any)
+        if ref.get("required") is True:
+            required_source_count += 1
+            if ref.get("sha256"):
+                hashed_required_source_count += 1
+            else:
+                source_hash_errors.append(f"{label}:missing_sha256")
+            if not embedded_report_section and ref.get("exists") is not True:
+                source_hash_errors.append(f"{label}:required_source_missing")
+        if embedded_report_section or not ref.get("sha256") or ref.get("exists") is not True:
+            continue
+        resolved = _resolve_semantic_source_path(ref.get("path"), run_dir=run_dir, closure_path=path)
+        if resolved is None or not resolved.exists() or not resolved.is_file():
+            source_hash_errors.append(f"{label}:referenced_source_missing")
+            continue
+        actual = _sha256(resolved)
+        if actual != ref.get("sha256"):
+            source_hash_errors.append(f"{label}:source_hash_mismatch")
+    missing_checks = sorted(required_check_ids - check_ids)
+    failed_checks = [str(item.get("check_id")) for item in checks if item.get("passed") is not True]
+    source_hash_backed = (
+        bool(source_artifacts)
+        and required_source_count > 0
+        and hashed_required_source_count == required_source_count
+        and not source_hash_errors
+    )
+    overall_passed = bool(payload.get("overall_passed") is True)
+    valid = bool(
+        payload
+        and payload.get("schema_version") == "dse.dft_scf.semantic_audit_closure.v1"
+        and overall_passed
+        and source_hash_backed
+        and not missing_checks
+        and not failed_checks
+    )
+    return {
+        "present": bool(payload),
+        "valid": valid,
+        "source": source,
+        "schema_version": payload.get("schema_version"),
+        "overall_passed": overall_passed,
+        "source_hash_backed": source_hash_backed,
+        "required_source_count": required_source_count,
+        "hashed_required_source_count": hashed_required_source_count,
+        "source_hash_errors": source_hash_errors,
+        "missing_checks": missing_checks,
+        "failed_checks": failed_checks,
+        "checks": checks,
+        "claim_boundary": payload.get("claim_boundary"),
+    }
 
 
 def _date_text() -> str:
@@ -196,11 +308,17 @@ def build_dft_scf_hardware_goal_completion_audit(
     final_report: Optional[Path] = None,
     horizon_local: str = DEFAULT_HORIZON_LOCAL,
     now: Optional[datetime] = None,
+    semantic_closure_path: Optional[Path] = None,
 ) -> Dict[str, Any]:
     """Return a fail-closed prompt-to-artifact audit for the active goal."""
 
     report_path = _final_report_path(run_dir=run_dir, final_report=final_report)
     report = _load_json(report_path)
+    dft_audit_semantic_closure = _load_semantic_closure_payload(
+        run_dir=run_dir,
+        report=report,
+        semantic_closure_path=semantic_closure_path,
+    )
     now_dt = now or datetime.now(LOCAL_TZ)
     if now_dt.tzinfo is None:
         now_dt = now_dt.replace(tzinfo=LOCAL_TZ)
@@ -336,6 +454,23 @@ def build_dft_scf_hardware_goal_completion_audit(
             "Step5 final_report.json is present and readable",
             "passed" if bool(report) else "failed",
             {"final_report": str(report_path), "schema_version": report.get("schema_version")},
+        ),
+        _status_item(
+            "DFT semantic audit closure artifact is source-hash backed and passed",
+            "passed" if dft_audit_semantic_closure.get("valid") is True else "blocked",
+            {
+                "present": dft_audit_semantic_closure.get("present"),
+                "schema_version": dft_audit_semantic_closure.get("schema_version"),
+                "source": dft_audit_semantic_closure.get("source"),
+                "overall_passed": dft_audit_semantic_closure.get("overall_passed"),
+                "source_hash_backed": dft_audit_semantic_closure.get("source_hash_backed"),
+                "required_source_count": dft_audit_semantic_closure.get("required_source_count"),
+                "hashed_required_source_count": dft_audit_semantic_closure.get("hashed_required_source_count"),
+                "source_hash_errors": dft_audit_semantic_closure.get("source_hash_errors"),
+                "missing_checks": dft_audit_semantic_closure.get("missing_checks"),
+                "failed_checks": dft_audit_semantic_closure.get("failed_checks"),
+                "claim_boundary": dft_audit_semantic_closure.get("claim_boundary"),
+            },
         ),
         _status_item(
             "DFT evidence ledger is cited by Step5",
@@ -1032,6 +1167,9 @@ def build_dft_scf_hardware_goal_completion_audit(
             "dft_hardware_closure_gate_adjudication_present": dft_hardware_gate_adjudication.get("present") is True,
             "dft_hardware_closure_release_gate_present": dft_hardware_release_gate.get("present") is True,
             "dft_l4_goal_binding_present": dft_l4_goal_binding.get("present") is True,
+            "dft_audit_semantic_closure_present": dft_audit_semantic_closure.get("present") is True,
+            "dft_audit_semantic_closure_valid": dft_audit_semantic_closure.get("valid") is True,
+            "dft_audit_semantic_closure_source_hash_backed": dft_audit_semantic_closure.get("source_hash_backed") is True,
             "l4_software_visible_proof_present": dft_l4_goal_binding.get("l4_software_visible_proof_present") is True,
             "current_goal_l4_bound": l4_current_goal_binding.get("current_goal_l4_bound") is True,
             "l4_goal_binding_final_closure_eligible": l4_goal_binding_final_closure_eligible,
@@ -1066,6 +1204,7 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser.add_argument("--final-report", type=Path, default=None)
     parser.add_argument("--horizon-local", default=DEFAULT_HORIZON_LOCAL)
     parser.add_argument("--out", type=Path, default=None)
+    parser.add_argument("--semantic-closure-path", type=Path, default=None)
     parser.add_argument("--quiet", action="store_true")
     parser.add_argument("--allow-in-progress", action="store_true")
     return parser.parse_args(list(argv))
@@ -1077,6 +1216,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         run_dir=args.run_dir,
         final_report=args.final_report,
         horizon_local=args.horizon_local,
+        semantic_closure_path=args.semantic_closure_path,
     )
     if args.out:
         _write_json(args.out, audit)

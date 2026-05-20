@@ -195,6 +195,46 @@ def _gate_adjudication_matrix(path: Path, *, candidate_count: int = 36, major_ke
     )
 
 
+def _per_candidate_evidence_ledger_with_routing_blocker(path: Path) -> Path:
+    return _write_json(
+        path,
+        {
+            "schema_version": "dse.codesign.per_candidate_evidence_ledger.v1",
+            "legal_candidate_count": 1,
+            "legal_candidate_ids": ["cand-a"],
+            "rows": [
+                {
+                    "candidate_id": "cand-a",
+                    "evaluation_policy_routing": {
+                        "schema_version": "dse.dft.ledger_evaluation_policy_routing.v1",
+                        "status": "blocked_for_claim_eligibility",
+                        "routing_recorded": True,
+                        "routing_compatible": False,
+                        "evaluation_policy_id": "policy-route-a",
+                        "evaluation_policy_assignments": {},
+                        "promotion_requirements": ["release_candidate_only"],
+                        "routing_blockers": [
+                            {
+                                "rule_id": "evaluation_policy_routing_missing",
+                                "reason": "routing metadata is intentionally blocked for claim eligibility",
+                            }
+                        ],
+                        "routing_blocker_count": 1,
+                        "affects_design_legality": False,
+                        "affects_design_score": False,
+                        "claim_eligibility_blocker": True,
+                        "claim_boundary": (
+                            "Evaluation routing schedules or blocks evidence/promotion work. "
+                            "Routing blockers affect release/candidate claim eligibility only; "
+                            "they do not change design legality, design score, or stable design identity."
+                        ),
+                    },
+                }
+            ],
+        },
+    )
+
+
 def test_release_gate_blocks_incomplete_unit_gates_fail_closed(tmp_path: Path) -> None:
     run_dir = tmp_path / "run"
     gate_path = _gate_adjudication(run_dir / "dft_hardware_closure_gate_adjudication.json")
@@ -251,6 +291,56 @@ def test_release_gate_all_unit_gates_pass_sets_hardware_eligible_not_deliverable
     )
     assert release["candidate_rows"][0]["candidate_hardware_gate_passed"] is True
     assert release["candidate_rows"][0]["deliverable_complete"] is False
+
+
+def test_release_gate_routing_blockers_affect_claim_eligibility_only(tmp_path: Path) -> None:
+    run_dir = tmp_path / "run"
+    gate_path = _gate_adjudication(run_dir / "dft_hardware_closure_gate_adjudication.json", all_passed=True)
+    ledger_path = _per_candidate_evidence_ledger_with_routing_blocker(
+        run_dir / "per_candidate_evidence_ledger.json"
+    )
+
+    release = build_dft_hardware_closure_release_gate(
+        gate_adjudication_path=gate_path,
+        per_candidate_evidence_ledger_path=ledger_path,
+    )
+
+    assert release["status"] == "blocked_incomplete_hardware_release_gate"
+    assert release["release_gate_result"] == "blocked_incomplete_hardware_release_gate"
+    candidate = release["candidate_rows"][0]
+    routing = candidate["evaluation_policy_routing"]
+    assert candidate["candidate_hardware_gate_passed"] is True
+    assert candidate["candidate_claim_eligible"] is False
+    assert candidate["routing_affects_design_legality"] is False
+    assert routing["routing_compatible"] is False
+    assert routing["affects_design_legality"] is False
+    assert routing["claim_eligibility_blocker"] is True
+    assert release["evaluation_policy_routing_summary"]["routing_blocked_candidate_ids"] == ["cand-a"]
+    assert release["evaluation_policy_routing_summary"]["routing_blocked_candidate_count"] == 1
+    assert any(
+        blocker["blocker_id"] == "candidate_evaluation_policy_routing_blocked"
+        for blocker in release["hardware_eligibility_blockers"]
+    )
+    assert release["hardware_completion_eligible"] is False
+    assert release["deliverable_complete"] is False
+    assert validate_dft_hardware_closure_release_gate(release)["valid"] is True
+
+    status = write_dft_hardware_closure_release_gate(
+        run_dir,
+        gate_adjudication_path=gate_path,
+        per_candidate_evidence_ledger_path=ledger_path,
+    )
+    assert status["routing_blocker_count"] == 1
+    assert status["routing_blocked_candidate_ids"] == ["cand-a"]
+    _write_json(run_dir / "verdict.json", {"run_id": "routing-release-gate", "backend": "systemc", "trusted_for_final_ranking": False})
+    _write_json(run_dir / "claim_validation.json", {"schema_version": "dse.claim_validation.v1", "passed": True})
+    _write_json(run_dir / "evidence_requirements.json", {"schema_version": "dse.evidence_requirements.v1", "requirements": []})
+    paths = write_step5_report_artifacts(run_dir, claims=[])
+    report = json.loads((run_dir / paths["final_report_json"]).read_text())
+    section = report["dft_hardware_closure_release_gate"]
+    assert section["routing_blocker_count"] == 1
+    assert section["routing_blocked_candidate_ids"] == ["cand-a"]
+    assert section["evaluation_policy_routing_summary"]["affects_design_legality"] is False
 
 
 def test_release_gate_rejects_partial_all_pass_subset_when_expected_matrix_is_larger(tmp_path: Path) -> None:

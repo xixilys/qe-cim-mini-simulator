@@ -23,15 +23,19 @@ from dse_v2.codesign.release_domain import stable_json_hash
 from dse_v2.codesign.dft_scf_workstreams import STRICT_DFT_QE_WORKLOAD_CLASSES
 from dse_v2.codesign.evidence_ledger import sha256_file, write_json
 from dse_v2.reference_workloads.dft_workload_profile import (
+    build_coverage_derivation_audit,
     build_layered_workload_profile,
     write_layered_workload_profile,
 )
 
 DFT_SCF_SIX_CLASS_SUITE_SCHEMA = "dse.dft_scf.six_class_descriptor_runnable_bundle.v1"
 DFT_SCF_SIX_CLASS_SUITE_VALIDATION_SCHEMA = "dse.dft_scf.six_class_descriptor_runnable_bundle_validation.v1"
+DFT_SCF_COVERAGE_DERIVATION_AUDIT_SCHEMA = "dse.dft_scf.coverage_derivation_audit.v1"
 DFT_SCF_SIX_CLASS_SUITE_ID = "dft_scf_six_class_suite_v1"
 DFT_SCF_SIX_CLASS_MANIFEST_NAME = "dft_scf_six_class_bundle_manifest.json"
 DFT_SCF_SIX_CLASS_REFERENCE_HASH_MANIFEST_NAME = "reference_output_hash_manifest.json"
+DFT_SCF_SIX_CLASS_REFERENCE_ADMISSION_LEDGER_SCHEMA = "dse.dft_scf.reference_admission_ledger.v1"
+DFT_SCF_SIX_CLASS_REFERENCE_ADMISSION_LEDGER_NAME = "reference_admission_ledger.json"
 DFT_SCF_SIX_CLASS_PARSER_VERSION = "dft_scf_six_class_suite.py:v1"
 DEFAULT_LOCAL_PW_X = Path("/usr/bin/pw.x")
 DEFAULT_LOCAL_QE_PSEUDO_DIR = Path("/usr/share/espresso/pseudo")
@@ -600,6 +604,133 @@ def _write_reference_output_hash_manifest(
     return manifest
 
 
+def _reference_admission_blocker_ids(reference_output: Mapping[str, Any]) -> list[str]:
+    blockers: list[str] = []
+    if not reference_output.get("sha256"):
+        blockers.append("missing_real_reference_output_hash")
+    elif reference_output.get("hash_final") is not True:
+        blockers.append("reference_output_hash_not_final")
+    if reference_output.get("status") not in {
+        "local_pw_x_reference_output_hash_from_converged_scf_run",
+        "local_pw_x_reference_output_hash_from_existing_converged_scf_output",
+    }:
+        blockers.append("reference_output_not_local_converged_qe_source")
+    if reference_output.get("job_done") is not True or reference_output.get("scf_converged") is not True:
+        blockers.append("reference_output_convergence_markers_not_verified")
+    if reference_output.get("admission_source") not in {"local_qe_reference_run", "reused_existing_local_qe_output"}:
+        blockers.append("reference_output_missing_builder_admission_marker")
+    if not _non_empty(reference_output.get("admission_entry_id")):
+        blockers.append("reference_output_missing_builder_admission_marker")
+    if reference_output.get("admission_marker_authority") != "builder_generated_local_qe_reference_entry":
+        blockers.append("reference_output_admission_marker_not_builder_owned")
+    return sorted(set(blockers))
+
+
+def _reference_admission_ledger_entry_from_case(case: Mapping[str, Any]) -> Dict[str, Any]:
+    class_id = str(case.get("class_id") or case.get("workload_class") or "")
+    reference_output = case.get("reference_output") if isinstance(case.get("reference_output"), Mapping) else {}
+    workload_analysis = case.get("dft_workload_analysis") if isinstance(case.get("dft_workload_analysis"), Mapping) else {}
+    reference_summary = (
+        workload_analysis.get("reference_summary")
+        if isinstance(workload_analysis.get("reference_summary"), Mapping)
+        else {}
+    )
+    admitted = _is_local_converged_reference_entry(reference_output)
+    expected_admission_entry_id = None
+    if reference_output.get("sha256") and reference_output.get("hash_final") is True:
+        expected_admission_entry_id = _reference_admission_entry_id(
+            class_id=class_id,
+            path=str(reference_output.get("path") or ""),
+            sha256=str(reference_output.get("sha256") or ""),
+            status=str(reference_output.get("status") or ""),
+        )
+    return {
+        "schema_version": "dse.dft_scf.reference_admission_ledger.entry.v1",
+        "class_id": class_id,
+        "case_id": case.get("case_id"),
+        "reference_output_path": reference_output.get("path"),
+        "reference_output_sha256": reference_output.get("sha256"),
+        "hash_algorithm": "sha256",
+        "status": reference_output.get("status"),
+        "hash_final": bool(reference_output.get("hash_final") is True),
+        "job_done": bool(reference_output.get("job_done") is True),
+        "scf_converged": bool(reference_output.get("scf_converged") is True),
+        "admission_source": reference_output.get("admission_source"),
+        "admission_entry_id": reference_output.get("admission_entry_id"),
+        "expected_admission_entry_id": expected_admission_entry_id,
+        "admission_marker_authority": reference_output.get("admission_marker_authority"),
+        "admitted": bool(admitted),
+        "fail_closed": not admitted,
+        "blocker_ids": [] if admitted else _reference_admission_blocker_ids(reference_output),
+        "source_case_reference_output": f"cases.{class_id}.reference_output",
+        "source_workload_profile_path": (
+            case.get("workload_profile", {}).get("path")
+            if isinstance(case.get("workload_profile"), Mapping)
+            else None
+        ),
+        "normalized_reference_summary_hash": (
+            reference_summary.get("normalized_reference_summary_hash")
+            if isinstance(reference_summary, Mapping)
+            else None
+        ),
+        "raw_output_sha256": reference_summary.get("raw_output_sha256") if isinstance(reference_summary, Mapping) else None,
+    }
+
+
+def _write_reference_admission_ledger(
+    out_root: Path,
+    cases: Sequence[Mapping[str, Any]],
+    *,
+    bundle_id: str,
+    qe_command: str,
+    reference_hash_manifest: Mapping[str, Any],
+) -> Dict[str, Any]:
+    entries = [_reference_admission_ledger_entry_from_case(case) for case in cases]
+    entries_by_class = {entry["class_id"]: entry for entry in entries}
+    admitted_class_ids = [
+        class_id
+        for class_id in REQUIRED_DFT_SCF_CLASS_IDS
+        if entries_by_class.get(class_id, {}).get("admitted") is True
+    ]
+    ledger = {
+        "schema_version": DFT_SCF_SIX_CLASS_REFERENCE_ADMISSION_LEDGER_SCHEMA,
+        "suite_id": DFT_SCF_SIX_CLASS_SUITE_ID,
+        "bundle_id": bundle_id,
+        "qe_command": qe_command,
+        "required_class_ids": list(REQUIRED_DFT_SCF_CLASS_IDS),
+        "entry_count": len(entries),
+        "admitted_class_ids": admitted_class_ids,
+        "missing_class_ids": [
+            class_id for class_id in REQUIRED_DFT_SCF_CLASS_IDS if class_id not in {entry["class_id"] for entry in entries}
+        ],
+        "reference_output_hash_manifest": {
+            "path": DFT_SCF_SIX_CLASS_REFERENCE_HASH_MANIFEST_NAME,
+            "sha256": sha256_file(out_root / DFT_SCF_SIX_CLASS_REFERENCE_HASH_MANIFEST_NAME),
+            "hash_algorithm": "sha256",
+            "final_admission_complete": bool(reference_hash_manifest.get("final_admission_complete") is True),
+        },
+        "final_admission_complete": all(entry["admitted"] for entry in entries)
+        and len(entries) == len(REQUIRED_DFT_SCF_CLASS_IDS),
+        "entries": entries,
+        "fail_closed_policy": {
+            "missing_ledger_blocks_admission": True,
+            "tampered_ledger_blocks_admission": True,
+            "stale_ledger_blocks_admission": True,
+            "external_or_caller_hashes_are_provenance_only": True,
+            "requires_local_bundle_output_file": True,
+            "requires_job_done_and_scf_convergence_markers": True,
+            "requires_normalized_reference_summary_hash_match": True,
+        },
+        "claim_boundary": (
+            "This ledger is the canonical admission record for final real-QE reference outputs. "
+            "Admission fails closed unless each entry matches the manifest case, hash manifest, "
+            "local/reused bundle output file, convergence markers, and normalized reference summary."
+        ),
+    }
+    write_json(out_root / DFT_SCF_SIX_CLASS_REFERENCE_ADMISSION_LEDGER_NAME, ledger)
+    return ledger
+
+
 def _is_local_converged_reference_entry(reference_output: Mapping[str, Any]) -> bool:
     return bool(
         reference_output.get("sha256")
@@ -887,6 +1018,7 @@ def build_dft_scf_six_class_bundle_manifest(
         )
         profile_path = workload_profile_dir / f"{spec.class_id}_workload_profile.json"
         profile_ref = write_layered_workload_profile(profile_path, profile)
+        coverage_derivation_audit = build_coverage_derivation_audit(profile["coverage_vector"])
         descriptor: Dict[str, Any] = {
             "schema_version": "dse.dft_scf.six_class_case_descriptor.v1",
             "suite_id": DFT_SCF_SIX_CLASS_SUITE_ID,
@@ -910,12 +1042,14 @@ def build_dft_scf_six_class_bundle_manifest(
             "reference_output": reference_output,
             "reference_output_hash": reference_output["sha256"],
             "workload_profile": profile_ref,
+            "coverage_derivation_audit": coverage_derivation_audit,
             "dft_workload_analysis": {
                 "layer_order": list(profile["layer_order"]),
                 "raw_input_facts": profile["raw_input_facts"],
                 "resolved_run_facts": profile["resolved_run_facts"],
                 "derived_scale_features": profile["derived_scale_features"],
                 "coverage_vector": profile["coverage_vector"],
+                "coverage_derivation_audit": coverage_derivation_audit,
                 "kernel_workload_graph": profile["kernel_workload_graph"],
                 "reference_summary": profile["reference_summary"],
                 "claim_boundary": profile["claim_boundary"],
@@ -962,6 +1096,28 @@ def build_dft_scf_six_class_bundle_manifest(
         "hash_algorithm": "sha256",
         "complete": reference_hash_manifest["complete"],
     }
+    reference_admission_ledger = _write_reference_admission_ledger(
+        out_root,
+        cases,
+        bundle_id=bundle_id,
+        qe_command=str(local_pw_x) if run_local_qe else qe_command,
+        reference_hash_manifest=reference_hash_manifest,
+    )
+    reference_admission_ledger_ref = {
+        "path": DFT_SCF_SIX_CLASS_REFERENCE_ADMISSION_LEDGER_NAME,
+        "sha256": sha256_file(out_root / DFT_SCF_SIX_CLASS_REFERENCE_ADMISSION_LEDGER_NAME),
+        "hash_algorithm": "sha256",
+        "schema_version": reference_admission_ledger["schema_version"],
+        "final_admission_complete": reference_admission_ledger["final_admission_complete"],
+    }
+
+    coverage_derivation_audit = _suite_coverage_derivation_audit(cases)
+
+    coverage_derivation_audit = _suite_coverage_derivation_audit(cases)
+
+    coverage_derivation_audit = _suite_coverage_derivation_audit(cases)
+
+    coverage_derivation_audit = _suite_coverage_derivation_audit(cases)
 
     manifest: Dict[str, Any] = {
         "schema_version": DFT_SCF_SIX_CLASS_SUITE_SCHEMA,
@@ -994,8 +1150,10 @@ def build_dft_scf_six_class_bundle_manifest(
         "workload_classes": list(REQUIRED_DFT_SCF_CLASS_IDS),
         "case_count": len(cases),
         "cases": cases,
+        "coverage_derivation_audit": coverage_derivation_audit,
         "manifest_path": DFT_SCF_SIX_CLASS_MANIFEST_NAME,
         "reference_output_hash_manifest": reference_hash_manifest_ref,
+        "reference_admission_ledger": reference_admission_ledger_ref,
         "local_qe_asset_discovery": local_qe_asset_discovery
         or {
             "schema_version": "dse.dft_scf.local_qe_pseudopotential_discovery.v1",
@@ -1066,6 +1224,51 @@ def _non_empty(value: Any) -> bool:
     return True
 
 
+def _suite_coverage_derivation_audit(cases: Sequence[Mapping[str, Any]]) -> Dict[str, Any]:
+    case_audits: dict[str, Dict[str, Any]] = {}
+    missing_coverage_cases: list[str] = []
+    for index, case in enumerate(cases):
+        class_id = str(case.get("class_id") or case.get("workload_class") or f"case_{index}")
+        workload_analysis = case.get("dft_workload_analysis") if isinstance(case.get("dft_workload_analysis"), Mapping) else {}
+        coverage = workload_analysis.get("coverage_vector") if isinstance(workload_analysis, Mapping) else None
+        if not isinstance(coverage, Mapping):
+            missing_coverage_cases.append(class_id)
+            continue
+        case_audits[class_id] = build_coverage_derivation_audit(coverage)
+
+    cases_without_non_tag_derivation = sorted(
+        class_id
+        for class_id, audit in case_audits.items()
+        if audit.get("all_required_gates_have_non_tag_derivation") is not True
+    )
+    cases_with_stress_tag_authority = sorted(
+        class_id
+        for class_id, audit in case_audits.items()
+        if audit.get("stress_tags_used_for_gate_authority") is True
+    )
+    return {
+        "schema_version": DFT_SCF_COVERAGE_DERIVATION_AUDIT_SCHEMA,
+        "all_required_gates_have_non_tag_derivation": (
+            not missing_coverage_cases
+            and not cases_without_non_tag_derivation
+            and len(case_audits) == len(cases)
+        ),
+        "stress_tags_used_for_gate_authority": bool(cases_with_stress_tag_authority),
+        "case_count": len(cases),
+        "audited_case_count": len(case_audits),
+        "case_ids": sorted(case_audits),
+        "missing_coverage_cases": sorted(missing_coverage_cases),
+        "cases_without_non_tag_derivation": cases_without_non_tag_derivation,
+        "cases_with_stress_tag_authority": cases_with_stress_tag_authority,
+        "case_audits": case_audits,
+        "recomputed_from": ["cases[].dft_workload_analysis.coverage_vector"],
+        "claim_boundary": (
+            "Suite coverage derivation audit is recomputed from case coverage vectors. "
+            "Stress tags are display-only suite intent and cannot authorize required gates."
+        ),
+    }
+
+
 def _path_ref_valid(ref: Mapping[str, Any], *, base_dir: Path, field: str, blockers: list[Dict[str, Any]]) -> None:
     rel_path = str(ref.get("path") or "")
     if not rel_path:
@@ -1117,6 +1320,146 @@ def _reference_hash_manifest_entries(payload: Mapping[str, Any], *, base_dir: Pa
     }
 
 
+def _reference_admission_ledger_entries(
+    payload: Mapping[str, Any],
+    *,
+    base_dir: Path,
+    blockers: list[Dict[str, Any]],
+) -> Dict[str, Dict[str, Any]]:
+    ref = payload.get("reference_admission_ledger")
+    if not isinstance(ref, Mapping):
+        blockers.append({
+            "id": "missing_reference_admission_ledger_ref",
+            "field": "reference_admission_ledger",
+            "reason": "final reference admission must be mediated by the canonical ledger",
+        })
+        return {}
+    rel_path = str(ref.get("path") or "")
+    if not rel_path:
+        blockers.append({
+            "id": "missing_reference_admission_ledger_ref",
+            "field": "reference_admission_ledger.path",
+            "reason": "canonical reference admission ledger path is required",
+        })
+        return {}
+    path = _bundle_relative_existing_file(rel_path, base_dir=base_dir)
+    if path is None:
+        blockers.append({
+            "id": "missing_reference_admission_ledger",
+            "field": "reference_admission_ledger.path",
+            "path": rel_path,
+            "reason": "canonical reference_admission_ledger.json is absent or not bundle-relative",
+        })
+        return {}
+    actual_hash = sha256_file(path)
+    expected_hash = str(ref.get("sha256") or "")
+    if actual_hash != expected_hash:
+        blockers.append({
+            "id": "reference_admission_ledger_hash_mismatch",
+            "field": "reference_admission_ledger.sha256",
+            "path": rel_path,
+            "expected": expected_hash,
+            "actual": actual_hash,
+            "reason": "tampered admission ledger blocks final reference admission",
+        })
+    try:
+        ledger = _read_json_mapping(path)
+    except (OSError, json.JSONDecodeError, DftScfSixClassBundleError) as exc:
+        blockers.append({
+            "id": "reference_admission_ledger_unreadable",
+            "field": "reference_admission_ledger.path",
+            "path": rel_path,
+            "error": str(exc),
+        })
+        return {}
+    if ledger.get("schema_version") != DFT_SCF_SIX_CLASS_REFERENCE_ADMISSION_LEDGER_SCHEMA:
+        blockers.append({
+            "id": "unexpected_reference_admission_ledger_schema",
+            "field": "reference_admission_ledger.schema_version",
+            "expected": DFT_SCF_SIX_CLASS_REFERENCE_ADMISSION_LEDGER_SCHEMA,
+            "actual": ledger.get("schema_version"),
+        })
+    if ledger.get("suite_id") != DFT_SCF_SIX_CLASS_SUITE_ID:
+        blockers.append({
+            "id": "reference_admission_ledger_suite_mismatch",
+            "field": "reference_admission_ledger.suite_id",
+            "expected": DFT_SCF_SIX_CLASS_SUITE_ID,
+            "actual": ledger.get("suite_id"),
+        })
+    if ledger.get("bundle_id") != payload.get("bundle_id"):
+        blockers.append({
+            "id": "reference_admission_ledger_bundle_mismatch",
+            "field": "reference_admission_ledger.bundle_id",
+            "expected": payload.get("bundle_id"),
+            "actual": ledger.get("bundle_id"),
+        })
+    entries = ledger.get("entries", [])
+    if not isinstance(entries, list):
+        blockers.append({
+            "id": "reference_admission_ledger_entries_not_list",
+            "field": "reference_admission_ledger.entries",
+        })
+        return {}
+    entries_by_class: Dict[str, Dict[str, Any]] = {}
+    duplicate_class_ids: set[str] = set()
+    for entry in entries:
+        if not isinstance(entry, Mapping):
+            blockers.append({
+                "id": "reference_admission_ledger_entry_not_object",
+                "field": "reference_admission_ledger.entries",
+            })
+            continue
+        class_id = str(entry.get("class_id") or "")
+        if class_id in entries_by_class:
+            duplicate_class_ids.add(class_id)
+        if class_id:
+            entries_by_class[class_id] = dict(entry)
+    if duplicate_class_ids:
+        blockers.append({
+            "id": "duplicate_reference_admission_ledger_class_id",
+            "class_ids": sorted(duplicate_class_ids),
+        })
+    missing = [class_id for class_id in REQUIRED_DFT_SCF_CLASS_IDS if class_id not in entries_by_class]
+    extra = [class_id for class_id in entries_by_class if class_id not in set(REQUIRED_DFT_SCF_CLASS_IDS)]
+    if missing:
+        blockers.append({
+            "id": "reference_admission_ledger_missing_required_class_ids",
+            "missing_class_ids": missing,
+        })
+    if extra:
+        blockers.append({
+            "id": "reference_admission_ledger_unexpected_class_ids",
+            "extra_class_ids": sorted(extra),
+        })
+    if ledger.get("entry_count") != len(entries):
+        blockers.append({
+            "id": "reference_admission_ledger_entry_count_mismatch",
+            "expected": len(entries),
+            "actual": ledger.get("entry_count"),
+        })
+    admitted_class_ids = [
+        class_id
+        for class_id in REQUIRED_DFT_SCF_CLASS_IDS
+        if entries_by_class.get(class_id, {}).get("admitted") is True
+    ]
+    if ledger.get("admitted_class_ids") != admitted_class_ids:
+        blockers.append({
+            "id": "reference_admission_ledger_admitted_class_ids_mismatch",
+            "expected": admitted_class_ids,
+            "actual": ledger.get("admitted_class_ids"),
+        })
+    expected_final_complete = len(entries_by_class) == len(REQUIRED_DFT_SCF_CLASS_IDS) and all(
+        entries_by_class[class_id].get("admitted") is True for class_id in REQUIRED_DFT_SCF_CLASS_IDS
+    )
+    if ledger.get("final_admission_complete") is not expected_final_complete:
+        blockers.append({
+            "id": "reference_admission_ledger_final_complete_mismatch",
+            "expected": expected_final_complete,
+            "actual": ledger.get("final_admission_complete"),
+        })
+    return entries_by_class
+
+
 def _normalized_reference_summary_hash(summary: Mapping[str, Any]) -> str:
     return stable_json_hash({
         key: value
@@ -1149,6 +1492,7 @@ def validate_dft_scf_six_class_bundle_manifest(
     reference_manifest_entries = _reference_hash_manifest_entries(payload, base_dir=root)
 
     blockers: list[Dict[str, Any]] = []
+    reference_admission_entries = _reference_admission_ledger_entries(payload, base_dir=root, blockers=blockers)
     if payload.get("schema_version") != DFT_SCF_SIX_CLASS_SUITE_SCHEMA:
         blockers.append({"id": "unexpected_schema_version", "reason": "six-class bundle manifest schema mismatch"})
     if payload.get("strict") is not True:
@@ -1180,19 +1524,22 @@ def validate_dft_scf_six_class_bundle_manifest(
         for field in ("case_id", "class_id", "workload_class", "run_command", "provenance", "license", "parser_version", "parser_tool_version", "proof_class"):
             if not _non_empty(case.get(field)):
                 blockers.append({"id": "missing_case_field", "field": f"cases[{index}].{field}", "class_id": class_id})
-        qe_input = case.get("qe_input") if isinstance(case.get("qe_input"), Mapping) else {}
+        raw_qe_input = case.get("qe_input")
+        qe_input: Mapping[str, Any] = raw_qe_input if isinstance(raw_qe_input, Mapping) else {}
         if not _non_empty(qe_input.get("text")):
             blockers.append({"id": "missing_qe_input_text", "field": f"cases[{index}].qe_input.text", "class_id": class_id})
         if qe_input:
             _path_ref_valid(qe_input, base_dir=root, field=f"cases[{index}].qe_input", blockers=blockers)
         else:
             blockers.append({"id": "missing_qe_input", "field": f"cases[{index}].qe_input", "class_id": class_id})
-        descriptor = case.get("descriptor") if isinstance(case.get("descriptor"), Mapping) else {}
+        raw_descriptor = case.get("descriptor")
+        descriptor: Mapping[str, Any] = raw_descriptor if isinstance(raw_descriptor, Mapping) else {}
         if descriptor:
             _path_ref_valid(descriptor, base_dir=root, field=f"cases[{index}].descriptor", blockers=blockers)
         else:
             blockers.append({"id": "missing_descriptor_ref", "field": f"cases[{index}].descriptor", "class_id": class_id})
-        workload_profile = case.get("workload_profile") if isinstance(case.get("workload_profile"), Mapping) else {}
+        raw_workload_profile = case.get("workload_profile")
+        workload_profile: Mapping[str, Any] = raw_workload_profile if isinstance(raw_workload_profile, Mapping) else {}
         if workload_profile:
             _path_ref_valid(workload_profile, base_dir=root, field=f"cases[{index}].workload_profile", blockers=blockers)
             if workload_profile.get("schema_version") != "dse.dft.workload_profile.layered.v1":
@@ -1209,12 +1556,14 @@ def validate_dft_scf_six_class_bundle_manifest(
                 })
         else:
             blockers.append({"id": "missing_workload_profile_ref", "field": f"cases[{index}].workload_profile", "class_id": class_id})
-        workload_analysis = case.get("dft_workload_analysis") if isinstance(case.get("dft_workload_analysis"), Mapping) else {}
+        raw_workload_analysis = case.get("dft_workload_analysis")
+        workload_analysis: Mapping[str, Any] = raw_workload_analysis if isinstance(raw_workload_analysis, Mapping) else {}
         required_analysis_layers = (
             "raw_input_facts",
             "resolved_run_facts",
             "derived_scale_features",
             "coverage_vector",
+            "coverage_derivation_audit",
             "kernel_workload_graph",
             "reference_summary",
         )
@@ -1257,6 +1606,45 @@ def validate_dft_scf_six_class_bundle_manifest(
                             "class_id": class_id,
                             "gate_id": gate_id,
                             "reason": "stress_tags are display-only and cannot authorize required kernel gates",
+                        })
+                expected_coverage_audit = build_coverage_derivation_audit(coverage)
+                if expected_coverage_audit.get("stress_tags_used_for_gate_authority") is True:
+                    blockers.append({
+                        "id": "stress_tag_gate_derivation_reason",
+                        "field": f"cases[{index}].dft_workload_analysis.coverage_vector.gate_derivation_reasons",
+                        "class_id": class_id,
+                        "stress_tag_reason_gates": expected_coverage_audit.get("stress_tag_reason_gates", []),
+                        "reason": "stress_tags are display-only and cannot appear as gate authority reasons",
+                    })
+                for audit_field, emitted_audit in (
+                    (
+                        f"cases[{index}].coverage_derivation_audit",
+                        case.get("coverage_derivation_audit"),
+                    ),
+                    (
+                        f"cases[{index}].dft_workload_analysis.coverage_derivation_audit",
+                        workload_analysis.get("coverage_derivation_audit"),
+                    ),
+                    (
+                        f"cases[{index}].dft_workload_analysis.coverage_vector.coverage_derivation_audit",
+                        coverage.get("coverage_derivation_audit"),
+                    ),
+                ):
+                    if not isinstance(emitted_audit, Mapping):
+                        blockers.append({
+                            "id": "missing_coverage_derivation_audit",
+                            "field": audit_field,
+                            "class_id": class_id,
+                            "reason": "coverage derivation audit must be emitted but recomputed by validation",
+                        })
+                    elif dict(emitted_audit) != expected_coverage_audit:
+                        blockers.append({
+                            "id": "coverage_derivation_audit_mismatch",
+                            "field": audit_field,
+                            "class_id": class_id,
+                            "expected": expected_coverage_audit,
+                            "actual": dict(emitted_audit),
+                            "reason": "emitted coverage derivation audit disagrees with recomputation from gate reasons",
                         })
             graph = workload_analysis.get("kernel_workload_graph")
             if isinstance(graph, Mapping):
@@ -1306,7 +1694,8 @@ def validate_dft_scf_six_class_bundle_manifest(
             for field in ("source", "license", "physical_validity"):
                 if not _non_empty(pseudo.get(field)):
                     blockers.append({"id": "missing_pseudo_ref_field", "field": f"cases[{index}].pseudo_refs[{pseudo_index}].{field}", "class_id": class_id})
-        reference_output = case.get("reference_output") if isinstance(case.get("reference_output"), Mapping) else {}
+        raw_reference_output = case.get("reference_output")
+        reference_output: Mapping[str, Any] = raw_reference_output if isinstance(raw_reference_output, Mapping) else {}
         ref_hash = str(reference_output.get("sha256") or "") if reference_output else ""
         if not ref_hash:
             blockers.append({
@@ -1421,6 +1810,68 @@ def validate_dft_scf_six_class_bundle_manifest(
                     "class_id": class_id,
                     "actual": reference_summary.get("convergence_verified") if isinstance(reference_summary, Mapping) else None,
                 })
+            ledger_entry = reference_admission_entries.get(class_id)
+            if not isinstance(ledger_entry, Mapping):
+                blockers.append({
+                    "id": "reference_admission_ledger_entry_missing",
+                    "field": f"reference_admission_ledger.entries.{class_id}",
+                    "class_id": class_id,
+                    "reason": "final reference admission requires a canonical ledger entry matching the manifest case",
+                })
+            else:
+                ledger_expected = {
+                    "reference_output_path": reference_output.get("path"),
+                    "reference_output_sha256": reference_output.get("sha256"),
+                    "status": reference_output.get("status"),
+                    "hash_final": bool(reference_output.get("hash_final") is True),
+                    "job_done": bool(reference_output.get("job_done") is True),
+                    "scf_converged": bool(reference_output.get("scf_converged") is True),
+                    "admission_source": reference_output.get("admission_source"),
+                    "admission_entry_id": reference_output.get("admission_entry_id"),
+                    "admission_marker_authority": reference_output.get("admission_marker_authority"),
+                    "admitted": bool(_is_local_converged_reference_entry(reference_output)),
+                    "normalized_reference_summary_hash": (
+                        reference_summary.get("normalized_reference_summary_hash")
+                        if isinstance(reference_summary, Mapping)
+                        else None
+                    ),
+                    "raw_output_sha256": (
+                        reference_summary.get("raw_output_sha256")
+                        if isinstance(reference_summary, Mapping)
+                        else None
+                    ),
+                }
+                ledger_mismatches = {
+                    key: {"case": expected_value, "ledger": ledger_entry.get(key)}
+                    for key, expected_value in ledger_expected.items()
+                    if ledger_entry.get(key) != expected_value
+                }
+                if ledger_mismatches:
+                    blockers.append({
+                        "id": "reference_admission_ledger_entry_mismatch",
+                        "field": f"reference_admission_ledger.entries.{class_id}",
+                        "class_id": class_id,
+                        "mismatches": ledger_mismatches,
+                        "reason": "canonical admission ledger entry is stale or disagrees with the manifest case",
+                    })
+
+    mapping_cases = [case for case in cases if isinstance(case, Mapping)]
+    expected_manifest_audit = _suite_coverage_derivation_audit(mapping_cases)
+    manifest_audit = payload.get("coverage_derivation_audit")
+    if not isinstance(manifest_audit, Mapping):
+        blockers.append({
+            "id": "missing_coverage_derivation_audit",
+            "field": "coverage_derivation_audit",
+            "reason": "suite manifest must emit a recomputable coverage derivation audit",
+        })
+    elif dict(manifest_audit) != expected_manifest_audit:
+        blockers.append({
+            "id": "coverage_derivation_audit_mismatch",
+            "field": "coverage_derivation_audit",
+            "expected": expected_manifest_audit,
+            "actual": dict(manifest_audit),
+            "reason": "suite manifest coverage audit disagrees with recomputation from cases",
+        })
 
     missing = [class_id for class_id in REQUIRED_DFT_SCF_CLASS_IDS if class_id not in set(present)]
     extra = [class_id for class_id in present if class_id not in set(REQUIRED_DFT_SCF_CLASS_IDS)]
@@ -1500,6 +1951,7 @@ def write_dft_scf_six_class_bundle(
         "case_count": manifest["case_count"],
         "required_class_ids": list(REQUIRED_DFT_SCF_CLASS_IDS),
         "reference_output_hash_manifest": manifest["reference_output_hash_manifest"]["path"],
+        "reference_admission_ledger": manifest["reference_admission_ledger"]["path"],
         "local_qe_pseudo_discovery_complete": manifest["local_qe_asset_discovery"]["complete"],
         "local_qe_reference_run_complete": manifest["local_qe_reference_run"]["complete"],
         "admitted": validation["admitted"],

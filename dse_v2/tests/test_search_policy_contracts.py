@@ -103,13 +103,13 @@ def test_hierarchical_funnel_records_required_stages_and_isolates_exploratory_ro
         workload_run_id="w4",
         objective="maximize throughput",
         parameters={
-            "candidate_tier": ["release", "exploratory"],
+            "release_lane": ["release", "exploratory"],
             "template_family": ["streaming", "wide"],
             "pe_count": [4],
         },
         constraints={
-            "formal_pareto_tier_field": "candidate_tier",
-            "release_tier": "release",
+            "formal_pareto_lane_field": "release_lane",
+            "release_lane": "release",
             "hierarchical_funnel_stages": HIERARCHICAL_FUNNEL_STAGES,
             "requires_physical_evidence": True,
         },
@@ -118,8 +118,8 @@ def test_hierarchical_funnel_records_required_stages_and_isolates_exploratory_ro
 
     records = policy.propose(problem, budget=4)
     payloads = [record.to_dict() for record in records]
-    release_rows = [payload for payload in payloads if payload["parameters"]["candidate_tier"] == "release"]
-    exploratory_rows = [payload for payload in payloads if payload["parameters"]["candidate_tier"] == "exploratory"]
+    release_rows = [payload for payload in payloads if payload["parameters"]["release_lane"] == "release"]
+    exploratory_rows = [payload for payload in payloads if payload["parameters"]["release_lane"] == "exploratory"]
 
     assert release_rows
     assert exploratory_rows
@@ -132,9 +132,56 @@ def test_hierarchical_funnel_records_required_stages_and_isolates_exploratory_ro
     assert all(payload["simulation_eligible"] is True for payload in release_rows)
     assert all("formal_release_pareto_eligible" in payload["promotion_reasons"] for payload in release_rows)
     assert all(payload["simulation_eligible"] is False for payload in exploratory_rows)
-    assert all("non_release_tier:exploratory" in payload["blocker_reasons"] for payload in exploratory_rows)
+    assert all("non_release_lane:exploratory" in payload["blocker_reasons"] for payload in exploratory_rows)
     assert all(
-        payload["provenance"]["release_tier_policy"]["exploratory_rows_can_enter_formal_pareto"] is False
+        payload["provenance"]["release_lane_policy"]["exploratory_rows_can_enter_formal_pareto"] is False
+        for payload in payloads
+    )
+    assert all(
+        payload["provenance"]["release_lane_policy"]["formal_pareto_lane_field"] == "release_lane"
+        and payload["provenance"]["release_lane_policy"]["release_lane"] == "release"
+        for payload in payloads
+    )
+
+
+def test_hierarchical_funnel_keeps_legacy_tier_constraints_non_authoritative():
+    problem = SearchProblem(
+        problem_id="p4-legacy",
+        workload_run_id="w4-legacy",
+        objective="maximize throughput",
+        parameters={
+            "candidate_tier": ["release", "exploratory"],
+            "template_family": ["streaming"],
+        },
+        constraints={
+            "formal_pareto_tier_field": "candidate_tier",
+            "release_tier": "release",
+            "hierarchical_funnel_stages": HIERARCHICAL_FUNNEL_STAGES,
+        },
+    )
+    policy = HierarchicalFunnelSearchPolicy()
+
+    payloads = [record.to_dict() for record in policy.propose(problem, budget=2)]
+    exploratory_rows = [
+        payload for payload in payloads
+        if payload["parameters"]["candidate_tier"] == "exploratory"
+    ]
+
+    assert exploratory_rows
+    assert all("non_release_lane:exploratory" in row["blocker_reasons"] for row in exploratory_rows)
+    assert all(
+        payload["provenance"]["release_lane_policy"]["lane_field_source"]
+        == "legacy_formal_pareto_tier_field"
+        for payload in payloads
+    )
+    assert all(
+        payload["provenance"]["release_lane_policy"]["legacy_compatibility"]
+        ["legacy_tier_constraints_authoritative"] is False
+        for payload in payloads
+    )
+    assert all(
+        payload["provenance"]["release_tier_policy"]["compatibility_alias_for"]
+        == "release_lane_policy"
         for payload in payloads
     )
 
@@ -145,11 +192,11 @@ def test_hierarchical_funnel_observations_change_later_proposal_order():
         workload_run_id="w5",
         objective="maximize throughput",
         parameters={
-            "candidate_tier": ["release"],
+            "release_lane": ["release"],
             "template_family": ["baseline", "calibrated"],
             "pe_count": [1],
         },
-        constraints={"formal_pareto_tier_field": "candidate_tier", "release_tier": "release"},
+        constraints={"formal_pareto_lane_field": "release_lane", "release_lane": "release"},
     )
     policy = HierarchicalFunnelSearchPolicy()
 

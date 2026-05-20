@@ -130,6 +130,9 @@ DFT_L4_GOAL_BINDING_ARTIFACT_NAMES = {
     "dft_l4_goal_binding_validation.json",
     "dft_l4_goal_binding_status.json",
 }
+DFT_AUDIT_SEMANTIC_CLOSURE_ARTIFACT_NAMES = {
+    "dft_audit_semantic_closure.json",
+}
 
 CLAIM_REQUIREMENTS: Dict[str, Dict[str, Any]] = {
     "best_architecture": {
@@ -338,6 +341,7 @@ def build_evidence_index(
     paths.extend(DFT_HARDWARE_CLOSURE_GATE_ADJUDICATION_ARTIFACT_NAMES)
     paths.extend(DFT_HARDWARE_CLOSURE_RELEASE_GATE_ARTIFACT_NAMES)
     paths.extend(DFT_L4_GOAL_BINDING_ARTIFACT_NAMES)
+    paths.extend(DFT_AUDIT_SEMANTIC_CLOSURE_ARTIFACT_NAMES)
 
     index: Dict[str, Dict[str, Any]] = {}
     for rel in sorted(set(paths)):
@@ -1295,6 +1299,15 @@ def _dft_evidence_ledger_section(
         if isinstance(release_report.get("release_claim_gate"), Mapping)
         else {}
     )
+    evaluation_policy_routing_summary = (
+        ledger.get("evaluation_policy_routing_summary")
+        if isinstance(ledger.get("evaluation_policy_routing_summary"), Mapping)
+        else release_report.get("evaluation_policy_routing_summary")
+        if isinstance(release_report.get("evaluation_policy_routing_summary"), Mapping)
+        else release_claim_gate.get("evaluation_policy_routing_summary")
+        if isinstance(release_claim_gate.get("evaluation_policy_routing_summary"), Mapping)
+        else {}
+    )
     full_scf_hybrid_bundle = (
         ledger.get("full_scf_hybrid_bundle")
         if isinstance(ledger.get("full_scf_hybrid_bundle"), Mapping)
@@ -1391,6 +1404,7 @@ def _dft_evidence_ledger_section(
             release_report.get("legal_candidate_count"),
         ),
         "release_claim_gate": release_claim_gate,
+        "evaluation_policy_routing_summary": evaluation_policy_routing_summary,
         "full_scf_hybrid_bundle": full_scf_hybrid_bundle,
         "deliverable_complete": deliverable_complete,
         "eda_summary": eda_summary,
@@ -2677,6 +2691,9 @@ def _dft_hardware_closure_release_gate_section(
         "release_gate_result": release_gate.get("release_gate_result"),
         "hardware_completion_eligible": hardware_completion_eligible,
         "deliverable_complete": deliverable_complete,
+        "evaluation_policy_routing_summary": release_gate.get("evaluation_policy_routing_summary", {}),
+        "routing_blocker_count": release_gate.get("routing_blocker_count", 0),
+        "routing_blocked_candidate_ids": release_gate.get("routing_blocked_candidate_ids", []),
         "validation": {
             "present": bool(validation),
             "valid": validation_valid,
@@ -2791,6 +2808,107 @@ def _dft_l4_goal_binding_section(
         ),
     }
 
+
+
+
+def _dft_audit_semantic_closure_section(
+    run_dir: Path,
+    evidence_index: Mapping[str, Mapping[str, Any]],
+) -> Dict[str, Any]:
+    """Summarize the semantic audit-closure artifact without upgrading claims."""
+
+    artifact_refs: Dict[str, Dict[str, Any]] = {}
+    loaded: Dict[str, Dict[str, Any]] = {}
+    for name in sorted(DFT_AUDIT_SEMANTIC_CLOSURE_ARTIFACT_NAMES):
+        rel_path, entry = _find_indexed_artifact(evidence_index, name)
+        artifact_refs[name] = {
+            "path": rel_path,
+            "exists": bool(entry.get("exists", False)),
+            "sha256": entry.get("sha256"),
+        }
+        if rel_path:
+            loaded[name] = _load_json(run_dir / rel_path)
+
+    closure = loaded.get("dft_audit_semantic_closure.json", {})
+    present = bool(closure)
+    checks = [dict(item) for item in closure.get("checks", []) or [] if isinstance(item, Mapping)]
+    source_artifacts = (
+        closure.get("source_artifacts", {})
+        if isinstance(closure.get("source_artifacts", {}), Mapping)
+        else {}
+    )
+    required_source_count = 0
+    hashed_required_source_count = 0
+    missing_required_sources: List[str] = []
+    for label, ref_any in source_artifacts.items():
+        ref = ref_any if isinstance(ref_any, Mapping) else {}
+        if ref.get("required") is True:
+            required_source_count += 1
+            if ref.get("exists") is not True:
+                missing_required_sources.append(str(label))
+            if ref.get("sha256"):
+                hashed_required_source_count += 1
+    source_hash_backed = bool(
+        closure.get("source_hash_backed") is True
+        and required_source_count > 0
+        and hashed_required_source_count == required_source_count
+        and not missing_required_sources
+    )
+    failed_checks = [str(item.get("check_id")) for item in checks if item.get("passed") is not True]
+    required_check_ids = {
+        "phase_hotspot_identity",
+        "evaluation_policy_legality",
+        "candidate_tier_absence",
+        "coverage_vector_derivation",
+        "reference_hash_admission",
+    }
+    present_check_ids = {str(item.get("check_id")) for item in checks if item.get("check_id")}
+    missing_checks = sorted(required_check_ids - present_check_ids)
+    overall_passed = bool(closure.get("overall_passed") is True)
+    valid = bool(
+        present
+        and closure.get("schema_version") == "dse.dft_scf.semantic_audit_closure.v1"
+        and overall_passed
+        and source_hash_backed
+        and not failed_checks
+        and not missing_checks
+    )
+    status = (
+        "semantic_audit_closure_passed"
+        if valid
+        else "semantic_audit_closure_blocked"
+        if present
+        else "not_present"
+    )
+    return {
+        "schema_version": "dse.final_report.dft_audit_semantic_closure.v1",
+        "present": present,
+        "status": status,
+        "artifacts": artifact_refs,
+        "source_schema_version": closure.get("schema_version"),
+        "overall_passed": overall_passed,
+        "source_hash_backed": source_hash_backed,
+        "required_source_count": required_source_count,
+        "hashed_required_source_count": hashed_required_source_count,
+        "missing_required_sources": missing_required_sources,
+        "check_count": len(checks),
+        "failed_checks": failed_checks,
+        "missing_checks": missing_checks,
+        "checks": [
+            {
+                "check_id": item.get("check_id"),
+                "passed": item.get("passed"),
+                "blockers": item.get("blockers", []),
+            }
+            for item in checks
+        ],
+        "trusted_final_claim": False,
+        "deliverable_complete": False,
+        "claim_boundary": (
+            closure.get("claim_boundary")
+            or "Semantic audit closure can close the five audit findings only; it is not hardware release or final DFT/QE hardware-DSE completion evidence."
+        ),
+    }
 
 def generate_final_report(
     run_dir: Path,
@@ -2913,6 +3031,10 @@ def generate_final_report(
         evidence_index,
     )
     dft_l4_goal_binding = _dft_l4_goal_binding_section(
+        run_dir,
+        evidence_index,
+    )
+    dft_audit_semantic_closure = _dft_audit_semantic_closure_section(
         run_dir,
         evidence_index,
     )
@@ -3163,6 +3285,11 @@ def generate_final_report(
             "it does not prove wave36 candidate identity, six-SCF workload closure, FPGA/ASIC PPA, "
             "or full deliverable completion unless explicit current-goal crosswalks pass."
         )
+    if dft_audit_semantic_closure.get("present"):
+        limitations.append(
+            "DFT semantic audit closure is source-hash-backed audit evidence for five HIGH semantic findings only; "
+            "it does not prove hardware release eligibility, trusted Pareto winners, FPGA/ASIC PPA, or final deliverable completion."
+        )
     if dft_full_scf_hybrid.get("present"):
         limitations.append(
             "DFT full-SCF evaluated-hybrid artifacts expose schedule/cost accounting only; "
@@ -3262,6 +3389,7 @@ def generate_final_report(
         "dft_hardware_closure_gate_adjudication": dft_hardware_closure_gate_adjudication,
         "dft_hardware_closure_release_gate": dft_hardware_closure_release_gate,
         "dft_l4_goal_binding": dft_l4_goal_binding,
+        "dft_audit_semantic_closure": dft_audit_semantic_closure,
         "dft_full_scf_evaluated_hybrid": dft_full_scf_hybrid,
         "codesign": {
             "candidate_artifact": "codesign_candidate.json" if codesign_candidate else None,
@@ -3832,6 +3960,23 @@ def render_markdown_report(report: Mapping[str, Any]) -> str:
     if not dft_release_gate.get("present"):
         lines.append("- No DFT hardware closure release-gate artifact was indexed for this Step5 run.")
 
+    dft_semantic = report.get("dft_audit_semantic_closure", {})
+    dft_semantic = dft_semantic if isinstance(dft_semantic, Mapping) else {}
+    lines.extend([
+        "",
+        "## DFT Semantic Audit Closure",
+        f"- Present: `{dft_semantic.get('present')}`",
+        f"- Status: `{dft_semantic.get('status')}`",
+        f"- Overall passed: `{dft_semantic.get('overall_passed')}`",
+        f"- Source-hash backed: `{dft_semantic.get('source_hash_backed')}`",
+        f"- Required sources hashed: `{dft_semantic.get('hashed_required_source_count')}` / `{dft_semantic.get('required_source_count')}`",
+        f"- Failed checks: `{', '.join(str(item) for item in (dft_semantic.get('failed_checks', []) or [])) or 'none'}`",
+        f"- Missing checks: `{', '.join(str(item) for item in (dft_semantic.get('missing_checks', []) or [])) or 'none'}`",
+        "- Boundary: semantic closure is audit-hardening evidence only; it does not prove hardware release, PPA, trusted Pareto, or final DFT/QE deliverable completion.",
+    ])
+    if not dft_semantic.get("present"):
+        lines.append("- No DFT semantic audit-closure artifact was indexed for this Step5 run.")
+
     dft_hybrid = report.get("dft_full_scf_evaluated_hybrid", {})
     dft_hybrid = dft_hybrid if isinstance(dft_hybrid, Mapping) else {}
     hybrid_schedule = (
@@ -4026,6 +4171,7 @@ def write_step5_report_artifacts(
         "dft_hardware_closure_gate_adjudication_summary": report.get("dft_hardware_closure_gate_adjudication", {}),
         "dft_hardware_closure_release_gate_summary": report.get("dft_hardware_closure_release_gate", {}),
         "dft_l4_goal_binding_summary": report.get("dft_l4_goal_binding", {}),
+        "dft_audit_semantic_closure_summary": report.get("dft_audit_semantic_closure", {}),
         "dft_full_scf_evaluated_hybrid_summary": report.get("dft_full_scf_evaluated_hybrid", {}),
         "source_step4_artifacts": ["verdict.json", "claim_validation.json", "evidence_requirements.json"],
     }

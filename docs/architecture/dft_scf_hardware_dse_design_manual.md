@@ -1212,15 +1212,35 @@ python3 dse_v2/scripts/dse/audit_dft_scf_hardware_dse_goal_completion.py \
   --allow-in-progress
 ```
 
-The audit checks the `date` horizon, Step5 report presence, DFT evidence ledger
-presence, DFT trial-state ledger visibility/validation, L4/gem5 binding
-visibility plus current-goal bridge/crosswalk rows, `release_claim_gate.deliverable_complete`,
-full-SCF hybrid bundle visibility, host-inclusive cost fields, major-kernel
-matrix trust, hardware completion eligibility from either the attached DFT
-ledger or the current Step5 release gate, and the rule that Step5 must not
-upgrade a trusted winner while DFT deliverable completion is false.  Before the
-date horizon, or while any hard-evidence row/crosswalk is blocked, the audit
-must return `in_progress`.
+Before the goal audit can clear the five semantic HIGH findings, build a
+source-hash-backed semantic closure artifact:
+
+```bash
+python3 dse_v2/scripts/dse/build_dft_audit_semantic_closure.py \
+  --run-dir runs/dse/<step5_run> \
+  --out runs/dse/<step5_run>/dft_audit_semantic_closure.json
+```
+
+`dft_audit_semantic_closure.json` has schema
+`dse.dft_scf.semantic_audit_closure.v1` and is required to carry hashed source
+refs plus five machine-readable sections:
+`phase_hotspot_identity`, `evaluation_policy_legality`,
+`candidate_tier_absence`, `coverage_vector_derivation`, and
+`reference_hash_admission`.  It is an audit-hardening artifact only: it can
+prove the five semantic findings are closed, but it cannot mark hardware release
+eligibility, trusted Pareto winners, FPGA/ASIC PPA, or the final DFT/QE
+hardware-DSE deliverable complete.
+
+The audit checks the `date` horizon, Step5 report presence, semantic audit
+closure presence/source hashes, DFT evidence ledger presence, DFT trial-state
+ledger visibility/validation, L4/gem5 binding visibility plus current-goal
+bridge/crosswalk rows, `release_claim_gate.deliverable_complete`, full-SCF
+hybrid bundle visibility, host-inclusive cost fields, major-kernel matrix trust,
+hardware completion eligibility from either the attached DFT ledger or the
+current Step5 release gate, and the rule that Step5 must not upgrade a trusted
+winner while DFT deliverable completion is false.  Before the date horizon,
+while semantic closure is missing/stale/failed, or while any hard-evidence
+row/crosswalk is blocked, the audit must return `in_progress`.
 
 ### Stale-term migration scan
 

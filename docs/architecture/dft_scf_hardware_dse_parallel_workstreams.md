@@ -43,9 +43,11 @@
 - The workload/profile/audit HIGH-fix lane has a tested canonical split between
   applicability, design identity, evaluation policy, release policy,
   feature-derived coverage, and fail-closed QE reference admission.  Its current
-  proof is regression tests plus stale-term scanner
-  `authoritative_stale_count=0`; it still must not be reported as full PPA
-  closure or final system completion.
+  proof path is regression tests, stale-term scanner
+  `authoritative_stale_count=0`, and the source-hash-backed
+  `dft_audit_semantic_closure.json` artifact.  That artifact closes semantic
+  audit findings only; it still must not be reported as full PPA closure or
+  final system completion.
 
 ## 1. Parallel workstream map
 
@@ -409,6 +411,9 @@ Before any stronger claim, verify:
     `stress_tags`;
 17. final QE reference admission fails closed for hash-only or
     non-converged/non-local output material;
-18. the goal audit remains `in_progress` until the full-system release gate says otherwise.
+18. `dft_audit_semantic_closure.json` is present, source-hash backed, and
+    passes all five semantic sections before the goal audit can clear the HIGH
+    semantic findings;
+19. the goal audit remains `in_progress` until the full-system release gate says otherwise.
 
 Anti-downgrade rule: do not convert a vertical slice, fixed seed set, model-level run, h_psi-only proof, materialized-only packet set, or partially registered matrix into a deliverable-complete DFT/QE full-SCF hardware DSE claim.

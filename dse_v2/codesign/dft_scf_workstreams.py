@@ -628,7 +628,7 @@ def build_wave15_trace(
             },
             {
                 "step": "step2",
-                "artifact": "release_tier_candidate",
+                "artifact": "release_lane_candidate",
                 "status": "passed" if candidate_filter["formal_pareto_candidates"] else "blocked",
             },
             {

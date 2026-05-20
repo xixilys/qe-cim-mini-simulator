@@ -3,14 +3,17 @@
 
 from __future__ import annotations
 
-from dse_v2.reference_workloads.dft_workload_profile import build_coverage_vector
+from dse_v2.reference_workloads.dft_workload_profile import (
+    build_coverage_derivation_audit,
+    build_coverage_vector,
+)
 
 
-def _raw_facts(*, nbnd: int = 32) -> dict:
+def _raw_facts(*, nbnd: int = 32, calculation: str = "scf") -> dict:
     return {
         "schema_version": "dse.dft.raw_input_facts.v1",
         "class_id": "feature_pressure_case",
-        "calculation": "scf",
+        "calculation": calculation,
         "structure": {"nat": 8, "ntyp": 1, "ibrav": 1},
         "system": {
             "occupations": "fixed",
@@ -56,6 +59,8 @@ def test_coverage_gates_are_feature_derived_not_stress_tag_driven():
     ]
     assert coverage["suite_intent_tags"] == coverage["display_stress_tags"]
     assert coverage["stress_tag_gate_policy"] == "display_only_not_authoritative"
+    assert coverage["coverage_derivation_audit"]["all_required_gates_have_non_tag_derivation"] is True
+    assert coverage["coverage_derivation_audit"]["stress_tags_used_for_gate_authority"] is False
 
 
 def test_feature_pressure_gates_have_derivation_reasons_independent_of_tags():
@@ -111,3 +116,52 @@ def test_feature_pressure_gates_have_derivation_reasons_independent_of_tags():
     assert any(reason["fact"] == "nonlocal_projector.projector_count" for reason in reasons["nonlocal_projector_apply"])
     assert any(reason["fact"] == "dense_linear_algebra.nbnd" for reason in reasons["complex_gemm_tile"])
     assert all(reason["source"] != "stress_tags" for gate_reasons in reasons.values() for reason in gate_reasons)
+    assert with_tags["coverage_derivation_audit"]["all_required_gates_have_non_tag_derivation"] is True
+    assert with_tags["coverage_derivation_audit"]["stress_tags_used_for_gate_authority"] is False
+
+
+def test_stress_tags_do_not_authorize_pressure_gates_without_feature_facts():
+    low_features = {
+        "fft": {"nfft": None, "nfft_total": None},
+        "hpsi": {"nbnd": 8, "kpoints": 1, "npw_effective": None},
+        "nonlocal_projector": {"projector_count": 0, "estimated_projector_work": 0},
+        "dense_linear_algebra": {"nbnd": 8, "gemm_shape_estimates": [], "orthogonalization_shape": [8, 8]},
+        "reductions": {"dot_products_per_scf_estimate": None},
+        "host_device": {"transfer_bytes_per_scf_estimate": None},
+    }
+
+    coverage = build_coverage_vector(
+        class_id="display_tags_without_features",
+        stress_tags=("large_fft", "transpose", "nonlocal_projector", "dma"),
+        raw_input_facts=_raw_facts(nbnd=8, calculation="unknown"),
+        derived_features=low_features,
+        resolved_run_facts={"resolved_nfft": {"grid": None}},
+    )
+
+    gates = set(coverage["required_kernel_gates"])
+    assert "transpose_layout_conversion" not in gates
+    assert "nonlocal_projector_apply" not in gates
+    assert "dma_hbm_movement_engine" not in gates
+    assert coverage["display_stress_tags"] == ["dma", "large_fft", "nonlocal_projector", "transpose"]
+    assert coverage["coverage_derivation_audit"]["all_required_gates_have_non_tag_derivation"] is True
+    assert coverage["coverage_derivation_audit"]["stress_tags_used_for_gate_authority"] is False
+
+
+def test_coverage_derivation_audit_flags_tag_only_required_gate_authority():
+    audit = build_coverage_derivation_audit({
+        "required_kernel_gates": ["transpose_layout_conversion"],
+        "gate_derivation_reasons": {
+            "transpose_layout_conversion": [
+                {
+                    "source": "stress_tags",
+                    "fact": "stress_tags.large_fft",
+                    "value": "large_fft",
+                    "rule": "invalid tag-only authority",
+                }
+            ]
+        },
+    })
+
+    assert audit["all_required_gates_have_non_tag_derivation"] is False
+    assert audit["stress_tags_used_for_gate_authority"] is True
+    assert audit["stress_tag_only_required_gates"] == ["transpose_layout_conversion"]

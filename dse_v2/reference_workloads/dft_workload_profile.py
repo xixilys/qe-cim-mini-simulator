@@ -23,6 +23,7 @@ from dse_v2.codesign.release_domain import stable_json_hash
 DFT_WORKLOAD_PROFILE_SCHEMA = "dse.dft.workload_profile.layered.v1"
 DFT_REFERENCE_SUMMARY_SCHEMA = "dse.dft.reference_summary.v1"
 DFT_COVERAGE_VECTOR_SCHEMA = "dse.dft.coverage_vector.v1"
+DFT_COVERAGE_DERIVATION_AUDIT_SCHEMA = "dse.dft.coverage_derivation_audit.v1"
 DFT_KERNEL_WORKLOAD_GRAPH_SCHEMA = "dse.dft.kernel_workload_graph.v1"
 DFT_KERNEL_GATE_CONTRACT_SCHEMA = "dse.dft.kernel_gate_contract.v1"
 DFT_PROFILE_BUILDER_VERSION = "dft_workload_profile.py:v1"
@@ -347,6 +348,74 @@ def _intensity(value: int | float | None, *, medium: float, high: float) -> str:
     return "low"
 
 
+def build_coverage_derivation_audit(coverage_vector: Mapping[str, Any]) -> Dict[str, Any]:
+    """Recompute whether required coverage gates derive from non-tag facts.
+
+    The audit is intentionally derived from ``required_kernel_gates`` and
+    ``gate_derivation_reasons`` every time.  ``stress_tags`` remain display and
+    suite-intent metadata; they are never accepted as required-gate authority.
+    """
+
+    required_gates = [str(gate) for gate in coverage_vector.get("required_kernel_gates") or []]
+    raw_reasons = coverage_vector.get("gate_derivation_reasons")
+    gate_derivation_reasons = raw_reasons if isinstance(raw_reasons, Mapping) else {}
+    missing_derivation_gates: list[str] = []
+    stress_tag_only_required_gates: list[str] = []
+    stress_tag_reason_gates: list[str] = []
+    required_gates_with_non_tag_derivation: list[str] = []
+
+    for gate_id in required_gates:
+        reasons = gate_derivation_reasons.get(gate_id)
+        if not isinstance(reasons, list) or not reasons:
+            missing_derivation_gates.append(gate_id)
+            continue
+        tag_reasons = [
+            reason
+            for reason in reasons
+            if isinstance(reason, Mapping) and reason.get("source") == "stress_tags"
+        ]
+        non_tag_reasons = [
+            reason
+            for reason in reasons
+            if isinstance(reason, Mapping)
+            and reason.get("source") != "stress_tags"
+            and bool(reason.get("source"))
+            and bool(reason.get("fact"))
+        ]
+        if tag_reasons:
+            stress_tag_reason_gates.append(gate_id)
+        if non_tag_reasons:
+            required_gates_with_non_tag_derivation.append(gate_id)
+        else:
+            stress_tag_only_required_gates.append(gate_id)
+
+    return {
+        "schema_version": DFT_COVERAGE_DERIVATION_AUDIT_SCHEMA,
+        "all_required_gates_have_non_tag_derivation": (
+            len(required_gates_with_non_tag_derivation) == len(required_gates)
+            and not missing_derivation_gates
+            and not stress_tag_only_required_gates
+        ),
+        "stress_tags_used_for_gate_authority": bool(stress_tag_reason_gates),
+        "required_gate_count": len(required_gates),
+        "non_tag_derived_required_gate_count": len(required_gates_with_non_tag_derivation),
+        "required_gates_with_non_tag_derivation": sorted(required_gates_with_non_tag_derivation),
+        "missing_derivation_gates": sorted(missing_derivation_gates),
+        "stress_tag_only_required_gates": sorted(stress_tag_only_required_gates),
+        "stress_tag_reason_gates": sorted(stress_tag_reason_gates),
+        "accepted_gate_authority_sources": [
+            "raw_input_facts",
+            "resolved_run_facts",
+            "derived_scale_features",
+        ],
+        "recomputed_from": ["required_kernel_gates", "gate_derivation_reasons"],
+        "claim_boundary": (
+            "Coverage derivation audit is recomputed validation output. Stress tags "
+            "are display-only suite intent and cannot authorize required kernel gates."
+        ),
+    }
+
+
 def build_coverage_vector(
     *,
     class_id: str,
@@ -541,7 +610,7 @@ def build_coverage_vector(
         "metallicity": "metal" if raw_system.get("occupations") == "smearing" else "insulator_or_fixed",
         "geometry": "slab" if "slab" in class_id else "supercell" if "supercell" in class_id else "bulk_or_fixture",
     }
-    return {
+    coverage_vector = {
         "schema_version": DFT_COVERAGE_VECTOR_SCHEMA,
         "class_id": class_id,
         "display_stress_tags": tags,
@@ -553,6 +622,8 @@ def build_coverage_vector(
         "legacy_kernel_gate_aliases": {gate: SEMANTIC_KERNEL_GATE_ALIASES[gate] for gate in sorted(gates) if gate in SEMANTIC_KERNEL_GATE_ALIASES},
         "claim_boundary": "Coverage vector is a workload-analysis product. It may drive Step2 legality, but it is not architecture identity or evidence policy.",
     }
+    coverage_vector["coverage_derivation_audit"] = build_coverage_derivation_audit(coverage_vector)
+    return coverage_vector
 
 
 def _kernel_gate_contract(
@@ -800,6 +871,7 @@ def build_layered_workload_profile(
         derived_features=derived,
         resolved_run_facts=resolved,
     )
+    coverage_derivation_audit = build_coverage_derivation_audit(coverage)
     graph = build_kernel_workload_graph(class_id=class_id, coverage_vector=coverage, derived_features=derived)
     reference_summary = build_reference_summary(
         class_id=class_id,
@@ -825,6 +897,7 @@ def build_layered_workload_profile(
         "resolved_run_facts": resolved,
         "derived_scale_features": derived,
         "coverage_vector": coverage,
+        "coverage_derivation_audit": coverage_derivation_audit,
         "kernel_workload_graph": graph,
         "reference_summary": reference_summary,
         "layer_order": [

@@ -262,7 +262,7 @@ def dft_hardware_template_families() -> List[Dict[str, Any]]:
     The rows are deliberately outside the generic mapping core.  Release rows
     are seed families allowed to enter formal evidence-gated Pareto ordering;
     the wide exploratory row may guide discovery but must not be treated as
-    release-tier Pareto evidence.
+    release-lane Pareto evidence.
     """
 
     return [
@@ -332,7 +332,7 @@ def build_dft_hierarchical_search_problem(
             "major_kernel_gate_required": True,
             "claim_boundary": (
                 "Wide/template search can order work; formal Pareto remains "
-                "release-tier and per-kernel evidence-gated."
+                "release-lane and per-kernel evidence-gated."
             ),
         },
         seed_candidates=tuple(seed_candidates),
@@ -484,7 +484,7 @@ def build_dft_hierarchical_funnel_search_report(
         },
         "wide_space_policy": {
             "wide_space_allowed": True,
-            "wide_space_tier": "exploratory",
+            "wide_space_lane": "exploratory",
             "wide_space_can_order_future_work": True,
             "wide_space_can_enter_formal_pareto_without_release_gate": False,
             "seed_sources": [

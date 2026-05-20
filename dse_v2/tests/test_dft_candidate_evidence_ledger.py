@@ -104,6 +104,31 @@ def test_dft_candidate_evidence_ledger_has_closed_hash_valid_row_for_every_legal
     candidate_ids = [row["candidate_id"] for row in ledger["rows"]]
     assert len(candidate_ids) == len(set(candidate_ids)) == len(expected_legal_candidate_ids)
     assert set(candidate_ids) == expected_legal_candidate_ids
+    assert {row["legality"]["status"] for row in ledger["rows"]} == {"legal"}
+    routing_summary = ledger["evaluation_policy_routing_summary"]
+    assert routing_summary["candidate_count"] == ledger["legal_candidate_count"]
+    assert routing_summary["routing_recorded_candidate_count"] == ledger["legal_candidate_count"]
+    assert routing_summary["routing_blocked_candidate_count"] > 0
+    assert routing_summary["affects_design_legality"] is False
+    assert ledger["release_claim_gate"]["routing_blocker_count"] == routing_summary["routing_blocker_count"]
+    routing_blocked_rows = [
+        row for row in ledger["rows"]
+        if row["evaluation_policy_routing"]["routing_compatible"] is not True
+    ]
+    assert {row["candidate_id"] for row in routing_blocked_rows} == set(
+        routing_summary["routing_blocked_candidate_ids"]
+    )
+    assert {row["legality"]["status"] for row in routing_blocked_rows} == {"legal"}
+    assert all(row["legality"]["routing_affects_design_legality"] is False for row in ledger["rows"])
+    assert all(row["claim_eligibility"]["routing_affects_design_legality"] is False for row in ledger["rows"])
+    for row in routing_blocked_rows:
+        assert "evaluation_policy_routing" in row["blocker_status"]["blocked_fields"]
+        assert row["blocker_status"]["routing_blocked_fields"] == ["evaluation_policy_routing"]
+        assert row["claim_eligibility"]["routing_compatible"] is False
+        assert row["claim_eligibility"]["routing_blockers"]
+        assert row["claim_eligibility"]["deliverable_complete"] is False
+        assert row["evaluation_policy_routing"]["claim_eligibility_blocker"] is True
+        assert row["evaluation_policy_routing"]["affects_design_legality"] is False
     legal_id_set = set(ledger["legal_candidate_ids"])
     requirement_matrix = json.loads((out_dir / "requirement_evidence_matrix.json").read_text())
     assert requirement_matrix["status"] == "passed"

@@ -302,7 +302,10 @@ def test_dft_hierarchical_funnel_report_keeps_wide_search_out_of_formal_pareto()
 
     assert "candidate_tier" not in problem.parameters
     assert "candidate_tier" not in problem.constraints["required_parameters"]
+    assert "release_lane" not in problem.parameters
+    assert "release_lane" not in problem.constraints["required_parameters"]
     assert all("candidate_tier" not in seed for seed in problem.seed_candidates)
+    assert all("release_lane" not in seed for seed in problem.seed_candidates)
     assert report["status"] == "passed"
     assert report["funnel_stage_order"] == [
         "template_legality_enumeration",
@@ -313,8 +316,10 @@ def test_dft_hierarchical_funnel_report_keeps_wide_search_out_of_formal_pareto()
     ]
     assert report["candidate_generation"]["missing_release_template_family_ids"] == []
     assert report["candidate_generation"]["exploratory_candidate_ids_in_formal_pareto"] == []
+    assert report["wide_space_policy"]["wide_space_lane"] == "exploratory"
     assert report["wide_space_policy"]["wide_space_can_enter_formal_pareto_without_release_gate"] is False
     assert all("candidate_tier" not in record["parameters"] for record in report["all_records"])
+    assert all("release_lane" not in record["parameters"] for record in report["all_records"])
     assert all(
         record["policy_metadata"]["policy_source"] == "dft_hardware_template_families"
         for record in report["all_records"]
@@ -341,6 +346,7 @@ def test_dft_hierarchical_funnel_report_keeps_wide_search_out_of_formal_pareto()
     )
     assert all(
         "candidate_tier" not in record["parameters"]
+        and "release_lane" not in record["parameters"]
         for record in exhaustive_report["all_records"]
     )
     assert any(

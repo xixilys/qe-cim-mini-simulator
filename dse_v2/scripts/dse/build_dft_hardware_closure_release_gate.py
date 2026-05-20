@@ -22,6 +22,12 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--gate-adjudication", type=Path, required=True)
+    parser.add_argument(
+        "--per-candidate-evidence-ledger",
+        type=Path,
+        default=None,
+        help="Optional per_candidate_evidence_ledger.json used to route evaluation-policy blockers into claim eligibility only",
+    )
     parser.add_argument("--quiet", action="store_true")
     return parser.parse_args(list(argv))
 
@@ -31,6 +37,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     status = write_dft_hardware_closure_release_gate(
         args.out,
         gate_adjudication_path=args.gate_adjudication,
+        per_candidate_evidence_ledger_path=args.per_candidate_evidence_ledger,
     )
     if not args.quiet:
         print(json.dumps(status, indent=2, sort_keys=True))

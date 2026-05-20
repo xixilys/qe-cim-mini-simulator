@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Write the strict six-SCF descriptor-plus-runnable bundle artifacts."""
+"""Write the strict six-SCF bundle artifacts, including the admission ledger."""
 
 from __future__ import annotations
 

@@ -337,14 +337,14 @@ class HierarchicalFunnelSearchPolicy(_BasePolicy):
     """Replayable staged search policy for expensive multi-fidelity funnels.
 
     The policy is domain-neutral: callers provide generic parameter records,
-    tier names, and constraint metadata.  Workload plugins may map any
+    release-lane names, and constraint metadata.  Workload plugins may map any
     domain-specific semantics into those parameters, but this class only enforces
     two generic invariants:
 
     * every proposal records the same staged funnel in provenance;
     * exploratory/wide-space rows are prevented from contaminating formal
       release/Pareto promotion unless the caller explicitly changes the release
-      tier constraint.
+      lane constraint.
     """
 
     policy_name = "hierarchical_funnel"
@@ -380,10 +380,11 @@ class HierarchicalFunnelSearchPolicy(_BasePolicy):
             if key not in parameters:
                 blockers.append(f"missing_required_parameter:{key}")
 
-        tier_field = str(constraints.get("formal_pareto_tier_field") or "")
-        release_tier = str(constraints.get("release_tier", "release"))
-        if tier_field in parameters and str(parameters[tier_field]) != release_tier:
-            blockers.append(f"non_release_tier:{parameters[tier_field]}")
+        lane_policy = self._release_lane_policy(problem)
+        lane_field = str(lane_policy.get("formal_pareto_lane_field") or "")
+        release_lane = str(lane_policy.get("release_lane", "release"))
+        if lane_field in parameters and str(parameters[lane_field]) != release_lane:
+            blockers.append(f"non_release_lane:{parameters[lane_field]}")
 
         legal_values = constraints.get("legal_values", {}) or {}
         if isinstance(legal_values, Mapping):
@@ -391,6 +392,48 @@ class HierarchicalFunnelSearchPolicy(_BasePolicy):
                 if key in parameters and parameters[key] not in set(values or ()):
                     blockers.append(f"illegal_value:{key}:{parameters[key]}")
         return blockers
+
+    def _release_lane_policy(self, problem: SearchProblem) -> Dict[str, Any]:
+        constraints = dict(problem.constraints or {})
+        preferred_lane_field = constraints.get("formal_pareto_lane_field")
+        legacy_tier_field = constraints.get("formal_pareto_tier_field")
+        preferred_release_lane = constraints.get("release_lane")
+        legacy_release_tier = constraints.get("release_tier")
+
+        if preferred_lane_field:
+            lane_field = str(preferred_lane_field)
+            lane_field_source = "formal_pareto_lane_field"
+        elif legacy_tier_field:
+            lane_field = str(legacy_tier_field)
+            lane_field_source = "legacy_formal_pareto_tier_field"
+        else:
+            lane_field = None
+            lane_field_source = "none"
+
+        release_lane = str(
+            preferred_release_lane
+            if preferred_release_lane is not None
+            else legacy_release_tier
+            if legacy_release_tier is not None
+            else "release"
+        )
+        legacy_policy = {
+            "formal_pareto_tier_field": str(legacy_tier_field) if legacy_tier_field else None,
+            "release_tier": str(legacy_release_tier) if legacy_release_tier is not None else None,
+            "legacy_tier_constraints_authoritative": False,
+            "deprecated": True,
+        }
+        return {
+            "formal_pareto_lane_field": lane_field,
+            "release_policy_field": str(
+                constraints.get("release_policy_field", "release_policy.lane")
+            ),
+            "release_lane": release_lane,
+            "lane_field_source": lane_field_source,
+            "exploratory_rows_can_order_search": True,
+            "exploratory_rows_can_enter_formal_pareto": False,
+            "legacy_compatibility": legacy_policy,
+        }
 
     def _stage_trace(
         self,
@@ -447,6 +490,7 @@ class HierarchicalFunnelSearchPolicy(_BasePolicy):
         for index, parameters in enumerate(ordered[:budget]):
             blockers = self._constraint_blockers(problem, parameters)
             stage_trace = self._stage_trace(problem, parameters, blockers)
+            release_lane_policy = self._release_lane_policy(problem)
             promotions = [] if blockers else [
                 "promoted_for_simulation",
                 "formal_release_pareto_eligible",
@@ -461,18 +505,10 @@ class HierarchicalFunnelSearchPolicy(_BasePolicy):
                     "candidate_index": index,
                     "funnel_stage_order": list(HIERARCHICAL_FUNNEL_STAGES),
                     "funnel_stages": stage_trace,
+                    "release_lane_policy": release_lane_policy,
                     "release_tier_policy": {
-                        "formal_pareto_tier_field": (
-                            str(problem.constraints["formal_pareto_tier_field"])
-                            if problem.constraints.get("formal_pareto_tier_field")
-                            else None
-                        ),
-                        "release_policy_field": str(
-                            problem.constraints.get("release_policy_field", "release_policy.lane")
-                        ),
-                        "release_tier": str(problem.constraints.get("release_tier", "release")),
-                        "exploratory_rows_can_order_search": True,
-                        "exploratory_rows_can_enter_formal_pareto": False,
+                        **release_lane_policy["legacy_compatibility"],
+                        "compatibility_alias_for": "release_lane_policy",
                     },
                 },
                 generation_reason="hierarchical_funnel_search",

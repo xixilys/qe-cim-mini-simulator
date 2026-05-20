@@ -21,7 +21,7 @@ from dse_v2.reference_workloads.dft_step2_policy import (
 
 
 DFT_CODESIGN_RELEASE_ID = "dft_first_seven_axis_release_v1"
-DFT_SEVEN_AXIS_IDS = (
+DFT_RELEASE_PRESET_AXIS_IDS = (
     "dft_phase_hotspot_selection",
     "algorithm_variants",
     "schedule_runtime_policy",
@@ -30,13 +30,18 @@ DFT_SEVEN_AXIS_IDS = (
     "interface_descriptor_protocol",
     "evidence_fidelity_promotion_policy",
 )
-DFT_APPLICABILITY_AXIS_IDS = ("dft_phase_hotspot_selection",)
-DFT_EVALUATION_POLICY_AXIS_IDS = ("evidence_fidelity_promotion_policy",)
-DFT_DESIGN_AXIS_IDS = tuple(
+DFT_SEVEN_AXIS_IDS = DFT_RELEASE_PRESET_AXIS_IDS
+DFT_EVALUATION_RECORD_AXIS_IDS = DFT_RELEASE_PRESET_AXIS_IDS
+DFT_APPLICABILITY_SCOPE_AXIS_IDS = ("dft_phase_hotspot_selection",)
+DFT_EVIDENCE_ROUTING_AXIS_IDS = ("evidence_fidelity_promotion_policy",)
+DFT_STABLE_DESIGN_IDENTITY_AXIS_IDS = tuple(
     axis_id
-    for axis_id in DFT_SEVEN_AXIS_IDS
-    if axis_id not in {*DFT_APPLICABILITY_AXIS_IDS, *DFT_EVALUATION_POLICY_AXIS_IDS}
+    for axis_id in DFT_RELEASE_PRESET_AXIS_IDS
+    if axis_id not in {*DFT_APPLICABILITY_SCOPE_AXIS_IDS, *DFT_EVIDENCE_ROUTING_AXIS_IDS}
 )
+DFT_APPLICABILITY_AXIS_IDS = DFT_APPLICABILITY_SCOPE_AXIS_IDS
+DFT_EVALUATION_POLICY_AXIS_IDS = DFT_EVIDENCE_ROUTING_AXIS_IDS
+DFT_DESIGN_AXIS_IDS = DFT_STABLE_DESIGN_IDENTITY_AXIS_IDS
 
 DFT_LEGALITY_CONSTRAINTS = (
     {
@@ -360,9 +365,13 @@ def dft_domain_freeze() -> Dict[str, Any]:
     }
     freeze["candidate_identity_policy"] = {
         "schema_version": "dse.dft.candidate_identity_policy.v1",
+        "release_preset_axis_ids": list(DFT_RELEASE_PRESET_AXIS_IDS),
+        "evaluation_record_axis_ids": list(DFT_EVALUATION_RECORD_AXIS_IDS),
         "design_identity_axis_ids": list(DFT_DESIGN_AXIS_IDS),
         "applicability_axis_ids": list(DFT_APPLICABILITY_AXIS_IDS),
+        "applicability_scope_axis_ids": list(DFT_APPLICABILITY_SCOPE_AXIS_IDS),
         "evaluation_policy_axis_ids": list(DFT_EVALUATION_POLICY_AXIS_IDS),
+        "evidence_routing_axis_ids": list(DFT_EVIDENCE_ROUTING_AXIS_IDS),
         "candidate_identity_excludes": [
             "dft_phase_hotspot_selection",
             "workload_id",
@@ -379,17 +388,45 @@ def dft_domain_freeze() -> Dict[str, Any]:
             "design_candidate_id is the stable DFT design identity and excludes applicability/evaluation/release policy."
         ),
         "evidence_policy_affects_identity": False,
+        "phase_hotspot_affects_identity": False,
+        "candidate_id_kind": "evaluation_record_id",
+        "candidate_id_authoritative_for_design": False,
+        "legacy_candidate_id_authoritative_for_design": False,
+        "stable_design_identity_key": "design_candidate_id",
         "claim_boundary": (
             "Evaluation/promotion policy can classify or schedule a design but does not create a new stable "
             "DFT design candidate identity; workload applicability/offload scope is tracked separately."
         ),
     }
+    freeze["design_identity_audit"] = {
+        "schema_version": "dse.dft.design_identity_audit_contract.v1",
+        "status": "contract_declared",
+        "stable_design_identity_key": "design_candidate_id",
+        "evaluation_record_key": "evaluation_record_id",
+        "legacy_candidate_key": "legacy_candidate_id",
+        "candidate_id_kind": "evaluation_record_id",
+        "candidate_id_authoritative_for_design": False,
+        "legacy_candidate_id_authoritative_for_design": False,
+        "phase_hotspot_affects_identity": False,
+        "evidence_policy_affects_identity": False,
+        "applicability_affects_design_score": False,
+        "evaluation_policy_affects_design_score": False,
+        "evaluation_policy_affects_design_legality": False,
+        "claim_boundary": (
+            "The freeze declares the vocabulary contract; the candidate-universe "
+            "manifest recomputes per-row identity/score/legality predicates."
+        ),
+    }
     freeze["axis_partitions"] = {
         "schema_version": "dse.dft.axis_partition.v1",
         "all_axis_ids": list(DFT_SEVEN_AXIS_IDS),
+        "release_preset_axis_ids": list(DFT_RELEASE_PRESET_AXIS_IDS),
+        "evaluation_record_axis_ids": list(DFT_EVALUATION_RECORD_AXIS_IDS),
         "design_identity_axis_ids": list(DFT_DESIGN_AXIS_IDS),
         "applicability_axis_ids": list(DFT_APPLICABILITY_AXIS_IDS),
+        "applicability_scope_axis_ids": list(DFT_APPLICABILITY_SCOPE_AXIS_IDS),
         "evaluation_policy_axis_ids": list(DFT_EVALUATION_POLICY_AXIS_IDS),
+        "evidence_routing_axis_ids": list(DFT_EVIDENCE_ROUTING_AXIS_IDS),
         "non_identity_axis_ids": list(DFT_APPLICABILITY_AXIS_IDS + DFT_EVALUATION_POLICY_AXIS_IDS),
         "claim_boundary": (
             "The seven-axis release preset remains an evaluation-row generator; "
@@ -456,6 +493,8 @@ def _applicability_compatibility(assignments: Mapping[str, str]) -> Dict[str, An
         "reasons": [str(blocker["reason"]) for blocker in blockers],
         "affects_design_legality": False,
         "affects_design_score": False,
+        "affects_candidate_binding_score": False,
+        "affects_formal_pareto_identity": False,
         "claim_boundary": (
             "Applicability compatibility determines whether an offload scope is compatible "
             "with a design assignment; blockers are not design-legality failures."
@@ -484,8 +523,16 @@ def _evaluation_policy_routing(assignments: Mapping[str, str]) -> Dict[str, Any]
         "promotion_requirements": promotion_requirements,
         "routing_compatible": not blockers,
         "routing_blockers": blockers,
+        "evaluation_row_evidence_routable": not blockers,
+        "claim_eligible": not blockers,
+        "claim_eligibility_boundary": (
+            "Routing compatibility is necessary for this evaluation row to pursue a claim; "
+            "downstream evidence ledgers and release gates are still required."
+        ),
         "affects_design_legality": False,
         "affects_design_score": False,
+        "affects_candidate_binding_score": False,
+        "affects_formal_pareto_identity": False,
         "claim_boundary": (
             "Evaluation policy routes required evidence and promotion work; routing blockers "
             "do not change design_legality or design_score."
@@ -501,6 +548,63 @@ def _partition_id(prefix: str, assignments: Mapping[str, str]) -> str:
     return prefix + stable_json_hash({"assignments": dict(sorted(assignments.items()))})[:16]
 
 
+def _build_design_identity_audit(manifest: Mapping[str, Any]) -> Dict[str, Any]:
+    identity_groups: Dict[str, list[Mapping[str, Any]]] = {}
+    for candidate in manifest.get("candidates", []) or []:
+        if not isinstance(candidate, Mapping):
+            continue
+        key = stable_json_hash({"identity_assignments": candidate.get("identity_assignments", {})})
+        identity_groups.setdefault(key, []).append(candidate)
+
+    same_design_id = True
+    same_design_score = True
+    same_design_legality = True
+    all_rows_labeled = True
+    for rows in identity_groups.values():
+        if len({str(row.get("design_candidate_id")) for row in rows}) != 1:
+            same_design_id = False
+        if len({json.dumps(row.get("design_score"), sort_keys=True) for row in rows}) != 1:
+            same_design_score = False
+        if len({json.dumps(row.get("design_legality"), sort_keys=True) for row in rows}) != 1:
+            same_design_legality = False
+        if any(
+            row.get("candidate_id_kind") != "evaluation_record_id"
+            or row.get("candidate_id_authoritative_for_design") is not False
+            or row.get("evaluation_record_id") != row.get("candidate_id")
+            or row.get("legacy_candidate_id") != row.get("candidate_id")
+            for row in rows
+        ):
+            all_rows_labeled = False
+
+    return {
+        "schema_version": "dse.dft.design_identity_audit.v1",
+        "status": "passed"
+        if same_design_id and same_design_score and same_design_legality and all_rows_labeled
+        else "failed",
+        "stable_design_identity_key": "design_candidate_id",
+        "evaluation_record_key": "evaluation_record_id",
+        "legacy_candidate_key": "legacy_candidate_id",
+        "identity_group_count": len(identity_groups),
+        "all_same_identity_axis_rows_share_design_candidate_id": same_design_id,
+        "all_same_identity_axis_rows_share_design_score": same_design_score,
+        "all_same_identity_axis_rows_share_design_legality": same_design_legality,
+        "all_candidate_rows_label_evaluation_record_identity": all_rows_labeled,
+        "candidate_id_kind": "evaluation_record_id",
+        "candidate_id_authoritative_for_design": False,
+        "legacy_candidate_id_authoritative_for_design": False,
+        "phase_hotspot_affects_identity": False,
+        "evidence_policy_affects_identity": False,
+        "applicability_affects_design_score": False,
+        "evaluation_policy_affects_design_score": False,
+        "evaluation_policy_affects_design_legality": False,
+        "claim_boundary": (
+            "Computed from generated candidates: all rows that share stable design axes "
+            "must share design identity, score, and design legality despite applicability "
+            "or evidence-routing differences."
+        ),
+    }
+
+
 def _enrich_candidate_partitions(manifest: Dict[str, Any], legality: Dict[str, Any]) -> None:
     """Add DFT-specific applicability/evaluation partitions without changing generic core."""
     for candidate in manifest.get("candidates", []) or []:
@@ -512,6 +616,10 @@ def _enrich_candidate_partitions(manifest: Dict[str, Any], legality: Dict[str, A
         design_legality = _design_legality(assignments)
         screening = dict(candidate.get("screening") or {})
         candidate.update({
+            "evaluation_record_id": candidate.get("candidate_id"),
+            "legacy_candidate_id": candidate.get("candidate_id"),
+            "candidate_id_authoritative_for_design": False,
+            "design_candidate_id_authoritative_for_design": True,
             "design_legality": design_legality,
             "design_score": screening.get("design_score", screening.get("score")),
             "applicability_assignments": applicability_assignments,
@@ -525,6 +633,7 @@ def _enrich_candidate_partitions(manifest: Dict[str, Any], legality: Dict[str, A
         candidate["provenance"]["applicability_axis_ids"] = list(DFT_APPLICABILITY_AXIS_IDS)
         candidate["provenance"]["evaluation_policy_axis_ids"] = list(DFT_EVALUATION_POLICY_AXIS_IDS)
         candidate["provenance"]["phase_hotspot_affects_identity"] = False
+        candidate["provenance"]["candidate_id_authoritative_for_design"] = False
 
     for row in legality.get("rows", []) or []:
         if not isinstance(row, dict):
@@ -533,6 +642,10 @@ def _enrich_candidate_partitions(manifest: Dict[str, Any], legality: Dict[str, A
         applicability_assignments = _partition_assignments(assignments, DFT_APPLICABILITY_AXIS_IDS)
         evaluation_policy_assignments = _partition_assignments(assignments, DFT_EVALUATION_POLICY_AXIS_IDS)
         row.update({
+            "evaluation_record_id": row.get("candidate_id"),
+            "legacy_candidate_id": row.get("candidate_id"),
+            "candidate_id_authoritative_for_design": False,
+            "design_candidate_id_authoritative_for_design": True,
             "design_legality": _design_legality(assignments),
             "applicability_assignments": applicability_assignments,
             "evaluation_policy_assignments": evaluation_policy_assignments,
@@ -545,16 +658,29 @@ def _enrich_candidate_partitions(manifest: Dict[str, Any], legality: Dict[str, A
         row["provenance"]["applicability_axis_ids"] = list(DFT_APPLICABILITY_AXIS_IDS)
         row["provenance"]["evaluation_policy_axis_ids"] = list(DFT_EVALUATION_POLICY_AXIS_IDS)
         row["provenance"]["phase_hotspot_affects_identity"] = False
+        row["provenance"]["candidate_id_authoritative_for_design"] = False
 
     manifest["applicability_axis_ids"] = list(DFT_APPLICABILITY_AXIS_IDS)
     manifest["evaluation_policy_axis_ids"] = list(DFT_EVALUATION_POLICY_AXIS_IDS)
     manifest["candidate_id_provenance"]["applicability_axis_ids"] = list(DFT_APPLICABILITY_AXIS_IDS)
     manifest["candidate_id_provenance"]["evaluation_policy_axis_ids"] = list(DFT_EVALUATION_POLICY_AXIS_IDS)
     manifest["candidate_id_provenance"]["phase_hotspot_affects_identity"] = False
+    manifest["candidate_id_provenance"]["candidate_id_authoritative_for_design"] = False
+    manifest["candidate_id_provenance"]["legacy_candidate_id_authoritative_for_design"] = False
+    manifest["candidate_id_provenance"]["evaluation_record_key"] = "evaluation_record_id"
+    manifest["candidate_id_provenance"]["stable_design_identity_key"] = "design_candidate_id"
+    manifest["legal_evaluation_record_ids"] = list(manifest.get("legal_candidate_ids", []) or [])
+    manifest["legal_candidate_ids_kind"] = "evaluation_record_id"
+    manifest["legal_candidate_ids_authoritative_for_design"] = False
+    manifest["design_identity_audit"] = _build_design_identity_audit(manifest)
     manifest["axis_partitions"] = {
+        "release_preset_axis_ids": list(DFT_RELEASE_PRESET_AXIS_IDS),
+        "evaluation_record_axis_ids": list(DFT_EVALUATION_RECORD_AXIS_IDS),
         "design_identity_axis_ids": list(DFT_DESIGN_AXIS_IDS),
         "applicability_axis_ids": list(DFT_APPLICABILITY_AXIS_IDS),
+        "applicability_scope_axis_ids": list(DFT_APPLICABILITY_SCOPE_AXIS_IDS),
         "evaluation_policy_axis_ids": list(DFT_EVALUATION_POLICY_AXIS_IDS),
+        "evidence_routing_axis_ids": list(DFT_EVIDENCE_ROUTING_AXIS_IDS),
     }
     manifest["universe_hash"] = stable_json_hash({
         key: value for key, value in manifest.items() if key != "universe_hash"
@@ -629,8 +755,12 @@ def build_search_space_report(
     promoted = [
         {
             "candidate_id": candidate["candidate_id"],
+            "evaluation_record_id": candidate.get("evaluation_record_id", candidate["candidate_id"]),
+            "legacy_candidate_id": candidate.get("legacy_candidate_id", candidate["candidate_id"]),
             "candidate_id_kind": candidate.get("candidate_id_kind"),
+            "candidate_id_authoritative_for_design": False,
             "design_candidate_id": candidate.get("design_candidate_id"),
+            "design_candidate_id_authoritative_for_design": True,
             "assignments": candidate["assignments"],
             "identity_assignments": candidate.get("identity_assignments"),
             "non_identity_assignments": candidate.get("non_identity_assignments"),
@@ -752,9 +882,12 @@ def build_search_space_report(
         "promotion_queue": promoted,
         "universe_backed_queue": {
             "queue_mode": "all_legal_candidates",
-            "source": "candidate_universe_manifest.legal_candidate_ids",
+            "source": "candidate_universe_manifest.legal_evaluation_record_ids",
             "entry_count": len(promoted_candidate_ids),
             "candidate_ids": promoted_candidate_ids,
+            "candidate_ids_kind": "evaluation_record_id",
+            "candidate_ids_authoritative_for_design": False,
+            "evaluation_record_ids": promoted_candidate_ids,
             "all_legal_candidates_once": promoted_candidate_ids == list(manifest.get("legal_candidate_ids", []) or [])
             and len(promoted_candidate_ids) == len(set(promoted_candidate_ids)),
             "legal_design_candidate_ids": list(manifest.get("legal_design_candidate_ids", []) or []),

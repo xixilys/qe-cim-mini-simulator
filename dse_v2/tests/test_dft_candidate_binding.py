@@ -40,6 +40,47 @@ def test_dft_candidate_binding_map_binds_all_search_rows_without_claim_upgrade(t
     assert all(row["completion_eligible"] is False for row in payload["binding_rows"])
 
 
+def test_candidate_binding_scores_use_design_axes_only_not_scope_or_evidence_policy(tmp_path: Path) -> None:
+    release_dir = tmp_path / "release"
+    write_dft_seven_axis_artifacts(release_dir)
+    manifest = json.loads((release_dir / "candidate_universe_manifest.json").read_text())
+    payload = build_dft_candidate_binding_map(
+        hierarchical_search_report_path=release_dir / "hierarchical_funnel_search_report.json",
+        candidate_universe_manifest_path=release_dir / "candidate_universe_manifest.json",
+    )
+
+    by_eval_id = {row["evaluation_record_id"]: row for row in payload["binding_rows"]}
+    # At least one bound row should carry the authoritative ID vocabulary.
+    first = payload["binding_rows"][0]
+    assert first["candidate_id_kind"] == "evaluation_record_id"
+    assert first["candidate_id_authoritative_for_design"] is False
+    assert first["design_candidate_id"].startswith("design_cand_")
+    assert set(first["binding_axis_ids"]) == {
+        "algorithm_variants",
+        "mapping_data_layout",
+        "hardware_microarchitecture",
+        "interface_descriptor_protocol",
+        "schedule_runtime_policy",
+    }
+    assert first["non_scoring_axis_ids"] == [
+        "dft_phase_hotspot_selection",
+        "evidence_fidelity_promotion_policy",
+    ]
+    assert first["applicability_match"]["affects_binding_score"] is False
+    assert first["evaluation_routing"]["affects_binding_score"] is False
+
+    # Directly compare release candidates that differ only by non-design axes: their design score and
+    # stable design id are already equal, and any binding-row metadata must not make row id authoritative.
+    candidates_by_design: dict[str, list[dict]] = {}
+    for candidate in manifest["candidates"]:
+        if candidate["legal"]:
+            candidates_by_design.setdefault(candidate["design_candidate_id"], []).append(candidate)
+    paired = next(rows for rows in candidates_by_design.values() if len(rows) == 4)
+    assert len({row["design_score"] for row in paired}) == 1
+    assert len({row["design_candidate_id"] for row in paired}) == 1
+    assert {row["candidate_id_authoritative_for_design"] for row in paired} == {False}
+
+
 def test_dft_candidate_binding_validator_rejects_missing_release_duplicate_search_and_claim_upgrade(tmp_path: Path) -> None:
     release_dir = tmp_path / "release"
     write_dft_seven_axis_artifacts(release_dir)

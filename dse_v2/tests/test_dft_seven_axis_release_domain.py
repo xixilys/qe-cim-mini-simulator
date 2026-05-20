@@ -100,6 +100,9 @@ def test_candidate_universe_manifest_contains_every_cartesian_candidate_and_stab
     assert manifest["universe_hash"] == repeat_manifest["universe_hash"]
     assert legality["legality_hash"] == repeat_legality["legality_hash"]
     assert set(manifest["legal_candidate_ids"]).issubset(candidate_ids)
+    assert manifest["legal_evaluation_record_ids"] == manifest["legal_candidate_ids"]
+    assert manifest["legal_candidate_ids_kind"] == "evaluation_record_id"
+    assert manifest["legal_candidate_ids_authoritative_for_design"] is False
     assert manifest["domain_hash"] == freeze["domain_hash"]
     assert legality["domain_hash"] == freeze["domain_hash"]
     assert legality["universe_hash"] == manifest["universe_hash"]
@@ -109,6 +112,14 @@ def test_candidate_universe_manifest_contains_every_cartesian_candidate_and_stab
     assert all(row["reasons"] for row in illegal_rows)
     assert manifest["candidate_id_provenance"]["candidate_id_rule"].startswith("cand_ + sha256")
     assert manifest["candidate_id_provenance"]["candidate_id_kind"] == "evaluation_record_id"
+    assert manifest["candidate_id_provenance"]["candidate_id_authoritative_for_design"] is False
+    assert manifest["candidate_id_provenance"]["legacy_candidate_id_authoritative_for_design"] is False
+    assert manifest["candidate_id_provenance"]["evaluation_record_key"] == "evaluation_record_id"
+    assert manifest["candidate_id_provenance"]["stable_design_identity_key"] == "design_candidate_id"
+    assert manifest["design_identity_audit"]["status"] == "passed"
+    assert manifest["design_identity_audit"]["all_same_identity_axis_rows_share_design_candidate_id"] is True
+    assert manifest["design_identity_audit"]["all_same_identity_axis_rows_share_design_score"] is True
+    assert manifest["design_identity_audit"]["all_same_identity_axis_rows_share_design_legality"] is True
     assert manifest["candidate_id_provenance"]["design_candidate_id_rule"].startswith("design_cand_ + sha256")
     assert manifest["candidate_id_provenance"]["assignment_order"] == list(DFT_SEVEN_AXIS_IDS)
     assert manifest["candidate_id_provenance"]["identity_axis_ids"] == list(DFT_DESIGN_AXIS_IDS)
@@ -129,6 +140,9 @@ def test_candidate_universe_manifest_contains_every_cartesian_candidate_and_stab
         assert candidate["applicability_compatibility"]["affects_design_legality"] is False
         assert candidate["evaluation_policy_routing"]["affects_design_legality"] is False
         assert candidate["candidate_id_kind"] == "evaluation_record_id"
+        assert candidate["evaluation_record_id"] == candidate["candidate_id"]
+        assert candidate["legacy_candidate_id"] == candidate["candidate_id"]
+        assert candidate["candidate_id_authoritative_for_design"] is False
         assert candidate["candidate_id"].startswith("cand_")
         assert candidate["design_candidate_id"].startswith("design_cand_")
         assert candidate["provenance"]["source"] == "frozen_release_domain_cartesian_product"
@@ -193,6 +207,9 @@ def test_phase_and_evaluation_policy_do_not_affect_design_identity_legality_or_s
     assert len(promotion_requirement_sets) == 2
     assert all(row["applicability_compatibility"]["affects_design_legality"] is False for row in rows)
     assert all(row["evaluation_policy_routing"]["affects_design_score"] is False for row in rows)
+    assert all(row["evaluation_policy_routing"]["affects_candidate_binding_score"] is False for row in rows)
+    assert all(row["evaluation_policy_routing"]["affects_formal_pareto_identity"] is False for row in rows)
+    assert all(row["evaluation_policy_routing"]["claim_eligible"] == row["evaluation_policy_routing"]["routing_compatible"] for row in rows)
     assert any(
         blocker["rule_id"] == "hybrid_exx_requires_batched_gemm"
         for row in rows
@@ -251,6 +268,9 @@ def test_search_space_report_uses_every_axis_in_generation_screening_promotion_a
     assert report["universe_backed_queue"]["queue_mode"] == "all_legal_candidates"
     assert report["universe_backed_queue"]["entry_count"] == manifest["legal_candidate_count"]
     assert report["universe_backed_queue"]["candidate_ids"] == manifest["legal_candidate_ids"]
+    assert report["universe_backed_queue"]["evaluation_record_ids"] == manifest["legal_evaluation_record_ids"]
+    assert report["universe_backed_queue"]["candidate_ids_kind"] == "evaluation_record_id"
+    assert report["universe_backed_queue"]["candidate_ids_authoritative_for_design"] is False
     assert report["universe_backed_queue"]["all_legal_candidates_once"] is True
     assert len(set(report["universe_backed_queue"]["candidate_ids"])) == manifest["legal_candidate_count"]
     assert report["universe_backed_queue"]["legal_design_candidate_ids"] == manifest["legal_design_candidate_ids"]

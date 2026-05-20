@@ -11,6 +11,7 @@ from pathlib import Path
 
 from dse_v2.reference_workloads.dft_scf_six_class_suite import (
     DFT_SCF_SIX_CLASS_MANIFEST_NAME,
+    DFT_SCF_SIX_CLASS_REFERENCE_ADMISSION_LEDGER_NAME,
     DFT_SCF_SIX_CLASS_REFERENCE_HASH_MANIFEST_NAME,
     DFT_SCF_SIX_CLASS_SUITE_SCHEMA,
     REQUIRED_DFT_SCF_CLASS_IDS,
@@ -42,6 +43,49 @@ def _write_local_test_pseudos(pseudo_dir: Path) -> dict[str, str]:
 
 def _sha256_text(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _write_fake_converged_pw(path: Path) -> Path:
+    return _write_fake_converged_pw_with_label(path, "local pw.x smoke output")
+
+
+def _write_fake_converged_pw_with_label(path: Path, label: str) -> Path:
+    path.write_text(
+        "#!/usr/bin/env bash\n"
+        "set -euo pipefail\n"
+        "input=''\n"
+        "while [ \"$#\" -gt 0 ]; do\n"
+        "  case \"$1\" in\n"
+        "    -in) input=\"$2\"; shift 2 ;;\n"
+        "    *) shift ;;\n"
+        "  esac\n"
+        "done\n"
+        f"printf '{label} for %s\\n' \"$input\"\n"
+        "printf '     convergence has been achieved in   1 iterations\\n'\n"
+        "printf '   JOB DONE.\\n'\n",
+        encoding="utf-8",
+    )
+    path.chmod(0o755)
+    return path
+
+
+def _write_admitted_reference_bundle(tmp_path: Path) -> Path:
+    _write_local_test_pseudos(tmp_path / "local_pseudos")
+    bundle_dir = tmp_path / "bundle"
+    status = write_dft_scf_six_class_bundle(
+        bundle_dir,
+        use_local_pseudos=True,
+        local_pseudo_dir=tmp_path / "local_pseudos",
+        run_local_qe=True,
+        local_pw_x=_write_fake_converged_pw(tmp_path / "pw.x"),
+        qe_run_timeout_seconds=5,
+    )
+    assert status["status"] == "passed"
+    return bundle_dir
+
+
+def _write_manifest(path: Path, payload: dict) -> None:
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
 def test_required_six_scf_class_ids_are_canonical_and_exact():
@@ -140,12 +184,25 @@ def test_builder_materializes_descriptor_plus_runnable_fields_and_fails_closed_w
     assert manifest["workload_analysis_model"]["reference_suite_role"] == "reference_suite_v1_regression_search_calibration_seed"
     assert "not architecture candidate identity" in manifest["workload_analysis_model"]["claim_boundary"]
     assert (tmp_path / DFT_SCF_SIX_CLASS_REFERENCE_HASH_MANIFEST_NAME).is_file()
+    assert (tmp_path / DFT_SCF_SIX_CLASS_REFERENCE_ADMISSION_LEDGER_NAME).is_file()
     assert manifest["reference_output_hash_manifest"]["path"] == DFT_SCF_SIX_CLASS_REFERENCE_HASH_MANIFEST_NAME
+    assert manifest["reference_admission_ledger"]["path"] == DFT_SCF_SIX_CLASS_REFERENCE_ADMISSION_LEDGER_NAME
     hash_manifest = json.loads((tmp_path / DFT_SCF_SIX_CLASS_REFERENCE_HASH_MANIFEST_NAME).read_text(encoding="utf-8"))
+    admission_ledger = json.loads((tmp_path / DFT_SCF_SIX_CLASS_REFERENCE_ADMISSION_LEDGER_NAME).read_text(encoding="utf-8"))
     assert hash_manifest["complete"] is False
     assert all(entry["sha256"] is None for entry in hash_manifest["entries"])
+    assert admission_ledger["final_admission_complete"] is False
+    assert admission_ledger["entry_count"] == 6
+    assert admission_ledger["admitted_class_ids"] == []
+    assert all(entry["admitted"] is False for entry in admission_ledger["entries"])
+    assert all(entry["fail_closed"] is True for entry in admission_ledger["entries"])
     assert manifest["required_class_ids"] == list(REQUIRED_DFT_SCF_CLASS_IDS)
     assert [case["class_id"] for case in manifest["cases"]] == list(REQUIRED_DFT_SCF_CLASS_IDS)
+    manifest_audit = manifest["coverage_derivation_audit"]
+    assert manifest_audit["all_required_gates_have_non_tag_derivation"] is True
+    assert manifest_audit["stress_tags_used_for_gate_authority"] is False
+    assert manifest_audit["audited_case_count"] == 6
+    assert manifest_audit["case_ids"] == sorted(REQUIRED_DFT_SCF_CLASS_IDS)
 
     for case in manifest["cases"]:
         assert case["qe_input"]["text"].startswith("&CONTROL")
@@ -188,6 +245,12 @@ def test_builder_materializes_descriptor_plus_runnable_fields_and_fails_closed_w
         assert coverage["stress_tag_gate_policy"] == "display_only_not_authoritative"
         assert coverage["suite_intent_tags"] == sorted(case["stress_tags"])
         assert set(coverage["gate_derivation_reasons"]) == set(coverage["required_kernel_gates"])
+        coverage_audit = case["coverage_derivation_audit"]
+        assert coverage_audit == case["dft_workload_analysis"]["coverage_derivation_audit"]
+        assert coverage_audit == coverage["coverage_derivation_audit"]
+        assert coverage_audit == profile["coverage_derivation_audit"]
+        assert coverage_audit["all_required_gates_have_non_tag_derivation"] is True
+        assert coverage_audit["stress_tags_used_for_gate_authority"] is False
         assert case["dft_workload_analysis"]["kernel_workload_graph"]["nodes"]
         gate_contracts = case["dft_workload_analysis"]["kernel_workload_graph"]["kernel_gate_contracts"]
         assert gate_contracts
@@ -215,6 +278,48 @@ def test_builder_materializes_descriptor_plus_runnable_fields_and_fails_closed_w
     assert validation["status"] == "blocked_missing_real_reference_output_hashes"
     assert validation["blocker_count"] == 6
     assert validation["blocker_ids"] == ["missing_real_reference_output_hash"]
+
+
+def test_manifest_validation_rejects_stress_tag_only_gate_derivation_reason(tmp_path):
+    manifest = build_dft_scf_six_class_bundle_manifest(out_dir=tmp_path)
+    case = manifest["cases"][0]
+    coverage = case["dft_workload_analysis"]["coverage_vector"]
+    gate_id = coverage["required_kernel_gates"][0]
+    coverage["gate_derivation_reasons"][gate_id] = [
+        {
+            "source": "stress_tags",
+            "fact": "stress_tags.large_fft",
+            "value": "large_fft",
+            "rule": "invalid hand-edited tag-only authority",
+        }
+    ]
+
+    validation = validate_dft_scf_six_class_bundle_manifest(manifest, base_dir=tmp_path)
+
+    assert validation["status"] == "blocked"
+    assert "stress_tag_only_gate_derivation_reason" in validation["blocker_ids"]
+    assert "coverage_derivation_audit_mismatch" in validation["blocker_ids"]
+
+
+def test_manifest_validation_rejects_tampered_coverage_derivation_audit_booleans(tmp_path):
+    manifest = build_dft_scf_six_class_bundle_manifest(out_dir=tmp_path)
+    manifest["coverage_derivation_audit"] = dict(manifest["coverage_derivation_audit"])
+    manifest["coverage_derivation_audit"]["all_required_gates_have_non_tag_derivation"] = False
+    manifest["cases"][0]["coverage_derivation_audit"] = dict(manifest["cases"][0]["coverage_derivation_audit"])
+    manifest["cases"][0]["coverage_derivation_audit"]["stress_tags_used_for_gate_authority"] = True
+
+    validation = validate_dft_scf_six_class_bundle_manifest(manifest, base_dir=tmp_path)
+
+    mismatch_blockers = [
+        blocker
+        for blocker in validation["blockers"]
+        if blocker["id"] == "coverage_derivation_audit_mismatch"
+    ]
+    assert validation["status"] == "blocked"
+    assert {blocker["field"] for blocker in mismatch_blockers} >= {
+        "coverage_derivation_audit",
+        "cases[0].coverage_derivation_audit",
+    }
 
 
 def test_manifest_validation_rejects_missing_required_class_and_extra_class(tmp_path):
@@ -332,12 +437,17 @@ def test_local_qe_runner_hash_manifest_records_actual_output_hashes_without_long
     assert status["final_real_qe_evidence"] is True
     manifest = json.loads((tmp_path / "bundle" / DFT_SCF_SIX_CLASS_MANIFEST_NAME).read_text(encoding="utf-8"))
     hash_manifest = json.loads((tmp_path / "bundle" / DFT_SCF_SIX_CLASS_REFERENCE_HASH_MANIFEST_NAME).read_text(encoding="utf-8"))
+    admission_ledger = json.loads((tmp_path / "bundle" / DFT_SCF_SIX_CLASS_REFERENCE_ADMISSION_LEDGER_NAME).read_text(encoding="utf-8"))
     assert manifest["validation"]["status"] == "passed"
     assert manifest["validation"]["final_real_qe_evidence"] is True
     assert manifest["final_real_qe_evidence"] is True
     assert manifest["local_qe_reference_run"]["attempted"] is True
     assert hash_manifest["complete"] is True
     assert hash_manifest["final_admission_complete"] is True
+    assert admission_ledger["final_admission_complete"] is True
+    assert admission_ledger["admitted_class_ids"] == list(REQUIRED_DFT_SCF_CLASS_IDS)
+    assert all(entry["admitted"] is True for entry in admission_ledger["entries"])
+    assert all(entry["fail_closed"] is False for entry in admission_ledger["entries"])
     for entry in hash_manifest["entries"]:
         output_path = tmp_path / "bundle" / entry["path"]
         assert output_path.is_file()
@@ -356,6 +466,56 @@ def test_local_qe_runner_hash_manifest_records_actual_output_hashes_without_long
         assert case["dft_workload_analysis"]["reference_summary"]["normalized_reference_summary_hash"]
         assert case["proof_class"] == "descriptor_runnable_fixture_with_local_converged_qe_reference_output"
         assert case["final_real_qe_evidence"] is True
+
+
+def test_missing_reference_admission_ledger_fails_closed_after_otherwise_admitted_bundle(tmp_path):
+    bundle_dir = _write_admitted_reference_bundle(tmp_path)
+    (bundle_dir / DFT_SCF_SIX_CLASS_REFERENCE_ADMISSION_LEDGER_NAME).unlink()
+
+    validation = validate_dft_scf_six_class_bundle_manifest(bundle_dir / DFT_SCF_SIX_CLASS_MANIFEST_NAME)
+
+    assert validation["status"] == "blocked"
+    assert validation["admitted"] is False
+    assert validation["final_real_qe_evidence"] is False
+    assert "missing_reference_admission_ledger" in validation["blocker_ids"]
+
+
+def test_tampered_reference_admission_ledger_hash_fails_closed(tmp_path):
+    bundle_dir = _write_admitted_reference_bundle(tmp_path)
+    ledger_path = bundle_dir / DFT_SCF_SIX_CLASS_REFERENCE_ADMISSION_LEDGER_NAME
+    ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
+    ledger["claim_boundary"] = "tampered ledger text"
+    ledger_path.write_text(json.dumps(ledger, indent=2, sort_keys=True), encoding="utf-8")
+
+    validation = validate_dft_scf_six_class_bundle_manifest(bundle_dir / DFT_SCF_SIX_CLASS_MANIFEST_NAME)
+
+    assert validation["status"] == "blocked"
+    assert validation["admitted"] is False
+    assert "reference_admission_ledger_hash_mismatch" in validation["blocker_ids"]
+
+
+def test_stale_reference_admission_ledger_entry_fails_closed_even_when_ledger_hash_ref_is_current(tmp_path):
+    bundle_dir = _write_admitted_reference_bundle(tmp_path)
+    manifest = json.loads((bundle_dir / DFT_SCF_SIX_CLASS_MANIFEST_NAME).read_text(encoding="utf-8"))
+    ledger_path = bundle_dir / DFT_SCF_SIX_CLASS_REFERENCE_ADMISSION_LEDGER_NAME
+    ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
+    stale_entry = ledger["entries"][0]
+    stale_entry["reference_output_sha256"] = "0" * 64
+    ledger_path.write_text(json.dumps(ledger, indent=2, sort_keys=True), encoding="utf-8")
+    manifest["reference_admission_ledger"]["sha256"] = hashlib.sha256(ledger_path.read_bytes()).hexdigest()
+
+    validation = validate_dft_scf_six_class_bundle_manifest(manifest, base_dir=bundle_dir)
+
+    assert validation["status"] == "blocked"
+    assert validation["admitted"] is False
+    assert "reference_admission_ledger_entry_mismatch" in validation["blocker_ids"]
+    mismatch = next(
+        blocker
+        for blocker in validation["blockers"]
+        if blocker["id"] == "reference_admission_ledger_entry_mismatch"
+    )
+    assert mismatch["class_id"] == stale_entry["class_id"]
+    assert "reference_output_sha256" in mismatch["mismatches"]
 
 
 def test_local_qe_runner_can_reuse_existing_converged_outputs_without_rerun(tmp_path):
@@ -480,6 +640,8 @@ def test_six_class_bundle_cli_writes_fail_closed_artifacts_by_default(tmp_path):
     status = json.loads(completed.stdout)
     assert status["status"] == "blocked_missing_real_reference_output_hashes"
     assert status["blocker_count"] == 6
+    assert status["reference_admission_ledger"] == DFT_SCF_SIX_CLASS_REFERENCE_ADMISSION_LEDGER_NAME
     assert (tmp_path / DFT_SCF_SIX_CLASS_MANIFEST_NAME).exists()
+    assert (tmp_path / DFT_SCF_SIX_CLASS_REFERENCE_ADMISSION_LEDGER_NAME).exists()
     manifest = json.loads((tmp_path / DFT_SCF_SIX_CLASS_MANIFEST_NAME).read_text(encoding="utf-8"))
     assert len(manifest["cases"]) == 6

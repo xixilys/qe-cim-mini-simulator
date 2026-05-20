@@ -18,56 +18,54 @@ from dse_v2.codesign.evidence_ledger import sha256_file, write_json
 DFT_CANDIDATE_BINDING_MAP_SCHEMA = "dse.dft.candidate_binding_map.v1"
 DFT_CANDIDATE_BINDING_MAP_VALIDATION_SCHEMA = "dse.dft.candidate_binding_map_validation.v1"
 
+_DESIGN_BINDING_AXIS_IDS = (
+    "algorithm_variants",
+    "mapping_data_layout",
+    "hardware_microarchitecture",
+    "interface_descriptor_protocol",
+    "schedule_runtime_policy",
+)
+_APPLICABILITY_SCOPE_AXIS_IDS = ("dft_phase_hotspot_selection",)
+_EVALUATION_ROUTING_AXIS_IDS = ("evidence_fidelity_promotion_policy",)
+
 _TEMPLATE_AXIS_PREFERENCES: Dict[str, Dict[str, Sequence[str]]] = {
     "streaming_fft_hpsi_pipeline": {
-        "dft_phase_hotspot_selection": ("scf_hpsi_density",),
         "algorithm_variants": ("iterative_diag_fft",),
         "mapping_data_layout": ("fft_grid_hbm_tiled",),
         "hardware_microarchitecture": ("host_fpga_minimal_v0",),
         "interface_descriptor_protocol": ("genericaccel_descriptor_v1",),
-        "evidence_fidelity_promotion_policy": ("systemc_gem5_eda_formal_ladder", "systemc_then_gem5_non_smoke"),
     },
     "memory_hbm_dma_transpose": {
-        "dft_phase_hotspot_selection": ("scf_hpsi_density",),
         "algorithm_variants": ("iterative_diag_fft",),
         "mapping_data_layout": ("fft_grid_hbm_tiled",),
         "hardware_microarchitecture": ("host_fpga_minimal_v0",),
         "interface_descriptor_protocol": ("genericaccel_descriptor_v1",),
-        "evidence_fidelity_promotion_policy": ("systemc_gem5_eda_formal_ladder", "systemc_then_gem5_non_smoke"),
     },
     "hybrid_cpu_fpga_scf_sidecar": {
-        "dft_phase_hotspot_selection": ("scf_hpsi_density", "hybrid_exx_fft"),
         "algorithm_variants": ("iterative_diag_fft", "batched_gemm_exx"),
         "mapping_data_layout": ("fft_grid_hbm_tiled", "band_block_systolic"),
         "hardware_microarchitecture": ("host_fpga_minimal_v0", "balanced_generic_systemc_v0"),
         "interface_descriptor_protocol": ("genericaccel_descriptor_v1",),
-        "evidence_fidelity_promotion_policy": ("systemc_gem5_eda_formal_ladder", "systemc_then_gem5_non_smoke"),
     },
     "projector_heavy_gemm_gemv": {
-        "dft_phase_hotspot_selection": ("hybrid_exx_fft",),
         "algorithm_variants": ("batched_gemm_exx",),
         "mapping_data_layout": ("band_block_systolic",),
         "hardware_microarchitecture": ("balanced_generic_systemc_v0", "host_fpga_minimal_v0"),
         "interface_descriptor_protocol": ("genericaccel_descriptor_v1", "batched_kernel_descriptor_v1"),
-        "evidence_fidelity_promotion_policy": ("systemc_then_gem5_non_smoke", "systemc_gem5_eda_formal_ladder"),
     },
     "asic_tile_array_template": {
-        "dft_phase_hotspot_selection": ("hybrid_exx_fft", "scf_hpsi_density"),
         "algorithm_variants": ("batched_gemm_exx",),
         "mapping_data_layout": ("band_block_systolic",),
         "hardware_microarchitecture": ("balanced_generic_systemc_v0",),
         "interface_descriptor_protocol": ("genericaccel_descriptor_v1",),
-        "evidence_fidelity_promotion_policy": ("systemc_gem5_eda_formal_ladder",),
     },
 }
 
 _AXIS_WEIGHTS = {
-    "dft_phase_hotspot_selection": 2.0,
     "algorithm_variants": 2.0,
     "mapping_data_layout": 1.5,
     "hardware_microarchitecture": 1.5,
     "interface_descriptor_protocol": 1.0,
-    "evidence_fidelity_promotion_policy": 1.0,
     "schedule_runtime_policy": 0.5,
 }
 
@@ -154,6 +152,54 @@ def _schedule_preference(params: Mapping[str, Any]) -> str:
     return "overlap_dma_compute" if hbm >= 8 or dma >= 16 else "host_orchestrated_sync"
 
 
+def _applicability_match(search_record: Mapping[str, Any], release_candidate: Mapping[str, Any]) -> Dict[str, Any]:
+    params = search_record.get("parameters", {}) if isinstance(search_record.get("parameters", {}), Mapping) else {}
+    assignments = release_candidate.get("assignments", {}) if isinstance(release_candidate.get("assignments", {}), Mapping) else {}
+    template = str(params.get("template_family", ""))
+    # Template family can describe workload/offload scope compatibility, but this is non-scoring metadata.
+    template_scope_hints = {
+        "streaming_fft_hpsi_pipeline": ("scf_hpsi_density",),
+        "memory_hbm_dma_transpose": ("scf_hpsi_density",),
+        "hybrid_cpu_fpga_scf_sidecar": ("scf_hpsi_density", "hybrid_exx_fft"),
+        "projector_heavy_gemm_gemv": ("hybrid_exx_fft",),
+        "asic_tile_array_template": ("hybrid_exx_fft", "scf_hpsi_density"),
+    }.get(template, ())
+    candidate_scope = {axis: str(assignments.get(axis, "")) for axis in _APPLICABILITY_SCOPE_AXIS_IDS}
+    required_scope = {"dft_phase_hotspot_selection": list(template_scope_hints)} if template_scope_hints else {}
+    compatible = not template_scope_hints or candidate_scope.get("dft_phase_hotspot_selection") in template_scope_hints
+    return {
+        "schema_version": "dse.dft.candidate_binding_applicability_match.v1",
+        "workload_coverage_required_scope": required_scope,
+        "candidate_applicability_scope": candidate_scope,
+        "compatible": compatible,
+        "applicability_blockers": [] if compatible else [
+            {
+                "id": "template_scope_mismatch",
+                "required": required_scope,
+                "actual": candidate_scope,
+                "reason": "Template/offload scope mismatch is metadata only and does not affect binding score.",
+            }
+        ],
+        "affects_binding_score": False,
+        "affects_design_identity": False,
+    }
+
+
+def _evaluation_routing_metadata(release_candidate: Mapping[str, Any]) -> Dict[str, Any]:
+    assignments = release_candidate.get("assignments", {}) if isinstance(release_candidate.get("assignments", {}), Mapping) else {}
+    routing = release_candidate.get("evaluation_policy_routing", {})
+    routing = routing if isinstance(routing, Mapping) else {}
+    return {
+        "schema_version": "dse.dft.candidate_binding_evaluation_routing.v1",
+        "evaluation_policy_assignments": {axis: str(assignments.get(axis, "")) for axis in _EVALUATION_ROUTING_AXIS_IDS},
+        "routing_compatible": bool(routing.get("routing_compatible", True)),
+        "routing_blockers": list(routing.get("routing_blockers", []) or []),
+        "promotion_requirements": list(routing.get("promotion_requirements", []) or []),
+        "affects_binding_score": False,
+        "affects_design_identity": False,
+    }
+
+
 def _score_binding(search_record: Mapping[str, Any], release_candidate: Mapping[str, Any]) -> tuple[float, list[str]]:
     params = search_record.get("parameters", {}) if isinstance(search_record.get("parameters", {}), Mapping) else {}
     template = str(params.get("template_family", ""))
@@ -201,12 +247,14 @@ def build_dft_candidate_binding_map(
         if scored and scored[0][0] > 0:
             score, reasons, candidate = scored[0]
             release_candidate_id = str(candidate["candidate_id"])
+            design_candidate_id = str(candidate.get("design_candidate_id") or "")
             status = "matched_by_template_axis_heuristic"
-            confidence = min(1.0, score / sum(_AXIS_WEIGHTS.values()))
+            confidence = min(1.0, score / sum(_AXIS_WEIGHTS[axis] for axis in _DESIGN_BINDING_AXIS_IDS))
             assignments = dict(candidate.get("assignments", {}) or {})
             evidence_row_present = release_candidate_id in evidence_ids if evidence_ids else None
         else:
             release_candidate_id = None
+            design_candidate_id = None
             status = "unmatched_no_legal_release_candidate"
             confidence = 0.0
             reasons = []
@@ -215,11 +263,20 @@ def build_dft_candidate_binding_map(
         binding_rows.append({
             "search_candidate_id": str(search_row["candidate_id"]),
             "release_candidate_id": release_candidate_id,
+            "evaluation_record_id": release_candidate_id,
+            "legacy_candidate_id": release_candidate_id,
+            "candidate_id_kind": "evaluation_record_id" if release_candidate_id else None,
+            "candidate_id_authoritative_for_design": False,
+            "design_candidate_id": design_candidate_id,
             "binding_status": status,
             "confidence": confidence,
             "template_family": params.get("template_family"),
             "release_policy": _release_policy_from_search_row(search_row),
             "release_assignments": assignments,
+            "binding_axis_ids": list(_DESIGN_BINDING_AXIS_IDS),
+            "non_scoring_axis_ids": list(_APPLICABILITY_SCOPE_AXIS_IDS + _EVALUATION_ROUTING_AXIS_IDS),
+            "applicability_match": _applicability_match(search_row, candidate) if release_candidate_id else {},
+            "evaluation_routing": _evaluation_routing_metadata(candidate) if release_candidate_id else {},
             "evidence_row_present": evidence_row_present,
             "reasons": reasons,
             "completion_eligible": False,
@@ -281,6 +338,12 @@ def validate_dft_candidate_binding_map(binding_map: Mapping[str, Any] | Path) ->
             errors.append({"field": f"binding_rows[{index}].release_candidate_id", "message": "release_candidate_id required for every search candidate"})
         if row.get("binding_status") == "matched_by_template_axis_heuristic" and not row.get("release_candidate_id"):
             errors.append({"field": f"binding_rows[{index}].release_candidate_id", "message": "matched row requires release_candidate_id"})
+        if row.get("candidate_id_kind") not in ("evaluation_record_id", None):
+            errors.append({"field": f"binding_rows[{index}].candidate_id_kind", "message": "bound row candidate_id must be labeled as evaluation_record_id"})
+        if row.get("candidate_id_authoritative_for_design") is not False:
+            errors.append({"field": f"binding_rows[{index}].candidate_id_authoritative_for_design", "message": "row candidate id cannot be authoritative for design"})
+        if row.get("release_candidate_id") and not row.get("design_candidate_id"):
+            errors.append({"field": f"binding_rows[{index}].design_candidate_id", "message": "bound row requires stable design_candidate_id"})
         if row.get("completion_eligible") is True:
             errors.append({"field": f"binding_rows[{index}].completion_eligible", "message": "binding rows cannot be completion eligible"})
     if payload.get("bound_candidate_count") != len(rows):

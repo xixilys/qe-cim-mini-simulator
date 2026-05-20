@@ -63,7 +63,8 @@ def _source_artifacts(tmp_path: Path) -> dict[str, Path]:
                 "binding_status": "matched_by_template_axis_heuristic",
                 "confidence": 1.0,
                 "template_family": search_report["all_records"][index]["parameters"].get("template_family"),
-                "candidate_tier": search_report["all_records"][index]["parameters"].get("candidate_tier"),
+                "release_policy": search_report["all_records"][index]["policy_metadata"]["release_policy"],
+                "release_lane": search_report["all_records"][index]["policy_metadata"]["release_policy"]["lane"],
                 "release_assignments": {"test_axis": "test_value"},
                 "evidence_row_present": index == 0,
                 "reasons": ["unit_test_binding"],
@@ -212,9 +213,15 @@ def test_dft_trial_state_ledger_policy_metadata_overrides_legacy_candidate_tier_
     ]
     assert release_rows
     assert all("candidate_tier" not in row for row in release_rows)
+    assert all("candidate_tier" not in row["candidate_binding"] for row in release_rows)
     assert {row["release_policy"]["lane"] for row in release_rows} == {"release"}
     assert {row["release_lane"] for row in release_rows} == {"release"}
+    assert {row["candidate_binding"]["release_lane"] for row in release_rows} == {"release"}
     assert all(row["release_policy"]["formal_pareto_allowed"] is True for row in release_rows)
+    assert all(
+        row["policy_metadata"]["release_policy"]["candidate_tier_authoritative"] is False
+        for row in release_rows
+    )
     assert all(row["state"] == "blocked" for row in release_rows)
 
     with sqlite3.connect(out_dir / "dft_trial_ledger.sqlite") as conn:

@@ -201,6 +201,112 @@ def _candidate_records(candidates: list[Mapping[str, Any]], *, status: str, deta
     ]
 
 
+def _candidate_evaluation_routing(
+    candidate: Mapping[str, Any],
+    legality_row: Mapping[str, Any] | None = None,
+) -> Dict[str, Any]:
+    """Return fail-closed evaluation routing metadata for a ledger row.
+
+    Evaluation/promotion routing belongs to claim eligibility.  Missing or
+    incompatible routing must not rewrite the design-legality result that made
+    the candidate part of the frozen legal universe.
+    """
+
+    legality_row = legality_row if isinstance(legality_row, Mapping) else {}
+    raw_routing = candidate.get("evaluation_policy_routing")
+    if not isinstance(raw_routing, Mapping):
+        raw_routing = legality_row.get("evaluation_policy_routing")
+    routing = dict(raw_routing) if isinstance(raw_routing, Mapping) else {}
+    blockers = [
+        dict(item)
+        for item in routing.get("routing_blockers", []) or []
+        if isinstance(item, Mapping)
+    ]
+    missing = not routing
+    if missing:
+        blockers = [
+            {
+                "rule_id": "evaluation_policy_routing_missing",
+                "reason": (
+                    "frozen release candidate is missing evaluation/promotion "
+                    "routing metadata required for claim eligibility"
+                ),
+            }
+        ]
+    routing_compatible = bool(routing.get("routing_compatible", not blockers)) and not blockers
+    evaluation_assignments = (
+        routing.get("evaluation_policy_assignments")
+        if isinstance(routing.get("evaluation_policy_assignments"), Mapping)
+        else candidate.get("evaluation_policy_assignments")
+        if isinstance(candidate.get("evaluation_policy_assignments"), Mapping)
+        else legality_row.get("evaluation_policy_assignments")
+        if isinstance(legality_row.get("evaluation_policy_assignments"), Mapping)
+        else {}
+    )
+    promotion_requirements = routing.get("promotion_requirements", candidate.get("promotion_requirements", []))
+    if not isinstance(promotion_requirements, list):
+        promotion_requirements = []
+    return {
+        "schema_version": "dse.dft.ledger_evaluation_policy_routing.v1",
+        "status": "compatible" if routing_compatible else "blocked_for_claim_eligibility",
+        "routing_recorded": not missing,
+        "routing_compatible": routing_compatible,
+        "evaluation_policy_id": candidate.get("evaluation_policy_id") or legality_row.get("evaluation_policy_id"),
+        "evaluation_policy_assignments": dict(evaluation_assignments),
+        "promotion_requirements": [str(item) for item in promotion_requirements],
+        "routing_blockers": blockers,
+        "routing_blocker_count": len(blockers),
+        "affects_design_legality": False,
+        "affects_design_score": False,
+        "claim_eligibility_blocker": not routing_compatible,
+        "claim_boundary": (
+            "Evaluation routing schedules or blocks required evidence/promotion "
+            "work. Routing blockers may block release claims, but they do not "
+            "change design legality, design score, or stable design identity."
+        ),
+    }
+
+
+def _evaluation_routing_summary(rows: list[Mapping[str, Any]]) -> Dict[str, Any]:
+    routing_rows = [
+        row.get("evaluation_policy_routing", {})
+        for row in rows
+        if isinstance(row.get("evaluation_policy_routing", {}), Mapping)
+    ]
+    blocked_candidate_ids = [
+        str(row.get("candidate_id"))
+        for row in rows
+        if isinstance(row.get("evaluation_policy_routing", {}), Mapping)
+        and row["evaluation_policy_routing"].get("routing_compatible") is not True
+    ]
+    blocker_rows = [
+        {
+            "candidate_id": str(row.get("candidate_id")),
+            "routing_blockers": list(row["evaluation_policy_routing"].get("routing_blockers", []) or []),
+            "affects_design_legality": False,
+        }
+        for row in rows
+        if isinstance(row.get("evaluation_policy_routing", {}), Mapping)
+        and row["evaluation_policy_routing"].get("routing_blockers")
+    ]
+    return {
+        "schema_version": "dse.dft.evaluation_policy_routing_summary.v1",
+        "candidate_count": len(rows),
+        "routing_recorded_candidate_count": sum(1 for routing in routing_rows if routing.get("routing_recorded") is True),
+        "routing_compatible_candidate_count": sum(1 for routing in routing_rows if routing.get("routing_compatible") is True),
+        "routing_blocked_candidate_count": len(blocked_candidate_ids),
+        "routing_blocked_candidate_ids": blocked_candidate_ids,
+        "routing_blocker_count": sum(len(item.get("routing_blockers", []) or []) for item in blocker_rows),
+        "routing_blocker_rows": blocker_rows,
+        "affects_design_legality": False,
+        "affects_design_score": False,
+        "claim_boundary": (
+            "Routing blockers are counted as claim-eligibility blockers only; "
+            "the legal candidate universe remains derived from design legality."
+        ),
+    }
+
+
 def _hardware_matrix_candidate_summary(
     candidate_id: str,
     hardware_matrix: Mapping[str, Any] | None,
@@ -952,29 +1058,53 @@ def write_dft_candidate_evidence_artifacts(
     rows = []
     for candidate in legal_candidates:
         candidate_id = str(candidate["candidate_id"])
-        blocked_fields = [
+        legality_row = legality_by_id.get(candidate_id, {})
+        evaluation_routing = _candidate_evaluation_routing(candidate, legality_row)
+        evidence_blocked_fields = [
             field
             for field in DFT_LEDGER_REQUIRED_EVIDENCE_REFS
             if refs[field]["status"] != "passed"
         ]
+        routing_blocked_fields = (
+            ["evaluation_policy_routing"]
+            if evaluation_routing["routing_compatible"] is not True
+            else []
+        )
+        blocked_fields = [*evidence_blocked_fields, *routing_blocked_fields]
         row = {
             "candidate_id": candidate_id,
             "assignments": dict(candidate.get("assignments", {})),
             "legality": {
                 "status": "legal" if candidate.get("legal") is True else "illegal",
-                "reasons": list(legality_by_id.get(candidate_id, {}).get("reasons", [])),
+                "reasons": list(legality_row.get("reasons", [])),
+                "routing_affects_design_legality": False,
             },
+            "evaluation_policy_routing": evaluation_routing,
             **refs,
             "blocker_status": {
                 "status": "blocked_temporary" if blocked_fields else "none",
                 "blocked_fields": blocked_fields,
-                "reason": "all-candidate hard evidence categories are explicitly recorded but not yet passed",
+                "evidence_blocked_fields": evidence_blocked_fields,
+                "routing_blocked_fields": routing_blocked_fields,
+                "routing_blockers": evaluation_routing["routing_blockers"],
+                "routing_affects_design_legality": False,
+                "reason": (
+                    "all-candidate hard evidence categories are explicitly recorded but not yet passed"
+                    if evidence_blocked_fields
+                    else "evaluation policy routing blocks claim eligibility"
+                    if routing_blocked_fields
+                    else "no blockers"
+                ),
             },
             "claim_eligibility": {
                 "status": "not_eligible" if blocked_fields else "eligible",
                 "deliverable_complete": False if blocked_fields else True,
                 "eligible_claims": [] if blocked_fields else ["closed_release_candidate"],
                 "blocked_claims": ["deliverable_complete", "full_dse_complete"] if blocked_fields else [],
+                "evidence_blocked_fields": evidence_blocked_fields,
+                "routing_compatible": evaluation_routing["routing_compatible"],
+                "routing_blockers": evaluation_routing["routing_blockers"],
+                "routing_affects_design_legality": False,
             },
             "provenance": {
                 "release_id": manifest.get("release_id"),
@@ -989,6 +1119,7 @@ def write_dft_candidate_evidence_artifacts(
         }
         rows.append(row)
 
+    evaluation_policy_routing_summary = _evaluation_routing_summary(rows)
     missing_evidence_classes = sorted(set(DFT_EVIDENCE_ARTIFACT_CLASSES) - set(artifact_class_paths))
     blocked_candidate_ids = [
         str(row["candidate_id"])
@@ -1005,6 +1136,9 @@ def write_dft_candidate_evidence_artifacts(
         "missing_hard_requirement_rows": list(requirement_matrix["missing_hard_requirement_rows"]),
         "all_candidate_claims_eligible": not blocked_candidate_ids,
         "blocked_candidate_ids": blocked_candidate_ids,
+        "evaluation_policy_routing_summary": evaluation_policy_routing_summary,
+        "routing_blocked_candidate_ids": evaluation_policy_routing_summary["routing_blocked_candidate_ids"],
+        "routing_blocker_count": evaluation_policy_routing_summary["routing_blocker_count"],
     }
     release_claim_gate["deliverable_complete"] = all(
         [
@@ -1026,6 +1160,7 @@ def write_dft_candidate_evidence_artifacts(
         "legal_candidate_ids": legal_candidate_ids,
         "release_domain_hashes": dict(release_hashes),
         "release_claim_gate": release_claim_gate,
+        "evaluation_policy_routing_summary": evaluation_policy_routing_summary,
         "full_scf_hybrid_bundle": full_scf_hybrid_bundle,
     }
     release_report = {
@@ -1090,10 +1225,15 @@ def write_dft_candidate_evidence_artifacts(
     ]
     blocker_report = {
         "schema_version": "dse.dft.blocker_report.v1",
-        "status": "blocked_temporary" if blocker_fields else "passed",
+        "status": (
+            "blocked_temporary"
+            if blocker_fields or evaluation_policy_routing_summary["routing_blocker_rows"]
+            else "passed"
+        ),
         **report_common,
         "blocked_candidate_count": len(blocked_candidate_ids),
         "blocked_fields": blocker_fields,
+        "routing_blocker_rows": evaluation_policy_routing_summary["routing_blocker_rows"],
         "blocker_rows": [
             {
                 "blocked_field": field,
@@ -1141,6 +1281,12 @@ def write_dft_candidate_evidence_artifacts(
                 "artifact": {"path": "per_candidate_evidence_ledger.json", "field": "coverage_policy"},
                 "status": "covered",
                 "completion_claim": "top_k_never_satisfies_release_completion",
+            },
+            {
+                "requirement": "evaluation_policy_routing_claim_only",
+                "artifact": {"path": "per_candidate_evidence_ledger.json", "field": "evaluation_policy_routing_summary"},
+                "status": "covered",
+                "completion_claim": "routing_blockers_affect_claim_eligibility_only",
             },
             {
                 "requirement": "tool_unavailable_is_not_completion",
@@ -1459,6 +1605,7 @@ def write_dft_candidate_evidence_artifacts(
             for name, path in report_artifact_paths.items()
         },
         "release_claim_gate": release_claim_gate,
+        "evaluation_policy_routing_summary": evaluation_policy_routing_summary,
         "full_scf_hybrid_bundle": full_scf_hybrid_bundle,
         "unsupported_gap_labels": [dict(item) for item in DFT_UNSUPPORTED_GAP_LABELS],
         "tool_unavailability_failure_policy": dict(TOOL_UNAVAILABLE_FAILURE_POLICY),
@@ -1507,6 +1654,7 @@ def write_dft_candidate_evidence_artifacts(
             for name, path in report_artifact_paths.items()
         },
         "release_claim_gate": release_claim_gate,
+        "evaluation_policy_routing_summary": evaluation_policy_routing_summary,
         "full_scf_hybrid_bundle": full_scf_hybrid_bundle,
         "unsupported_gap_labels": [dict(item) for item in DFT_UNSUPPORTED_GAP_LABELS],
         "tool_unavailability_failure_policy": dict(TOOL_UNAVAILABLE_FAILURE_POLICY),
