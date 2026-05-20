@@ -290,13 +290,19 @@ def _check_evaluation_policy_legality(
         legality = payloads.get("candidate_legality_report", {})
         identity = _mapping(universe.get("design_identity_audit")) or _mapping(universe.get("identity_semantics"))
         routing = _mapping(legality.get("evaluation_policy_routing_audit")) or _mapping(universe.get("evaluation_policy_routing_audit"))
-        excludes_policy = identity.get("design_candidate_id_excludes_evaluation_policy") is True
+        excludes_policy = (
+            identity.get("design_candidate_id_excludes_evaluation_policy") is True
+            or identity.get("evidence_policy_affects_identity") is False
+        )
         legality_unchanged = (
             routing.get("affects_design_legality") is False
+            or routing.get("evaluation_policy_routing_affects_legal") is False
             or legality.get("evaluation_policy_affects_design_legality") is False
+            or _mapping(legality.get("legality_semantics")).get("evaluation_policy_routing_affects_legal") is False
         )
         score_unchanged = (
             routing.get("affects_design_score") is False
+            or identity.get("evaluation_policy_affects_design_score") is False
             or legality.get("evaluation_policy_affects_design_score") is False
         )
         if not excludes_policy:
@@ -416,14 +422,15 @@ def _check_reference_hash_admission(
             blockers.append("reference_admission_ledger_schema_missing_or_wrong")
         if ledger.get("final_admission_complete") is not True:
             blockers.append("reference_admission_ledger_not_final_complete")
-        rows = ledger.get("rows", ledger.get("cases", []))
+        rows = ledger.get("rows", ledger.get("cases", ledger.get("entries", [])))
         if not isinstance(rows, list) or not rows:
             blockers.append("reference_admission_rows_missing")
         else:
             blocked_rows = [
                 str(row.get("case_id", index))
                 for index, row in enumerate(rows)
-                if not isinstance(row, Mapping) or row.get("final_admission_eligible") is not True
+                if not isinstance(row, Mapping)
+                or (row.get("final_admission_eligible") is not True and row.get("admitted") is not True)
             ]
             if blocked_rows:
                 blockers.append("reference_admission_rows_not_final_eligible:" + ",".join(blocked_rows[:20]))

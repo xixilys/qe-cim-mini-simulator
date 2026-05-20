@@ -409,6 +409,8 @@ def dft_domain_freeze() -> Dict[str, Any]:
         "legacy_candidate_id_authoritative_for_design": False,
         "phase_hotspot_affects_identity": False,
         "evidence_policy_affects_identity": False,
+        "design_candidate_id_excludes_applicability": True,
+        "design_candidate_id_excludes_evaluation_policy": True,
         "applicability_affects_design_score": False,
         "evaluation_policy_affects_design_score": False,
         "evaluation_policy_affects_design_legality": False,
@@ -594,6 +596,8 @@ def _build_design_identity_audit(manifest: Mapping[str, Any]) -> Dict[str, Any]:
         "legacy_candidate_id_authoritative_for_design": False,
         "phase_hotspot_affects_identity": False,
         "evidence_policy_affects_identity": False,
+        "design_candidate_id_excludes_applicability": True,
+        "design_candidate_id_excludes_evaluation_policy": True,
         "applicability_affects_design_score": False,
         "evaluation_policy_affects_design_score": False,
         "evaluation_policy_affects_design_legality": False,
@@ -691,6 +695,18 @@ def _enrich_candidate_partitions(manifest: Dict[str, Any], legality: Dict[str, A
         "legal_field": "design_legality.passed",
         "applicability_compatibility_affects_legal": False,
         "evaluation_policy_routing_affects_legal": False,
+    }
+    legality["evaluation_policy_routing_audit"] = {
+        "schema_version": "dse.dft.evaluation_policy_routing_audit.v1",
+        "affects_design_legality": False,
+        "affects_design_score": False,
+        "affects_candidate_binding_score": False,
+        "affects_formal_pareto_identity": False,
+        "claim_boundary": (
+            "Evidence-fidelity policy chooses evidence routes and claim "
+            "requirements only; it cannot mutate design legality, design "
+            "score, candidate binding score, or formal Pareto identity."
+        ),
     }
     legality["legality_hash"] = stable_json_hash({
         key: value for key, value in legality.items() if key != "legality_hash"
