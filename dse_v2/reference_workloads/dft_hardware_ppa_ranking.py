@@ -402,7 +402,11 @@ def _apply_candidate_parametric_source_blockers(candidate_rows: list[Dict[str, A
                             "source_bundle_manifest": source.get("manifest", {}).get("path"),
                         }
                     )
-                continue
+            # Assignment-derived attribution is audit-only.  Even when assignment
+            # sidecars differ by candidate, identical generated RTL source
+            # signatures and absent/identical parameter hashes prove that the
+            # physical Vivado/DC PPA evidence is not candidate-parametric enough
+            # to rank a trusted winner.
             for row, source in rows_with_sources:
                 row.setdefault("blockers", []).append(
                     {
