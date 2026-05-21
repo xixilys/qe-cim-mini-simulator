@@ -54,9 +54,12 @@ current code avoids overclaiming while still producing auditable report artifact
 10. `evidence_index` — run-local artifact availability for required evidence and
     report outputs.
 11. Optional DFT-profile sections — `dft_evidence_ledger`,
-    `dft_trial_state_ledger`, and `dft_full_scf_evaluated_hybrid`, when their
-    artifacts are indexed; these are audit/reporting citations and never
-    self-upgrade trusted claims.
+    `dft_trial_state_ledger`, `dft_full_scf_evaluated_hybrid`,
+    `dft_hardware_ppa_ranking`, `dft_hardware_ppa_pareto_frontier`,
+    `dft_candidate_specific_ppa_provenance_audit`,
+    `dft_architecture_winner_resolution`, `dft_l4_goal_binding`, and
+    `dft_audit_semantic_closure`, when their artifacts are indexed; these are
+    audit/reporting citations and never self-upgrade trusted claims.
 12. `limitations` — gem5+SystemC blockers, missing metrics, and single-run
     scope limits.
 13. `replay_instructions` — Python and simulator commands from the manifest.
@@ -498,6 +501,15 @@ accounting, and release-claim gates.  Newer status should be read from the
 latest `discovery_status.json`, source-flow map status, Step5 release gate, and
 goal-audit artifacts.
 
+The current all36 route
+`runs/dse/wave36_step5_current_route_all36_20260521T011801Z` extends that
+release-gate checkpoint into the hardware-only PPA reporting layer.  It may
+show 36 ranking-eligible/Pareto-visible candidates, but identical parsed
+kernel-PPA signatures leave `winner_selection_status` at
+`tied_by_identical_kernel_ppa_no_single_winner`.  Reports must present this as
+tie-breaker input only, not as a selected FPGA/ASIC architecture, not as a
+trusted full-SCF winner, and not as deliverable completion.
+
 The fail-closed Step5 sequence is:
 
 1. candidate-id-stamped source-flow generation/staging;
@@ -694,7 +706,11 @@ When indexed in a Step5 run, `final_report.json` includes
 `dft_hardware_closure_parsed_evidence`,
 `dft_hardware_closure_parser_run`,
 `dft_hardware_closure_gate_adjudication`,
-`dft_hardware_closure_release_gate`, and `dft_trial_state_ledger`.  The
+`dft_hardware_closure_release_gate`, `dft_hardware_ppa_ranking`,
+`dft_hardware_ppa_pareto_frontier`,
+`dft_candidate_specific_ppa_provenance_audit`,
+`dft_architecture_winner_resolution`, `dft_l4_goal_binding`,
+`dft_audit_semantic_closure`, and `dft_trial_state_ledger`.  The
 binding section reports search/bound/unmatched counts, duplicate release-ID
 reuse, validation, and fail-closed completion flags.  The workplan section
 reports release-candidate count,
@@ -728,7 +744,15 @@ counts, parser verdict counts, and
 section reports stage gates passed/blocked/failed, unit gates passed/blocked
 or failed, and the fail-closed release-claim boundary.  The release-gate
 section reports candidate/release rollup counts and whether hardware completion
-is eligible before final deliverable completion.  The trial section reports
+is eligible before final deliverable completion.  The hardware-PPA ranking and
+Pareto sections report only candidate-stamped major-kernel PPA rows after hard
+gates; tied metrics keep the winner unset.  The candidate-specific provenance
+audit section reports whether PPA rows came from fresh candidate/kernel command
+execution and tool-version records.  The winner-resolution section is the only
+place that may name a FPGA/ASIC hardware winner, and only after a unique
+rank-1 candidate plus eligible provenance exist.  The L4 binding and semantic
+closure sections are software-visible transport and audit-hardening checks,
+respectively, not PPA or deliverable-completion upgrades.  The trial section reports
 Campaign / WorkloadRun / Trial IDs, candidate counts,
 blocked/rejected/selected trial counts, `completion_eligible`, and
 `deliverable_complete`.  These sections are orchestration/audit evidence only:

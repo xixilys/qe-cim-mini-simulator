@@ -6,7 +6,7 @@
 **Active HIGH-fix plans:** `.omx/plans/prd-dft-workload-profile-high-fixes-20260520T102113Z.md`;
 `.omx/plans/prd-dft-audit-high-fix-ralplan-20260520T165732Z.md`
 
-## Current strict state (2026-05-20)
+## Current strict state (2026-05-21)
 
 - Workload admission is the six representative SCF descriptor-plus-runnable
   bundle contract.  Generated fixture/pseudo bundles remain scaffolding until
@@ -24,6 +24,12 @@
   `stage_gate_passed_count=1440`, `unit_gate_passed_count=288`,
   `candidate_gate_passed_count=36`, `hardware_completion_eligible=true`, and
   `deliverable_complete=false`.
+- The current all36 route
+  `runs/dse/wave36_step5_current_route_all36_20260521T011801Z` keeps all 36
+  release candidates hardware-PPA-ranking/Pareto visible but tied by identical
+  kernel-PPA signatures.  Treat it as tie-breaker input only: it does not name a
+  FPGA/ASIC winner, does not close candidate-specific PPA provenance, and does
+  not upgrade final deliverable status.
 - Current-goal L4 transport proof is present for the 36 × 6 target.
   `current_goal_l4_bridge/` is the exact structured crosswalk/provenance handoff;
   `runs/dse/current_goal_l4_regenerated_36x6_20260520T091000Z` contains 216/216

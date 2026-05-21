@@ -6,7 +6,7 @@
 **Active HIGH-fix plans:** `.omx/plans/prd-dft-workload-profile-high-fixes-20260520T102113Z.md`;
 `.omx/plans/prd-dft-audit-high-fix-ralplan-20260520T165732Z.md`
 
-## Current strict state (2026-05-20)
+## Current strict state (2026-05-21)
 
 - The workload front door is a six-class SCF descriptor-plus-runnable bundle
   contract.  Synthetic fixture/pseudo material is admission scaffolding only;
@@ -25,6 +25,15 @@
   (`unit_gate_passed_count=288`, `candidate_gate_passed_count=36`,
   `hardware_completion_eligible=true`) but still has
   `deliverable_complete=false`.
+- The current all36 route
+  `runs/dse/wave36_step5_current_route_all36_20260521T011801Z` carries the
+  hardware-only PPA ranking surface forward: 36 candidates are ranking-eligible
+  and Pareto-visible, but `winner_selection_status` remains
+  `tied_by_identical_kernel_ppa_no_single_winner`.  Reporting may cite this as
+  tied kernel-PPA progress only; it must not select a FPGA/ASIC winner, mark a
+  trusted full-SCF winner, or set `deliverable_complete=true` until
+  candidate-specific PPA provenance, fresh tie-breaker evidence,
+  winner-resolution, full-SCF accounting, and the goal/release claim gate close.
 - Current-goal L4/gem5 transport proof is now present and bound for the
   36-candidate × 6-SCF target.  The bridge under
   `runs/dse/wave36_step5_real_source_flow_all288_20260520T061902Z/current_goal_l4_bridge/`
