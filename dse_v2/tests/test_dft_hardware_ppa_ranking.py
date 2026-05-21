@@ -204,3 +204,56 @@ def test_hardware_ppa_ranking_blocks_fpga_claim_without_vivado_route(tmp_path: P
         for blocker in row["blockers"]
     )
     assert validation["valid"] is True
+
+
+def test_hardware_ppa_ranking_missing_parsed_stage_results_fails_closed(tmp_path: Path) -> None:
+    run_dir = tmp_path / "run"
+    candidate_id = "cand-a"
+    kernel_id = "fft_ifft_ffft"
+    _write_json(
+        run_dir / "dft_hardware_closure_release_gate.json",
+        {
+            "schema_version": "dse.dft.hardware_closure_release_gate.v1",
+            "release_id": "release-missing-parsed-stage-test",
+            "candidate_count": 1,
+            "major_kernel_count": 1,
+            "expected_kernel_ids": [kernel_id],
+            "stage_gate_passed_count": len(STAGES),
+            "unit_gate_passed_count": 1,
+            "candidate_gate_passed_count": 1,
+            "hardware_completion_eligible": True,
+            "deliverable_complete": False,
+            "candidate_rows": [
+                {
+                    "candidate_id": candidate_id,
+                    "candidate_hardware_gate_passed": True,
+                    "candidate_claim_eligible": True,
+                }
+            ],
+        },
+    )
+    _write_json(
+        run_dir / "dft_hardware_closure_release_gate_validation.json",
+        {"schema_version": "dse.dft.hardware_closure_release_gate_validation.v1", "valid": True, "errors": []},
+    )
+    _write_json(
+        run_dir / "dft_hardware_closure_parser_run.json",
+        {"schema_version": "dse.dft.hardware_closure_parser_run.v1", "status": "parsed"},
+    )
+
+    ranking = build_dft_hardware_ppa_ranking(run_dir)
+    validation = validate_dft_hardware_ppa_ranking(ranking)
+
+    assert ranking["status"] == "blocked_hardware_ppa_ranking"
+    assert ranking["winner_selection_status"] == "blocked_no_hardware_ppa_winner"
+    assert ranking["ranking_eligible_candidate_count"] == 0
+    assert ranking["blocked_candidate_count"] == 1
+    assert ranking["fpga_ranking"] == []
+    assert ranking["asic_ranking"] == []
+    candidate_row = ranking["candidate_rows"][0]
+    assert candidate_row["candidate_gate_passed"] is False
+    assert candidate_row["ranking_eligible"] is False
+    assert {blocker["blocker_id"] for blocker in candidate_row["blockers"]} == {"missing_parsed_stage_result"}
+    assert ranking["hardware_completion_eligible"] is True
+    assert ranking["deliverable_complete"] is False
+    assert validation["valid"] is True
