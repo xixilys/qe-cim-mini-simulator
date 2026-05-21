@@ -80,6 +80,62 @@ def _release_candidate_ids(
     return sorted(set(ids))
 
 
+def _candidate_universe_path(per_candidate_evidence_ledger_path: Path) -> Path | None:
+    run_dir = Path(per_candidate_evidence_ledger_path).parent
+    if run_dir.name == "dft_ledger":
+        run_dir = run_dir.parent
+    candidates = [
+        run_dir / "candidate_universe_manifest.json",
+        run_dir / "release_domain_current36" / "candidate_universe_manifest.json",
+        run_dir / "release_domain" / "candidate_universe_manifest.json",
+    ]
+    candidates.extend(sorted(run_dir.glob("release_domain*/candidate_universe_manifest.json")))
+    for path in candidates:
+        if path.exists() and path.is_file():
+            return path
+    return None
+
+
+def _candidate_metadata_by_id(
+    *,
+    per_candidate_evidence_ledger: Mapping[str, Any],
+    candidate_binding_map: Mapping[str, Any],
+    candidate_universe_manifest: Mapping[str, Any],
+) -> Dict[str, Dict[str, Any]]:
+    metadata: Dict[str, Dict[str, Any]] = {}
+    for row in candidate_universe_manifest.get("candidates", []) or []:
+        if isinstance(row, Mapping) and row.get("candidate_id"):
+            metadata[str(row["candidate_id"])] = dict(row)
+    for row in per_candidate_evidence_ledger.get("rows", []) or []:
+        if not isinstance(row, Mapping) or not row.get("candidate_id"):
+            continue
+        candidate_id = str(row["candidate_id"])
+        existing = metadata.setdefault(candidate_id, {"candidate_id": candidate_id})
+        for field in (
+            "design_candidate_id",
+            "assignments",
+            "identity_assignments",
+            "non_identity_assignments",
+            "applicability_assignments",
+            "evaluation_policy_assignments",
+        ):
+            value = row.get(field)
+            if value not in (None, {}, []):
+                existing.setdefault(field, value)
+    for row in candidate_binding_map.get("binding_rows", []) or []:
+        if not isinstance(row, Mapping):
+            continue
+        candidate_id = str(row.get("release_candidate_id") or row.get("candidate_id") or "")
+        if not candidate_id:
+            continue
+        existing = metadata.setdefault(candidate_id, {"candidate_id": candidate_id})
+        if row.get("design_candidate_id"):
+            existing.setdefault("design_candidate_id", row.get("design_candidate_id"))
+        if isinstance(row.get("release_assignments"), Mapping):
+            existing.setdefault("assignments", dict(row["release_assignments"]))
+    return metadata
+
+
 def _tool_rows_by_id(tool_availability: Mapping[str, Any]) -> Dict[str, Dict[str, Any]]:
     rows: Dict[str, Dict[str, Any]] = {}
     for row in tool_availability.get("tool_rows", []) or []:
@@ -131,6 +187,7 @@ def _build_work_item(
     stage_id: str,
     shared_kernel_row: Mapping[str, Any],
     tool_rows: Mapping[str, Mapping[str, Any]],
+    candidate_metadata: Mapping[str, Any],
 ) -> Dict[str, Any]:
     tool_id = _stage_tool(stage_id)
     tool_available = bool(tool_rows.get(tool_id or "", {}).get("available", False)) if tool_id else True
@@ -150,6 +207,12 @@ def _build_work_item(
     return {
         "work_item_id": f"{candidate_id}:{kernel['kernel_id']}:{stage_id}",
         "candidate_id": candidate_id,
+        "design_candidate_id": candidate_metadata.get("design_candidate_id"),
+        "assignments": dict(candidate_metadata.get("assignments", {}) if isinstance(candidate_metadata.get("assignments"), Mapping) else {}),
+        "identity_assignments": dict(candidate_metadata.get("identity_assignments", {}) if isinstance(candidate_metadata.get("identity_assignments"), Mapping) else {}),
+        "non_identity_assignments": dict(candidate_metadata.get("non_identity_assignments", {}) if isinstance(candidate_metadata.get("non_identity_assignments"), Mapping) else {}),
+        "applicability_assignments": dict(candidate_metadata.get("applicability_assignments", {}) if isinstance(candidate_metadata.get("applicability_assignments"), Mapping) else {}),
+        "evaluation_policy_assignments": dict(candidate_metadata.get("evaluation_policy_assignments", {}) if isinstance(candidate_metadata.get("evaluation_policy_assignments"), Mapping) else {}),
         "kernel_id": kernel["kernel_id"],
         "kernel_name": kernel["name"],
         "kernel_family": kernel["kernel_family"],
@@ -177,6 +240,7 @@ def build_dft_hardware_completion_workplan(
     dft_hardware_evidence_matrix_path: Path | None = None,
     ic_eda_tool_availability_path: Path | None = None,
     candidate_binding_map_path: Path | None = None,
+    candidate_universe_manifest_path: Path | None = None,
 ) -> Dict[str, Any]:
     """Return candidate × kernel hard-gate work items for remaining closure."""
 
@@ -184,7 +248,14 @@ def build_dft_hardware_completion_workplan(
     matrix = _load_json(dft_hardware_evidence_matrix_path)
     tools = _load_json(ic_eda_tool_availability_path)
     binding = _load_json(candidate_binding_map_path)
+    universe_path = candidate_universe_manifest_path or _candidate_universe_path(per_candidate_evidence_ledger_path)
+    universe = _load_json(universe_path)
     candidate_ids = _release_candidate_ids(ledger, binding)
+    metadata_by_id = _candidate_metadata_by_id(
+        per_candidate_evidence_ledger=ledger,
+        candidate_binding_map=binding,
+        candidate_universe_manifest=universe,
+    )
     kernel_rows = _kernel_rows_by_id(matrix)
     tool_rows = _tool_rows_by_id(tools)
     work_items: list[Dict[str, Any]] = []
@@ -199,6 +270,7 @@ def build_dft_hardware_completion_workplan(
                         stage_id=stage_id,
                         shared_kernel_row=shared_kernel_row,
                         tool_rows=tool_rows,
+                        candidate_metadata=metadata_by_id.get(candidate_id, {}),
                     )
                 )
     blocker_ids = sorted({str(item["blocker_id"]) for item in work_items if item.get("blocked")})
@@ -221,6 +293,7 @@ def build_dft_hardware_completion_workplan(
             "dft_hardware_evidence_matrix": _source_ref(dft_hardware_evidence_matrix_path, required=False),
             "ic_eda_tool_availability": _source_ref(ic_eda_tool_availability_path, required=False),
             "candidate_binding_map": _source_ref(candidate_binding_map_path, required=False),
+            "candidate_universe_manifest": _source_ref(universe_path, required=False),
         },
         "work_items": work_items,
         "claim_boundary": _CLAIM_BOUNDARY,
@@ -272,6 +345,7 @@ def write_dft_hardware_completion_workplan(
     dft_hardware_evidence_matrix_path: Path | None = None,
     ic_eda_tool_availability_path: Path | None = None,
     candidate_binding_map_path: Path | None = None,
+    candidate_universe_manifest_path: Path | None = None,
 ) -> Dict[str, Any]:
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -280,6 +354,7 @@ def write_dft_hardware_completion_workplan(
         dft_hardware_evidence_matrix_path=dft_hardware_evidence_matrix_path,
         ic_eda_tool_availability_path=ic_eda_tool_availability_path,
         candidate_binding_map_path=candidate_binding_map_path,
+        candidate_universe_manifest_path=candidate_universe_manifest_path,
     )
     workplan_path = out_dir / "dft_hardware_completion_workplan.json"
     write_json(workplan_path, payload)

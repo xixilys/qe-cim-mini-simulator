@@ -27,6 +27,15 @@ _CLAIM_BOUNDARY = (
     "deliverable-completion claims."
 )
 
+_CANDIDATE_METADATA_FIELDS = (
+    "design_candidate_id",
+    "assignments",
+    "identity_assignments",
+    "non_identity_assignments",
+    "applicability_assignments",
+    "evaluation_policy_assignments",
+)
+
 
 def _load_json(path: Path) -> Dict[str, Any]:
     payload = json.loads(Path(path).read_text(encoding="utf-8"))
@@ -60,10 +69,20 @@ def _candidate_kernel_units(workplan: Mapping[str, Any]) -> list[Dict[str, Any]]
         kernel_family = str(items[0].get("kernel_family", "")) if items else ""
         stage_ids = [str(item.get("stage_id", "")) for item in items]
         required_tools = sorted({str(item.get("tool_id")) for item in items if item.get("tool_id")})
+        metadata_source = items[0] if items else {}
         units.append(
             {
                 "unit_id": f"{candidate_id}:{kernel_id}",
                 "candidate_id": candidate_id,
+                **{
+                    field: (
+                        dict(metadata_source.get(field, {}))
+                        if isinstance(metadata_source.get(field), Mapping)
+                        else metadata_source.get(field)
+                    )
+                    for field in _CANDIDATE_METADATA_FIELDS
+                    if metadata_source.get(field) not in (None, {}, [])
+                },
                 "kernel_id": kernel_id,
                 "kernel_name": kernel_name,
                 "kernel_family": kernel_family,

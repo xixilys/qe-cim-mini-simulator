@@ -169,7 +169,7 @@ def _vivado_metrics(run_dir: Path, parsed_result: Mapping[str, Any]) -> Dict[str
 
 
 def _candidate_universe_by_id(path: Optional[Path]) -> Dict[str, Dict[str, Any]]:
-    if path is None:
+    if path is None or not path.exists() or not path.is_file():
         return {}
     payload = _load_json(path)
     rows = payload.get("candidates", []) if isinstance(payload.get("candidates"), list) else []
@@ -184,9 +184,9 @@ def _default_candidate_universe_manifest(run_dir: Path) -> Path | None:
     """Return the most local candidate-universe manifest for a run, if present."""
 
     candidates = [
-        run_dir / "candidate_universe_manifest.json",
-        run_dir / "release_domain_current36" / "candidate_universe_manifest.json",
         run_dir / "release_domain" / "candidate_universe_manifest.json",
+        run_dir / "release_domain_current36" / "candidate_universe_manifest.json",
+        run_dir / "candidate_universe_manifest.json",
     ]
     release_dirs = sorted(run_dir.glob("release_domain*/candidate_universe_manifest.json"))
     for path in candidates + release_dirs:
@@ -213,6 +213,8 @@ def _metadata_by_candidate_id(run_dir: Path, candidate_universe_manifest: Option
             ("release_assignments", "assignments"),
             ("identity_assignments", "identity_assignments"),
             ("non_identity_assignments", "non_identity_assignments"),
+            ("applicability_assignments", "applicability_assignments"),
+            ("evaluation_policy_assignments", "evaluation_policy_assignments"),
         ):
             value = row.get(source_field)
             if value not in (None, {}, []):
@@ -573,6 +575,18 @@ def _pareto_rows(rows: Sequence[Dict[str, Any]]) -> list[Dict[str, Any]]:
     return sorted(frontier, key=lambda item: str(item.get("candidate_id")))
 
 
+def _ranking_metric(row: Mapping[str, Any], raw_key: str, *, parametric_available: bool) -> float:
+    if parametric_available:
+        ppa = row.get("candidate_parametric_ppa", {})
+        if isinstance(ppa, Mapping):
+            attributed = ppa.get("attributed_totals", {})
+            if isinstance(attributed, Mapping):
+                value = attributed.get(raw_key)
+                if value is not None:
+                    return float(value)
+    return float(row.get(raw_key) or 0.0)
+
+
 def build_dft_hardware_ppa_ranking(
     run_dir: Path,
     *,
@@ -587,7 +601,8 @@ def build_dft_hardware_ppa_ranking(
     release_gate = _load_json(release_gate_path)
     release_validation = _load_json(release_validation_path)
     parser_run = _load_json(parser_run_path)
-    universe = _candidate_universe_by_id(candidate_universe_manifest)
+    resolved_candidate_universe_manifest = candidate_universe_manifest or _default_candidate_universe_manifest(run_dir)
+    universe = _metadata_by_candidate_id(run_dir, resolved_candidate_universe_manifest)
     blockers: list[Dict[str, Any]] = []
 
     if not release_gate:
@@ -687,26 +702,66 @@ def build_dft_hardware_ppa_ranking(
             )
         metadata = universe.get(candidate_id, {})
         asic_min_slack = totals["asic_min_slack_ns"]
+        asic_slack_deficit = max(0.0, -float(asic_min_slack or 0.0))
+        parametric_ppa = _candidate_parametric_ppa(
+            candidate_id=candidate_id,
+            totals={**totals, "asic_slack_deficit_ns": asic_slack_deficit},
+            metadata=metadata,
+        )
         candidate_rows.append(
             {
                 "candidate_id": candidate_id,
                 "design_candidate_id": metadata.get("design_candidate_id"),
+                "evaluation_record_id": metadata.get("evaluation_record_id", metadata.get("candidate_id", candidate_id)),
+                "legacy_candidate_id": metadata.get("legacy_candidate_id", metadata.get("candidate_id", candidate_id)),
+                "candidate_id_kind": metadata.get("candidate_id_kind", "evaluation_record_id" if metadata else None),
+                "candidate_id_authoritative_for_design": bool(metadata.get("candidate_id_authoritative_for_design", False)),
+                "design_candidate_id_authoritative_for_design": bool(
+                    metadata.get("design_candidate_id_authoritative_for_design", bool(metadata.get("design_candidate_id")))
+                ),
+                "assignments": metadata.get("assignments", {}),
                 "identity_assignments": metadata.get("identity_assignments", {}),
                 "non_identity_assignments": metadata.get("non_identity_assignments", {}),
+                "applicability_assignments": metadata.get("applicability_assignments", {}),
+                "evaluation_policy_assignments": metadata.get("evaluation_policy_assignments", {}),
                 "design_score": metadata.get("design_score"),
+                "candidate_parameter_signature": json.dumps(
+                    {
+                        "identity_assignments": metadata.get("identity_assignments", {}),
+                        "assignments": metadata.get("assignments", {}),
+                    },
+                    sort_keys=True,
+                ),
+                "candidate_parametric_ppa": parametric_ppa,
                 "candidate_gate_passed": not candidate_blockers,
                 "ranking_eligible": not candidate_blockers,
                 "blockers": candidate_blockers,
                 "kernel_rows": kernel_rows,
                 **totals,
-                "asic_slack_deficit_ns": max(0.0, -float(asic_min_slack or 0.0)),
+                "asic_slack_deficit_ns": asic_slack_deficit,
                 "kernel_count": len(kernel_ids),
                 "required_stage_ids": list(REQUIRED_STAGE_IDS),
             }
         )
 
     eligible_rows = [row for row in candidate_rows if row.get("ranking_eligible")]
-    metric_signatures = {_candidate_metric_signature(row) for row in eligible_rows}
+    physical_metric_signatures = {_candidate_metric_signature(row) for row in eligible_rows}
+    all_physical_metric_tied = bool(eligible_rows) and len(physical_metric_signatures) == 1
+    parametric_available = (
+        all_physical_metric_tied
+        and any(
+            isinstance(row.get("candidate_parametric_ppa"), Mapping)
+            and row["candidate_parametric_ppa"].get("available") is True
+            for row in eligible_rows
+        )
+    )
+    def _comparison_signature(row: Mapping[str, Any]) -> str:
+        if parametric_available:
+            attributed = row.get("candidate_parametric_ppa", {}).get("attributed_totals", {})
+            return json.dumps(attributed, sort_keys=True)
+        return _candidate_metric_signature(row)
+
+    metric_signatures = {_comparison_signature(row) for row in eligible_rows}
     all_metric_tied = bool(eligible_rows) and len(metric_signatures) == 1
     if not eligible_rows and not blockers:
         blockers.append({"blocker_id": "no_ranking_eligible_candidates"})
@@ -714,17 +769,17 @@ def build_dft_hardware_ppa_ranking(
     fpga_ranking = _rank_with_ties(
         eligible_rows,
         key=lambda item: (
-            int(item.get("fpga_total_slice_luts") or 0),
-            int(item.get("fpga_total_dsps") or 0),
-            int(item.get("fpga_total_block_ram_tiles") or 0),
-            int(item.get("fpga_total_bonded_iob") or 0),
+            _ranking_metric(item, "fpga_total_slice_luts", parametric_available=parametric_available),
+            _ranking_metric(item, "fpga_total_dsps", parametric_available=parametric_available),
+            _ranking_metric(item, "fpga_total_block_ram_tiles", parametric_available=parametric_available),
+            _ranking_metric(item, "fpga_total_bonded_iob", parametric_available=parametric_available),
         ),
     )
     asic_ranking = _rank_with_ties(
         eligible_rows,
         key=lambda item: (
-            float(item.get("asic_total_cell_area") or 0.0),
-            -float(item.get("asic_min_slack_ns") or 0.0),
+            _ranking_metric(item, "asic_total_cell_area", parametric_available=parametric_available),
+            -_ranking_metric(item, "asic_min_slack_ns", parametric_available=parametric_available),
         ),
     )
     pareto = _pareto_rows(eligible_rows)
@@ -750,10 +805,11 @@ def build_dft_hardware_ppa_ranking(
             "release_gate": _source_ref(release_gate_path),
             "release_gate_validation": _source_ref(release_validation_path),
             "parser_run": _source_ref(parser_run_path),
-            "candidate_universe_manifest": _source_ref(candidate_universe_manifest)
-            if candidate_universe_manifest
+            "candidate_universe_manifest": _source_ref(resolved_candidate_universe_manifest)
+            if resolved_candidate_universe_manifest
             else {"path": None, "exists": False, "sha256": None, "hash_algorithm": "sha256"},
         },
+        "candidate_metadata_context_available": bool(universe),
         "release_id": release_gate.get("release_id"),
         "candidate_count": release_gate.get("candidate_count"),
         "major_kernel_count": release_gate.get("major_kernel_count"),
@@ -779,9 +835,19 @@ def build_dft_hardware_ppa_ranking(
             ],
             "non_identity_axes_excluded_from_score": True,
             "system_level_tie_breaker_required": all_metric_tied,
+            "physical_metric_signature_count": len(physical_metric_signatures),
+            "all_candidates_physical_metric_tied": all_physical_metric_tied,
+            "candidate_parametric_attribution_used": parametric_available,
+            "candidate_parametric_attribution_policy": (
+                "Use assignment-derived attribution over real raw totals only "
+                "when all parsed physical PPA signatures are identical; never "
+                "use candidate_id as a winner tie-break factor."
+            ),
         },
         "winner_selection_status": winner_selection_status,
         "all_candidates_metric_tied": all_metric_tied,
+        "all_candidates_physical_metric_tied": all_physical_metric_tied,
+        "candidate_parametric_attribution_used": parametric_available,
         "metric_signature_count": len(metric_signatures),
         "ranking_eligible_candidate_count": len(eligible_rows),
         "blocked_candidate_count": len(candidate_rows) - len(eligible_rows),
@@ -822,6 +888,7 @@ def validate_dft_hardware_ppa_ranking(payload: Mapping[str, Any]) -> Dict[str, A
     actual = int(payload.get("ranking_eligible_candidate_count", 0) or 0)
     if expected and actual > expected:
         errors.append("ranking_eligible_count_exceeds_candidate_gate_passed_count")
+    metadata_context_available = payload.get("candidate_metadata_context_available") is True
     for row in payload.get("candidate_rows", []) or []:
         if not isinstance(row, Mapping):
             errors.append("candidate_row_not_mapping")
@@ -829,10 +896,22 @@ def validate_dft_hardware_ppa_ranking(payload: Mapping[str, Any]) -> Dict[str, A
         if row.get("ranking_eligible") and row.get("blockers"):
             errors.append(f"{row.get('candidate_id')}:ranking_eligible_with_blockers")
         if row.get("ranking_eligible"):
+            if metadata_context_available:
+                if not row.get("design_candidate_id"):
+                    errors.append(f"{row.get('candidate_id')}:missing_design_candidate_id")
+                if not isinstance(row.get("assignments"), Mapping) or not row.get("assignments"):
+                    errors.append(f"{row.get('candidate_id')}:missing_candidate_assignments")
             if int(row.get("vivado_route_completed_kernel_count", 0) or 0) != int(row.get("kernel_count", 0) or 0):
                 errors.append(f"{row.get('candidate_id')}:missing_vivado_route_kernel")
             if int(row.get("dc_real_target_library_kernel_count", 0) or 0) != int(row.get("kernel_count", 0) or 0):
                 errors.append(f"{row.get('candidate_id')}:missing_dc_real_target_library_kernel")
+        parametric = row.get("candidate_parametric_ppa", {})
+        if isinstance(parametric, Mapping) and parametric.get("candidate_id_used_as_factor") is True:
+            errors.append(f"{row.get('candidate_id')}:candidate_id_used_as_parametric_factor")
+    if payload.get("candidate_parametric_attribution_used") is True:
+        ranked_ids = [row.get("candidate_id") for row in payload.get("fpga_ranking", []) or [] if isinstance(row, Mapping)]
+        if len(ranked_ids) != len(set(ranked_ids)):
+            errors.append("duplicate_candidate_id_in_parametric_ranking")
     return {
         "schema_version": DFT_HARDWARE_PPA_RANKING_VALIDATION_SCHEMA,
         "generated_at": _now_iso(),

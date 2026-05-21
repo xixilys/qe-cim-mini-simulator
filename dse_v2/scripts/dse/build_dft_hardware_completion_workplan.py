@@ -25,6 +25,12 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser.add_argument("--dft-hardware-evidence-matrix", type=Path, default=None)
     parser.add_argument("--ic-eda-tool-availability", type=Path, default=None)
     parser.add_argument("--candidate-binding-map", type=Path, default=None)
+    parser.add_argument(
+        "--candidate-universe-manifest",
+        type=Path,
+        default=None,
+        help="Optional candidate_universe_manifest.json; defaults to a run-local release_domain*/candidate_universe_manifest.json when available.",
+    )
     parser.add_argument("--quiet", action="store_true")
     return parser.parse_args(list(argv))
 
@@ -37,6 +43,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         dft_hardware_evidence_matrix_path=args.dft_hardware_evidence_matrix,
         ic_eda_tool_availability_path=args.ic_eda_tool_availability,
         candidate_binding_map_path=args.candidate_binding_map,
+        candidate_universe_manifest_path=args.candidate_universe_manifest,
     )
     if not args.quiet:
         print(json.dumps(status, indent=2, sort_keys=True))
