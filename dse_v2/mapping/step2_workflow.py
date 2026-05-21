@@ -2228,6 +2228,7 @@ def _build_step2_search_policy_payload(
             "parameters": {key: list(values) for key, values in problem.parameters.items()},
             "constraints": dict(problem.constraints),
             "seed_candidate_count": len(seed_candidates),
+            "seed_candidates": [dict(seed) for seed in seed_candidates],
             "parameter_grid_size": problem.parameter_grid_size(),
         },
         "mapping_policy": mapping_policy,
@@ -2573,6 +2574,7 @@ def build_step2_search_checkpoint_artifact(
         "search_policy_observed_count": search_policy_payload.get("observed_count") if isinstance(search_policy_payload, Mapping) else None,
         "search_policy_candidates": compact_policy_candidates,
         "search_policy_checkpoint": search_policy_payload.get("checkpoint") if isinstance(search_policy_payload, Mapping) else None,
+        "search_policy_problem": search_policy_payload.get("problem") if isinstance(search_policy_payload, Mapping) else None,
         "search_policy_feedback": {
             "feedback_update_artifact": "feedback_update.json",
             "calibration_record_artifact": "calibration_record.json",

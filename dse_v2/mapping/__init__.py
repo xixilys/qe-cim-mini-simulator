@@ -26,8 +26,11 @@ from dse_v2.mapping.search_policy import (
     SearchPolicy,
     SearchProblem,
     SeededBeamSearchPolicy,
+    build_search_iteration_plan,
     candidate_observation_id_lookup,
     observe_step4_feedback,
+    search_policy_from_checkpoint,
+    search_problem_from_dict,
     step4_feedback_observations,
 )
 from dse_v2.mapping.step2_workflow import (
@@ -59,8 +62,11 @@ __all__ = [
     "ComponentCapability",
     "CapabilityDecision",
     "BottleneckGuidedPolicy",
+    "build_search_iteration_plan",
     "candidate_observation_id_lookup",
     "observe_step4_feedback",
+    "search_policy_from_checkpoint",
+    "search_problem_from_dict",
     "step4_feedback_observations",
     "MappingCandidate",
     "STEP2_ARTIFACT_NAMES",

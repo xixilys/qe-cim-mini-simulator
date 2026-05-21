@@ -128,6 +128,8 @@ def test_full_flow_pilot_writes_required_evidence(tmp_path):
     assert step2_checkpoint["top_k_queue_provenance_only"] is True
     assert step2_checkpoint["release_completion_eligible"] is False
     assert step2_checkpoint["trusted_final_claim"] is False
+    assert step2_checkpoint["search_policy_problem"]["seed_candidate_count"] >= 1
+    assert step2_checkpoint["search_policy_problem"]["seed_candidates"]
     assert step2_top_k["queue_mode"] == "top-k-provenance-only"
     assert step2_top_k["step3_queue_mode"] == "selected-entry-only"
     assert step2_top_k["provenance_only"] is True
@@ -216,6 +218,7 @@ def test_full_flow_pilot_writes_required_evidence(tmp_path):
 
     sim_result = json.loads((out_dir / "simulation_result.json").read_text())
     feedback_update = json.loads((out_dir / "feedback_update.json").read_text())
+    search_iteration_plan = json.loads((out_dir / "search_iteration_plan.json").read_text())
     search_policy_updates = [
         update for update in feedback_update["updates"]
         if update.get("target") == "search_policy"
@@ -226,6 +229,15 @@ def test_full_flow_pilot_writes_required_evidence(tmp_path):
     assert search_policy_updates[0]["candidate_refs"]["mapping_parameter_hash"].startswith("sha256:")
     assert search_policy_updates[0]["metrics"]["step4_verdict"] == "trusted_pass"
     assert search_policy_updates[0]["metrics"]["promoted"] is True
+    assert search_iteration_plan["schema_version"] == "dse.step2.search_iteration_plan.v1"
+    assert search_iteration_plan["input_search_checkpoint_ref"] == "step2/search_checkpoint.json"
+    assert search_iteration_plan["feedback_update_ref"] == "feedback_update.json"
+    assert search_iteration_plan["applied_feedback_count"] == 1
+    assert search_iteration_plan["output_observed_count"] >= 1
+    assert search_iteration_plan["next_proposed_count"] >= 1
+    assert search_iteration_plan["top_k_queue_provenance_only"] is True
+    assert search_iteration_plan["hidden_evidence_fanout_allowed"] is False
+    assert search_iteration_plan["trusted_final_claim"] is False
     assert sim_result["status"] == "passed"
     assert sim_result["missing_required_coverage"] == []
     assert sim_result["numerical_validation"]["passed"] is True
@@ -242,6 +254,7 @@ def test_full_flow_pilot_writes_required_evidence(tmp_path):
     assert artifacts["campaign.json"]["exists"] is True
     assert artifacts["campaign_ledger.json"]["exists"] is True
     assert artifacts["campaign_evaluation_plan.json"]["exists"] is True
+    assert artifacts["search_iteration_plan.json"]["exists"] is True
     assert artifacts["step1/step1_status.json"]["exists"] is True
     assert artifacts["step1/step1_artifact_validation.json"]["exists"] is True
     assert artifacts["step2/search_checkpoint.json"]["exists"] is True

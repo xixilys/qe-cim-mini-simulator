@@ -123,6 +123,18 @@ class SearchProblem:
         visit(0, {})
         return records
 
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "problem_id": self.problem_id,
+            "workload_run_id": self.workload_run_id,
+            "objective": self.objective,
+            "parameters": {key: list(values) for key, values in self.parameters.items()},
+            "constraints": dict(self.constraints),
+            "seed_candidate_count": len(self.seed_candidates),
+            "seed_candidates": [dict(seed) for seed in self.seed_candidates],
+            "parameter_grid_size": self.parameter_grid_size(),
+        }
+
 
 @dataclass
 class SearchCandidateRecord:
@@ -217,6 +229,70 @@ def _as_mapping(value: Any) -> Dict[str, Any]:
     return dict(value) if isinstance(value, Mapping) else {}
 
 
+def _unique_domain_values(values: Iterable[Any]) -> List[Any]:
+    ordered: List[Any] = []
+    seen: Set[str] = set()
+    for value in values:
+        key = json.dumps(value, sort_keys=True, separators=(",", ":"), default=str)
+        if key in seen:
+            continue
+        seen.add(key)
+        ordered.append(value)
+    return ordered
+
+
+def _parameter_domains_from_candidates(candidates: Iterable[Mapping[str, Any]]) -> Dict[str, List[Any]]:
+    domains: Dict[str, List[Any]] = {}
+    for candidate in candidates:
+        parameters = candidate.get("parameters", candidate) if isinstance(candidate, Mapping) else {}
+        if not isinstance(parameters, Mapping):
+            continue
+        for key, value in parameters.items():
+            domains.setdefault(str(key), []).append(value)
+    return {key: _unique_domain_values(values) for key, values in domains.items()}
+
+
+def search_problem_from_dict(
+    payload: Mapping[str, Any],
+    *,
+    fallback_candidates: Sequence[Mapping[str, Any]] = (),
+) -> SearchProblem:
+    """Rebuild a SearchProblem from persisted Step2 search metadata.
+
+    Older checkpoints may not carry seed candidates.  In that case, the
+    persisted candidate parameter records become replay seeds so feedback can
+    still produce a deterministic next-iteration ordering without inventing a
+    new search space.
+    """
+
+    fallback_seeds = [
+        dict(candidate.get("parameters", candidate))
+        for candidate in fallback_candidates
+        if isinstance(candidate, Mapping)
+    ]
+    raw_seeds = payload.get("seed_candidates", fallback_seeds)
+    seed_candidates = tuple(
+        dict(seed)
+        for seed in (raw_seeds or fallback_seeds)
+        if isinstance(seed, Mapping)
+    )
+    raw_parameters = payload.get("parameters", {}) if isinstance(payload.get("parameters", {}), Mapping) else {}
+    parameters = {
+        str(key): list(values) if isinstance(values, (list, tuple)) else [values]
+        for key, values in raw_parameters.items()
+    }
+    if not parameters:
+        parameters = _parameter_domains_from_candidates(seed_candidates or fallback_seeds)
+    return SearchProblem(
+        problem_id=str(payload.get("problem_id") or "restored_search_problem"),
+        workload_run_id=str(payload.get("workload_run_id") or payload.get("workload_id") or "unknown_workload_run"),
+        objective=str(payload.get("objective") or "rank_step2_mapping_candidates"),
+        parameters=parameters,
+        constraints=_as_mapping(payload.get("constraints")),
+        seed_candidates=seed_candidates,
+    )
+
+
 def candidate_observation_id_lookup(candidates: Iterable[Mapping[str, Any]]) -> Dict[str, str]:
     """Return stable aliases that can route Step4 feedback to policy records.
 
@@ -241,20 +317,79 @@ def candidate_observation_id_lookup(candidates: Iterable[Mapping[str, Any]]) -> 
             lookup.pop(alias, None)
             ambiguous.add(alias)
 
+    def add_candidate_aliases(candidate: Mapping[str, Any], candidate_id: str) -> None:
+        add_alias(candidate.get("candidate_id"), candidate_id)
+        add_alias(candidate.get("search_policy_candidate_id"), candidate_id)
+        add_alias(candidate.get("mapping_candidate_id"), candidate_id)
+        add_alias(candidate.get("search_policy_parameter_hash"), candidate_id)
+        add_alias(candidate.get("mapping_parameter_hash"), candidate_id)
+        add_alias(candidate.get("parameter_hash"), candidate_id)
+        add_alias(candidate.get("architecture_id"), candidate_id)
+        add_alias(candidate.get("mapping_id"), candidate_id)
+        add_alias(candidate.get("design_point_id"), candidate_id)
+        add_alias(candidate.get("top_k_entry_id"), candidate_id)
+        add_alias(candidate.get("queue_entry_id"), candidate_id)
+        provenance = candidate.get("provenance", {})
+        if isinstance(provenance, Mapping):
+            add_alias(provenance.get("parameter_hash"), candidate_id)
+            add_alias(provenance.get("search_policy_candidate_id"), candidate_id)
+            add_alias(provenance.get("mapping_candidate_id"), candidate_id)
+            add_alias(provenance.get("architecture_id"), candidate_id)
+        candidate_refs = candidate.get("candidate_refs", {})
+        if isinstance(candidate_refs, Mapping):
+            add_alias(candidate_refs.get("search_policy_candidate_id"), candidate_id)
+            add_alias(candidate_refs.get("candidate_id"), candidate_id)
+            add_alias(candidate_refs.get("mapping_candidate_id"), candidate_id)
+            add_alias(candidate_refs.get("mapping_parameter_hash"), candidate_id)
+            add_alias(candidate_refs.get("parameter_hash"), candidate_id)
+            add_alias(candidate_refs.get("architecture_id"), candidate_id)
+
     for candidate in candidates:
         if not isinstance(candidate, Mapping):
             continue
         candidate_id = str(candidate.get("candidate_id") or "")
         if not candidate_id:
             continue
-        add_alias(candidate_id, candidate_id)
-        add_alias(candidate.get("parameter_hash"), candidate_id)
+        add_candidate_aliases(candidate, candidate_id)
         parameters = candidate.get("parameters", {})
         if isinstance(parameters, Mapping):
-            for value in parameters.values():
+            for key, value in parameters.items():
                 if isinstance(value, (str, int, float, bool)) and value not in (None, ""):
                     add_alias(value, candidate_id)
+                if isinstance(value, Mapping):
+                    for nested_value in value.values():
+                        if isinstance(nested_value, (str, int, float, bool)) and nested_value not in (None, ""):
+                            add_alias(nested_value, candidate_id)
     return lookup
+
+
+def _candidate_aliases_from_feedback(update: Mapping[str, Any]) -> List[str]:
+    candidate_refs = _as_mapping(update.get("candidate_refs"))
+    aliases: List[str] = []
+
+    def append_alias(value: Any) -> None:
+        alias = str(value or "")
+        if alias and alias not in aliases:
+            aliases.append(alias)
+
+    append_alias(update.get("search_policy_candidate_id"))
+    append_alias(candidate_refs.get("search_policy_candidate_id"))
+    append_alias(update.get("search_policy_parameter_hash"))
+    append_alias(candidate_refs.get("search_policy_parameter_hash"))
+    append_alias(update.get("candidate_id"))
+    append_alias(candidate_refs.get("candidate_id"))
+    append_alias(update.get("mapping_candidate_id"))
+    append_alias(candidate_refs.get("mapping_candidate_id"))
+    append_alias(update.get("mapping_parameter_hash"))
+    append_alias(candidate_refs.get("mapping_parameter_hash"))
+    append_alias(update.get("parameter_hash"))
+    append_alias(candidate_refs.get("parameter_hash"))
+    append_alias(candidate_refs.get("architecture_id"))
+    append_alias(candidate_refs.get("design_point_id"))
+    append_alias(candidate_refs.get("mapping_id"))
+    append_alias(candidate_refs.get("top_k_entry_id"))
+    append_alias(candidate_refs.get("queue_entry_id"))
+    return aliases
 
 
 def step4_feedback_observations(
@@ -295,21 +430,13 @@ def step4_feedback_observations(
             metrics.setdefault("step4_quality_score", float(calibration_confidence) * 100.0)
         if calibration_errors:
             metrics.setdefault("calibration_error_metrics", dict(calibration_errors))
-        candidate_id = str(
-            update.get("search_policy_candidate_id")
-            or candidate_refs.get("search_policy_candidate_id")
-            or update.get("candidate_id")
-            or candidate_refs.get("candidate_id")
-            or candidate_refs.get("mapping_candidate_id")
-            or candidate_refs.get("mapping_parameter_hash")
-            or candidate_refs.get("parameter_hash")
-            or ""
-        )
-        if not candidate_id:
+        candidate_aliases = _candidate_aliases_from_feedback(update)
+        if not candidate_aliases:
             continue
         observations.append({
             "observation_id": f"step4-feedback::{feedback_update.get('trial_id', 'trial')}::{index}",
-            "candidate_id": candidate_id,
+            "candidate_id": candidate_aliases[0],
+            "candidate_aliases": candidate_aliases,
             "candidate_refs": candidate_refs,
             "metrics": metrics,
             "source_update_index": index,
@@ -333,17 +460,206 @@ def observe_step4_feedback(
     """
 
     aliases = dict(candidate_id_lookup or {})
+    require_alias_match = candidate_id_lookup is not None
     observed = 0
     for observation in step4_feedback_observations(feedback_update, calibration_record):
-        source_id = str(observation.get("candidate_id") or "")
-        candidate_id = aliases.get(source_id, source_id)
+        candidate_aliases = [
+            str(alias)
+            for alias in observation.get("candidate_aliases", []) or []
+            if str(alias)
+        ]
+        if not candidate_aliases:
+            candidate_aliases = [str(observation.get("candidate_id") or "")]
+        matched_alias = ""
+        candidate_id = ""
+        for source_id in candidate_aliases:
+            if require_alias_match and source_id not in aliases:
+                continue
+            candidate_id = aliases.get(source_id, source_id)
+            if candidate_id:
+                matched_alias = source_id
+                break
         if not candidate_id:
             continue
         metrics = _as_mapping(observation.get("metrics"))
-        metrics.setdefault("step4_feedback_source_candidate_id", source_id)
+        metrics.setdefault("step4_feedback_source_candidate_id", str(observation.get("candidate_id") or ""))
+        if matched_alias:
+            metrics.setdefault("step4_feedback_matched_candidate_alias", matched_alias)
         policy.observe(candidate_id, metrics)
         observed += 1
     return observed
+
+
+def _candidate_record_from_dict(payload: Mapping[str, Any]) -> SearchCandidateRecord:
+    parameters = _as_mapping(payload.get("parameters"))
+    provenance = _as_mapping(payload.get("provenance"))
+    return SearchCandidateRecord(
+        candidate_id=str(payload.get("candidate_id") or _stable_candidate_id(
+            SearchProblem("restored", "restored", "rank", {}),
+            str(provenance.get("policy_name") or "restored_policy"),
+            parameters,
+        )),
+        parameters=parameters,
+        provenance=provenance,
+        generation_reason=str(payload.get("generation_reason") or "restored_checkpoint_candidate"),
+        parameter_hash=str(payload.get("parameter_hash") or _parameter_hash(parameters)),
+        score=float(payload.get("score", 0.0) or 0.0),
+        promotion_reasons=[str(reason) for reason in payload.get("promotion_reasons", []) or []],
+        blocker_reasons=[str(reason) for reason in payload.get("blocker_reasons", []) or []],
+        observed_metrics={},
+    )
+
+
+def _policy_for_name(policy_name: str) -> SearchPolicy:
+    if policy_name == HierarchicalFunnelSearchPolicy.policy_name:
+        return HierarchicalFunnelSearchPolicy(bottleneck_keys=("step2_candidate_rank_score",))
+    if policy_name == SeededBeamSearchPolicy.policy_name:
+        return SeededBeamSearchPolicy()
+    if policy_name == BottleneckGuidedPolicy.policy_name:
+        return BottleneckGuidedPolicy()
+    if policy_name == RandomBaselinePolicy.policy_name:
+        return RandomBaselinePolicy(seed=0)
+    return HierarchicalFunnelSearchPolicy(bottleneck_keys=("step2_candidate_rank_score",))
+
+
+def search_policy_from_checkpoint(
+    checkpoint: Mapping[str, Any],
+    *,
+    policy_name: Optional[str] = None,
+) -> SearchPolicy:
+    """Restore a SearchPolicy's proposed records and feedback bias."""
+
+    resolved_policy_name = str(policy_name or checkpoint.get("policy_name") or HierarchicalFunnelSearchPolicy.policy_name)
+    policy = _policy_for_name(resolved_policy_name)
+    if not isinstance(policy, _BasePolicy):
+        return policy
+    policy._proposed = {}
+    policy._observed_count = 0
+    for candidate in checkpoint.get("candidates", []) or []:
+        if not isinstance(candidate, Mapping):
+            continue
+        observed_metrics = _as_mapping(candidate.get("observed_metrics"))
+        record = _candidate_record_from_dict(candidate)
+        policy._remember_record(record)
+        if observed_metrics:
+            policy.observe(record.candidate_id, observed_metrics)
+    policy._observed_count = int(checkpoint.get("observed_count", policy._observed_count) or 0)
+    return policy
+
+
+def build_search_iteration_plan(
+    *,
+    search_checkpoint: Mapping[str, Any],
+    feedback_update: Mapping[str, Any],
+    calibration_record: Optional[Mapping[str, Any]] = None,
+    proposal_budget: Optional[int] = None,
+    refs: Optional[Mapping[str, str]] = None,
+) -> Dict[str, Any]:
+    """Build a replayable next-iteration search plan from persisted artifacts.
+
+    This closes the durable loop: Step2 checkpoint + Step4 feedback become a
+    refreshed proposal ordering, while Step3 admission remains external and
+    fail-closed through `step3_simulation_queue.json`.
+    """
+
+    refs_payload = dict(refs or {})
+    checkpoint_payload = (
+        _as_mapping(search_checkpoint.get("search_policy_checkpoint"))
+        if isinstance(search_checkpoint.get("search_policy_checkpoint"), Mapping)
+        else _as_mapping(search_checkpoint)
+    )
+    checkpoint_candidates = [
+        dict(candidate)
+        for candidate in checkpoint_payload.get("candidates", []) or []
+        if isinstance(candidate, Mapping)
+    ]
+    problem_payload = (
+        _as_mapping(search_checkpoint.get("search_policy_problem"))
+        or _as_mapping(search_checkpoint.get("problem"))
+    )
+    problem = search_problem_from_dict(
+        problem_payload,
+        fallback_candidates=checkpoint_candidates,
+    )
+    policy = search_policy_from_checkpoint(
+        checkpoint_payload,
+        policy_name=str(
+            search_checkpoint.get("search_policy_name")
+            or checkpoint_payload.get("policy_name")
+            or HierarchicalFunnelSearchPolicy.policy_name
+        ),
+    )
+    alias_source_candidates = list(checkpoint_candidates)
+    alias_source_candidates.extend(
+        dict(candidate)
+        for candidate in search_checkpoint.get("search_policy_candidates", []) or []
+        if isinstance(candidate, Mapping)
+    )
+    alias_lookup = candidate_observation_id_lookup(
+        candidate.to_dict() if isinstance(candidate, SearchCandidateRecord) else candidate
+        for candidate in alias_source_candidates
+    )
+    input_observed_count = int(checkpoint_payload.get("observed_count", 0) or 0)
+    applied_feedback_count = observe_step4_feedback(
+        policy,
+        feedback_update,
+        calibration_record,
+        candidate_id_lookup=alias_lookup,
+    )
+    next_budget = max(
+        1,
+        int(
+            proposal_budget
+            or search_checkpoint.get("search_policy_proposal_budget")
+            or checkpoint_payload.get("proposal_budget")
+            or checkpoint_payload.get("proposed_count")
+            or len(checkpoint_candidates)
+            or len(problem.seed_candidates)
+            or 1
+        ),
+    )
+    next_records = policy.propose(problem, budget=next_budget)
+    next_candidates: List[Dict[str, Any]] = []
+    for rank, record in enumerate(next_records, start=1):
+        payload = record.to_dict()
+        payload["search_policy_rank"] = rank
+        payload["not_a_step3_queue_entry"] = True
+        payload["provenance_only"] = True
+        payload["trusted_final_claim"] = False
+        next_candidates.append(payload)
+    next_checkpoint = policy.checkpoint(problem).to_dict()
+    next_checkpoint["candidate_count"] = len(next_checkpoint.get("candidates", []) or [])
+    next_checkpoint["proposal_budget"] = next_budget
+    output_observed_count = int(next_checkpoint.get("observed_count", 0) or 0)
+    return {
+        "schema_version": "dse.step2.search_iteration_plan.v1",
+        "policy_name": next_checkpoint.get("policy_name"),
+        "problem_id": next_checkpoint.get("problem_id"),
+        "search_policy_problem": problem.to_dict(),
+        "input_search_checkpoint_ref": refs_payload.get("search_checkpoint", "step2/search_checkpoint.json"),
+        "feedback_update_ref": refs_payload.get("feedback_update", "feedback_update.json"),
+        "calibration_record_ref": refs_payload.get("calibration_record", "calibration_record.json"),
+        "input_observed_count": input_observed_count,
+        "applied_feedback_count": applied_feedback_count,
+        "output_observed_count": output_observed_count,
+        "candidate_alias_count": len(alias_lookup),
+        "next_proposal_budget": next_budget,
+        "next_proposed_count": len(next_candidates),
+        "next_best_candidate_id": next_checkpoint.get("best_candidate_id"),
+        "next_candidates": next_candidates,
+        "next_checkpoint": next_checkpoint,
+        "top_k_queue_role": "provenance_only_not_step3_admission",
+        "step3_admission_queue": "step3_simulation_queue.json",
+        "top_k_queue_provenance_only": True,
+        "hidden_evidence_fanout_allowed": False,
+        "release_completion_eligible": False,
+        "trusted_final_claim": False,
+        "claim_boundary": (
+            "Search iteration plans are feedback-informed proposal provenance. "
+            "They cannot schedule Step3 evidence until a Campaign materializes "
+            "entries in step3_simulation_queue.json."
+        ),
+    }
 
 
 def _score_candidate(parameters: Mapping[str, Any], objective: str) -> float:
@@ -760,7 +1076,10 @@ __all__ = [
     "SIMULATION_ELIGIBLE",
     "STEP2_SCREENABLE",
     "STEP3_EVALUABLE",
+    "build_search_iteration_plan",
     "candidate_observation_id_lookup",
     "observe_step4_feedback",
+    "search_policy_from_checkpoint",
+    "search_problem_from_dict",
     "step4_feedback_observations",
 ]

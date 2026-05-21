@@ -28,6 +28,7 @@ from dse_v2.core.workload.workflows import required_coverage_from_workflow
 from dse_v2.contracts import CONTRACT_VERSION
 from dse_v2.dse.orchestrator import DesignPoint
 from dse_v2.mapping.search import run_mapping_search
+from dse_v2.mapping.search_policy import build_search_iteration_plan
 
 def _profile_required_coverage(
     workload_package: WorkloadPackage,
@@ -1774,6 +1775,7 @@ def write_full_flow_evidence(
             "error_metrics": simulator_consistency_check.get("summary", {}),
             "source_artifact_hashes": calibration_source_hashes,
         })
+        search_iteration_plan_written = False
         feedback_source_hashes = _hash_existing_artifacts(
             run_dir,
             ["simulation_result.json", "mapping_feedback_state.json", "calibration_record.json"],
@@ -1832,6 +1834,39 @@ def write_full_flow_evidence(
             ],
             "source_artifact_hashes": feedback_source_hashes,
         })
+        search_checkpoint = _load_optional_json(run_dir / "step2" / "search_checkpoint.json")
+        feedback_update = _load_optional_json(run_dir / "feedback_update.json")
+        calibration_record = _load_optional_json(run_dir / "calibration_record.json")
+        if search_checkpoint and feedback_update:
+            try:
+                search_iteration_plan = build_search_iteration_plan(
+                    search_checkpoint=search_checkpoint,
+                    feedback_update=feedback_update,
+                    calibration_record=calibration_record,
+                    refs={
+                        "search_checkpoint": "step2/search_checkpoint.json",
+                        "feedback_update": "feedback_update.json",
+                        "calibration_record": "calibration_record.json",
+                    },
+                )
+            except Exception as exc:
+                search_iteration_plan = {
+                    "schema_version": "dse.step2.search_iteration_plan.v1",
+                    "status": "blocked",
+                    "blocker": {
+                        "reason_id": "search_iteration_plan_build_failed",
+                        "detail": str(exc),
+                    },
+                    "input_search_checkpoint_ref": "step2/search_checkpoint.json",
+                    "feedback_update_ref": "feedback_update.json",
+                    "calibration_record_ref": "calibration_record.json",
+                    "top_k_queue_provenance_only": True,
+                    "hidden_evidence_fanout_allowed": False,
+                    "release_completion_eligible": False,
+                    "trusted_final_claim": False,
+                }
+            _write_json(run_dir / "search_iteration_plan.json", search_iteration_plan)
+            search_iteration_plan_written = True
         _write_json(run_dir / "gem5_l4_proof.json", gem5_l4_proof)
         if backend == "gem5_systemc":
             _write_json(run_dir / "l4_interface_metrics.json", l4_interface_metrics)
@@ -1878,7 +1913,7 @@ def write_full_flow_evidence(
             "timing_model_calibration.json",
             "calibration_record.json",
             "feedback_update.json",
-        ],
+        ] + (["search_iteration_plan.json"] if search_iteration_plan_written else []),
     })
 
     manifest = {
@@ -1942,6 +1977,7 @@ def write_full_flow_evidence(
             "feedback_update.json",
             "provenance.json",
         ]
+        + (["search_iteration_plan.json"] if search_iteration_plan_written else [])
         + (["l4_interface_metrics.json"] if backend == "gem5_systemc" else [])
         + codesign_paths
         + list(extra_artifact_paths or [])
