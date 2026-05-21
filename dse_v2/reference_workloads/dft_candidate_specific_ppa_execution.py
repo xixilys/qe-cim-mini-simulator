@@ -92,6 +92,14 @@ _STAGE_FILE_NAMES: Dict[str, tuple[str, ...]] = {
         "dc_synth.ddc",
     ),
 }
+_CANDIDATE_METADATA_FIELDS = (
+    "design_candidate_id",
+    "assignments",
+    "identity_assignments",
+    "non_identity_assignments",
+    "applicability_assignments",
+    "evaluation_policy_assignments",
+)
 
 _PASS_MARKERS = ("PASS", "PASSED", "SUCCESS", "MET", "ROUTE_DESIGN COMPLETE")
 
@@ -690,9 +698,20 @@ def _write_unit_provenance(
     previous_command_manifest: Mapping[str, Any],
 ) -> Dict[str, Any]:
     unit_id = f"{candidate_id}:{kernel_id}"
+    candidate_bundle_payload = _load_json(candidate_bundle_path)
+    candidate_metadata = {
+        field: (
+            dict(candidate_bundle_payload.get(field, {}))
+            if isinstance(candidate_bundle_payload.get(field), Mapping)
+            else candidate_bundle_payload.get(field)
+        )
+        for field in _CANDIDATE_METADATA_FIELDS
+        if candidate_bundle_payload.get(field) not in (None, {}, [])
+    }
     tool_versions = {
         "schema_version": "dse.dft.hardware_closure.tool_versions.v1",
         "candidate_id": candidate_id,
+        **candidate_metadata,
         "kernel_id": kernel_id,
         "unit_id": unit_id,
         "candidate_specific_closure": True,
@@ -742,6 +761,7 @@ def _write_unit_provenance(
     command_manifest = {
         "schema_version": "dse.dft.hardware_closure.command_manifest.v1",
         "candidate_id": candidate_id,
+        **candidate_metadata,
         "kernel_id": kernel_id,
         "unit_id": unit_id,
         "candidate_specific_closure": True,
@@ -766,6 +786,7 @@ def _write_unit_provenance(
     raw_transcript_index = {
         "schema_version": "dse.dft.hardware_closure.raw_transcript_index.v1",
         "candidate_id": candidate_id,
+        **candidate_metadata,
         "kernel_id": kernel_id,
         "unit_id": unit_id,
         "candidate_specific_closure": True,
@@ -793,6 +814,7 @@ def _write_unit_provenance(
     source_bundle_manifest = {
         "schema_version": "dse.dft.hardware_closure.source_bundle_manifest.v1",
         "candidate_id": candidate_id,
+        **candidate_metadata,
         "kernel_id": kernel_id,
         "unit_id": unit_id,
         "candidate_specific_closure": True,
