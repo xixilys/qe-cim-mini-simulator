@@ -193,6 +193,23 @@ def _candidate_universe_by_id(path: Optional[Path]) -> Dict[str, Dict[str, Any]]
     }
 
 
+def _metadata_by_candidate_id(run_dir: Path, candidate_universe_manifest: Optional[Path]) -> Dict[str, Dict[str, Any]]:
+    metadata = _candidate_universe_by_id(candidate_universe_manifest)
+    binding = _load_json(run_dir / "dft_candidate_binding_map.json")
+    for row in binding.get("binding_rows", []) or []:
+        if not isinstance(row, Mapping):
+            continue
+        candidate_id = str(row.get("release_candidate_id") or row.get("candidate_id") or "")
+        if not candidate_id:
+            continue
+        existing = metadata.setdefault(candidate_id, {"candidate_id": candidate_id})
+        if row.get("design_candidate_id"):
+            existing.setdefault("design_candidate_id", row.get("design_candidate_id"))
+        if isinstance(row.get("release_assignments"), Mapping):
+            existing.setdefault("assignments", dict(row["release_assignments"]))
+    return metadata
+
+
 def _candidate_metadata_sidecar(metadata: Mapping[str, Any]) -> Dict[str, Any]:
     """Return audit-only candidate metadata that must not affect PPA ordering."""
 
