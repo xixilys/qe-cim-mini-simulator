@@ -193,41 +193,6 @@ def _candidate_universe_by_id(path: Optional[Path]) -> Dict[str, Dict[str, Any]]
     }
 
 
-def _metadata_by_candidate_id(run_dir: Path, candidate_universe_manifest: Optional[Path]) -> Dict[str, Dict[str, Any]]:
-    """Load design metadata for audit context without making it a PPA rank input."""
-
-    universe_path = _discover_candidate_universe_manifest(run_dir, candidate_universe_manifest)
-    metadata = _candidate_universe_by_id(universe_path)
-    binding = _load_json(run_dir / "dft_candidate_binding_map.json")
-    for row in binding.get("binding_rows", []) or []:
-        if not isinstance(row, Mapping):
-            continue
-        candidate_id = str(row.get("release_candidate_id") or row.get("candidate_id") or "")
-        if not candidate_id:
-            continue
-        existing = metadata.setdefault(candidate_id, {"candidate_id": candidate_id})
-        for source_field, dest_field in (
-            ("design_candidate_id", "design_candidate_id"),
-            ("evaluation_record_id", "evaluation_record_id"),
-            ("legacy_candidate_id", "legacy_candidate_id"),
-            ("candidate_id_kind", "candidate_id_kind"),
-            ("release_assignments", "assignments"),
-            ("assignments", "assignments"),
-            ("identity_assignments", "identity_assignments"),
-            ("non_identity_assignments", "non_identity_assignments"),
-            ("applicability_assignments", "applicability_assignments"),
-            ("evaluation_policy_assignments", "evaluation_policy_assignments"),
-            ("design_score", "design_score"),
-        ):
-            value = row.get(source_field)
-            if value not in (None, {}, []):
-                existing.setdefault(dest_field, value)
-    for existing in metadata.values():
-        if not existing.get("assignments") and isinstance(existing.get("identity_assignments"), Mapping):
-            existing["assignments"] = dict(existing["identity_assignments"])
-    return metadata
-
-
 def _candidate_metadata_sidecar(metadata: Mapping[str, Any]) -> Dict[str, Any]:
     """Return audit-only candidate metadata that must not affect PPA ordering."""
 
@@ -254,52 +219,6 @@ def _candidate_metadata_sidecar(metadata: Mapping[str, Any]) -> Dict[str, Any]:
             "provenance",
         )
         if key in metadata
-    }
-
-
-def _candidate_parametric_ppa(
-    *,
-    candidate_id: str,
-    totals: Mapping[str, Any],
-    metadata: Mapping[str, Any],
-) -> Dict[str, Any]:
-    """Return candidate design context as a sidecar, never as ranking evidence."""
-
-    assignments = metadata.get("assignments")
-    if not isinstance(assignments, Mapping):
-        assignments = metadata.get("identity_assignments")
-    if not isinstance(assignments, Mapping):
-        assignments = {}
-    return {
-        "available": bool(assignments),
-        "basis": (
-            "candidate_assignment_sidecar_only_not_physical_ppa; true candidate-parametric "
-            "ranking requires generated RTL/tool evidence whose source/parameter hashes vary by candidate"
-        ),
-        "candidate_id": candidate_id,
-        "candidate_id_used_as_factor": False,
-        "ranking_input": False,
-        "winner_input": False,
-        "assignments_used": dict(assignments),
-        "raw_totals_remain_authoritative": True,
-        "raw_totals": {
-            key: totals.get(key)
-            for key in (
-                "fpga_total_slice_luts",
-                "fpga_total_slice_registers",
-                "fpga_total_block_ram_tiles",
-                "fpga_total_dsps",
-                "fpga_total_bonded_iob",
-                "asic_total_cell_area",
-                "asic_min_slack_ns",
-                "asic_slack_deficit_ns",
-            )
-        },
-        "attributed_totals": {},
-        "audit_note": (
-            "This sidecar preserves design metadata for audit/debugging only; it must not break "
-            "ties in parsed Vivado/DC physical PPA metrics."
-        ),
     }
 
 
@@ -621,8 +540,11 @@ def build_dft_hardware_ppa_ranking(
     release_gate = _load_json(release_gate_path)
     release_validation = _load_json(release_validation_path)
     parser_run = _load_json(parser_run_path)
-    resolved_candidate_universe_manifest = _discover_candidate_universe_manifest(run_dir, candidate_universe_manifest)
-    universe = _metadata_by_candidate_id(run_dir, resolved_candidate_universe_manifest)
+    resolved_candidate_universe_manifest = _discover_candidate_universe_manifest(
+        run_dir,
+        candidate_universe_manifest,
+    )
+    universe = _candidate_universe_by_id(resolved_candidate_universe_manifest)
     blockers: list[Dict[str, Any]] = []
 
     if not release_gate:
@@ -644,9 +566,25 @@ def build_dft_hardware_ppa_ranking(
 
     candidate_ids = _passed_candidate_ids(release_gate)
     kernel_ids = _kernel_ids(release_gate)
+    if candidate_ids and not universe:
+        blockers.append(
+            {
+                "blocker_id": "missing_candidate_universe_metadata",
+                "path": str(resolved_candidate_universe_manifest) if resolved_candidate_universe_manifest else None,
+            }
+        )
     candidate_rows: list[Dict[str, Any]] = []
     for candidate_id in candidate_ids:
         candidate_blockers: list[Dict[str, Any]] = []
+        metadata = universe.get(candidate_id, {})
+        if not metadata:
+            candidate_blockers.append(
+                {
+                    "candidate_id": candidate_id,
+                    "stage_id": "candidate_universe_metadata",
+                    "blocker_id": "missing_candidate_universe_metadata",
+                }
+            )
         kernel_rows: list[Dict[str, Any]] = []
         totals = {
             "fpga_total_slice_luts": 0,
@@ -718,9 +656,9 @@ def build_dft_hardware_ppa_ranking(
                         for ref in stage.get("raw_evidence_refs", []) or []
                         if isinstance(ref, Mapping) and ref.get("path")
                     ],
+                    "candidate_source_bundle": _source_bundle_signature(run_dir, candidate_id, kernel_id),
                 }
             )
-        metadata = universe.get(candidate_id, {})
         asic_min_slack = totals["asic_min_slack_ns"]
         asic_slack_deficit = max(0.0, -float(asic_min_slack or 0.0))
         parametric_ppa = _candidate_parametric_ppa(
@@ -732,13 +670,7 @@ def build_dft_hardware_ppa_ranking(
             {
                 "candidate_id": candidate_id,
                 "design_candidate_id": metadata.get("design_candidate_id"),
-                "evaluation_record_id": metadata.get("evaluation_record_id", metadata.get("candidate_id", candidate_id)),
-                "legacy_candidate_id": metadata.get("legacy_candidate_id", metadata.get("candidate_id", candidate_id)),
-                "candidate_id_kind": metadata.get("candidate_id_kind", "evaluation_record_id" if metadata else None),
-                "candidate_id_authoritative_for_design": bool(metadata.get("candidate_id_authoritative_for_design", False)),
-                "design_candidate_id_authoritative_for_design": bool(
-                    metadata.get("design_candidate_id_authoritative_for_design", bool(metadata.get("design_candidate_id")))
-                ),
+                "candidate_metadata": _candidate_metadata_sidecar(metadata),
                 "assignments": metadata.get("assignments", {}),
                 "identity_assignments": metadata.get("identity_assignments", {}),
                 "non_identity_assignments": metadata.get("non_identity_assignments", {}),
@@ -765,6 +697,7 @@ def build_dft_hardware_ppa_ranking(
             }
         )
 
+    _apply_candidate_parametric_source_blockers(candidate_rows)
     eligible_rows = [row for row in candidate_rows if row.get("ranking_eligible")]
     physical_metric_signatures = {_candidate_metric_signature(row) for row in eligible_rows}
     all_physical_metric_tied = bool(eligible_rows) and len(physical_metric_signatures) == 1
@@ -839,14 +772,15 @@ def build_dft_hardware_ppa_ranking(
                 "min fpga_total_dsps",
                 "min fpga_total_block_ram_tiles",
                 "min fpga_total_bonded_iob",
-                "candidate_id stable display order only; not a rank tie-break factor",
+                "shared rank for equal physical metrics; listing order is not winner evidence",
             ],
             "asic_sort_order": [
                 "min asic_total_cell_area",
                 "max asic_min_slack_ns",
-                "candidate_id stable display order only; not a rank tie-break factor",
+                "shared rank for equal physical metrics; listing order is not winner evidence",
             ],
             "non_identity_axes_excluded_from_score": True,
+            "candidate_metadata_sidecar_only": True,
             "system_level_tie_breaker_required": all_metric_tied,
             "physical_metric_signature_count": len(physical_metric_signatures),
             "all_candidates_physical_metric_tied": all_physical_metric_tied,
