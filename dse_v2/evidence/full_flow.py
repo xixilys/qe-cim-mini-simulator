@@ -26,6 +26,7 @@ from dse_v2.core.workload.lowering import lower_compute_graph
 from dse_v2.core.workload.package import WorkloadPackage, package_from_graph
 from dse_v2.core.workload.workflows import required_coverage_from_workflow
 from dse_v2.contracts import CONTRACT_VERSION
+from dse_v2.dse.campaign_manager import build_campaign_search_admission_plan
 from dse_v2.dse.orchestrator import DesignPoint
 from dse_v2.mapping.search import run_mapping_search
 from dse_v2.mapping.search_policy import build_search_iteration_plan
@@ -1775,7 +1776,9 @@ def write_full_flow_evidence(
             "error_metrics": simulator_consistency_check.get("summary", {}),
             "source_artifact_hashes": calibration_source_hashes,
         })
+        search_iteration_plan: Dict[str, Any] = {}
         search_iteration_plan_written = False
+        campaign_search_admission_plan_written = False
         feedback_source_hashes = _hash_existing_artifacts(
             run_dir,
             ["simulation_result.json", "mapping_feedback_state.json", "calibration_record.json"],
@@ -1852,7 +1855,7 @@ def write_full_flow_evidence(
             except Exception as exc:
                 search_iteration_plan = {
                     "schema_version": "dse.step2.search_iteration_plan.v1",
-                    "status": "blocked",
+                    "status": "partial_blocked_not_complete",
                     "blocker": {
                         "reason_id": "search_iteration_plan_build_failed",
                         "detail": str(exc),
@@ -1867,6 +1870,74 @@ def write_full_flow_evidence(
                 }
             _write_json(run_dir / "search_iteration_plan.json", search_iteration_plan)
             search_iteration_plan_written = True
+        if search_iteration_plan:
+            campaign_evaluation_plan = _load_optional_json(run_dir / "campaign_evaluation_plan.json")
+            step3_simulation_queue = _load_optional_json(run_dir / "step2" / "step3_simulation_queue.json")
+            try:
+                campaign_search_admission_plan = build_campaign_search_admission_plan(
+                    search_iteration_plan=search_iteration_plan,
+                    campaign_evaluation_plan=campaign_evaluation_plan,
+                    step3_simulation_queue=step3_simulation_queue,
+                    refs={
+                        "campaign_evaluation_plan": "campaign_evaluation_plan.json",
+                        "search_iteration_plan": "search_iteration_plan.json",
+                        "step3_simulation_queue": "step2/step3_simulation_queue.json",
+                    },
+                )
+            except Exception as exc:
+                campaign_search_admission_plan = {
+                    "schema_version": CONTRACT_VERSION,
+                    "campaign_id": str(campaign_evaluation_plan.get("campaign_id") or search_iteration_plan.get("campaign_id") or "campaign"),
+                    "workload_run_id": str(campaign_evaluation_plan.get("workload_run_id") or search_iteration_plan.get("workload_run_id") or "workload_run"),
+                    "trial_id": str(campaign_evaluation_plan.get("trial_id") or search_iteration_plan.get("trial_id") or "trial"),
+                    "plan_id": "campaign_search_admission_plan::blocked",
+                    "status": "partial_blocked_not_complete",
+                    "admission_status": "proposal_only",
+                    "plan_scope": "post_step4_search_feedback_budget_bridge",
+                    "budget_policy": dict(campaign_evaluation_plan.get("budget_policy", {}) or {}),
+                    "campaign_evaluation_plan_ref": "campaign_evaluation_plan.json",
+                    "search_iteration_plan_ref": "search_iteration_plan.json",
+                    "step3_simulation_queue_ref": "step2/step3_simulation_queue.json",
+                    "step2_iteration_request_count": 0,
+                    "step2_iteration_requests": [],
+                    "materialized_step3_queue_entry_count": 0,
+                    "materialized_step3_queue_entries": [],
+                    "admitted_entry_count": 0,
+                    "deferred_candidate_count": 0,
+                    "deferred_candidates": [],
+                    "admission_control": {
+                        "step3_admission_authority": "step2/step3_simulation_queue.json",
+                        "search_iteration_plan_role": "proposal_ordering_not_step3_admission",
+                        "materialized_step3_queue_required": True,
+                        "hidden_evidence_fanout_allowed": False,
+                        "claim_boundary": f"campaign search admission plan build failed: {exc}",
+                    },
+                    "execution_allowed": False,
+                    "top_k_queue_provenance_only": True,
+                    "hidden_evidence_fanout_allowed": False,
+                    "broad_evidence_run": False,
+                    "release_completion_eligible": False,
+                    "trusted_final_claim": False,
+                    "claim_boundary": "Campaign search admission plans are fail-closed when plan synthesis fails.",
+                    "resume_next_actions": [
+                        "rebuild search_iteration_plan.json from Step4 feedback",
+                        "do not execute Step3 without canonical step2/step3_simulation_queue.json entries",
+                    ],
+                }
+            _write_json(run_dir / "campaign_search_admission_plan.json", campaign_search_admission_plan)
+            campaign_ledger_path = run_dir / "campaign_ledger.json"
+            campaign_ledger = _load_optional_json(campaign_ledger_path)
+            if campaign_ledger:
+                control_refs = dict(campaign_ledger.get("control_plane_refs", {}) or {})
+                control_refs["campaign_search_admission_plan"] = "campaign_search_admission_plan.json"
+                campaign_ledger["control_plane_refs"] = control_refs
+                step4_refs = dict(campaign_ledger.get("step4_refs", {}) or {})
+                step4_refs["search_iteration_plan"] = "search_iteration_plan.json"
+                step4_refs["campaign_search_admission_plan"] = "campaign_search_admission_plan.json"
+                campaign_ledger["step4_refs"] = step4_refs
+                campaign_ledger["campaign_search_admission_plan_ref"] = "campaign_search_admission_plan.json"
+                _write_json(campaign_ledger_path, campaign_ledger)
+            campaign_search_admission_plan_written = True
         _write_json(run_dir / "gem5_l4_proof.json", gem5_l4_proof)
         if backend == "gem5_systemc":
             _write_json(run_dir / "l4_interface_metrics.json", l4_interface_metrics)
@@ -1895,6 +1966,17 @@ def write_full_flow_evidence(
         }
 
     _write_json(run_dir / "verdict.json", verdict)
+    provenance_outputs = [
+        "verdict.json",
+        "simulator_consistency_check.json",
+        "timing_model_calibration.json",
+        "calibration_record.json",
+        "feedback_update.json",
+    ]
+    if search_iteration_plan_written:
+        provenance_outputs.append("search_iteration_plan.json")
+    if campaign_search_admission_plan_written:
+        provenance_outputs.append("campaign_search_admission_plan.json")
     _write_json(run_dir / "provenance.json", {
         "schema_version": "dse.step4.provenance.v1",
         "run_id": run_id,
@@ -1907,13 +1989,7 @@ def write_full_flow_evidence(
             "systemc_stdout.log",
             "systemc_stderr.log",
         ],
-        "outputs": [
-            "verdict.json",
-            "simulator_consistency_check.json",
-            "timing_model_calibration.json",
-            "calibration_record.json",
-            "feedback_update.json",
-        ] + (["search_iteration_plan.json"] if search_iteration_plan_written else []),
+        "outputs": provenance_outputs,
     })
 
     manifest = {
@@ -1978,6 +2054,7 @@ def write_full_flow_evidence(
             "provenance.json",
         ]
         + (["search_iteration_plan.json"] if search_iteration_plan_written else [])
+        + (["campaign_search_admission_plan.json"] if campaign_search_admission_plan_written else [])
         + (["l4_interface_metrics.json"] if backend == "gem5_systemc" else [])
         + codesign_paths
         + list(extra_artifact_paths or [])

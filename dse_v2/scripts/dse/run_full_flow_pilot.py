@@ -873,6 +873,7 @@ def _record_registry_lifecycle(
                 "campaign": str(run_dir / "campaign.json"),
                 "campaign_ledger": str(run_dir / "campaign_ledger.json"),
                 "campaign_evaluation_plan": str(run_dir / "campaign_evaluation_plan.json"),
+                "campaign_search_admission_plan": str(run_dir / "campaign_search_admission_plan.json"),
                 "step1_workload_package": str(run_dir / "step1" / "workload_package.json"),
                 "step2_trial_state_ledger": str(run_dir / "step2" / "trial_state_ledger.json"),
                 "step3_simulation_queue": str(run_dir / "step2" / "step3_simulation_queue.json"),
@@ -912,6 +913,7 @@ def _record_registry_lifecycle(
                 "campaign": "campaign.json",
                 "campaign_ledger": "campaign_ledger.json",
                 "campaign_evaluation_plan": "campaign_evaluation_plan.json",
+                "campaign_search_admission_plan": "campaign_search_admission_plan.json",
             },
             provenance=_registry_provenance("write campaign control-plane artifacts"),
         )
@@ -971,16 +973,21 @@ def _record_registry_lifecycle(
             ("campaign.json", "dse.contract.campaign.v1"),
             ("campaign_ledger.json", "dse.contract.campaign_ledger.v1"),
             ("campaign_evaluation_plan.json", "dse.contract.campaign_evaluation_plan.v1"),
+            ("campaign_search_admission_plan.json", "dse.contract.campaign_search_admission_plan.v1"),
         ]:
+            is_trial_scoped_plan = rel_path in {
+                "campaign_evaluation_plan.json",
+                "campaign_search_admission_plan.json",
+            }
             _register_registry_artifact(
                 registry,
                 campaign_row_id=campaign.campaign_id,
-                workload_row_id=workload_run.workload_run_id if rel_path == "campaign_evaluation_plan.json" else None,
-                trial_row_id=trial.trial_id if rel_path == "campaign_evaluation_plan.json" else None,
+                workload_row_id=workload_run.workload_run_id if is_trial_scoped_plan else None,
+                trial_row_id=trial.trial_id if is_trial_scoped_plan else None,
                 run_dir=run_dir,
                 rel_path=rel_path,
                 schema_id=schema_id,
-                scope="trial" if rel_path == "campaign_evaluation_plan.json" else "campaign",
+                scope="trial" if is_trial_scoped_plan else "campaign",
                 producing_activity_id=campaign_activity.activity_id,
                 metadata={"artifact_role": rel_path, "logical_campaign_id": campaign_payload.get("campaign_id")},
             )
