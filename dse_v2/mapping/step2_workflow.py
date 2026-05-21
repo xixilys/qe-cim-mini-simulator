@@ -90,6 +90,7 @@ STEP2_CANDIDATE_QUEUE_ARTIFACTS = [
     "architecture_search_space.json",
     "architecture_candidate_generation_report.json",
     "architecture_screening_report.json",
+    "trial_state_ledger.json",
     "mapping_candidates.jsonl",
     "screening_results.jsonl",
     "promotion_decisions.jsonl",
@@ -1761,6 +1762,239 @@ def _step2_control_scope(
     }
 
 
+def _reason_id_list(items: Iterable[Any]) -> List[str]:
+    """Return stable reason/blocker identifiers without losing fail-closed detail."""
+
+    reasons: List[str] = []
+    for item in items:
+        if isinstance(item, Mapping):
+            reason = item.get("reason_id") or item.get("blocker_id") or item.get("message") or item.get("detail")
+            if reason is not None:
+                reasons.append(str(reason))
+        elif item is not None:
+            reasons.append(str(item))
+    return reasons
+
+
+def _trial_state_from_flags(
+    *,
+    generated: bool,
+    screened: bool,
+    promoted: bool,
+    queue_state: str,
+    blockers: Sequence[str],
+) -> str:
+    if queue_state.startswith("scheduled_for_simulation"):
+        return "queued_for_step3"
+    if queue_state.startswith("blocked"):
+        return queue_state
+    if promoted:
+        return "promoted_not_queued"
+    if blockers:
+        return "blocked_before_step3"
+    if screened:
+        return "screened_not_promoted"
+    if generated:
+        return "generated_not_screened"
+    return "unknown"
+
+
+def build_step2_trial_state_ledger(
+    *,
+    workload_package: WorkloadPackage,
+    architecture_candidates: Sequence[Mapping[str, Any]],
+    mapping_candidates: Sequence[Mapping[str, Any]],
+    screening_results: Sequence[Mapping[str, Any]],
+    promotion_decisions: Sequence[Mapping[str, Any]],
+    step3_queue: Mapping[str, Any],
+    search_space: Mapping[str, Any],
+    scope: Mapping[str, str],
+    policy_scope: str,
+) -> Dict[str, Any]:
+    """Build the domain-neutral Step2 Trial ledger.
+
+    The ledger is intentionally still a Step2 artifact: it records candidate
+    generation/screening/promotion/queue state so Step3 can be audited, but it
+    never upgrades candidates to trusted winners or substitutes for evidence.
+    """
+
+    queue_entries = [
+        dict(entry)
+        for entry in step3_queue.get("entries", []) or []
+        if isinstance(entry, Mapping)
+    ]
+    queue_by_candidate_id = {str(entry.get("candidate_id")): entry for entry in queue_entries if entry.get("candidate_id")}
+    queue_by_architecture_id = {str(entry.get("architecture_id")): entry for entry in queue_entries if entry.get("architecture_id")}
+    queue_by_mapping_id = {str(entry.get("mapping_candidate_id")): entry for entry in queue_entries if entry.get("mapping_candidate_id")}
+    queue_by_architecture_mapping = {
+        (str(entry.get("architecture_id")), str(entry.get("mapping_candidate_id"))): entry
+        for entry in queue_entries
+        if entry.get("architecture_id") and entry.get("mapping_candidate_id")
+    }
+    screening_by_candidate_id = {
+        str(record.get("candidate_id")): dict(record)
+        for record in screening_results
+        if isinstance(record, Mapping) and record.get("candidate_id")
+    }
+    promotions_by_candidate_id = {
+        str(record.get("candidate_id")): dict(record)
+        for record in promotion_decisions
+        if isinstance(record, Mapping) and record.get("candidate_id")
+    }
+    promotions_by_architecture_candidate = {
+        (str(record.get("architecture_id")), str(record.get("candidate_id"))): dict(record)
+        for record in promotion_decisions
+        if isinstance(record, Mapping) and record.get("architecture_id") and record.get("candidate_id")
+    }
+
+    rows: List[Dict[str, Any]] = []
+
+    def append_row(candidate_type: str, candidate: Mapping[str, Any]) -> None:
+        candidate_id = str(candidate.get("candidate_id") or "")
+        parameters = candidate.get("parameters", {}) if isinstance(candidate.get("parameters", {}), Mapping) else {}
+        architecture_id = str(candidate.get("architecture_id") or parameters.get("architecture_id") or "")
+        mapping_candidate_id = str(
+            candidate.get("mapping_candidate_id")
+            or candidate.get("selected_mapping_candidate_id")
+            or candidate_id
+        )
+        screen = screening_by_candidate_id.get(candidate_id, {})
+        promotion = promotions_by_architecture_candidate.get((architecture_id, candidate_id)) or promotions_by_candidate_id.get(candidate_id, {})
+        if candidate_type == "architecture":
+            queue = (
+                queue_by_architecture_id.get(architecture_id)
+                or queue_by_architecture_mapping.get((architecture_id, mapping_candidate_id))
+                or queue_by_candidate_id.get(candidate_id)
+                or {}
+            )
+        else:
+            queue = (
+                queue_by_candidate_id.get(candidate_id)
+                or queue_by_architecture_mapping.get((architecture_id, mapping_candidate_id))
+                or queue_by_mapping_id.get(mapping_candidate_id)
+                or {}
+            )
+        promoted = bool(
+            candidate.get("promoted_for_simulation")
+            or candidate.get("simulation_eligible")
+            or screen.get("simulation_eligible")
+            or promotion.get("promoted_for_simulation")
+        )
+        screened = bool(screen) or candidate_type == "architecture"
+        simulation_blockers = _reason_id_list(candidate.get("simulation_blockers", []) or [])
+        step3_blockers = _reason_id_list(candidate.get("step3_search_blockers", []) or [])
+        candidate_blockers = _reason_id_list(candidate.get("blocker_reasons", []) or [])
+        screening_blockers = _reason_id_list(screen.get("blocker_reasons", []) or [])
+        queue_blockers = _reason_id_list(queue.get("blocked_reasons", []) or [])
+        blockers = sorted({
+            *simulation_blockers,
+            *step3_blockers,
+            *candidate_blockers,
+            *screening_blockers,
+            *queue_blockers,
+        })
+        queue_state = str(queue.get("queue_state") or "not_queued")
+        trial_state = _trial_state_from_flags(
+            generated=True,
+            screened=screened,
+            promoted=promoted,
+            queue_state=queue_state,
+            blockers=blockers,
+        )
+        rows.append({
+            "schema_version": "dse.step2.trial_candidate_record.v1",
+            **dict(scope),
+            "trial_candidate_id": f"{scope.get('trial_id', 'trial')}::{candidate_type}::{candidate_id}",
+            "candidate_type": candidate_type,
+            "candidate_id": candidate_id,
+            "architecture_id": architecture_id,
+            "mapping_candidate_id": mapping_candidate_id if candidate_type == "mapping" or mapping_candidate_id != candidate_id else None,
+            "parameter_hash": str(candidate.get("parameter_hash") or ""),
+            "candidate_identity_policy": str(candidate.get("candidate_identity_policy") or "unknown"),
+            "generated": True,
+            "screened": screened,
+            "step2_screenable": bool(candidate.get("step2_screenable", screen.get("step2_screenable", False))),
+            "step3_evaluable": bool(candidate.get("step3_evaluable", screen.get("step3_evaluable", False))),
+            "simulation_eligible": bool(candidate.get("simulation_eligible", screen.get("simulation_eligible", False))),
+            "promoted_for_simulation": promoted,
+            "queue_state": queue_state,
+            "trial_state": trial_state,
+            "blockers": blockers,
+            "transition_history": [
+                {
+                    "transition": "candidate_generated",
+                    "status": "recorded",
+                    "artifact": "architecture_candidate_set.json" if candidate_type == "architecture" else "mapping_candidates.jsonl",
+                },
+                {
+                    "transition": "screened",
+                    "status": "passed" if bool(screen.get("passed", candidate.get("step2_screenable", False))) else "blocked_or_not_screened",
+                    "artifact": "screening_results.jsonl",
+                },
+                {
+                    "transition": "promotion_decision",
+                    "status": "promote" if promoted else str(promotion.get("decision") or "block"),
+                    "artifact": "promotion_decisions.jsonl",
+                },
+                {
+                    "transition": "step3_queue_admission",
+                    "status": queue_state,
+                    "artifact": "step3_simulation_queue.json",
+                },
+            ],
+            "artifact_refs": {
+                "search_space": "architecture_search_space.json",
+                "candidate_set": "architecture_candidate_set.json",
+                "mapping_candidates": "mapping_candidates.jsonl",
+                "screening_results": "screening_results.jsonl",
+                "promotion_decisions": "promotion_decisions.jsonl",
+                "step3_queue": "step3_simulation_queue.json",
+            },
+            "trusted_final_claim": False,
+        })
+
+    for candidate in architecture_candidates:
+        append_row("architecture", candidate)
+    for candidate in mapping_candidates:
+        append_row("mapping", candidate)
+
+    state_counts: Dict[str, int] = {}
+    for row in rows:
+        state = str(row.get("trial_state"))
+        state_counts[state] = state_counts.get(state, 0) + 1
+
+    return {
+        "schema_version": "dse.step2.trial_state_ledger.v1",
+        **dict(scope),
+        "workload_id": workload_package.workload_id,
+        "workload_family": workload_package.workload_family,
+        "policy_scope": policy_scope,
+        "trial_state_policy": "generated_screened_promoted_queued_fail_closed_v1",
+        "candidate_identity_policy": "stable_parameter_hash_sidecar",
+        "search_space_artifact": "architecture_search_space.json",
+        "search_space_hash": search_space.get("search_space_hash"),
+        "candidate_generation_report_artifact": "architecture_candidate_generation_report.json",
+        "architecture_screening_report_artifact": "architecture_screening_report.json",
+        "step3_simulation_queue_artifact": "step3_simulation_queue.json",
+        "queue_mode": step3_queue.get("queue_mode"),
+        "candidate_count": len(rows),
+        "architecture_candidate_count": len(architecture_candidates),
+        "mapping_candidate_count": len(mapping_candidates),
+        "queued_entry_count": len(queue_entries),
+        "promoted_candidate_count": sum(1 for row in rows if row.get("promoted_for_simulation")),
+        "blocked_candidate_count": sum(1 for row in rows if row.get("blockers")),
+        "state_counts": state_counts,
+        "all_candidates_have_parameter_hash": all(row.get("parameter_hash") for row in rows),
+        "release_completion_eligible": False,
+        "trusted_final_claim": False,
+        "claim_boundary": (
+            "Trial ledger state is Step2 search/provenance evidence only. "
+            "It gates Step3 admission and auditability but cannot prove final hardware claims."
+        ),
+        "candidates": rows,
+    }
+
+
 def build_architecture_search_space_artifact(
     catalog: ArchitectureCatalog,
     *,
@@ -1878,14 +2112,15 @@ def build_step2_search_artifacts(
             "workload_id": workload_package.workload_id,
             "workload_family": workload_package.workload_family,
             "candidate_id": str(record.get("candidate_id", f"mapping_candidate_{index}")),
+            "architecture_id": str(record.get("architecture_id") or (promotion_decision or {}).get("architecture_id") or ""),
             "mapping": dict(record.get("mapping", {}) or {}),
             "parameters": {
-                "architecture_id": str((promotion_decision or {}).get("architecture_id") or ""),
+                "architecture_id": str(record.get("architecture_id") or (promotion_decision or {}).get("architecture_id") or ""),
                 "backend": backend,
                 "mapping_policy": mapping_candidate_records.get("algorithm", "workflow_seeded_beam_local_search_v1"),
             },
             "parameter_hash": _payload_sha256({
-                "architecture_id": str((promotion_decision or {}).get("architecture_id") or ""),
+                "architecture_id": str(record.get("architecture_id") or (promotion_decision or {}).get("architecture_id") or ""),
                 "backend": backend,
                 "mapping": dict(record.get("mapping", {}) or {}),
                 "mapping_policy": mapping_candidate_records.get("algorithm", "workflow_seeded_beam_local_search_v1"),
@@ -2013,6 +2248,7 @@ def build_step2_search_artifacts(
             "jsonl_artifacts": ["mapping_candidates.jsonl"],
             "candidate_identity_policy": "stable_parameter_hash_sidecar",
         },
+        "trial_state_ledger_artifact": "trial_state_ledger.json",
         "trusted_final_claim": False,
     }
     architecture_screening_report = {
@@ -2025,14 +2261,27 @@ def build_step2_search_artifacts(
         "promotion_decision_artifact": "promotion_decisions.jsonl",
         "screening_results_artifact": "screening_results.jsonl",
         "step3_simulation_queue_artifact": "step3_simulation_queue.json",
+        "trial_state_ledger_artifact": "trial_state_ledger.json",
         "step3_queue_entry_count": int(step3_queue.get("entry_count", 0) or 0),
         "trusted_final_claim": False,
         "claim_boundary": "Step2 screening/promotions only; final trust requires Step3/Step4 evidence.",
     }
+    trial_state_ledger = build_step2_trial_state_ledger(
+        workload_package=workload_package,
+        architecture_candidates=architecture_candidates,
+        mapping_candidates=mapping_candidates,
+        screening_results=screening_results,
+        promotion_decisions=promotion_records,
+        step3_queue=step3_queue,
+        search_space=search_space,
+        scope=scope,
+        policy_scope=policy_scope,
+    )
     return {
         "architecture_search_space": search_space,
         "architecture_candidate_generation_report": candidate_generation_report,
         "architecture_screening_report": architecture_screening_report,
+        "trial_state_ledger": trial_state_ledger,
         "mapping_candidates_jsonl": mapping_candidates,
         "screening_results_jsonl": screening_results,
         "promotion_decisions_jsonl": promotion_records,
@@ -2379,6 +2628,54 @@ def validate_step2_artifacts(artifacts: Mapping[str, Any]) -> Dict[str, Any]:
                     "field": f"step3_simulation_queue.entries[{idx}].architecture_id",
                     "message": "queue entry architecture_id must match architecture.json",
                 })
+
+    trial_ledger = artifacts.get("trial_state_ledger", {})
+    if isinstance(trial_ledger, Mapping) and trial_ledger:
+        if trial_ledger.get("trusted_final_claim"):
+            errors.append({"field": "trial_state_ledger.trusted_final_claim", "message": "Step2 Trial ledger cannot claim trusted final winners"})
+        if trial_ledger.get("release_completion_eligible"):
+            errors.append({"field": "trial_state_ledger.release_completion_eligible", "message": "Step2 Trial ledger cannot establish release completion"})
+        if step3_queue and trial_ledger.get("queue_mode") != step3_queue.get("queue_mode"):
+            errors.append({"field": "trial_state_ledger.queue_mode", "message": "Trial ledger queue_mode must match step3_simulation_queue.queue_mode"})
+        candidates = trial_ledger.get("candidates", []) or []
+        if len(candidates) != int(trial_ledger.get("candidate_count", len(candidates)) or 0):
+            errors.append({"field": "trial_state_ledger.candidate_count", "message": "candidate_count must match Trial ledger candidate rows"})
+        expected_arch_count = len(architecture_candidate_set.get("candidates", []) or []) if isinstance(architecture_candidate_set, Mapping) else 0
+        if expected_arch_count and int(trial_ledger.get("architecture_candidate_count", expected_arch_count) or 0) != expected_arch_count:
+            errors.append({
+                "field": "trial_state_ledger.architecture_candidate_count",
+                "message": "Trial ledger architecture count must match architecture_candidate_set",
+            })
+        mapping_candidates = artifacts.get("mapping_candidates_jsonl", [])
+        expected_mapping_count = len(mapping_candidates) if isinstance(mapping_candidates, (list, tuple)) else 0
+        if expected_mapping_count and int(trial_ledger.get("mapping_candidate_count", expected_mapping_count) or 0) != expected_mapping_count:
+            errors.append({
+                "field": "trial_state_ledger.mapping_candidate_count",
+                "message": "Trial ledger mapping count must match mapping_candidates.jsonl",
+            })
+        if candidates and not trial_ledger.get("all_candidates_have_parameter_hash", False):
+            errors.append({
+                "field": "trial_state_ledger.all_candidates_have_parameter_hash",
+                "message": "Trial ledger candidate rows require stable parameter_hash sidecars",
+            })
+        for idx, row in enumerate(candidates):
+            if not isinstance(row, Mapping):
+                errors.append({"field": f"trial_state_ledger.candidates[{idx}]", "message": "Trial ledger row must be an object"})
+                continue
+            if row.get("trusted_final_claim"):
+                errors.append({"field": f"trial_state_ledger.candidates[{idx}].trusted_final_claim", "message": "Trial ledger rows cannot claim trusted final winners"})
+            if not row.get("parameter_hash"):
+                errors.append({"field": f"trial_state_ledger.candidates[{idx}].parameter_hash", "message": "Trial ledger rows require parameter_hash"})
+            if row.get("trial_state") == "queued_for_step3" and not row.get("promoted_for_simulation"):
+                errors.append({
+                    "field": f"trial_state_ledger.candidates[{idx}].trial_state",
+                    "message": "Trial ledger cannot mark an unpromoted candidate as queued_for_step3",
+                })
+    elif isinstance(artifacts.get("architecture_candidate_set", {}), Mapping) and artifacts.get("architecture_candidate_set"):
+        errors.append({
+            "field": "trial_state_ledger",
+            "message": "Trial ledger missing; Step2 search provenance is scattered across candidate/queue artifacts",
+        })
     low_summary = artifacts.get("low_fidelity_summary") or artifacts.get("low_fidelity_screening_summary") or {}
     if isinstance(low_summary, Mapping):
         if low_summary.get("trusted_final_claim"):
@@ -2902,6 +3199,7 @@ def run_step2_architecture_mapping_workflow(
     design_point.config.setdefault("replay_metadata", {})["architecture_search_space"] = "architecture_search_space.json"
     design_point.config.setdefault("replay_metadata", {})["architecture_candidate_generation_report"] = "architecture_candidate_generation_report.json"
     design_point.config.setdefault("replay_metadata", {})["architecture_screening_report"] = "architecture_screening_report.json"
+    design_point.config.setdefault("replay_metadata", {})["trial_state_ledger"] = "trial_state_ledger.json"
     design_point.config.setdefault("replay_metadata", {})["mapping_candidates_jsonl"] = "mapping_candidates.jsonl"
     design_point.config.setdefault("replay_metadata", {})["screening_results_jsonl"] = "screening_results.jsonl"
     design_point.config.setdefault("replay_metadata", {})["promotion_decisions_jsonl"] = "promotion_decisions.jsonl"
@@ -2974,6 +3272,7 @@ def run_step2_architecture_mapping_workflow(
         "architecture_search_space": canonical_search_artifacts["architecture_search_space"],
         "architecture_candidate_generation_report": canonical_search_artifacts["architecture_candidate_generation_report"],
         "architecture_screening_report": canonical_search_artifacts["architecture_screening_report"],
+        "trial_state_ledger": canonical_search_artifacts["trial_state_ledger"],
         "mapping_candidates_jsonl": canonical_search_artifacts["mapping_candidates_jsonl"],
         "screening_results_jsonl": canonical_search_artifacts["screening_results_jsonl"],
         "promotion_decisions_jsonl": canonical_search_artifacts["promotion_decisions_jsonl"],
@@ -3029,6 +3328,7 @@ def run_step2_architecture_mapping_workflow(
             "architecture_search_space": "architecture_search_space.json",
             "architecture_candidate_generation_report": "architecture_candidate_generation_report.json",
             "architecture_screening_report": "architecture_screening_report.json",
+            "trial_state_ledger": "trial_state_ledger.json",
             "architecture_candidate_set": "architecture_candidate_set.json",
             "step3_simulation_queue": "step3_simulation_queue.json",
             "legality_matrix": "mapping_legality_matrix.json",
@@ -3229,6 +3529,7 @@ def run_step2_architecture_screening_workflow(
         "candidates": [
             {
                 "candidate_id": str(record.get("selected_candidate_id") or record.get("architecture_id")),
+                "architecture_id": str(record.get("architecture_id") or ""),
                 "mapping": {},
                 "state": "promoted" if record.get("promoted_for_simulation") else "blocked",
                 "selection_reason": "architecture_screening_record",
@@ -3289,6 +3590,17 @@ def run_step2_architecture_screening_workflow(
         }
         for record in records
     ]
+    canonical_screening_artifacts["trial_state_ledger"] = build_step2_trial_state_ledger(
+        workload_package=workload_package,
+        architecture_candidates=architecture_candidate_set.get("candidates", []),
+        mapping_candidates=canonical_screening_artifacts["mapping_candidates_jsonl"],
+        screening_results=canonical_screening_artifacts["screening_results_jsonl"],
+        promotion_decisions=canonical_screening_artifacts["promotion_decisions_jsonl"],
+        step3_queue=step3_queue,
+        search_space=canonical_screening_artifacts["architecture_search_space"],
+        scope=screening_scope,
+        policy_scope="architecture_screening",
+    )
     aggregate = {
         "schema_version": "dse.step2.architecture_screening_records.v1",
         "workload_id": workload_package.workload_id,
@@ -3310,6 +3622,7 @@ def run_step2_architecture_screening_workflow(
         "architecture_search_space": canonical_screening_artifacts["architecture_search_space"],
         "architecture_candidate_generation_report": canonical_screening_artifacts["architecture_candidate_generation_report"],
         "architecture_screening_report": canonical_screening_artifacts["architecture_screening_report"],
+        "trial_state_ledger": canonical_screening_artifacts["trial_state_ledger"],
         "mapping_candidates_jsonl": canonical_screening_artifacts["mapping_candidates_jsonl"],
         "screening_results_jsonl": canonical_screening_artifacts["screening_results_jsonl"],
         "promotion_decisions_jsonl": canonical_screening_artifacts["promotion_decisions_jsonl"],
@@ -3326,6 +3639,8 @@ def run_step2_architecture_screening_workflow(
         artifact_paths["architecture_candidate_generation_report"] = "architecture_candidate_generation_report.json"
         _write_json(root_dir / "architecture_screening_report.json", canonical_screening_artifacts["architecture_screening_report"])
         artifact_paths["architecture_screening_report"] = "architecture_screening_report.json"
+        _write_json(root_dir / "trial_state_ledger.json", canonical_screening_artifacts["trial_state_ledger"])
+        artifact_paths["trial_state_ledger"] = "trial_state_ledger.json"
         _write_jsonl(root_dir / "mapping_candidates.jsonl", canonical_screening_artifacts["mapping_candidates_jsonl"])
         artifact_paths["mapping_candidates_jsonl"] = "mapping_candidates.jsonl"
         _write_jsonl(root_dir / "screening_results.jsonl", canonical_screening_artifacts["screening_results_jsonl"])

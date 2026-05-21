@@ -24,9 +24,17 @@ workload ingestion
 
 并明确 L1/L2 只能初筛，SystemC/gem5+SystemC 才能支撑最终可信结论。
 
-但系统层面还缺一个更硬的抽象：**DSE campaign / trial state machine**。
+但系统层面还需要继续补强一个更硬的抽象：**DSE campaign / trial state
+machine**。当前 Step2 已开始把分散的搜索记录收敛成通用
+`trial_state_ledger.json`，覆盖 candidate generation、screening、promotion
+和 Step3 queue admission；这解决了“搜索候选为什么来、为什么过/不过、是否
+进入 Step3”的第一层账本问题。剩余缺口是 campaign 级预算/恢复/环境/跨
+Step3/Step4/Step5 反馈闭环的一等公民 ledger。
 
-现在文档里有 Step1、Step2、Step3、Reporting，但没有把一次完整 DSE 运行定义成一个稳定的、可恢复的、可查询的 campaign ledger。也就是说，系统知道有哪些 artifacts，但还没有一个足够强的“运行账本”来回答：
+现在文档里有 Step1、Step2、Step3、Reporting，Step2 也有了
+trial-level lifecycle ledger；但还没有把一次完整 DSE 运行定义成一个
+稳定的、可恢复的、可查询的 campaign ledger。也就是说，系统开始知道每个
+Step2 candidate 的状态，但还需要一个更强的“运行账本”来回答：
 
 * 这个 campaign 的目标函数是什么？
 * 预算是什么？

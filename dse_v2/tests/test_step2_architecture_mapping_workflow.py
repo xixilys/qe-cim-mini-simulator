@@ -253,6 +253,7 @@ def test_step2_runs_representative_non_qe_workloads_and_writes_required_artifact
             "architecture_search_space.json",
             "architecture_candidate_generation_report.json",
             "architecture_screening_report.json",
+            "trial_state_ledger.json",
             "mapping_candidates.jsonl",
             "screening_results.jsonl",
             "promotion_decisions.jsonl",
@@ -277,6 +278,7 @@ def test_step2_runs_representative_non_qe_workloads_and_writes_required_artifact
         search_space = _load_json(run_dir / "architecture_search_space.json")
         candidate_generation = _load_json(run_dir / "architecture_candidate_generation_report.json")
         screening_report = _load_json(run_dir / "architecture_screening_report.json")
+        trial_ledger = _load_json(run_dir / "trial_state_ledger.json")
         mapping_candidates = _load_jsonl(run_dir / "mapping_candidates.jsonl")
         screening_results = _load_jsonl(run_dir / "screening_results.jsonl")
         promotion_decisions = _load_jsonl(run_dir / "promotion_decisions.jsonl")
@@ -290,9 +292,22 @@ def test_step2_runs_representative_non_qe_workloads_and_writes_required_artifact
         assert candidate_generation["mapping_candidate_count"] == len(mapping_candidates)
         assert candidate_generation["candidate_identity_policy"] == "stable_parameter_hash_sidecar"
         assert candidate_generation["all_generated_candidates_have_parameter_hash"] is True
+        assert candidate_generation["trial_state_ledger_artifact"] == "trial_state_ledger.json"
         assert candidate_generation["trusted_final_claim"] is False
         assert screening_report["promotion_decision_artifact"] == "promotion_decisions.jsonl"
+        assert screening_report["trial_state_ledger_artifact"] == "trial_state_ledger.json"
         assert screening_report["trusted_final_claim"] is False
+        assert trial_ledger["schema_version"] == "dse.step2.trial_state_ledger.v1"
+        assert trial_ledger["trial_id"]
+        assert trial_ledger["candidate_count"] == trial_ledger["architecture_candidate_count"] + trial_ledger["mapping_candidate_count"]
+        assert trial_ledger["mapping_candidate_count"] == len(mapping_candidates)
+        assert trial_ledger["all_candidates_have_parameter_hash"] is True
+        assert trial_ledger["trusted_final_claim"] is False
+        assert trial_ledger["release_completion_eligible"] is False
+        assert trial_ledger["queue_mode"] == "selected-entry-only"
+        assert any(row["trial_state"] == "queued_for_step3" for row in trial_ledger["candidates"])
+        assert all(row["parameter_hash"].startswith("sha256:") for row in trial_ledger["candidates"])
+        assert all(row["trusted_final_claim"] is False for row in trial_ledger["candidates"])
         assert mapping_candidates
         assert all(record["step2_screenable"] is True for record in mapping_candidates)
         assert all(record["parameter_hash"].startswith("sha256:") for record in mapping_candidates)
@@ -724,6 +739,13 @@ def test_step2_artifact_validation_rejects_illegal_mapping_and_predicted_final_c
     selected["trusted_final_eligible"] = True
     artifacts["selected_record"] = selected
     artifacts["promotion_decision"] = {**artifacts["promotion_decision"], "trusted_final_claim": True}
+    ledger = dict(artifacts["trial_state_ledger"])
+    ledger["trusted_final_claim"] = True
+    ledger_rows = [dict(row) for row in ledger["candidates"]]
+    ledger_rows[0]["trial_state"] = "queued_for_step3"
+    ledger_rows[0]["promoted_for_simulation"] = False
+    ledger["candidates"] = ledger_rows
+    artifacts["trial_state_ledger"] = ledger
     assert result.design_point is not None
     artifacts["system_architecture"] = result.design_point.system_architecture.to_dict()
 
@@ -734,7 +756,55 @@ def test_step2_artifact_validation_rejects_illegal_mapping_and_predicted_final_c
     assert validation["valid"] is False
     assert any(error["field"] == "mapping" for error in validation["errors"])
     assert any(error["field"] == "promotion_decision.trusted_final_claim" for error in validation["errors"])
+    assert any(error["field"] == "trial_state_ledger.trusted_final_claim" for error in validation["errors"])
+    assert any(error["field"].startswith("trial_state_ledger.candidates[") for error in validation["errors"])
     assert all(record["trusted_final_eligible"] is False for record in predicted_records)
+
+
+def test_step2_artifact_validation_rejects_missing_or_inconsistent_trial_ledger(tmp_path):
+    graph = create_vector_search_graph("vector_trial_ledger_validation")
+    package = package_from_graph(graph, workload_family="database_vector_search", importer_id="generic_json")
+    result = run_step2_architecture_mapping_workflow(package, output_dir=tmp_path)
+    assert result.design_point is not None
+
+    artifacts = {
+        **dict(result.artifacts),
+        "system_architecture": result.design_point.system_architecture.to_dict(),
+    }
+
+    missing_ledger_artifacts = dict(artifacts)
+    missing_ledger_artifacts.pop("trial_state_ledger", None)
+    missing_validation = validate_step2_artifacts(missing_ledger_artifacts)
+
+    assert missing_validation["valid"] is False
+    assert any(error["field"] == "trial_state_ledger" for error in missing_validation["errors"])
+
+    ledger = dict(artifacts["trial_state_ledger"])
+    rows = [dict(row) for row in ledger["candidates"]]
+    rows[0].pop("parameter_hash", None)
+    ledger.update({
+        "release_completion_eligible": True,
+        "queue_mode": "tampered-queue-mode",
+        "candidate_count": int(ledger["candidate_count"]) + 1,
+        "architecture_candidate_count": int(ledger["architecture_candidate_count"]) + 1,
+        "mapping_candidate_count": int(ledger["mapping_candidate_count"]) + 1,
+        "all_candidates_have_parameter_hash": False,
+        "candidates": rows,
+    })
+    tampered_validation = validate_step2_artifacts({
+        **artifacts,
+        "trial_state_ledger": ledger,
+    })
+
+    assert tampered_validation["valid"] is False
+    error_fields = {error["field"] for error in tampered_validation["errors"]}
+    assert "trial_state_ledger.release_completion_eligible" in error_fields
+    assert "trial_state_ledger.queue_mode" in error_fields
+    assert "trial_state_ledger.candidate_count" in error_fields
+    assert "trial_state_ledger.architecture_candidate_count" in error_fields
+    assert "trial_state_ledger.mapping_candidate_count" in error_fields
+    assert "trial_state_ledger.all_candidates_have_parameter_hash" in error_fields
+    assert "trial_state_ledger.candidates[0].parameter_hash" in error_fields
 
 
 def test_step2_screens_multiple_architectures_without_breaking_step3_handoff(tmp_path):
@@ -756,6 +826,7 @@ def test_step2_screens_multiple_architectures_without_breaking_step3_handoff(tmp
     search_space = _load_json(tmp_path / "architecture_search_space.json")
     candidate_generation = _load_json(tmp_path / "architecture_candidate_generation_report.json")
     screening_report = _load_json(tmp_path / "architecture_screening_report.json")
+    trial_ledger = _load_json(tmp_path / "trial_state_ledger.json")
     mapping_candidates = _load_jsonl(tmp_path / "mapping_candidates.jsonl")
     screening_results = _load_jsonl(tmp_path / "screening_results.jsonl")
     promotion_decisions = _load_jsonl(tmp_path / "promotion_decisions.jsonl")
@@ -767,6 +838,16 @@ def test_step2_screens_multiple_architectures_without_breaking_step3_handoff(tmp
     assert set(search_space["parameters"]["architecture_ids"]) == {"balanced-generic-systemc-v0", "future-custom-candidate-v0"}
     assert candidate_generation["search_space_hash"] == search_space["search_space_hash"]
     assert screening_report["screened_candidate_count"] >= 2
+    assert trial_ledger["schema_version"] == "dse.step2.trial_state_ledger.v1"
+    assert trial_ledger["policy_scope"] == "architecture_screening"
+    assert trial_ledger["candidate_count"] == trial_ledger["architecture_candidate_count"] + trial_ledger["mapping_candidate_count"]
+    assert trial_ledger["architecture_candidate_count"] == screening_candidate_set["candidate_count"]
+    assert trial_ledger["mapping_candidate_count"] == len(mapping_candidates)
+    assert trial_ledger["queue_mode"] == "selected-entry-only"
+    assert trial_ledger["all_candidates_have_parameter_hash"] is True
+    assert trial_ledger["trusted_final_claim"] is False
+    assert "queued_for_step3" in trial_ledger["state_counts"]
+    assert "blocked_not_promoted" in trial_ledger["state_counts"]
     assert mapping_candidates
     assert len(screening_results) >= 2
     assert {record["decision"] for record in promotion_decisions} == {"promote", "block"}
