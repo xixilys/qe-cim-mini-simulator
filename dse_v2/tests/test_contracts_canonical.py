@@ -55,6 +55,8 @@ def test_artifact_catalog_has_unique_one_producer_bindings_and_examples():
 
     producers = {item.canonical_name: item.producer_stage for item in ARTIFACT_CATALOG}
     assert producers["architecture_search_space.json"] == "step2"
+    assert producers["search_checkpoint.json"] == "step2"
+    assert producers["top_k_candidate_queue.json"] == "step2"
     assert producers["architecture_candidate_generation_report.json"] == "step2"
     assert producers["architecture_screening_report.json"] == "step2"
     assert producers["mapping_candidates.jsonl"] == "step2"

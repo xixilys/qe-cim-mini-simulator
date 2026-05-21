@@ -88,6 +88,8 @@ STEP2_LOW_FIDELITY_ARTIFACT_KEYS = {
 
 STEP2_CANDIDATE_QUEUE_ARTIFACTS = [
     "architecture_search_space.json",
+    "search_checkpoint.json",
+    "top_k_candidate_queue.json",
     "architecture_candidate_generation_report.json",
     "architecture_screening_report.json",
     "trial_state_ledger.json",
@@ -2064,6 +2066,261 @@ def build_architecture_search_space_artifact(
     return payload
 
 
+def _candidate_priority_score(candidate: Mapping[str, Any]) -> float:
+    """Return a deterministic Step2 ordering score for provenance queues."""
+
+    ranking = candidate.get("ranking", {}) if isinstance(candidate.get("ranking", {}), Mapping) else {}
+    screening = candidate.get("screening", {}) if isinstance(candidate.get("screening", {}), Mapping) else {}
+    for value in (
+        candidate.get("score"),
+        candidate.get("estimated_score"),
+        candidate.get("promotion_priority"),
+        ranking.get("priority_score"),
+        screening.get("promotion_priority"),
+    ):
+        number = _finite_float(value, default=float("nan"))
+        if math.isfinite(number):
+            return number
+    return 0.0
+
+
+def _checkpoint_candidate_summary(
+    *,
+    candidate_type: str,
+    candidate: Mapping[str, Any],
+    source_artifact: str,
+    source_index: int,
+) -> Dict[str, Any]:
+    parameters = candidate.get("parameters", {}) if isinstance(candidate.get("parameters", {}), Mapping) else {}
+    parameter_hash = str(candidate.get("parameter_hash") or _payload_sha256(parameters or {
+        "candidate_id": candidate.get("candidate_id"),
+        "architecture_id": candidate.get("architecture_id"),
+        "mapping": candidate.get("mapping", {}),
+    }))
+    return {
+        "candidate_type": candidate_type,
+        "candidate_id": str(candidate.get("candidate_id") or ""),
+        "architecture_id": str(candidate.get("architecture_id") or ""),
+        "mapping_candidate_id": str(
+            candidate.get("mapping_candidate_id")
+            or candidate.get("selected_mapping_candidate_id")
+            or (candidate.get("candidate_id") if candidate_type == "mapping" else "")
+            or ""
+        ),
+        "parameter_hash": parameter_hash,
+        "candidate_identity_policy": str(candidate.get("candidate_identity_policy") or "stable_parameter_hash_sidecar"),
+        "score": _candidate_priority_score(candidate),
+        "step2_screenable": bool(candidate.get("step2_screenable", not bool(candidate.get("violations")))),
+        "step3_evaluable": bool(candidate.get("step3_evaluable", candidate.get("simulation_eligible", False))),
+        "simulation_eligible": bool(candidate.get("simulation_eligible", False)),
+        "promoted_for_simulation": bool(candidate.get("promoted_for_simulation", candidate.get("simulation_eligible", False))),
+        "simulation_blockers": list(candidate.get("simulation_blockers", candidate.get("blocker_reasons", [])) or []),
+        "source_artifact": source_artifact,
+        "source_index": source_index,
+        "trusted_final_claim": False,
+    }
+
+
+def build_top_k_candidate_queue(
+    *,
+    workload_package: WorkloadPackage,
+    mapping_candidate_records: Mapping[str, Any],
+    mapping_candidates: Sequence[Mapping[str, Any]],
+    promotion_decision: Optional[Mapping[str, Any]],
+    step3_queue: Mapping[str, Any],
+    scope: Mapping[str, str],
+    policy_scope: str,
+    beam_width: int,
+) -> Dict[str, Any]:
+    """Build a provenance-only top-K ordering queue.
+
+    This artifact is intentionally not the Step3 admission queue.  It preserves
+    ranked candidate provenance while `step3_simulation_queue.json` remains the
+    selected-entry v1 handoff consumed by Step3.
+    """
+
+    canonical_by_id = {
+        str(candidate.get("candidate_id")): dict(candidate)
+        for candidate in mapping_candidates
+        if isinstance(candidate, Mapping) and candidate.get("candidate_id")
+    }
+    step3_entries = [
+        entry
+        for entry in step3_queue.get("entries", []) or []
+        if isinstance(entry, Mapping)
+    ]
+    admitted_mapping_ids = {
+        str(entry.get("mapping_candidate_id"))
+        for entry in step3_entries
+        if entry.get("mapping_candidate_id")
+        and str(entry.get("queue_state", "")).startswith("scheduled_for_simulation")
+    }
+    source_records = [
+        dict(record)
+        for record in mapping_candidate_records.get("candidates", []) or []
+        if isinstance(record, Mapping)
+    ]
+    ranked_source = [
+        record
+        for record in source_records
+        if not record.get("violations") and str(record.get("state", "")) in {"selected", "promoted", "predicted-only"}
+    ]
+    if not ranked_source:
+        ranked_source = [record for record in source_records if not record.get("violations")]
+    ranked_source = sorted(
+        ranked_source,
+        key=lambda record: (
+            0 if str(record.get("state", "")) == "selected" else 1,
+            -_candidate_priority_score(record),
+            str(record.get("candidate_id") or ""),
+        ),
+    )
+    top_k = ranked_source[: max(1, int(beam_width or 1))]
+    entries: List[Dict[str, Any]] = []
+    for rank, source in enumerate(top_k, start=1):
+        candidate_id = str(source.get("candidate_id") or "")
+        canonical = canonical_by_id.get(candidate_id, {})
+        parameter_hash = str(
+            canonical.get("parameter_hash")
+            or source.get("parameter_hash")
+            or _payload_sha256({
+                "architecture_id": canonical.get("architecture_id") or (promotion_decision or {}).get("architecture_id") or "",
+                "backend": canonical.get("parameters", {}).get("backend") if isinstance(canonical.get("parameters", {}), Mapping) else "",
+                "mapping": source.get("mapping", {}),
+                "mapping_policy": mapping_candidate_records.get("algorithm"),
+            })
+        )
+        top_k_state = "selected_entry" if str(source.get("state", "")) == "selected" else "candidate_order_suggestion"
+        entries.append({
+            "top_k_rank": rank,
+            "top_k_entry_id": f"top-k::{scope.get('trial_id', 'trial')}::{rank}::{candidate_id}",
+            "candidate_id": candidate_id,
+            "mapping_candidate_id": candidate_id,
+            "architecture_id": str(canonical.get("architecture_id") or (promotion_decision or {}).get("architecture_id") or ""),
+            "parameter_hash": parameter_hash,
+            "candidate_identity_policy": str(canonical.get("candidate_identity_policy") or source.get("candidate_identity_policy") or "stable_mapping_parameters_hash_sidecar"),
+            "source_state": str(source.get("state") or "unknown"),
+            "top_k_state": top_k_state,
+            "priority_score": _candidate_priority_score(source),
+            "step2_screenable": not bool(source.get("violations")),
+            "promoted_by_mapping_search": str(source.get("state", "")) in {"selected", "promoted"},
+            "admitted_by_step3_queue": candidate_id in admitted_mapping_ids,
+            "step3_admission_source": "step3_simulation_queue.json",
+            "execution_suggestion_only": True,
+            "not_a_step3_queue_entry": True,
+            "release_completion_eligible": False,
+            "top_k_or_representative_completion_allowed": False,
+            "trusted_final_claim": False,
+            "source_artifact": "mapping_candidate_records.json",
+        })
+
+    return {
+        "schema_version": "dse.step2.top_k_candidate_queue.v1",
+        **dict(scope),
+        "workload_id": workload_package.workload_id,
+        "workload_family": workload_package.workload_family,
+        "policy_scope": policy_scope,
+        "policy_name": str(mapping_candidate_records.get("algorithm", "workflow_seeded_beam_local_search_v1")),
+        "queue_mode": "top-k-provenance-only",
+        "entry_count": len(entries),
+        "requested_top_k": max(1, int(beam_width or 1)),
+        "candidate_source_artifact": "mapping_candidate_records.json",
+        "mapping_candidates_artifact": "mapping_candidates.jsonl",
+        "step3_simulation_queue_artifact": "step3_simulation_queue.json",
+        "step3_queue_mode": str(step3_queue.get("queue_mode") or ""),
+        "provenance_only": True,
+        "execution_order_suggestion_only": True,
+        "top_k_or_representative_completion_allowed": False,
+        "release_completion_eligible": False,
+        "trusted_final_claim": False,
+        "claim_boundary": (
+            "Top-K ordering is search provenance and future execution-order guidance only. "
+            "It is not the Step3 admission queue and cannot establish final completion."
+        ),
+        "entries": entries,
+    }
+
+
+def build_step2_search_checkpoint_artifact(
+    *,
+    workload_package: WorkloadPackage,
+    search_space: Mapping[str, Any],
+    architecture_candidates: Sequence[Mapping[str, Any]],
+    mapping_candidates: Sequence[Mapping[str, Any]],
+    mapping_candidate_records: Mapping[str, Any],
+    mapping_feedback_state: Optional[Mapping[str, Any]],
+    convergence_status: Optional[Mapping[str, Any]],
+    top_k_candidate_queue: Mapping[str, Any],
+    step3_queue: Mapping[str, Any],
+    scope: Mapping[str, str],
+    policy_scope: str,
+) -> Dict[str, Any]:
+    """Build a compact replay checkpoint over Step2 candidate/search state."""
+
+    candidate_summaries = [
+        _checkpoint_candidate_summary(
+            candidate_type="architecture",
+            candidate=candidate,
+            source_artifact="architecture_candidate_set.json",
+            source_index=index,
+        )
+        for index, candidate in enumerate(architecture_candidates)
+    ] + [
+        _checkpoint_candidate_summary(
+            candidate_type="mapping",
+            candidate=candidate,
+            source_artifact="mapping_candidates.jsonl",
+            source_index=index,
+        )
+        for index, candidate in enumerate(mapping_candidates)
+    ]
+    best = max(candidate_summaries, key=lambda item: item.get("score", 0.0), default=None)
+    feedback = mapping_feedback_state if isinstance(mapping_feedback_state, Mapping) else {}
+    convergence = convergence_status if isinstance(convergence_status, Mapping) else {}
+    simulation_samples = feedback.get("simulation_samples", []) if isinstance(feedback.get("simulation_samples", []), list) else []
+    return {
+        "schema_version": "dse.step2.search_checkpoint_summary.v1",
+        **dict(scope),
+        "workload_id": workload_package.workload_id,
+        "workload_family": workload_package.workload_family,
+        "policy_scope": policy_scope,
+        "policy_name": str(mapping_candidate_records.get("algorithm", "workflow_seeded_beam_local_search_v1")),
+        "search_space_artifact": "architecture_search_space.json",
+        "search_space_hash": search_space.get("search_space_hash"),
+        "candidate_identity_policy": "stable_parameter_hash_sidecar",
+        "architecture_candidate_count": len(architecture_candidates),
+        "mapping_candidate_count": len(mapping_candidates),
+        "candidate_count": len(candidate_summaries),
+        "proposed_count": len(candidate_summaries),
+        "observed_count": len(simulation_samples),
+        "best_candidate_id": best.get("candidate_id") if best else None,
+        "selected_candidate_id": mapping_candidate_records.get("selected_candidate_id"),
+        "feedback_state_artifact": "mapping_feedback_state.json",
+        "feedback_state_summary": {
+            "source": (feedback.get("ranking_update", {}) or {}).get("source") if isinstance(feedback.get("ranking_update", {}), Mapping) else None,
+            "effect": (feedback.get("ranking_update", {}) or {}).get("effect") if isinstance(feedback.get("ranking_update", {}), Mapping) else None,
+            "simulation_budget": dict(feedback.get("simulation_budget", {}) or {}) if isinstance(feedback.get("simulation_budget", {}), Mapping) else {},
+        },
+        "convergence_status_artifact": "convergence_status.json",
+        "convergence_summary": {
+            "status": convergence.get("status"),
+            "converged": bool(convergence.get("converged", False)),
+            "stop_reason": convergence.get("stop_reason"),
+        },
+        "top_k_candidate_queue_artifact": "top_k_candidate_queue.json",
+        "top_k_entry_count": int(top_k_candidate_queue.get("entry_count", 0) or 0),
+        "step3_simulation_queue_artifact": "step3_simulation_queue.json",
+        "step3_queue_mode": step3_queue.get("queue_mode"),
+        "top_k_queue_provenance_only": True,
+        "release_completion_eligible": False,
+        "trusted_final_claim": False,
+        "claim_boundary": (
+            "Search checkpoint is Step2 candidate/search provenance only; final ranking requires Step3/Step4 evidence."
+        ),
+        "candidates": candidate_summaries,
+    }
+
+
 def build_step2_search_artifacts(
     *,
     catalog: ArchitectureCatalog,
@@ -2075,6 +2332,8 @@ def build_step2_search_artifacts(
     beam_width: int,
     architecture_candidate_set: Mapping[str, Any],
     mapping_candidate_records: Mapping[str, Any],
+    mapping_feedback_state: Optional[Mapping[str, Any]],
+    convergence_status: Optional[Mapping[str, Any]],
     low_fidelity_summary: Optional[Mapping[str, Any]],
     promotion_decision: Optional[Mapping[str, Any]],
     step3_queue: Mapping[str, Any],
@@ -2117,6 +2376,7 @@ def build_step2_search_artifacts(
             "parameters": {
                 "architecture_id": str(record.get("architecture_id") or (promotion_decision or {}).get("architecture_id") or ""),
                 "backend": backend,
+                "mapping": dict(record.get("mapping", {}) or {}),
                 "mapping_policy": mapping_candidate_records.get("algorithm", "workflow_seeded_beam_local_search_v1"),
             },
             "parameter_hash": _payload_sha256({
@@ -2133,7 +2393,7 @@ def build_step2_search_artifacts(
                 "beam_width": mapping_candidate_records.get("beam_width"),
             },
             "generation_reason": str(record.get("selection_reason") or record.get("state") or "mapping_search_candidate"),
-            "score": record.get("score", record.get("estimated_score", 0.0)),
+            "score": _candidate_priority_score(record),
             "step2_screenable": not bool(record.get("violations")),
             "step3_evaluable": bool((promotion_decision or {}).get("promoted_for_simulation", False) and record.get("candidate_id") == (promotion_decision or {}).get("candidate_id")),
             "simulation_eligible": bool((promotion_decision or {}).get("promoted_for_simulation", False) and record.get("candidate_id") == (promotion_decision or {}).get("candidate_id")),
@@ -2216,6 +2476,16 @@ def build_step2_search_artifacts(
             "trusted_final_claim": False,
         }
     ] if promotion_decision else []
+    top_k_candidate_queue = build_top_k_candidate_queue(
+        workload_package=workload_package,
+        mapping_candidate_records=mapping_candidate_records,
+        mapping_candidates=mapping_candidates,
+        promotion_decision=promotion_decision,
+        step3_queue=step3_queue,
+        scope=scope,
+        policy_scope=policy_scope,
+        beam_width=beam_width,
+    )
     candidate_generation_report = {
         "schema_version": "dse.step2.architecture_candidate_generation_report.v1",
         **dict(scope),
@@ -2242,9 +2512,14 @@ def build_step2_search_artifacts(
         "all_generated_candidates_have_parameter_hash": all(
             candidate.get("parameter_hash") for candidate in architecture_candidates
         ) and all(candidate.get("parameter_hash") for candidate in mapping_candidates),
+        "search_checkpoint_artifact": "search_checkpoint.json",
+        "top_k_candidate_queue_artifact": "top_k_candidate_queue.json",
+        "top_k_candidate_count": int(top_k_candidate_queue.get("entry_count", 0) or 0),
         "generation_provenance": {
             "architecture_source": "architecture_catalog.json",
             "mapping_source": "mapping_candidate_records.json",
+            "checkpoint_artifact": "search_checkpoint.json",
+            "top_k_candidate_queue_artifact": "top_k_candidate_queue.json",
             "jsonl_artifacts": ["mapping_candidates.jsonl"],
             "candidate_identity_policy": "stable_parameter_hash_sidecar",
         },
@@ -2262,7 +2537,12 @@ def build_step2_search_artifacts(
         "screening_results_artifact": "screening_results.jsonl",
         "step3_simulation_queue_artifact": "step3_simulation_queue.json",
         "trial_state_ledger_artifact": "trial_state_ledger.json",
+        "search_checkpoint_artifact": "search_checkpoint.json",
+        "top_k_candidate_queue_artifact": "top_k_candidate_queue.json",
         "step3_queue_entry_count": int(step3_queue.get("entry_count", 0) or 0),
+        "top_k_provenance_entry_count": int(top_k_candidate_queue.get("entry_count", 0) or 0),
+        "top_k_queue_mode": top_k_candidate_queue.get("queue_mode"),
+        "top_k_queue_provenance_only": True,
         "trusted_final_claim": False,
         "claim_boundary": "Step2 screening/promotions only; final trust requires Step3/Step4 evidence.",
     }
@@ -2277,8 +2557,23 @@ def build_step2_search_artifacts(
         scope=scope,
         policy_scope=policy_scope,
     )
+    search_checkpoint = build_step2_search_checkpoint_artifact(
+        workload_package=workload_package,
+        search_space=search_space,
+        architecture_candidates=architecture_candidates,
+        mapping_candidates=mapping_candidates,
+        mapping_candidate_records=mapping_candidate_records,
+        mapping_feedback_state=mapping_feedback_state,
+        convergence_status=convergence_status,
+        top_k_candidate_queue=top_k_candidate_queue,
+        step3_queue=step3_queue,
+        scope=scope,
+        policy_scope=policy_scope,
+    )
     return {
         "architecture_search_space": search_space,
+        "search_checkpoint": search_checkpoint,
+        "top_k_candidate_queue": top_k_candidate_queue,
         "architecture_candidate_generation_report": candidate_generation_report,
         "architecture_screening_report": architecture_screening_report,
         "trial_state_ledger": trial_state_ledger,
@@ -2628,6 +2923,60 @@ def validate_step2_artifacts(artifacts: Mapping[str, Any]) -> Dict[str, Any]:
                     "field": f"step3_simulation_queue.entries[{idx}].architecture_id",
                     "message": "queue entry architecture_id must match architecture.json",
                 })
+
+    top_k_queue = artifacts.get("top_k_candidate_queue", {})
+    if isinstance(top_k_queue, Mapping) and top_k_queue:
+        if top_k_queue.get("trusted_final_claim"):
+            errors.append({"field": "top_k_candidate_queue.trusted_final_claim", "message": "Top-K provenance queue cannot claim trusted final winners"})
+        if top_k_queue.get("release_completion_eligible"):
+            errors.append({"field": "top_k_candidate_queue.release_completion_eligible", "message": "Top-K provenance queue cannot establish release completion"})
+        if top_k_queue.get("top_k_or_representative_completion_allowed"):
+            errors.append({"field": "top_k_candidate_queue.top_k_or_representative_completion_allowed", "message": "Top-K or representative subsets cannot satisfy full DSE completion"})
+        if top_k_queue.get("queue_mode") != "top-k-provenance-only":
+            errors.append({"field": "top_k_candidate_queue.queue_mode", "message": "Top-K artifact must remain provenance-only and separate from Step3 queue"})
+        if top_k_queue.get("step3_simulation_queue_artifact") not in {None, "", "step3_simulation_queue.json"}:
+            errors.append({"field": "top_k_candidate_queue.step3_simulation_queue_artifact", "message": "Top-K provenance must cite the canonical Step3 queue artifact"})
+        if step3_queue and top_k_queue.get("step3_queue_mode") != step3_queue.get("queue_mode"):
+            errors.append({"field": "top_k_candidate_queue.step3_queue_mode", "message": "Top-K provenance must not redefine Step3 queue semantics"})
+        top_k_entries = top_k_queue.get("entries", []) or []
+        if len(top_k_entries) != int(top_k_queue.get("entry_count", len(top_k_entries)) or 0):
+            errors.append({"field": "top_k_candidate_queue.entry_count", "message": "Top-K entry_count must match entries length"})
+        for idx, entry in enumerate(top_k_entries):
+            if not isinstance(entry, Mapping):
+                errors.append({"field": f"top_k_candidate_queue.entries[{idx}]", "message": "Top-K entry must be an object"})
+                continue
+            if entry.get("trusted_final_claim"):
+                errors.append({"field": f"top_k_candidate_queue.entries[{idx}].trusted_final_claim", "message": "Top-K entries cannot claim trusted final winners"})
+            if entry.get("release_completion_eligible"):
+                errors.append({"field": f"top_k_candidate_queue.entries[{idx}].release_completion_eligible", "message": "Top-K entries cannot establish release completion"})
+            if entry.get("top_k_or_representative_completion_allowed"):
+                errors.append({"field": f"top_k_candidate_queue.entries[{idx}].top_k_or_representative_completion_allowed", "message": "Top-K entries cannot satisfy full DSE completion"})
+            if not entry.get("parameter_hash"):
+                errors.append({"field": f"top_k_candidate_queue.entries[{idx}].parameter_hash", "message": "Top-K entries require stable parameter_hash sidecars"})
+            if str(entry.get("queue_state", "")).startswith("scheduled_for_simulation"):
+                errors.append({"field": f"top_k_candidate_queue.entries[{idx}].queue_state", "message": "Top-K provenance entries must not masquerade as Step3 queue entries"})
+
+    search_checkpoint = artifacts.get("search_checkpoint", {})
+    if isinstance(search_checkpoint, Mapping) and search_checkpoint:
+        if search_checkpoint.get("trusted_final_claim"):
+            errors.append({"field": "search_checkpoint.trusted_final_claim", "message": "Search checkpoint cannot claim trusted final winners"})
+        if search_checkpoint.get("release_completion_eligible"):
+            errors.append({"field": "search_checkpoint.release_completion_eligible", "message": "Search checkpoint cannot establish release completion"})
+        if search_checkpoint.get("top_k_queue_provenance_only") is not True:
+            errors.append({"field": "search_checkpoint.top_k_queue_provenance_only", "message": "Search checkpoint must mark Top-K queue as provenance-only"})
+        checkpoint_candidates = search_checkpoint.get("candidates", []) or []
+        if len(checkpoint_candidates) != int(search_checkpoint.get("candidate_count", len(checkpoint_candidates)) or 0):
+            errors.append({"field": "search_checkpoint.candidate_count", "message": "Search checkpoint candidate_count must match candidates length"})
+        if step3_queue and search_checkpoint.get("step3_queue_mode") != step3_queue.get("queue_mode"):
+            errors.append({"field": "search_checkpoint.step3_queue_mode", "message": "Search checkpoint must not redefine Step3 queue semantics"})
+        for idx, candidate in enumerate(checkpoint_candidates):
+            if not isinstance(candidate, Mapping):
+                errors.append({"field": f"search_checkpoint.candidates[{idx}]", "message": "Search checkpoint candidate must be an object"})
+                continue
+            if candidate.get("trusted_final_claim"):
+                errors.append({"field": f"search_checkpoint.candidates[{idx}].trusted_final_claim", "message": "Search checkpoint candidates cannot claim trusted final winners"})
+            if not candidate.get("parameter_hash"):
+                errors.append({"field": f"search_checkpoint.candidates[{idx}].parameter_hash", "message": "Search checkpoint candidates require stable parameter_hash sidecars"})
 
     trial_ledger = artifacts.get("trial_state_ledger", {})
     if isinstance(trial_ledger, Mapping) and trial_ledger:
@@ -3175,6 +3524,8 @@ def run_step2_architecture_mapping_workflow(
         beam_width=beam_width,
         architecture_candidate_set=architecture_candidate_set,
         mapping_candidate_records=mapping_artifacts["candidate_records"],
+        mapping_feedback_state=mapping_artifacts["feedback_state"],
+        convergence_status=mapping_artifacts["convergence_status"],
         low_fidelity_summary=low_fidelity_artifacts["low_fidelity_summary"],
         promotion_decision=promotion_decision,
         step3_queue=step3_queue,
@@ -3197,6 +3548,8 @@ def run_step2_architecture_mapping_workflow(
     design_point.config.setdefault("replay_metadata", {})["architecture_candidate_set"] = "architecture_candidate_set.json"
     design_point.config.setdefault("replay_metadata", {})["step3_simulation_queue"] = "step3_simulation_queue.json"
     design_point.config.setdefault("replay_metadata", {})["architecture_search_space"] = "architecture_search_space.json"
+    design_point.config.setdefault("replay_metadata", {})["search_checkpoint"] = "search_checkpoint.json"
+    design_point.config.setdefault("replay_metadata", {})["top_k_candidate_queue"] = "top_k_candidate_queue.json"
     design_point.config.setdefault("replay_metadata", {})["architecture_candidate_generation_report"] = "architecture_candidate_generation_report.json"
     design_point.config.setdefault("replay_metadata", {})["architecture_screening_report"] = "architecture_screening_report.json"
     design_point.config.setdefault("replay_metadata", {})["trial_state_ledger"] = "trial_state_ledger.json"
@@ -3270,6 +3623,8 @@ def run_step2_architecture_mapping_workflow(
         "architecture_candidate_set": architecture_candidate_set,
         "step3_simulation_queue": step3_queue,
         "architecture_search_space": canonical_search_artifacts["architecture_search_space"],
+        "search_checkpoint": canonical_search_artifacts["search_checkpoint"],
+        "top_k_candidate_queue": canonical_search_artifacts["top_k_candidate_queue"],
         "architecture_candidate_generation_report": canonical_search_artifacts["architecture_candidate_generation_report"],
         "architecture_screening_report": canonical_search_artifacts["architecture_screening_report"],
         "trial_state_ledger": canonical_search_artifacts["trial_state_ledger"],
@@ -3326,6 +3681,8 @@ def run_step2_architecture_mapping_workflow(
             "l2_promotion_decision": "l2_promotion_decision.json",
             "low_fidelity_summary": "low_fidelity_screening_summary.json",
             "architecture_search_space": "architecture_search_space.json",
+            "search_checkpoint": "search_checkpoint.json",
+            "top_k_candidate_queue": "top_k_candidate_queue.json",
             "architecture_candidate_generation_report": "architecture_candidate_generation_report.json",
             "architecture_screening_report": "architecture_screening_report.json",
             "trial_state_ledger": "trial_state_ledger.json",
@@ -3562,6 +3919,8 @@ def run_step2_architecture_screening_workflow(
         beam_width=beam_width,
         architecture_candidate_set=architecture_candidate_set,
         mapping_candidate_records=synthetic_mapping_candidates,
+        mapping_feedback_state=None,
+        convergence_status=None,
         low_fidelity_summary=None,
         promotion_decision=aggregate_promotion_decision,
         step3_queue=step3_queue,
@@ -3620,6 +3979,8 @@ def run_step2_architecture_screening_workflow(
     artifacts: Dict[str, Any] = {
         "architecture_screening_records": aggregate,
         "architecture_search_space": canonical_screening_artifacts["architecture_search_space"],
+        "search_checkpoint": canonical_screening_artifacts["search_checkpoint"],
+        "top_k_candidate_queue": canonical_screening_artifacts["top_k_candidate_queue"],
         "architecture_candidate_generation_report": canonical_screening_artifacts["architecture_candidate_generation_report"],
         "architecture_screening_report": canonical_screening_artifacts["architecture_screening_report"],
         "trial_state_ledger": canonical_screening_artifacts["trial_state_ledger"],
@@ -3635,6 +3996,10 @@ def run_step2_architecture_screening_workflow(
         artifact_paths["architecture_screening_records"] = "architecture_screening_records.json"
         _write_json(root_dir / "architecture_search_space.json", canonical_screening_artifacts["architecture_search_space"])
         artifact_paths["architecture_search_space"] = "architecture_search_space.json"
+        _write_json(root_dir / "search_checkpoint.json", canonical_screening_artifacts["search_checkpoint"])
+        artifact_paths["search_checkpoint"] = "search_checkpoint.json"
+        _write_json(root_dir / "top_k_candidate_queue.json", canonical_screening_artifacts["top_k_candidate_queue"])
+        artifact_paths["top_k_candidate_queue"] = "top_k_candidate_queue.json"
         _write_json(root_dir / "architecture_candidate_generation_report.json", canonical_screening_artifacts["architecture_candidate_generation_report"])
         artifact_paths["architecture_candidate_generation_report"] = "architecture_candidate_generation_report.json"
         _write_json(root_dir / "architecture_screening_report.json", canonical_screening_artifacts["architecture_screening_report"])

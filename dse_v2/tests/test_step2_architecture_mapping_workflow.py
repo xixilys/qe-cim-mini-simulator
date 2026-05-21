@@ -251,6 +251,8 @@ def test_step2_runs_representative_non_qe_workloads_and_writes_required_artifact
             "mapping.json",
             "mapping_promotion_decision.json",
             "architecture_search_space.json",
+            "search_checkpoint.json",
+            "top_k_candidate_queue.json",
             "architecture_candidate_generation_report.json",
             "architecture_screening_report.json",
             "trial_state_ledger.json",
@@ -276,6 +278,8 @@ def test_step2_runs_representative_non_qe_workloads_and_writes_required_artifact
         low_fidelity_summary = _load_json(run_dir / "low_fidelity_screening_summary.json")
         promotion = _load_json(run_dir / "mapping_promotion_decision.json")
         search_space = _load_json(run_dir / "architecture_search_space.json")
+        search_checkpoint = _load_json(run_dir / "search_checkpoint.json")
+        top_k_queue = _load_json(run_dir / "top_k_candidate_queue.json")
         candidate_generation = _load_json(run_dir / "architecture_candidate_generation_report.json")
         screening_report = _load_json(run_dir / "architecture_screening_report.json")
         trial_ledger = _load_json(run_dir / "trial_state_ledger.json")
@@ -288,7 +292,34 @@ def test_step2_runs_representative_non_qe_workloads_and_writes_required_artifact
         assert search_space["search_space_hash"].startswith("sha256:")
         assert search_space["trusted_final_claim"] is False
         assert search_space["freeze_gate_verdict"]["completion_evidence"] is False
+        assert search_checkpoint["schema_version"] == "dse.step2.search_checkpoint_summary.v1"
+        assert search_checkpoint["search_space_hash"] == search_space["search_space_hash"]
+        assert search_checkpoint["top_k_candidate_queue_artifact"] == "top_k_candidate_queue.json"
+        assert search_checkpoint["step3_simulation_queue_artifact"] == "step3_simulation_queue.json"
+        assert search_checkpoint["top_k_queue_provenance_only"] is True
+        assert search_checkpoint["trusted_final_claim"] is False
+        assert search_checkpoint["release_completion_eligible"] is False
+        assert search_checkpoint["candidate_count"] == len(search_checkpoint["candidates"])
+        assert all(candidate["parameter_hash"].startswith("sha256:") for candidate in search_checkpoint["candidates"])
+        assert top_k_queue["schema_version"] == "dse.step2.top_k_candidate_queue.v1"
+        assert top_k_queue["queue_mode"] == "top-k-provenance-only"
+        assert top_k_queue["step3_simulation_queue_artifact"] == "step3_simulation_queue.json"
+        assert top_k_queue["step3_queue_mode"] == "selected-entry-only"
+        assert top_k_queue["provenance_only"] is True
+        assert top_k_queue["execution_order_suggestion_only"] is True
+        assert top_k_queue["top_k_or_representative_completion_allowed"] is False
+        assert top_k_queue["release_completion_eligible"] is False
+        assert top_k_queue["trusted_final_claim"] is False
+        assert top_k_queue["entry_count"] == len(top_k_queue["entries"])
+        assert top_k_queue["entries"]
+        assert all(entry["parameter_hash"].startswith("sha256:") for entry in top_k_queue["entries"])
+        assert all(entry["trusted_final_claim"] is False for entry in top_k_queue["entries"])
+        assert all(entry["not_a_step3_queue_entry"] is True for entry in top_k_queue["entries"])
+        assert all("queue_state" not in entry for entry in top_k_queue["entries"])
         assert candidate_generation["search_space_hash"] == search_space["search_space_hash"]
+        assert candidate_generation["search_checkpoint_artifact"] == "search_checkpoint.json"
+        assert candidate_generation["top_k_candidate_queue_artifact"] == "top_k_candidate_queue.json"
+        assert candidate_generation["top_k_candidate_count"] == top_k_queue["entry_count"]
         assert candidate_generation["mapping_candidate_count"] == len(mapping_candidates)
         assert candidate_generation["candidate_identity_policy"] == "stable_parameter_hash_sidecar"
         assert candidate_generation["all_generated_candidates_have_parameter_hash"] is True
@@ -296,6 +327,10 @@ def test_step2_runs_representative_non_qe_workloads_and_writes_required_artifact
         assert candidate_generation["trusted_final_claim"] is False
         assert screening_report["promotion_decision_artifact"] == "promotion_decisions.jsonl"
         assert screening_report["trial_state_ledger_artifact"] == "trial_state_ledger.json"
+        assert screening_report["search_checkpoint_artifact"] == "search_checkpoint.json"
+        assert screening_report["top_k_candidate_queue_artifact"] == "top_k_candidate_queue.json"
+        assert screening_report["top_k_queue_mode"] == "top-k-provenance-only"
+        assert screening_report["top_k_queue_provenance_only"] is True
         assert screening_report["trusted_final_claim"] is False
         assert trial_ledger["schema_version"] == "dse.step2.trial_state_ledger.v1"
         assert trial_ledger["trial_id"]
@@ -807,6 +842,65 @@ def test_step2_artifact_validation_rejects_missing_or_inconsistent_trial_ledger(
     assert "trial_state_ledger.candidates[0].parameter_hash" in error_fields
 
 
+def test_step2_artifact_validation_rejects_top_k_and_checkpoint_completion_claims(tmp_path):
+    graph = create_vector_search_graph("vector_top_k_validation")
+    package = package_from_graph(graph, workload_family="database_vector_search", importer_id="generic_json")
+    result = run_step2_architecture_mapping_workflow(package, output_dir=tmp_path)
+    assert result.design_point is not None
+
+    artifacts = {
+        **dict(result.artifacts),
+        "system_architecture": result.design_point.system_architecture.to_dict(),
+    }
+    top_k_queue = dict(artifacts["top_k_candidate_queue"])
+    top_k_entries = [dict(entry) for entry in top_k_queue["entries"]]
+    top_k_entries[0]["trusted_final_claim"] = True
+    top_k_entries[0]["release_completion_eligible"] = True
+    top_k_entries[0]["top_k_or_representative_completion_allowed"] = True
+    top_k_entries[0]["queue_state"] = "scheduled_for_simulation"
+    top_k_queue.update({
+        "trusted_final_claim": True,
+        "release_completion_eligible": True,
+        "top_k_or_representative_completion_allowed": True,
+        "queue_mode": "selected-entry-only",
+        "entries": top_k_entries,
+    })
+    search_checkpoint = dict(artifacts["search_checkpoint"])
+    checkpoint_candidates = [dict(candidate) for candidate in search_checkpoint["candidates"]]
+    checkpoint_candidates[0]["trusted_final_claim"] = True
+    checkpoint_candidates[0].pop("parameter_hash", None)
+    search_checkpoint.update({
+        "trusted_final_claim": True,
+        "release_completion_eligible": True,
+        "top_k_queue_provenance_only": False,
+        "candidate_count": int(search_checkpoint["candidate_count"]) + 1,
+        "candidates": checkpoint_candidates,
+    })
+
+    validation = validate_step2_artifacts({
+        **artifacts,
+        "top_k_candidate_queue": top_k_queue,
+        "search_checkpoint": search_checkpoint,
+    })
+
+    assert validation["valid"] is False
+    error_fields = {error["field"] for error in validation["errors"]}
+    assert "top_k_candidate_queue.trusted_final_claim" in error_fields
+    assert "top_k_candidate_queue.release_completion_eligible" in error_fields
+    assert "top_k_candidate_queue.top_k_or_representative_completion_allowed" in error_fields
+    assert "top_k_candidate_queue.queue_mode" in error_fields
+    assert "top_k_candidate_queue.entries[0].trusted_final_claim" in error_fields
+    assert "top_k_candidate_queue.entries[0].release_completion_eligible" in error_fields
+    assert "top_k_candidate_queue.entries[0].top_k_or_representative_completion_allowed" in error_fields
+    assert "top_k_candidate_queue.entries[0].queue_state" in error_fields
+    assert "search_checkpoint.trusted_final_claim" in error_fields
+    assert "search_checkpoint.release_completion_eligible" in error_fields
+    assert "search_checkpoint.top_k_queue_provenance_only" in error_fields
+    assert "search_checkpoint.candidate_count" in error_fields
+    assert "search_checkpoint.candidates[0].trusted_final_claim" in error_fields
+    assert "search_checkpoint.candidates[0].parameter_hash" in error_fields
+
+
 def test_step2_screens_multiple_architectures_without_breaking_step3_handoff(tmp_path):
     graph = create_sparse_spmv_graph("sparse_multi_arch_step2")
     package = package_from_graph(graph, workload_family="sparse_la", importer_id="generic_json")
@@ -824,6 +918,8 @@ def test_step2_screens_multiple_architectures_without_breaking_step3_handoff(tmp
     screening_queue = _load_json(tmp_path / "step3_simulation_queue.json")
     screening_candidate_set = _load_json(tmp_path / "architecture_candidate_set.json")
     search_space = _load_json(tmp_path / "architecture_search_space.json")
+    search_checkpoint = _load_json(tmp_path / "search_checkpoint.json")
+    top_k_queue = _load_json(tmp_path / "top_k_candidate_queue.json")
     candidate_generation = _load_json(tmp_path / "architecture_candidate_generation_report.json")
     screening_report = _load_json(tmp_path / "architecture_screening_report.json")
     trial_ledger = _load_json(tmp_path / "trial_state_ledger.json")
@@ -836,8 +932,24 @@ def test_step2_screens_multiple_architectures_without_breaking_step3_handoff(tmp
     assert (tmp_path / "architecture_screening_records.json").exists()
     assert search_space["policy_scope"] == "architecture_screening"
     assert set(search_space["parameters"]["architecture_ids"]) == {"balanced-generic-systemc-v0", "future-custom-candidate-v0"}
+    assert search_checkpoint["policy_scope"] == "architecture_screening"
+    assert search_checkpoint["top_k_candidate_queue_artifact"] == "top_k_candidate_queue.json"
+    assert search_checkpoint["top_k_queue_provenance_only"] is True
+    assert search_checkpoint["trusted_final_claim"] is False
+    assert top_k_queue["policy_scope"] == "architecture_screening"
+    assert top_k_queue["queue_mode"] == "top-k-provenance-only"
+    assert top_k_queue["step3_queue_mode"] == "selected-entry-only"
+    assert top_k_queue["entry_count"] == len(top_k_queue["entries"])
+    assert top_k_queue["release_completion_eligible"] is False
+    assert top_k_queue["top_k_or_representative_completion_allowed"] is False
+    assert top_k_queue["trusted_final_claim"] is False
+    assert all(entry["not_a_step3_queue_entry"] is True for entry in top_k_queue["entries"])
     assert candidate_generation["search_space_hash"] == search_space["search_space_hash"]
+    assert candidate_generation["search_checkpoint_artifact"] == "search_checkpoint.json"
+    assert candidate_generation["top_k_candidate_queue_artifact"] == "top_k_candidate_queue.json"
     assert screening_report["screened_candidate_count"] >= 2
+    assert screening_report["top_k_queue_mode"] == "top-k-provenance-only"
+    assert screening_report["top_k_queue_provenance_only"] is True
     assert trial_ledger["schema_version"] == "dse.step2.trial_state_ledger.v1"
     assert trial_ledger["policy_scope"] == "architecture_screening"
     assert trial_ledger["candidate_count"] == trial_ledger["architecture_candidate_count"] + trial_ledger["mapping_candidate_count"]

@@ -26,9 +26,10 @@ workload ingestion
 
 但系统层面还需要继续补强一个更硬的抽象：**DSE campaign / trial state
 machine**。当前 Step2 已开始把分散的搜索记录收敛成通用
-`trial_state_ledger.json`，覆盖 candidate generation、screening、promotion
-和 Step3 queue admission；这解决了“搜索候选为什么来、为什么过/不过、是否
-进入 Step3”的第一层账本问题。剩余缺口是 campaign 级预算/恢复/环境/跨
+`trial_state_ledger.json`，并补了 `search_checkpoint.json` 与
+`top_k_candidate_queue.json`，覆盖 candidate generation、screening、promotion、
+Top-K ordering provenance 和 Step3 queue admission；这解决了“搜索候选为什么来、
+为什么过/不过、Top-K 只是排序建议还是 Step3 admission、是否进入 Step3”的第一层账本问题。剩余缺口是 campaign 级预算/恢复/环境/跨
 Step3/Step4/Step5 反馈闭环的一等公民 ledger。
 
 现在文档里有 Step1、Step2、Step3、Reporting，Step2 也有了
@@ -198,6 +199,7 @@ domain_physics_validation.json
 现在文档里同类 artifact 有多套名字。例如：
 
 * `mapping_candidates.jsonl` / `mapping_candidate_records.json`
+* `top_k_candidate_queue.json` / `step3_simulation_queue.json`
 * `promotion_decisions.jsonl` / `promotion_decision.json` / `mapping_promotion_decision.json`
 * `manifest.json` / `artifact_manifest.json`
 * `mapping.json` / `mapping_selected_record.json`

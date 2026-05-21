@@ -11,6 +11,8 @@ only; trusted selection requires SystemC/gem5+SystemC evidence.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import hashlib
+import json
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
 from dse_v2.core.architecture.accelerator import Accelerator, SystemArchitecture
@@ -137,6 +139,7 @@ class MappingCandidate:
     candidate_id: str
     seed_name: str
     mapping: Dict[str, str]
+    parameter_hash: str
     predicted_latency_ms: float
     predicted_energy_j: float
     predicted_data_movement_mb: float
@@ -152,6 +155,9 @@ class MappingCandidate:
             "candidate_id": self.candidate_id,
             "seed_name": self.seed_name,
             "mapping": dict(self.mapping),
+            "parameters": {"mapping": dict(self.mapping)},
+            "parameter_hash": self.parameter_hash,
+            "candidate_identity_policy": "stable_graph_architecture_mapping_hash",
             "screening": {
                 "fidelity": "L1_screening",
                 "predicted_latency_ms": self.predicted_latency_ms,
@@ -593,6 +599,23 @@ def mapping_violations(mapping: Mapping[str, str], graph: ComputeGraph, matrix: 
     return violations
 
 
+def _mapping_parameter_hash(mapping: Mapping[str, str]) -> str:
+    payload = json.dumps(dict(mapping), sort_keys=True, separators=(",", ":"), default=str)
+    return "sha256:" + hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _stable_mapping_candidate_id(graph: ComputeGraph, architecture: SystemArchitecture, mapping: Mapping[str, str]) -> str:
+    identity_payload = {
+        "graph_id": graph.graph_id,
+        "architecture_id": architecture.system_id,
+        "parameter_hash": _mapping_parameter_hash(mapping),
+    }
+    digest = hashlib.sha256(
+        json.dumps(identity_payload, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
+    ).hexdigest()
+    return f"map_{digest[:16]}"
+
+
 def screen_mapping(seed: Mapping[str, Any], graph: ComputeGraph, architecture: SystemArchitecture, candidate_index: int) -> MappingCandidate:
     mapping = dict(seed["mapping"])
     violations: List[str] = []
@@ -614,10 +637,12 @@ def screen_mapping(seed: Mapping[str, Any], graph: ComputeGraph, architecture: S
     predicted_latency_ms += movement * 0.002
     confidence = 0.72 if not violations else 0.35
     priority = 1.0 / max(predicted_latency_ms, 1e-9) * confidence
+    parameter_hash = _mapping_parameter_hash(mapping)
     return MappingCandidate(
-        candidate_id=f"map_{candidate_index:03d}_{seed['seed_name']}",
+        candidate_id=_stable_mapping_candidate_id(graph, architecture, mapping),
         seed_name=str(seed["seed_name"]),
         mapping=mapping,
+        parameter_hash=parameter_hash,
         predicted_latency_ms=predicted_latency_ms,
         predicted_energy_j=predicted_energy_j,
         predicted_data_movement_mb=movement,

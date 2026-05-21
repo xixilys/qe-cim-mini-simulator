@@ -63,6 +63,26 @@ def test_mapping_search_emits_promotion_sample_and_feedback():
     assert artifacts["convergence_status"]["stop_reason"] == "incomplete"
 
 
+def test_mapping_search_candidate_identity_is_parameter_stable_across_beam_budget():
+    graph = create_sparse_spmv_graph(graph_id="sparse_profile_stable_candidate_id")
+    architecture = build_pilot_architecture()
+
+    narrow = run_mapping_search(graph, architecture, beam_width=1)
+    wide = run_mapping_search(graph, architecture, beam_width=3)
+    narrow_by_mapping = {
+        json.dumps(record["mapping"], sort_keys=True): record
+        for record in narrow["candidate_records"]["candidates"]
+    }
+    wide_by_mapping = {
+        json.dumps(record["mapping"], sort_keys=True): record
+        for record in wide["candidate_records"]["candidates"]
+    }
+    shared_key = next(iter(set(narrow_by_mapping) & set(wide_by_mapping)))
+    assert narrow_by_mapping[shared_key]["candidate_id"] == wide_by_mapping[shared_key]["candidate_id"]
+    assert narrow_by_mapping[shared_key]["parameter_hash"] == wide_by_mapping[shared_key]["parameter_hash"]
+    assert narrow_by_mapping[shared_key]["candidate_identity_policy"] == "stable_graph_architecture_mapping_hash"
+
+
 def test_mapping_search_records_multi_candidate_feedback_and_budget_exhaustion():
     graph = create_sparse_spmv_graph(graph_id="sparse_profile_multi_feedback")
     architecture = build_pilot_architecture()
