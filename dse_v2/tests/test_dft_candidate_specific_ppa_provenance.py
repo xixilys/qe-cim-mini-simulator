@@ -8,8 +8,10 @@ from pathlib import Path
 
 from dse_v2.reference_workloads.dft_candidate_specific_ppa_provenance import (
     DFT_CANDIDATE_SPECIFIC_PPA_PROVENANCE_AUDIT_SCHEMA,
+    build_dft_hardware_tie_breaker_execution_queue,
     build_dft_candidate_specific_ppa_provenance_audit,
     validate_dft_candidate_specific_ppa_provenance_audit,
+    validate_dft_hardware_tie_breaker_execution_queue,
     write_dft_candidate_specific_ppa_provenance_audit,
 )
 from dse_v2.reference_workloads.dft_hardware_ppa_ranking import REQUIRED_STAGE_IDS
@@ -153,6 +155,65 @@ def test_provenance_audit_blocks_materialized_source_flow_without_fresh_commands
     assert audit["blocker_id_counts"]["raw_evidence_materialized_from_source_flow"] == len(REQUIRED_STAGE_IDS)
     assert queue["work_item_count"] == len(REQUIRED_STAGE_IDS)
     assert queue["work_items"][0]["fresh_execution_required"] is True
+
+
+def test_provenance_audit_missing_candidate_specific_files_fails_closed_and_queues_all_stages(
+    tmp_path: Path,
+) -> None:
+    run_dir = tmp_path / "run"
+    candidate_id = "cand-a"
+    kernel_id = "fft_ifft_ffft"
+    _write_json(
+        run_dir / "dft_hardware_closure_release_gate.json",
+        {
+            "schema_version": "dse.dft.hardware_closure_release_gate.v1",
+            "release_id": "release-missing-provenance-test",
+            "candidate_count": 1,
+            "major_kernel_count": 1,
+            "expected_kernel_ids": [kernel_id],
+            "hardware_completion_eligible": True,
+            "candidate_rows": [
+                {
+                    "candidate_id": candidate_id,
+                    "candidate_hardware_gate_passed": True,
+                    "candidate_claim_eligible": True,
+                }
+            ],
+        },
+    )
+    _write_json(
+        run_dir / "dft_hardware_ppa_ranking.json",
+        {
+            "schema_version": "dse.dft.hardware_ppa_ranking.v1",
+            "status": "trusted_hardware_ppa_ranking_tied",
+            "fpga_ranking": [{"candidate_id": candidate_id, "rank": 1}],
+            "asic_ranking": [{"candidate_id": candidate_id, "rank": 1}],
+            "winner_selection_status": "tied_by_identical_kernel_ppa_no_single_winner",
+        },
+    )
+
+    audit = build_dft_candidate_specific_ppa_provenance_audit(run_dir)
+    audit_validation = validate_dft_candidate_specific_ppa_provenance_audit(audit)
+    queue = build_dft_hardware_tie_breaker_execution_queue(run_dir, provenance_audit=audit)
+    queue_validation = validate_dft_hardware_tie_breaker_execution_queue(queue)
+
+    assert audit["status"] == "blocked_candidate_specific_ppa_provenance"
+    assert audit["winner_provenance_eligible"] is False
+    assert audit["unit_count"] == 1
+    assert audit["trusted_unit_count"] == 0
+    assert audit["blocked_unit_count"] == 1
+    assert audit["blocker_id_counts"]["missing_candidate_specific_evidence_dir"] == 1
+    assert audit["blocker_id_counts"]["missing_source_bundle_manifest"] == 1
+    assert audit["blocker_id_counts"]["missing_tool_versions_manifest"] == 1
+    assert audit["hardware_completion_eligible"] is False
+    assert audit["deliverable_complete"] is False
+    assert queue["status"] == "fresh_candidate_specific_ppa_execution_required"
+    assert queue["work_item_count"] == len(REQUIRED_STAGE_IDS)
+    assert {item["stage_id"] for item in queue["work_items"]} == set(REQUIRED_STAGE_IDS)
+    assert all(item["fresh_execution_required"] is True for item in queue["work_items"])
+    assert all(item["no_shared_evidence_allowed"] is True for item in queue["work_items"])
+    assert audit_validation["valid"] is True
+    assert queue_validation["valid"] is True
 
 
 def test_provenance_audit_accepts_fresh_candidate_specific_command_tool_provenance(tmp_path: Path) -> None:

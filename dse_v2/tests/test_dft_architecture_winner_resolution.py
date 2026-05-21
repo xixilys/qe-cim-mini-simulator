@@ -158,3 +158,25 @@ def test_winner_resolution_accepts_unique_fpga_and_asic_rank_one_without_complet
     assert payload["trusted_best_architecture_claim_eligible"] is False
     assert payload["deliverable_complete"] is False
     assert validation["valid"] is True
+
+
+def test_winner_resolution_blocks_unique_ppa_rank_without_trusted_provenance(tmp_path: Path) -> None:
+    run_dir = tmp_path / "run"
+    _seed_ppa(run_dir, tied=False)
+    _seed_provenance(run_dir, eligible=False)
+
+    payload = build_dft_architecture_winner_resolution(run_dir)
+    validation = validate_dft_architecture_winner_resolution(payload)
+
+    assert payload["status"] == "blocked_no_unique_hardware_ppa_winners"
+    assert payload["hardware_winner_resolution_eligible"] is False
+    assert payload["trusted_best_architecture_claim_eligible"] is False
+    assert payload["deliverable_complete"] is False
+    assert payload["candidate_specific_ppa_provenance"]["winner_provenance_eligible"] is False
+    assert payload["candidate_specific_ppa_provenance"]["tie_breaker_work_item_count"] == 80
+    assert any(
+        blocker["blocker_id"] == "candidate_specific_ppa_provenance_not_trusted"
+        for blocker in payload["blockers"]
+    )
+    assert payload["completion_claim"] == "blocked"
+    assert validation["valid"] is True

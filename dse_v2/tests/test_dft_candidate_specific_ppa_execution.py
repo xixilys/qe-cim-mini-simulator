@@ -229,6 +229,29 @@ def test_execution_skip_remote_clears_stale_raw_and_records_provenance(
     assert source_bundle["shared_microkernel_smoke_only"] is False
 
 
+def test_execution_missing_tie_breaker_queue_fails_closed_without_claim_upgrade(tmp_path: Path) -> None:
+    run_dir = tmp_path / "run"
+
+    payload = build_dft_candidate_specific_ppa_execution(
+        run_dir=run_dir,
+        candidate_ids=["cand-a"],
+        kernel_ids=["fft_ifft_ffft"],
+        skip_remote=True,
+        timeout_s=60,
+    )
+    validation = validate_dft_candidate_specific_ppa_execution(payload)
+
+    assert payload["status"] == "failed_missing_tie_breaker_queue"
+    assert payload["selected_unit_count"] == 0
+    assert payload["executed_unit_count"] == 0
+    assert payload["blocked_unit_count"] == 0
+    assert payload["materialized_raw_file_count"] == 0
+    assert payload["source_artifacts"]["tie_breaker_queue"]["exists"] is False
+    assert payload["hardware_completion_eligible"] is False
+    assert payload["deliverable_complete"] is False
+    assert validation["valid"] is True
+
+
 def test_aggregate_fresh_execution_shards_deduplicates_latest_unit(tmp_path: Path) -> None:
     run_dir = tmp_path / "run"
     unit_a_old = {
