@@ -6,6 +6,9 @@ from dse_v2.mapping.search_policy import (
     RandomBaselinePolicy,
     SearchProblem,
     SeededBeamSearchPolicy,
+    candidate_observation_id_lookup,
+    observe_step4_feedback,
+    step4_feedback_observations,
 )
 
 
@@ -225,6 +228,82 @@ def test_hierarchical_funnel_observations_change_later_proposal_order():
     assert second_round[0].parameter_hash == baseline.parameter_hash
     assert checkpoint["observed_count"] == 1
     assert checkpoint["best_candidate_id"] == second_round[0].candidate_id
+
+
+def test_hierarchical_funnel_observes_step4_feedback_updates_with_candidate_aliases():
+    problem = SearchProblem(
+        problem_id="p5-step4",
+        workload_run_id="w5-step4",
+        objective="maximize throughput",
+        parameters={
+            "release_lane": ["release"],
+            "mapping_candidate_id": ["m-baseline", "m-calibrated"],
+            "pe_count": [1],
+        },
+        constraints={"formal_pareto_lane_field": "release_lane", "release_lane": "release"},
+    )
+    policy = HierarchicalFunnelSearchPolicy()
+
+    first_round = policy.propose(problem, budget=2)
+    baseline = next(record for record in first_round if record.parameters["mapping_candidate_id"] == "m-baseline")
+    lookup = candidate_observation_id_lookup(record.to_dict() for record in first_round)
+    feedback_update = {
+        "schema_version": "dse.contract.feedback_update.v1",
+        "campaign_id": "campaign",
+        "workload_run_id": "w5-step4",
+        "trial_id": "trial",
+        "updates": [
+            {
+                "target": "search_policy",
+                "status": "available",
+                "candidate_refs": {
+                    "mapping_candidate_id": "m-baseline",
+                    "mapping_parameter_hash": baseline.parameter_hash,
+                },
+                "metrics": {
+                    "latency_ms": 1.2,
+                    "trusted_sample": True,
+                    "step4_verdict": "trusted_pass",
+                    "calibrated_score_delta": 100.0,
+                },
+                "source_artifacts": ["simulation_result.json", "mapping_feedback_state.json"],
+            }
+        ],
+        "source_artifact_hashes": {},
+    }
+    calibration_record = {
+        "schema_version": "dse.contract.calibration_record.v1",
+        "campaign_id": "campaign",
+        "workload_run_id": "w5-step4",
+        "trial_id": "trial",
+        "levels": ["l3"],
+        "confidence": 0.8,
+        "error_metrics": {"max_abs_error": 0.0},
+        "source_artifact_hashes": {},
+    }
+
+    observations = step4_feedback_observations(feedback_update, calibration_record)
+    applied = observe_step4_feedback(
+        policy,
+        feedback_update,
+        calibration_record,
+        candidate_id_lookup=lookup,
+    )
+    second_round = policy.propose(problem, budget=1)
+    checkpoint = policy.checkpoint(problem).to_dict()
+    observed_candidate = next(
+        candidate for candidate in checkpoint["candidates"]
+        if candidate["candidate_id"] == baseline.candidate_id
+    )
+
+    assert observations[0]["candidate_id"] == "m-baseline"
+    assert applied == 1
+    assert second_round[0].candidate_id == baseline.candidate_id
+    assert checkpoint["observed_count"] == 1
+    assert checkpoint["best_candidate_id"] == baseline.candidate_id
+    assert observed_candidate["observed_metrics"]["latency_ms"] == 1.2
+    assert observed_candidate["observed_metrics"]["calibration_confidence"] == 0.8
+    assert observed_candidate["observed_metrics"]["promoted"] is True
 
 
 def test_hierarchical_funnel_considers_full_grid_before_budgeting_outputs():

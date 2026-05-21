@@ -2573,6 +2573,22 @@ def build_step2_search_checkpoint_artifact(
         "search_policy_observed_count": search_policy_payload.get("observed_count") if isinstance(search_policy_payload, Mapping) else None,
         "search_policy_candidates": compact_policy_candidates,
         "search_policy_checkpoint": search_policy_payload.get("checkpoint") if isinstance(search_policy_payload, Mapping) else None,
+        "search_policy_feedback": {
+            "feedback_update_artifact": "feedback_update.json",
+            "calibration_record_artifact": "calibration_record.json",
+            "observe_api": "SearchPolicy.observe(candidate_id, metrics)",
+            "candidate_id_resolution": [
+                "search_policy_candidate_id",
+                "mapping_candidate_id",
+                "mapping_parameter_hash",
+                "parameter_hash",
+                "candidate_id",
+            ],
+            "claim_boundary": (
+                "Step4 feedback may update SearchPolicy checkpoint state, but it cannot "
+                "admit extra Step3 work unless Campaign budget materializes queue entries."
+            ),
+        },
         "search_space_artifact": "architecture_search_space.json",
         "search_space_hash": search_space.get("search_space_hash"),
         "candidate_identity_policy": "stable_parameter_hash_sidecar",

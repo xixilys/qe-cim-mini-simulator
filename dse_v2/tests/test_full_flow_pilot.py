@@ -8,6 +8,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import dse_v2.backends.gem5_systemc_adapter as gem5_adapter_module
 from dse_v2.backends.generic_systemc_bridge import GenericSystemCBackend
@@ -26,7 +27,7 @@ from dse_v2.evidence.full_flow import (
 )
 from dse_v2.mapping.search import select_initial_mapping
 from dse_v2.registry import ExperimentRegistry
-from dse_v2.scripts.dse.run_full_flow_pilot import build_pilot_architecture
+from dse_v2.scripts.dse.run_full_flow_pilot import _build_campaign_evaluation_plan, build_pilot_architecture
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -160,6 +161,10 @@ def test_full_flow_pilot_writes_required_evidence(tmp_path):
     assert campaign["final_completion_status"] is None
     assert campaign["budgets"]["broad_evidence_run"] is False
     assert campaign["budgets"]["step3_queue_entry_budget"] == 1
+    assert campaign["budgets"]["step3_admission_policy"] == "selected_entry_only"
+    assert campaign["budgets"]["top_k_widening_requested"] is False
+    assert campaign["budgets"]["top_k_widening_allowed"] is False
+    assert campaign["budgets"]["top_k_budget_requires_materialized_step3_queue"] is True
     assert campaign["policies"]["top_k_queue_role"] == "provenance_only_not_step3_admission"
     assert "DFT" not in "".join(campaign.keys())
     assert campaign_ledger["campaign_id"] == step2_ledger["campaign_id"]
@@ -191,6 +196,12 @@ def test_full_flow_pilot_writes_required_evidence(tmp_path):
     assert len(evaluation_plan["planned_entries"]) == evaluation_plan["planned_entry_count"]
     assert evaluation_plan["planned_entries"][0]["admission_source"] == "step2/step3_simulation_queue.json"
     assert evaluation_plan["planned_entries"][0]["execution_allowed"] is True
+    assert evaluation_plan["admission_control"]["step3_admission_authority"] == "step2/step3_simulation_queue.json"
+    assert evaluation_plan["admission_control"]["top_k_queue_role"] == "provenance_only_not_step3_admission"
+    assert evaluation_plan["admission_control"]["widening_requested_by_budget"] is False
+    assert evaluation_plan["admission_control"]["hidden_evidence_fanout_allowed"] is False
+    assert evaluation_plan["search_feedback_loop"]["observe_api"] == "SearchPolicy.observe(candidate_id, metrics)"
+    assert evaluation_plan["search_feedback_loop"]["feedback_update_ref"] == "feedback_update.json"
     ledger_candidate_ids = {row["candidate_id"] for row in step2_ledger["candidates"]}
     assert evaluation_plan["planned_entries"][0]["mapping_candidate_id"] in ledger_candidate_ids
 
@@ -204,6 +215,17 @@ def test_full_flow_pilot_writes_required_evidence(tmp_path):
     assert verdict["status_boundary"]["predicted_only_done_evidence"] == "unsupported"
 
     sim_result = json.loads((out_dir / "simulation_result.json").read_text())
+    feedback_update = json.loads((out_dir / "feedback_update.json").read_text())
+    search_policy_updates = [
+        update for update in feedback_update["updates"]
+        if update.get("target") == "search_policy"
+    ]
+    assert search_policy_updates
+    assert search_policy_updates[0]["observe_api"] == "SearchPolicy.observe(candidate_id, metrics)"
+    assert search_policy_updates[0]["candidate_refs"]["mapping_candidate_id"]
+    assert search_policy_updates[0]["candidate_refs"]["mapping_parameter_hash"].startswith("sha256:")
+    assert search_policy_updates[0]["metrics"]["step4_verdict"] == "trusted_pass"
+    assert search_policy_updates[0]["metrics"]["promoted"] is True
     assert sim_result["status"] == "passed"
     assert sim_result["missing_required_coverage"] == []
     assert sim_result["numerical_validation"]["passed"] is True
@@ -255,6 +277,80 @@ def test_full_flow_pilot_writes_required_evidence(tmp_path):
         "dse_v2/scripts/dse/run_full_flow_pilot.py",
     ]
     assert replay["simulator_replay_command"]
+
+
+def test_campaign_evaluation_plan_requires_step3_queue_materialization_for_top_k_widening(tmp_path):
+    step2_dir = tmp_path / "step2"
+    step2_dir.mkdir()
+    (step2_dir / "step3_simulation_queue.json").write_text(json.dumps({
+        "schema_version": "dse.step3.simulation_queue.v1",
+        "queue_mode": "selected-entry-only",
+        "entry_count": 1,
+        "entries": [
+            {
+                "queue_entry_id": "q-selected",
+                "candidate_id": "arch::m-selected",
+                "mapping_candidate_id": "m-selected",
+                "architecture_id": "arch",
+                "design_point_id": "dp",
+                "mapping_id": "mapping",
+                "promoted_for_simulation": True,
+                "queue_state": "scheduled_for_simulation",
+            }
+        ],
+    }), encoding="utf-8")
+    (step2_dir / "top_k_candidate_queue.json").write_text(json.dumps({
+        "schema_version": "dse.step2.top_k_candidate_queue.v1",
+        "queue_mode": "top-k-provenance-only",
+        "entry_count": 2,
+        "entries": [
+            {
+                "top_k_entry_id": "top-k-1",
+                "candidate_id": "m-selected",
+                "mapping_candidate_id": "m-selected",
+                "architecture_id": "arch",
+                "top_k_rank": 1,
+                "parameter_hash": "sha256:selected",
+                "priority_score": 10.0,
+            },
+            {
+                "top_k_entry_id": "top-k-2",
+                "candidate_id": "m-other",
+                "mapping_candidate_id": "m-other",
+                "architecture_id": "arch",
+                "top_k_rank": 2,
+                "parameter_hash": "sha256:other",
+                "priority_score": 9.0,
+            },
+        ],
+    }), encoding="utf-8")
+    package = package_from_graph(create_sparse_spmv_graph("campaign_budget_widening_guard"))
+
+    plan = _build_campaign_evaluation_plan(
+        args=SimpleNamespace(),
+        run_dir=tmp_path,
+        run_id="run",
+        workload_package=package,
+        scope={"campaign_id": "campaign", "workload_run_id": "workload", "trial_id": "trial"},
+        budgets={
+            "top_k_widening_requested": True,
+            "top_k_widening_allowed": True,
+            "top_k_admission_budget": 1,
+            "broad_evidence_run": False,
+        },
+    )
+
+    assert plan["selected_entry_only"] is True
+    assert plan["broad_evidence_run"] is False
+    assert plan["planned_entry_count"] == 1
+    assert plan["deferred_entry_count"] == 1
+    assert plan["admission_control"]["widening_requested_by_budget"] is True
+    assert plan["admission_control"]["widening_allowed_by_budget"] is True
+    assert plan["admission_control"]["materialized_step3_queue_required"] is True
+    assert plan["admission_control"]["hidden_evidence_fanout_allowed"] is False
+    assert plan["deferred_entries"][0]["mapping_candidate_id"] == "m-other"
+    assert plan["deferred_entries"][0]["admission_status"] == "deferred_requires_step3_queue_materialization"
+    assert "materialized_step3_queue_entry_required" in plan["deferred_entries"][0]["budget_widening_blockers"]
 
 
 def test_generic_full_flow_pilot_campaign_ledger_is_domain_neutral(tmp_path):

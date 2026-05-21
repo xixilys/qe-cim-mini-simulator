@@ -15,7 +15,7 @@ import hashlib
 import json
 from dataclasses import dataclass, field
 from random import Random
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Set, Tuple
 
 
 STEP2_SCREENABLE = "step2_screenable"
@@ -211,6 +211,139 @@ class SearchPolicy(ABC):
     @abstractmethod
     def checkpoint(self, problem: SearchProblem) -> SearchCheckpoint:
         """Return a replayable state snapshot."""
+
+
+def _as_mapping(value: Any) -> Dict[str, Any]:
+    return dict(value) if isinstance(value, Mapping) else {}
+
+
+def candidate_observation_id_lookup(candidates: Iterable[Mapping[str, Any]]) -> Dict[str, str]:
+    """Return stable aliases that can route Step4 feedback to policy records.
+
+    Step4 artifacts often know a selected mapping id or a parameter hash rather
+    than the internal SearchPolicy candidate id.  This lookup is intentionally
+    generic: it indexes the canonical `candidate_id`, `parameter_hash`, and any
+    scalar `parameters.*` values without granting those aliases Step3 admission
+    authority.
+    """
+
+    lookup: Dict[str, str] = {}
+    ambiguous: Set[str] = set()
+
+    def add_alias(value: Any, candidate_id: str) -> None:
+        alias = str(value or "")
+        if not alias or alias in ambiguous:
+            return
+        previous = lookup.get(alias)
+        if previous is None:
+            lookup[alias] = candidate_id
+        elif previous != candidate_id:
+            lookup.pop(alias, None)
+            ambiguous.add(alias)
+
+    for candidate in candidates:
+        if not isinstance(candidate, Mapping):
+            continue
+        candidate_id = str(candidate.get("candidate_id") or "")
+        if not candidate_id:
+            continue
+        add_alias(candidate_id, candidate_id)
+        add_alias(candidate.get("parameter_hash"), candidate_id)
+        parameters = candidate.get("parameters", {})
+        if isinstance(parameters, Mapping):
+            for value in parameters.values():
+                if isinstance(value, (str, int, float, bool)) and value not in (None, ""):
+                    add_alias(value, candidate_id)
+    return lookup
+
+
+def step4_feedback_observations(
+    feedback_update: Mapping[str, Any],
+    calibration_record: Optional[Mapping[str, Any]] = None,
+) -> List[Dict[str, Any]]:
+    """Normalize Step4 feedback/calibration artifacts into policy observations.
+
+    The feedback contract stays domain-neutral: each observation resolves a
+    candidate-like id plus a metrics map suitable for `SearchPolicy.observe()`.
+    Callers may use `candidate_observation_id_lookup()` when Step4 reports a
+    mapping id or parameter hash instead of the policy candidate id.
+    """
+
+    calibration = _as_mapping(calibration_record)
+    calibration_confidence = calibration.get("confidence")
+    calibration_errors = _as_mapping(calibration.get("error_metrics"))
+    observations: List[Dict[str, Any]] = []
+    for index, update in enumerate(feedback_update.get("updates", []) or []):
+        if not isinstance(update, Mapping):
+            continue
+        candidate_refs = _as_mapping(update.get("candidate_refs"))
+        metrics = _as_mapping(update.get("metrics"))
+        if "trusted_sample" in update:
+            metrics.setdefault("trusted_sample", bool(update.get("trusted_sample")))
+            metrics.setdefault("promoted", bool(update.get("trusted_sample")))
+        if "trusted_sample" in metrics:
+            metrics.setdefault("promoted", bool(metrics.get("trusted_sample")))
+        if "step4_verdict" not in metrics:
+            if metrics.get("trusted_sample") or update.get("trusted_sample"):
+                metrics["step4_verdict"] = "trusted_pass"
+            elif update.get("status") in {"blocked", "failed", "rejected"}:
+                metrics["step4_verdict"] = str(update.get("status"))
+            else:
+                metrics["step4_verdict"] = str(update.get("status") or "available")
+        if isinstance(calibration_confidence, (int, float)):
+            metrics.setdefault("calibration_confidence", float(calibration_confidence))
+            metrics.setdefault("step4_quality_score", float(calibration_confidence) * 100.0)
+        if calibration_errors:
+            metrics.setdefault("calibration_error_metrics", dict(calibration_errors))
+        candidate_id = str(
+            update.get("search_policy_candidate_id")
+            or candidate_refs.get("search_policy_candidate_id")
+            or update.get("candidate_id")
+            or candidate_refs.get("candidate_id")
+            or candidate_refs.get("mapping_candidate_id")
+            or candidate_refs.get("mapping_parameter_hash")
+            or candidate_refs.get("parameter_hash")
+            or ""
+        )
+        if not candidate_id:
+            continue
+        observations.append({
+            "observation_id": f"step4-feedback::{feedback_update.get('trial_id', 'trial')}::{index}",
+            "candidate_id": candidate_id,
+            "candidate_refs": candidate_refs,
+            "metrics": metrics,
+            "source_update_index": index,
+            "source_artifacts": list(update.get("source_artifacts", []) or []),
+        })
+    return observations
+
+
+def observe_step4_feedback(
+    policy: SearchPolicy,
+    feedback_update: Mapping[str, Any],
+    calibration_record: Optional[Mapping[str, Any]] = None,
+    *,
+    candidate_id_lookup: Optional[Mapping[str, str]] = None,
+) -> int:
+    """Apply Step4 observations to a live SearchPolicy instance.
+
+    Returns the number of feedback rows routed to `policy.observe()`.  Unknown
+    ids remain fail-closed inside policy implementations; the optional lookup is
+    the canonical way to bridge mapping ids/parameter hashes to policy ids.
+    """
+
+    aliases = dict(candidate_id_lookup or {})
+    observed = 0
+    for observation in step4_feedback_observations(feedback_update, calibration_record):
+        source_id = str(observation.get("candidate_id") or "")
+        candidate_id = aliases.get(source_id, source_id)
+        if not candidate_id:
+            continue
+        metrics = _as_mapping(observation.get("metrics"))
+        metrics.setdefault("step4_feedback_source_candidate_id", source_id)
+        policy.observe(candidate_id, metrics)
+        observed += 1
+    return observed
 
 
 def _score_candidate(parameters: Mapping[str, Any], objective: str) -> float:
@@ -627,4 +760,7 @@ __all__ = [
     "SIMULATION_ELIGIBLE",
     "STEP2_SCREENABLE",
     "STEP3_EVALUABLE",
+    "candidate_observation_id_lookup",
+    "observe_step4_feedback",
+    "step4_feedback_observations",
 ]

@@ -437,6 +437,8 @@ def test_step2_search_policy_candidate_records_flow_into_canonical_artifacts_wit
     assert search_checkpoint["release_completion_eligible"] is False
     assert search_checkpoint["trusted_final_claim"] is False
     assert search_checkpoint["search_policy_proposed_count"] == len(search_checkpoint["search_policy_candidates"])
+    assert search_checkpoint["search_policy_feedback"]["observe_api"] == "SearchPolicy.observe(candidate_id, metrics)"
+    assert search_checkpoint["search_policy_feedback"]["feedback_update_artifact"] == "feedback_update.json"
     assert all(candidate["parameter_hash"].startswith("sha256:") for candidate in search_checkpoint["candidates"])
     assert all(candidate["trusted_final_claim"] is False for candidate in search_checkpoint["candidates"])
     assert all(candidate["parameter_hash"].startswith("sha256:") for candidate in search_checkpoint["search_policy_candidates"])

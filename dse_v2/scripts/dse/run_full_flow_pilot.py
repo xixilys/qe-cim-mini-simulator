@@ -389,13 +389,22 @@ def _campaign_objective(args: argparse.Namespace, workload_package: WorkloadPack
 def _campaign_budgets(args: argparse.Namespace, run_dir: Path) -> Dict[str, Any]:
     queue = _load_json(run_dir / "step2" / "step3_simulation_queue.json")
     top_k = _load_json(run_dir / "step2" / "top_k_candidate_queue.json")
+    queue_entry_budget = int(queue.get("entry_count", 0) or 0)
+    top_k_entry_count = int(top_k.get("entry_count", 0) or 0)
     return {
         "backend": args.backend,
         "evidence_mode": args.evidence_mode,
         "timeout_seconds": args.timeout,
         "feedback_sample_budget": max(1, int(args.feedback_samples)),
-        "step3_queue_entry_budget": int(queue.get("entry_count", 0) or 0),
-        "top_k_provenance_entry_count": int(top_k.get("entry_count", 0) or 0),
+        "step3_queue_entry_budget": queue_entry_budget,
+        "top_k_provenance_entry_count": top_k_entry_count,
+        "step3_admission_policy": "selected_entry_only",
+        "step3_admission_authority": "step2/step3_simulation_queue.json",
+        "top_k_queue_role": "provenance_only_not_step3_admission",
+        "top_k_widening_requested": False,
+        "top_k_widening_allowed": False,
+        "top_k_admission_budget": 0,
+        "top_k_budget_requires_materialized_step3_queue": True,
         "broad_evidence_run": False,
         "evidence_fanout_policy": "selected_entry_only_for_pilot",
     }
@@ -454,6 +463,9 @@ def _build_campaign_evaluation_plan(
     queue = _load_json(run_dir / "step2" / "step3_simulation_queue.json")
     top_k_queue = _load_json(run_dir / "step2" / "top_k_candidate_queue.json")
     top_k_lookup = _top_k_lookup(top_k_queue)
+    top_k_admission_budget = max(0, int(budgets.get("top_k_admission_budget", 0) or 0))
+    top_k_widening_requested = bool(budgets.get("top_k_widening_requested", False) or top_k_admission_budget > 0)
+    top_k_widening_allowed = bool(budgets.get("top_k_widening_allowed", False)) and top_k_widening_requested
     queue_entries = queue.get("entries", []) if isinstance(queue.get("entries", []), list) else []
     planned_entries: list[Dict[str, Any]] = []
     planned_top_k_ids: set[str] = set()
@@ -500,6 +512,17 @@ def _build_campaign_evaluation_plan(
         }
         if identities & planned_top_k_ids:
             continue
+        admission_status = (
+            "deferred_requires_step3_queue_materialization"
+            if top_k_widening_requested
+            else "deferred_budget_not_widened"
+        )
+        widening_blockers = [
+            "top_k_candidate_queue_is_provenance_only",
+            "materialized_step3_queue_entry_required",
+        ]
+        if not top_k_widening_allowed:
+            widening_blockers.append("campaign_budget_does_not_allow_top_k_widening")
         deferred_entries.append({
             "top_k_entry_id": str(entry.get("top_k_entry_id") or f"top_k_entry_{index}"),
             "candidate_id": str(entry.get("candidate_id") or ""),
@@ -509,6 +532,11 @@ def _build_campaign_evaluation_plan(
             "parameter_hash": entry.get("parameter_hash"),
             "priority_score": entry.get("priority_score"),
             "defer_reason": "not_admitted_by_selected_entry_budget",
+            "admission_status": admission_status,
+            "budget_widening_requested": top_k_widening_requested,
+            "budget_widening_allowed": top_k_widening_allowed,
+            "campaign_budget_top_k_admission_budget": top_k_admission_budget,
+            "budget_widening_blockers": widening_blockers,
             "admission_required_before_execution": "step2/step3_simulation_queue.json",
             "execution_allowed": False,
             "provenance_only": True,
@@ -531,6 +559,34 @@ def _build_campaign_evaluation_plan(
         "search_checkpoint_ref": "step2/search_checkpoint.json",
         "step3_queue_mode": queue.get("queue_mode"),
         "top_k_queue_mode": top_k_queue.get("queue_mode"),
+        "admission_control": {
+            "step3_admission_authority": "step2/step3_simulation_queue.json",
+            "top_k_queue_role": "provenance_only_not_step3_admission",
+            "default_mode": "selected_entry_only",
+            "widening_requested_by_budget": top_k_widening_requested,
+            "widening_allowed_by_budget": top_k_widening_allowed,
+            "requested_top_k_admission_budget": top_k_admission_budget,
+            "materialized_step3_queue_required": True,
+            "planned_step3_entry_count": len(planned_entries),
+            "top_k_deferred_entry_count": len(deferred_entries),
+            "hidden_evidence_fanout_allowed": False,
+            "claim_boundary": (
+                "Campaign budgets may request future Top-K widening, but execution remains "
+                "fail-closed until candidates are materialized in step2/step3_simulation_queue.json."
+            ),
+        },
+        "search_feedback_loop": {
+            "feedback_update_ref": "feedback_update.json",
+            "calibration_record_ref": "calibration_record.json",
+            "observe_api": "SearchPolicy.observe(candidate_id, metrics)",
+            "candidate_id_resolution": [
+                "search_policy_candidate_id",
+                "mapping_candidate_id",
+                "mapping_parameter_hash",
+                "candidate_id",
+            ],
+            "search_checkpoint_ref": "step2/search_checkpoint.json",
+        },
         "planned_entry_count": len(planned_entries),
         "planned_entries": planned_entries,
         "deferred_entry_count": len(deferred_entries),

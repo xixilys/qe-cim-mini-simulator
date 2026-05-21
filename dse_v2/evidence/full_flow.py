@@ -1776,8 +1776,27 @@ def write_full_flow_evidence(
         })
         feedback_source_hashes = _hash_existing_artifacts(
             run_dir,
-            ["simulation_result.json", "mapping_feedback_state.json"],
+            ["simulation_result.json", "mapping_feedback_state.json", "calibration_record.json"],
         )
+        public_metrics = public_result.get("metrics", {}) if isinstance(public_result.get("metrics", {}), Mapping) else {}
+        search_feedback_metrics = {
+            "trusted_sample": trusted_for_final,
+            "promoted": trusted_for_final,
+            "step4_verdict": "trusted_pass" if trusted_for_final else "blocked_or_untrusted",
+            "step4_quality_score": 80.0 if numerical_passed else 0.0,
+            "calibrated_score_delta": 1.0 if trusted_for_final else -1.0,
+        }
+        for metric_name in ("latency_ms", "power_w", "energy_j", "total_data_movement_mb"):
+            if metric_name in public_metrics:
+                search_feedback_metrics[metric_name] = public_metrics.get(metric_name)
+        search_feedback_candidate_refs = {
+            "candidate_id": selected_mapping_record.get("candidate_id"),
+            "mapping_candidate_id": selected_mapping_record.get("candidate_id"),
+            "mapping_parameter_hash": selected_mapping_record.get("parameter_hash"),
+            "mapping_id": mapping_payload.get("mapping_id"),
+            "architecture_id": design_point.system_architecture.system_id,
+            "design_point_id": design_point.design_point_id,
+        }
         _write_json(run_dir / "feedback_update.json", {
             "schema_version": CONTRACT_VERSION,
             **control_scope,
@@ -1788,6 +1807,27 @@ def write_full_flow_evidence(
                     "trusted_sample": trusted_for_final,
                     "mapping_feedback_state": "mapping_feedback_state.json",
                     "source_artifacts": ["simulation_result.json", "mapping_feedback_state.json"],
+                },
+                {
+                    "target": "search_policy",
+                    "status": "available",
+                    "observation_role": "search_policy_feedback",
+                    "trusted_sample": trusted_for_final,
+                    "candidate_refs": search_feedback_candidate_refs,
+                    "metrics": search_feedback_metrics,
+                    "observe_api": "SearchPolicy.observe(candidate_id, metrics)",
+                    "candidate_id_resolution": [
+                        "search_policy_candidate_id",
+                        "mapping_candidate_id",
+                        "mapping_parameter_hash",
+                        "candidate_id",
+                    ],
+                    "mapping_feedback_state": "mapping_feedback_state.json",
+                    "source_artifacts": [
+                        "simulation_result.json",
+                        "mapping_feedback_state.json",
+                        "calibration_record.json",
+                    ],
                 }
             ],
             "source_artifact_hashes": feedback_source_hashes,
