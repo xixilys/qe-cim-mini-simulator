@@ -33,9 +33,11 @@
   216/216 `gem5_l4_proof.json` files with `passed=true`.  The Step5 binding
   status has `status=passed`, `binding_status=passed_current_goal_l4_bound`,
   `current_goal_l4_bound=true`, and `l4_software_visible_proof_present=true`.
-  This is software-visible L4 transport proof only: the L4 report and final
-  deliverable remain blocked by QE baseline/correctness/reference gates, and the
-  old 9 × 4 crosswalk is still insufficient for the current 36 × 6 goal.
+  This is software-visible L4 transport proof only for the current 36 × 6
+  SCF workload transport target: the L4 report and final deliverable remain
+  blocked by QE baseline/correctness/reference gates.  The old 9 × 4 crosswalk
+  is still insufficient, and it must not be confused with the separate 36 × 8
+  candidate/kernel hardware-release matrix above.
 - The QE reference lane is split.  The QE 6.7 `/usr/bin/pw.x` probe
   `runs/dse/dft_scf_six_class_local_qe_probe_20260520T074735Z` found all
   required local pseudopotentials but failed fail-closed (mostly SIGABRT/returncode

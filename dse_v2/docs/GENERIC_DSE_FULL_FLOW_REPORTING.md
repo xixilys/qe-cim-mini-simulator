@@ -818,7 +818,11 @@ Step5 then surfaces `dft_l4_goal_binding`.  A binding can report
 workload scopes (legacy QE mainflows versus strict six-SCF/full-SCF classes)
 are not explicitly crosswalked.  The goal audit treats artifact visibility and
 current-goal identity binding as separate checks; neither is FPGA/ASIC PPA or
-deliverable completion evidence.
+deliverable completion evidence.  When the L4 bridge is current-goal bound for
+the 36 × 6 SCF transport target, report it as software-visible transport proof
+only; do not use it to satisfy the separate 36 × 8 candidate/kernel hardware
+release matrix, QE reference correctness, FPGA/ASIC PPA, or final deliverable
+completion gates.
 
 For full-SCF evaluated-hybrid reports, `full_scf_evaluated_hybrid_costs` must
 surface both kernel-scope and end-to-end accounting.  If a run has descriptor
