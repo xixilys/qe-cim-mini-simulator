@@ -26,6 +26,15 @@ _CLAIM_BOUNDARY = (
     "timing/area, trusted Pareto, or deliverable completion."
 )
 
+_CANDIDATE_METADATA_FIELDS = (
+    "design_candidate_id",
+    "assignments",
+    "identity_assignments",
+    "non_identity_assignments",
+    "applicability_assignments",
+    "evaluation_policy_assignments",
+)
+
 
 def _load_json(path: Path) -> Dict[str, Any]:
     if not Path(path).exists():
@@ -110,6 +119,15 @@ def _unit_intake_row(evidence_root: Path, unit: Mapping[str, Any]) -> Dict[str, 
     return {
         "unit_id": str(unit.get("unit_id", "")),
         "candidate_id": str(unit.get("candidate_id", "")),
+        **{
+            field: (
+                dict(unit.get(field, {}))
+                if isinstance(unit.get(field), Mapping)
+                else unit.get(field)
+            )
+            for field in _CANDIDATE_METADATA_FIELDS
+            if unit.get(field) not in (None, {}, [])
+        },
         "kernel_id": str(unit.get("kernel_id", "")),
         "kernel_name": str(unit.get("kernel_name", unit.get("kernel_id", ""))),
         "stage_ids": [str(item) for item in unit.get("stage_ids", []) or []],

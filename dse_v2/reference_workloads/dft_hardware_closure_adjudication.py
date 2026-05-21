@@ -43,6 +43,15 @@ _CLAIM_BOUNDARY = (
     "rows are attached and independently validated."
 )
 
+_CANDIDATE_METADATA_FIELDS = (
+    "design_candidate_id",
+    "assignments",
+    "identity_assignments",
+    "non_identity_assignments",
+    "applicability_assignments",
+    "evaluation_policy_assignments",
+)
+
 
 def _load_json(path: Path) -> Dict[str, Any]:
     if not Path(path).exists():
@@ -122,6 +131,15 @@ def _unit_row(packet_row: Mapping[str, Any], unit_row: Mapping[str, Any]) -> Dic
         "shard_id": packet_row.get("shard_id"),
         "unit_id": str(unit_row.get("unit_id", "")),
         "candidate_id": str(unit_row.get("candidate_id", "")),
+        **{
+            field: (
+                dict(unit_row.get(field, {}))
+                if isinstance(unit_row.get(field), Mapping)
+                else unit_row.get(field)
+            )
+            for field in _CANDIDATE_METADATA_FIELDS
+            if unit_row.get(field) not in (None, {}, [])
+        },
         "kernel_id": str(unit_row.get("kernel_id", "")),
         "kernel_name": str(unit_row.get("kernel_name", unit_row.get("kernel_id", ""))),
         "stage_count": len(stage_rows),
