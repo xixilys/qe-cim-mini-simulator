@@ -181,6 +181,48 @@ def test_fft_ifft_rtl_flow_stamps_candidate_parametric_source_without_candidate_
     assert source_a != source_c
 
 
+def test_fft_ifft_rtl_flow_enriches_legacy_candidate_bundle_from_ranking_metadata(tmp_path):
+    run_dir = tmp_path / "run"
+    candidate_id = "cand-legacy"
+    kernel_id = FFT_IFFT_KERNEL_ID
+    bundle = run_dir / "candidate_specific_bundles" / candidate_id / kernel_id / "candidate_bundle.json"
+    bundle.parent.mkdir(parents=True, exist_ok=True)
+    bundle.write_text(
+        json.dumps(
+            {
+                "schema_version": "legacy.bundle.without.assignments",
+                "candidate_id": candidate_id,
+                "kernel_id": kernel_id,
+            }
+        ),
+        encoding="utf-8",
+    )
+    (run_dir / "dft_hardware_ppa_ranking.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "unit-test.ranking.v1",
+                "candidate_rows": [
+                    _candidate_bundle_payload(
+                        candidate_id=candidate_id,
+                        design_candidate_id="design-from-ranking",
+                        hardware="balanced_generic_systemc_v0",
+                    )
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    out_dir = tmp_path / "out"
+    initialize_fft_ifft_ffft_rtl_flow(out_dir, candidate_id=candidate_id, candidate_parameter_manifest=bundle)
+    manifest = json.loads((out_dir / "manifest.json").read_text(encoding="utf-8"))
+    candidate_parameters = json.loads((out_dir / "candidate_parameter_manifest.json").read_text(encoding="utf-8"))
+
+    assert manifest["candidate_parametric_source_hash"]
+    assert candidate_parameters["design_assignments"]["hardware_microarchitecture"] == "balanced_generic_systemc_v0"
+    assert candidate_parameters["design_candidate_id"] == "design-from-ranking"
+
+
 def test_fft_ifft_rtl_flow_is_fail_closed_before_remote_tool_outputs(tmp_path):
     initialize_fft_ifft_ffft_rtl_flow(tmp_path)
 

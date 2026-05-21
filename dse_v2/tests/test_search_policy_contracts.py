@@ -49,6 +49,12 @@ def test_seeded_beam_records_parameters_provenance_and_promotion_reason():
 
     assert len(records) == 2
     assert all(payload["parameters"] for payload in payloads)
+    assert all(payload["parameter_hash"].startswith("sha256:") for payload in payloads)
+    assert all(
+        payload["provenance"]["candidate_identity_policy"]
+        == "stable_problem_policy_parameter_hash"
+        for payload in payloads
+    )
     assert all(payload["provenance"]["policy_name"] == "seeded_beam" for payload in payloads)
     assert all("promoted_for_simulation" in payload["promotion_reasons"] for payload in payloads)
     assert all(payload["step2_screenable"] is True for payload in payloads)
@@ -215,5 +221,58 @@ def test_hierarchical_funnel_observations_change_later_proposal_order():
     checkpoint = policy.checkpoint(problem).to_dict()
 
     assert second_round[0].parameters["template_family"] == "baseline"
+    assert second_round[0].candidate_id == baseline.candidate_id
+    assert second_round[0].parameter_hash == baseline.parameter_hash
     assert checkpoint["observed_count"] == 1
     assert checkpoint["best_candidate_id"] == second_round[0].candidate_id
+
+
+def test_hierarchical_funnel_considers_full_grid_before_budgeting_outputs():
+    problem = SearchProblem(
+        problem_id="p6",
+        workload_run_id="w6",
+        objective="maximize throughput",
+        parameters={
+            "release_lane": ["release"],
+            "template_family": ["small", "medium", "large"],
+            "pe_count": [1, 2, 100],
+        },
+        constraints={"formal_pareto_lane_field": "release_lane", "release_lane": "release"},
+    )
+    policy = HierarchicalFunnelSearchPolicy()
+
+    selected = policy.propose(problem, budget=1)[0].to_dict()
+    enumeration = selected["provenance"]["search_space_enumeration"]
+
+    assert selected["parameters"]["pe_count"] == 100
+    assert enumeration["grid_candidate_count"] == 9
+    assert enumeration["grid_candidate_enumerated_count"] == 9
+    assert enumeration["complete_grid_enumeration"] is True
+    assert enumeration["output_budget"] == 1
+
+
+def test_hierarchical_funnel_declares_bounded_candidate_enumeration():
+    problem = SearchProblem(
+        problem_id="p7",
+        workload_run_id="w7",
+        objective="maximize throughput",
+        parameters={
+            "release_lane": ["release"],
+            "template_family": ["small", "medium", "large"],
+            "pe_count": [1, 2, 100],
+        },
+        constraints={
+            "formal_pareto_lane_field": "release_lane",
+            "release_lane": "release",
+            "max_candidate_enumeration": 4,
+        },
+    )
+    policy = HierarchicalFunnelSearchPolicy()
+
+    selected = policy.propose(problem, budget=1)[0].to_dict()
+    enumeration = selected["provenance"]["search_space_enumeration"]
+
+    assert enumeration["grid_candidate_count"] == 9
+    assert enumeration["grid_candidate_enumerated_count"] == 4
+    assert enumeration["complete_grid_enumeration"] is False
+    assert enumeration["max_candidate_enumeration"] == 4

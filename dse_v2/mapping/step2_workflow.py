@@ -1564,10 +1564,19 @@ def build_architecture_candidate_set(
             reasons.append({"reason_id": "architecture_candidate_only", "detail": candidate_reason})
         if selected:
             reasons.extend(dict(reason) for reason in promotion_decision.get("reasons", []) or [] if isinstance(reason, Mapping))
+        candidate_parameters = {
+            "architecture_id": instance.architecture_id,
+            "architecture_family": instance.family_id,
+            "backend": backend,
+            "selected_mapping_candidate_id": selected_record.get("candidate_id") if selected else None,
+        }
         candidates.append({
             "candidate_id": f"architecture::{instance.architecture_id}",
             "architecture_id": instance.architecture_id,
             "architecture_family": instance.family_id,
+            "parameters": candidate_parameters,
+            "parameter_hash": _payload_sha256(candidate_parameters),
+            "candidate_identity_policy": "stable_architecture_id_with_parameter_hash_sidecar",
             "architecture_status": instance.status,
             "architecture_instance": instance.to_dict(include_bindings=True),
             "selected_for_step2_mapping": selected,
@@ -1790,11 +1799,19 @@ def build_architecture_search_space_artifact(
             "claim_boundary": workload_package.claim_boundary,
             "step2_only": True,
             "trusted_final_claim": False,
+            "candidate_identity_policy": "stable_parameter_hash_sidecar",
         },
         "generation_provenance": {
             "catalog_instance_count": len(catalog.instances),
             "selected_architecture_count": len(architecture_ids),
             "source": "Step2 catalog/domain-policy screening",
+            "candidate_identity_policy": "stable_parameter_hash_sidecar",
+            "candidate_identity_excludes": [
+                "proposal_order",
+                "transient_rank",
+                "Step3_result",
+                "Step4_verdict",
+            ],
             "replay_inputs": [
                 "architecture_catalog.json",
                 "workload_package.json",
@@ -1867,6 +1884,13 @@ def build_step2_search_artifacts(
                 "backend": backend,
                 "mapping_policy": mapping_candidate_records.get("algorithm", "workflow_seeded_beam_local_search_v1"),
             },
+            "parameter_hash": _payload_sha256({
+                "architecture_id": str((promotion_decision or {}).get("architecture_id") or ""),
+                "backend": backend,
+                "mapping": dict(record.get("mapping", {}) or {}),
+                "mapping_policy": mapping_candidate_records.get("algorithm", "workflow_seeded_beam_local_search_v1"),
+            }),
+            "candidate_identity_policy": "stable_mapping_parameters_hash_sidecar",
             "provenance": {
                 "source_artifact": "mapping_candidate_records.json",
                 "source_index": index,
@@ -1969,10 +1993,25 @@ def build_step2_search_artifacts(
         "mapping_candidate_count": len(mapping_candidates),
         "generated_candidate_ids": [str(candidate.get("candidate_id")) for candidate in architecture_candidates],
         "mapping_candidate_ids": [str(candidate.get("candidate_id")) for candidate in mapping_candidates],
+        "candidate_identity_policy": "stable_parameter_hash_sidecar",
+        "architecture_candidate_parameter_hashes": [
+            str(candidate.get("parameter_hash"))
+            for candidate in architecture_candidates
+            if candidate.get("parameter_hash")
+        ],
+        "mapping_candidate_parameter_hashes": [
+            str(candidate.get("parameter_hash"))
+            for candidate in mapping_candidates
+            if candidate.get("parameter_hash")
+        ],
+        "all_generated_candidates_have_parameter_hash": all(
+            candidate.get("parameter_hash") for candidate in architecture_candidates
+        ) and all(candidate.get("parameter_hash") for candidate in mapping_candidates),
         "generation_provenance": {
             "architecture_source": "architecture_catalog.json",
             "mapping_source": "mapping_candidate_records.json",
             "jsonl_artifacts": ["mapping_candidates.jsonl"],
+            "candidate_identity_policy": "stable_parameter_hash_sidecar",
         },
         "trusted_final_claim": False,
     }
@@ -2014,10 +2053,19 @@ def _screening_architecture_candidate_set(
             step3_blockers=list(record.get("step3_search_blockers", record.get("simulation_blockers", [])) or []),
             promoted_for_simulation=bool(record.get("promoted_for_simulation", False)),
         )
+        candidate_parameters = {
+            "architecture_id": architecture_id,
+            "architecture_family": record.get("architecture_family"),
+            "backend": backend,
+            "selected_mapping_candidate_id": record.get("selected_candidate_id"),
+        }
         candidates.append({
             "candidate_id": f"architecture::{architecture_id}",
             "architecture_id": architecture_id,
             "architecture_family": record.get("architecture_family"),
+            "parameters": candidate_parameters,
+            "parameter_hash": _payload_sha256(candidate_parameters),
+            "candidate_identity_policy": "stable_architecture_id_with_parameter_hash_sidecar",
             "architecture_run_dir": record.get("run_dir"),
             "selected_for_step2_mapping": True,
             "selected_mapping_candidate_id": record.get("selected_candidate_id"),

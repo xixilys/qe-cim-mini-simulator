@@ -83,6 +83,15 @@ def _seed_run(run_dir: Path, *, fresh: bool) -> None:
             "candidate_specific_closure": True,
             "shared_microkernel_smoke_only": False,
             "raw_evidence_scope": "candidate_specific_closure",
+            **(
+                {
+                    "candidate_parameter_manifest": "candidate_parameter_manifest.json",
+                    "candidate_parametric_source_hash": "candidate-parametric-hash",
+                    "rtl_parameter_values": {"rtl_kernel_variant": 1},
+                }
+                if fresh
+                else {}
+            ),
         },
     )
     _write_json(
@@ -233,3 +242,26 @@ def test_provenance_audit_accepts_fresh_candidate_specific_command_tool_provenan
     assert queue["status"] == "no_tie_breaker_work_items"
     assert queue["work_item_count"] == 0
     assert validation["valid"] is True
+
+
+def test_provenance_audit_requires_candidate_parametric_source_hash_for_winner_proof(tmp_path: Path) -> None:
+    run_dir = tmp_path / "run"
+    _seed_run(run_dir, fresh=True)
+    source_bundle = run_dir / "candidate_specific_evidence" / "cand-a" / "fft_ifft_ffft" / "source_bundle_manifest.json"
+    payload = json.loads(source_bundle.read_text(encoding="utf-8"))
+    payload.pop("candidate_parameter_manifest", None)
+    payload.pop("candidate_parametric_source_hash", None)
+    payload.pop("rtl_parameter_values", None)
+    _write_json(source_bundle, payload)
+
+    status = write_dft_candidate_specific_ppa_provenance_audit(run_dir)
+    audit = json.loads((run_dir / "dft_candidate_specific_ppa_provenance_audit.json").read_text(encoding="utf-8"))
+    queue = json.loads((run_dir / "dft_hardware_tie_breaker_execution_queue.json").read_text(encoding="utf-8"))
+
+    assert status["status"] == "passed"
+    assert audit["winner_provenance_eligible"] is False
+    assert audit["blocker_id_counts"]["candidate_parametric_source_hash_missing"] == 1
+    assert audit["blocker_id_counts"]["candidate_parameter_manifest_missing"] == 1
+    assert audit["blocker_id_counts"]["rtl_parameter_values_missing"] == 1
+    assert queue["status"] == "fresh_candidate_specific_ppa_execution_required"
+    assert queue["work_item_count"] == len(REQUIRED_STAGE_IDS)

@@ -288,11 +288,18 @@ def test_step2_runs_representative_non_qe_workloads_and_writes_required_artifact
         assert search_space["freeze_gate_verdict"]["completion_evidence"] is False
         assert candidate_generation["search_space_hash"] == search_space["search_space_hash"]
         assert candidate_generation["mapping_candidate_count"] == len(mapping_candidates)
+        assert candidate_generation["candidate_identity_policy"] == "stable_parameter_hash_sidecar"
+        assert candidate_generation["all_generated_candidates_have_parameter_hash"] is True
         assert candidate_generation["trusted_final_claim"] is False
         assert screening_report["promotion_decision_artifact"] == "promotion_decisions.jsonl"
         assert screening_report["trusted_final_claim"] is False
         assert mapping_candidates
         assert all(record["step2_screenable"] is True for record in mapping_candidates)
+        assert all(record["parameter_hash"].startswith("sha256:") for record in mapping_candidates)
+        assert all(
+            record["candidate_identity_policy"] == "stable_mapping_parameters_hash_sidecar"
+            for record in mapping_candidates
+        )
         assert all(record["trusted_final_claim"] is False for record in mapping_candidates)
         assert screening_results
         assert all(record["trusted_final_claim"] is False for record in screening_results)
@@ -765,6 +772,15 @@ def test_step2_screens_multiple_architectures_without_breaking_step3_handoff(tmp
     assert {record["decision"] for record in promotion_decisions} == {"promote", "block"}
     assert screening_candidate_set["policy_scope"] == "architecture_screening"
     assert screening_candidate_set["candidate_count"] == 2
+    assert all(
+        candidate["parameter_hash"].startswith("sha256:")
+        for candidate in screening_candidate_set["candidates"]
+    )
+    assert all(
+        candidate["candidate_identity_policy"]
+        == "stable_architecture_id_with_parameter_hash_sidecar"
+        for candidate in screening_candidate_set["candidates"]
+    )
     assert screening_queue["queue_mode"] == "selected-entry-only"
     assert screening_queue["claim_status"] == "legacy_pilot_only"
     assert screening_queue["retention_policy"] == "legacy_pilot_regression_only"
@@ -819,6 +835,10 @@ def test_dft_research_architecture_instances_are_cataloged_and_step3_searchable(
 
     assert result.status == "architecture_screening_completed"
     assert screening_candidate_set["candidate_count"] == len(DFT_RESEARCH_ARCHITECTURE_IDS)
+    assert all(
+        candidate["parameter_hash"].startswith("sha256:")
+        for candidate in screening_candidate_set["candidates"]
+    )
     assert screening_queue["entry_count"] == len(DFT_RESEARCH_ARCHITECTURE_IDS)
     assert {entry["architecture_id"] for entry in screening_queue["entries"]} == set(DFT_RESEARCH_ARCHITECTURE_IDS)
     assert {entry["queue_state"] for entry in screening_queue["entries"]} == {"scheduled_for_simulation"}

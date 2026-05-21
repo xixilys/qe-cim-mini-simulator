@@ -112,6 +112,28 @@ def _parsed_result_path(unit: Mapping[str, Any], stage_id: str) -> str:
     )
 
 
+def _parsed_result_rel_path(*, parsed_root: Path, unit: Mapping[str, Any], stage_id: str) -> str:
+    """Return a parsed-result path relative to ``parsed_root``.
+
+    The public CLI names the argument ``--parsed-root`` and historical callers
+    have used both forms:
+
+    * the run/base directory, expecting ``parsed_hard_gate_results/...`` under it;
+    * the ``parsed_hard_gate_results`` directory itself.
+
+    Treat the latter as an already-selected canonical parsed-results directory
+    rather than nesting another ``parsed_hard_gate_results`` segment.  This
+    keeps ranking/adjudication fail-closed checks pointed at the files the
+    parser actually writes.
+    """
+
+    rel = _parsed_result_path(unit, stage_id)
+    if Path(parsed_root).name == "parsed_hard_gate_results":
+        prefix = "parsed_hard_gate_results/"
+        return rel[len(prefix) :] if rel.startswith(prefix) else rel
+    return rel
+
+
 def _stage_files(unit: Mapping[str, Any], stage_id: str) -> list[Mapping[str, Any]]:
     files: list[Mapping[str, Any]] = []
     for item in unit.get("expected_evidence_files", []) or []:
@@ -476,7 +498,7 @@ def _write_parsed_result(
     raw_paths: list[Path],
 ) -> Dict[str, Any]:
     verdict, metrics, parser_id, blocker_ids = _parse_stage(stage_id, raw_paths)
-    rel = _parsed_result_path(unit, stage_id)
+    rel = _parsed_result_rel_path(parsed_root=parsed_root, unit=unit, stage_id=stage_id)
     path = parsed_root / rel
     payload = {
         "schema_version": DFT_HARDWARE_PARSED_STAGE_RESULT_SCHEMA,

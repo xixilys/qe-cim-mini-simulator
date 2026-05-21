@@ -147,6 +147,36 @@ def test_parsed_evidence_manifest_validates_present_parser_output_without_passin
     assert row["passed"] is False
 
 
+def test_parsed_evidence_manifest_accepts_parsed_hard_gate_results_as_root_without_double_prefix(tmp_path: Path) -> None:
+    adjudication_path = _adjudication(tmp_path / "dft_hardware_closure_adjudication.json")
+    parsed_root = tmp_path / "parsed_hard_gate_results"
+    _write_json(
+        parsed_root / "cand-a" / "fft_ifft_ffft" / "golden_correctness_parsed_result.json",
+        {
+            "schema_version": DFT_HARDWARE_PARSED_STAGE_RESULT_SCHEMA,
+            "candidate_id": "cand-a",
+            "kernel_id": "fft_ifft_ffft",
+            "stage_id": "golden_correctness",
+            "verdict": "passed",
+            "parser_id": "unit-test-golden-parser",
+            "raw_evidence_refs": [{"path": "raw/golden.log", "sha256": "abc"}],
+            "metrics": {"max_abs_error": 0.0},
+            "hardware_completion_eligible": False,
+            "deliverable_complete": False,
+        },
+    )
+
+    manifest = build_dft_hardware_closure_parsed_evidence_manifest(
+        closure_adjudication_path=adjudication_path,
+        parsed_root=parsed_root,
+    )
+
+    row = next(row for row in manifest["parsed_rows"] if row["stage_id"] == "golden_correctness")
+    assert manifest["present_parsed_result_count"] == 1
+    assert row["expected_parsed_result"]["path"] == "cand-a/fft_ifft_ffft/golden_correctness_parsed_result.json"
+    assert row["parsed_result_schema_valid"] is True
+
+
 def test_parsed_evidence_manifest_preserves_blocked_dc_parser_result(tmp_path: Path) -> None:
     adjudication_path = _adjudication(tmp_path / "dft_hardware_closure_adjudication.json")
     parsed_path = (

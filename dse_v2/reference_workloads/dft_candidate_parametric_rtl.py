@@ -53,6 +53,42 @@ def _mapping(payload: Mapping[str, Any], key: str) -> dict[str, Any]:
     return dict(value) if isinstance(value, Mapping) else {}
 
 
+def _run_dir_from_candidate_bundle_path(path: Path) -> Path | None:
+    parts = path.parts
+    if "candidate_specific_bundles" not in parts:
+        return None
+    index = parts.index("candidate_specific_bundles")
+    if index == 0:
+        return None
+    return Path(*parts[:index])
+
+
+def _ranking_metadata_for_candidate(path: Path, candidate_id: str) -> dict[str, Any]:
+    run_dir = _run_dir_from_candidate_bundle_path(path)
+    if run_dir is None or not candidate_id:
+        return {}
+    ranking = _load_json(run_dir / "dft_hardware_ppa_ranking.json")
+    rows = ranking.get("candidate_rows", [])
+    if not isinstance(rows, list):
+        return {}
+    for row in rows:
+        if not isinstance(row, Mapping) or str(row.get("candidate_id", "")) != candidate_id:
+            continue
+        return {
+            key: dict(row.get(key, {})) if isinstance(row.get(key), Mapping) else row.get(key)
+            for key in (
+                "design_candidate_id",
+                "assignments",
+                "identity_assignments",
+                "non_identity_assignments",
+                "applicability_assignments",
+                "evaluation_policy_assignments",
+            )
+            if row.get(key) not in (None, {}, [])
+        }
+    return {}
+
+
 def _design_assignments(payload: Mapping[str, Any]) -> dict[str, Any]:
     direct = _mapping(payload, "design_assignments")
     if direct:
@@ -93,16 +129,21 @@ def load_candidate_parameter_manifest(
 ) -> dict[str, Any]:
     """Return a canonical candidate parameter manifest, or ``{}`` when absent."""
 
+    source_path: Path | None = None
     if source is None:
         payload: dict[str, Any] = {}
     elif isinstance(source, Mapping):
         payload = dict(source)
     else:
-        payload = _load_json(Path(source))
+        source_path = Path(source)
+        payload = _load_json(source_path)
+    candidate = str(candidate_id or payload.get("candidate_id") or payload.get("release_candidate_id") or "")
+    if source_path is not None:
+        for key, value in _ranking_metadata_for_candidate(source_path, candidate).items():
+            payload.setdefault(key, value)
     design_assignments = _design_assignments(payload)
     rtl_parameters = _mapping(payload, "rtl_parameter_values") or _mapping(payload, "rtl_parameters")
     kernel = str(kernel_id or payload.get("kernel_id") or "")
-    candidate = str(candidate_id or payload.get("candidate_id") or payload.get("release_candidate_id") or "")
     if not design_assignments and not rtl_parameters and not payload.get("design_candidate_id"):
         return {}
     if not rtl_parameters:

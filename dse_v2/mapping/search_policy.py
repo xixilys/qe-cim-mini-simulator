@@ -11,6 +11,7 @@ promotion/blocker reasons so downstream Step3 admission can be audited.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+import hashlib
 import json
 from dataclasses import dataclass, field
 from random import Random
@@ -95,6 +96,14 @@ class SearchProblem:
     constraints: Mapping[str, Any] = field(default_factory=dict)
     seed_candidates: Sequence[Mapping[str, Any]] = field(default_factory=tuple)
 
+    def parameter_grid_size(self) -> int:
+        """Return the exact Cartesian-grid size without materializing records."""
+
+        size = 1
+        for values in self.parameters.values():
+            size *= len(tuple(values))
+        return size
+
     def parameter_grid(self, limit: Optional[int] = None) -> List[Dict[str, Any]]:
         keys = list(self.parameters.keys())
         records: List[Dict[str, Any]] = []
@@ -123,6 +132,7 @@ class SearchCandidateRecord:
     parameters: Dict[str, Any]
     provenance: Dict[str, Any]
     generation_reason: str
+    parameter_hash: str = ""
     score: float = 0.0
     promotion_reasons: List[str] = field(default_factory=list)
     blocker_reasons: List[str] = field(default_factory=list)
@@ -150,6 +160,7 @@ class SearchCandidateRecord:
         return {
             "candidate_id": self.candidate_id,
             "parameters": dict(self.parameters),
+            "parameter_hash": self.parameter_hash or _parameter_hash(self.parameters),
             "provenance": dict(self.provenance),
             "generation_reason": self.generation_reason,
             "score": float(self.score),
@@ -216,12 +227,65 @@ def _score_candidate(parameters: Mapping[str, Any], objective: str) -> float:
     return score
 
 
+def _parameter_hash(parameters: Mapping[str, Any]) -> str:
+    data = json.dumps(dict(parameters), sort_keys=True, separators=(",", ":"), default=str)
+    return "sha256:" + hashlib.sha256(data.encode("utf-8")).hexdigest()
+
+
+def _stable_candidate_id(problem: SearchProblem, policy_name: str, parameters: Mapping[str, Any]) -> str:
+    identity_payload = {
+        "problem_id": problem.problem_id,
+        "policy_name": policy_name,
+        "parameter_hash": _parameter_hash(parameters),
+    }
+    digest = hashlib.sha256(
+        json.dumps(identity_payload, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
+    ).hexdigest()
+    return f"{problem.problem_id}:{policy_name}:{digest[:16]}"
+
+
 class _BasePolicy(SearchPolicy):
     policy_name = "base"
 
     def __init__(self) -> None:
         self._proposed: Dict[str, SearchCandidateRecord] = {}
         self._observed_count = 0
+
+    def _candidate_provenance(
+        self,
+        problem: SearchProblem,
+        *,
+        candidate_index: int,
+        parameters: Mapping[str, Any],
+    ) -> Dict[str, Any]:
+        parameter_hash = _parameter_hash(parameters)
+        return {
+            "policy_name": self.policy_name,
+            "problem_id": problem.problem_id,
+            "workload_run_id": problem.workload_run_id,
+            "candidate_index": candidate_index,
+            "parameter_hash": parameter_hash,
+            "candidate_identity_policy": "stable_problem_policy_parameter_hash",
+            "candidate_identity_excludes": [
+                "proposal_order",
+                "budget",
+                "feedback_order",
+                "transient_rank",
+            ],
+        }
+
+    def _remember_record(self, record: SearchCandidateRecord) -> SearchCandidateRecord:
+        previous = self._proposed.get(record.candidate_id)
+        if previous is not None:
+            record.observed_metrics.update(previous.observed_metrics)
+            for reason in previous.promotion_reasons:
+                if reason not in record.promotion_reasons:
+                    record.promotion_reasons.append(reason)
+            for blocker in previous.blocker_reasons:
+                if blocker not in record.blocker_reasons:
+                    record.blocker_reasons.append(blocker)
+        self._proposed[record.candidate_id] = record
+        return record
 
     def observe(self, candidate_id: str, metrics: Mapping[str, Any]) -> None:
         record = self._proposed.get(candidate_id)
@@ -250,22 +314,18 @@ class _BasePolicy(SearchPolicy):
     def _record(self, problem: SearchProblem, index: int, parameters: Mapping[str, Any], reason: str) -> SearchCandidateRecord:
         blockers = [] if parameters else ["empty_parameter_record"]
         promotions = ["promoted_for_simulation"] if not blockers else []
+        parameter_hash = _parameter_hash(parameters)
         record = SearchCandidateRecord(
-            candidate_id=f"{problem.problem_id}:{self.policy_name}:{index}",
+            candidate_id=_stable_candidate_id(problem, self.policy_name, parameters),
             parameters=dict(parameters),
-            provenance={
-                "policy_name": self.policy_name,
-                "problem_id": problem.problem_id,
-                "workload_run_id": problem.workload_run_id,
-                "candidate_index": index,
-            },
+            provenance=self._candidate_provenance(problem, candidate_index=index, parameters=parameters),
             generation_reason=reason,
+            parameter_hash=parameter_hash,
             score=_score_candidate(parameters, problem.objective),
             promotion_reasons=promotions,
             blocker_reasons=blockers,
         )
-        self._proposed[record.candidate_id] = record
-        return record
+        return self._remember_record(record)
 
 
 class SeededBeamSearchPolicy(_BasePolicy):
@@ -353,6 +413,7 @@ class HierarchicalFunnelSearchPolicy(_BasePolicy):
         super().__init__()
         self.bottleneck_keys = tuple(bottleneck_keys)
         self._feedback_bias: Dict[str, float] = {}
+        self._enumeration_by_problem: Dict[str, Dict[str, Any]] = {}
 
     def observe(self, candidate_id: str, metrics: Mapping[str, Any]) -> None:
         record = self._proposed.get(candidate_id)
@@ -469,13 +530,38 @@ class HierarchicalFunnelSearchPolicy(_BasePolicy):
         touched = sum(1 for key in self.bottleneck_keys if key in parameters)
         return base + touched + self._feedback_bias.get(_stable_parameter_key(parameters), 0.0)
 
+    def _max_candidate_enumeration(self, problem: SearchProblem) -> Optional[int]:
+        raw_limit = (problem.constraints or {}).get("max_candidate_enumeration")
+        if raw_limit in (None, "", False):
+            return None
+        try:
+            return max(0, int(raw_limit))
+        except (TypeError, ValueError):
+            return None
+
     def _raw_candidates(self, problem: SearchProblem, budget: int) -> List[Mapping[str, Any]]:
-        grid_limit = max(budget * 4, budget, 1)
+        grid_size = problem.parameter_grid_size()
+        max_enumeration = self._max_candidate_enumeration(problem)
+        grid_limit = grid_size if max_enumeration is None else min(grid_size, max_enumeration)
         raw: List[Mapping[str, Any]] = [dict(seed) for seed in problem.seed_candidates]
         raw.extend(problem.parameter_grid(limit=grid_limit))
         deduped: Dict[str, Mapping[str, Any]] = {}
         for params in raw:
             deduped.setdefault(_stable_parameter_key(params), dict(params))
+        self._enumeration_by_problem[problem.problem_id] = {
+            "schema_version": "dse.step2.search_space_enumeration.v1",
+            "grid_candidate_count": grid_size,
+            "grid_candidate_enumerated_count": grid_limit,
+            "seed_candidate_count": len(problem.seed_candidates),
+            "deduped_candidate_count": len(deduped),
+            "complete_grid_enumeration": grid_limit >= grid_size,
+            "max_candidate_enumeration": max_enumeration,
+            "output_budget": int(budget),
+            "claim_boundary": (
+                "Search-space enumeration is Step2 candidate-generation provenance only; "
+                "it is not Step3 evidence or a trusted final ranking."
+            ),
+        }
         return list(deduped.values())
 
     def propose(self, problem: SearchProblem, budget: int) -> List[SearchCandidateRecord]:
@@ -491,33 +577,37 @@ class HierarchicalFunnelSearchPolicy(_BasePolicy):
             blockers = self._constraint_blockers(problem, parameters)
             stage_trace = self._stage_trace(problem, parameters, blockers)
             release_lane_policy = self._release_lane_policy(problem)
+            parameter_hash = _parameter_hash(parameters)
+            provenance = self._candidate_provenance(
+                problem,
+                candidate_index=index,
+                parameters=parameters,
+            )
+            provenance.update({
+                "funnel_stage_order": list(HIERARCHICAL_FUNNEL_STAGES),
+                "funnel_stages": stage_trace,
+                "release_lane_policy": release_lane_policy,
+                "release_tier_policy": {
+                    **release_lane_policy["legacy_compatibility"],
+                    "compatibility_alias_for": "release_lane_policy",
+                },
+                "search_space_enumeration": dict(self._enumeration_by_problem.get(problem.problem_id, {})),
+            })
             promotions = [] if blockers else [
                 "promoted_for_simulation",
                 "formal_release_pareto_eligible",
             ]
             record = SearchCandidateRecord(
-                candidate_id=f"{problem.problem_id}:{self.policy_name}:{index}",
+                candidate_id=_stable_candidate_id(problem, self.policy_name, parameters),
                 parameters=dict(parameters),
-                provenance={
-                    "policy_name": self.policy_name,
-                    "problem_id": problem.problem_id,
-                    "workload_run_id": problem.workload_run_id,
-                    "candidate_index": index,
-                    "funnel_stage_order": list(HIERARCHICAL_FUNNEL_STAGES),
-                    "funnel_stages": stage_trace,
-                    "release_lane_policy": release_lane_policy,
-                    "release_tier_policy": {
-                        **release_lane_policy["legacy_compatibility"],
-                        "compatibility_alias_for": "release_lane_policy",
-                    },
-                },
+                provenance=provenance,
                 generation_reason="hierarchical_funnel_search",
+                parameter_hash=parameter_hash,
                 score=self._score(problem, parameters),
                 promotion_reasons=promotions,
                 blocker_reasons=list(blockers),
             )
-            self._proposed[record.candidate_id] = record
-            records.append(record)
+            records.append(self._remember_record(record))
         return records
 
 

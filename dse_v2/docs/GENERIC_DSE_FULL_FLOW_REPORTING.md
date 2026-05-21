@@ -641,6 +641,13 @@ python3 dse_v2/scripts/dse/run_dft_hardware_closure_parsers.py \
   --parsed-root runs/dse/<closure_parser_run>
 ```
 
+`--parsed-root` accepts either the run/base directory that should contain
+`parsed_hard_gate_results/` or the `parsed_hard_gate_results/` directory itself.
+When the argument already ends in `parsed_hard_gate_results`, parser outputs
+and manifest lookups are direct children of that directory; reports and ranking
+must ignore stale double-prefixed
+`parsed_hard_gate_results/parsed_hard_gate_results/...` artifacts.
+
 The parser-run artifact is still fail-closed: missing candidate bundles,
 missing/stale unit provenance, invalid evidence paths, missing raw transcript
 hash refs, or missing raw stage files remain blockers, parser outputs are
@@ -673,6 +680,11 @@ python3 dse_v2/scripts/dse/build_dft_hardware_closure_parsed_evidence_manifest.p
   --closure-adjudication runs/dse/<closure_adjudication_run>/dft_hardware_closure_adjudication.json \
   --parsed-root runs/dse/<closure_parser_run>
 ```
+
+Use the same parsed-root convention for parser and manifest generation; mixing
+base-root and canonical-directory interpretations can otherwise leave the
+hard-gate adjudicator looking at the wrong directory and incorrectly reporting
+`missing_parsed_stage_result`.
 
 Build the fail-closed hard-gate adjudication layer from parsed evidence:
 

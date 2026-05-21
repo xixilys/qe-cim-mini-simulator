@@ -894,6 +894,13 @@ candidate bundle, all required unit-level provenance files
 and `source_bundle_manifest.json`), and all required raw files for a
 candidate/kernel/stage are already present, parsed stage-result JSON files under
 `parsed_hard_gate_results/<candidate>/<kernel>/<stage>_parsed_result.json`.
+`--parsed-root` may name either the run/base directory that should contain the
+canonical `parsed_hard_gate_results/` subdirectory, or that canonical
+`parsed_hard_gate_results/` directory itself.  In the latter case the parser
+must write `<candidate>/<kernel>/<stage>_parsed_result.json` directly under the
+given root; nested
+`parsed_hard_gate_results/parsed_hard_gate_results/...` paths are stale invalid
+artifacts and must not be consumed by ranking.
 The source-bundle manifest must declare the matching `candidate_id`,
 `kernel_id`, `candidate_specific_closure=true`, and a candidate-specific raw
 evidence scope; shared microkernel smoke artifacts are blocked from becoming
@@ -954,6 +961,10 @@ The parsed-evidence helper writes
 minimal parsed stage result schema (`dse.dft.hardware_parsed_stage_result.v1`)
 for the five hard gates and records expected/missing/present parser output
 files under `parsed_hard_gate_results/<candidate>/<kernel>/<stage>_parsed_result.json`.
+It follows the same `--parsed-root` convention as the parser runner: a root
+named `parsed_hard_gate_results` is treated as the canonical parsed-results
+directory itself, not as a parent that should receive another nested
+`parsed_hard_gate_results` prefix.
 Even if a parser output declares `verdict=passed`, the manifest keeps
 `passed_stage_count=0` and
 `adjudication_result=not_adjudicated_by_parsed_manifest`; a separate hard-gate
@@ -1141,15 +1152,19 @@ Current all36 current-route evidence
 `status=blocked_hardware_ppa_ranking`,
 `winner_selection_status=blocked_no_hardware_ppa_winner`, and
 `candidate_parametric_attribution_used=false` under the stricter provenance
-rule.  All 36 candidates are currently blocked because candidate assignment
-sidecars are not enough: each candidate/kernel source bundle must distinguish
-generated RTL/source provenance through `candidate_parametric_source_hash`, and
-trusted FPGA/ASIC ranking still requires comparable golden/sim/synth/Vivado/DC
-physical metrics.  Candidate-id ordering, design scores, assignments, or
-fresh-but-static RTL source signatures remain non-ranking metadata.  The PPA
-winner proof must come from physical candidate-parametric evidence: fresh
-generated RTL/tool runs whose source, parameter hashes, and ultimately raw
-Vivado/DC metrics actually vary by candidate.
+rule.  A refreshed parser/ranking pass after one real candidate-parametric FFT
+unit shows that the parsed-result path is now recognized
+(`missing_parsed_stage_result=0` for that candidate) and that the FFT unit has
+candidate-parametric source provenance, but the all36 run is still blocked:
+only one candidate/kernel unit has fresh parameterized RTL provenance while the
+remaining candidate/kernel matrix still requires fresh golden/sim/synth/Vivado/DC
+evidence and source bundles with `candidate_parametric_source_hash`,
+`candidate_parameter_manifest`, and `rtl_parameter_values`.  Candidate-id
+ordering, design scores, assignments, or fresh-but-static RTL source signatures
+remain non-ranking metadata.  The PPA winner proof must come from physical
+candidate-parametric evidence: fresh generated RTL/tool runs whose source,
+parameter hashes, and ultimately raw Vivado/DC metrics actually vary by
+candidate.
 
 Before a parsed PPA row can support that tie-breaker, Step5 must also run the
 candidate-specific provenance audit:

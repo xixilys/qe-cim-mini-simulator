@@ -294,6 +294,22 @@ def _unit_audit(run_dir: Path, *, candidate_id: str, kernel_id: str) -> Dict[str
             blockers.append(_blocker("source_bundle_shared_microkernel_smoke_only", candidate_id=candidate_id, kernel_id=kernel_id))
         if source_bundle.get("raw_evidence_scope") != "candidate_specific_closure":
             blockers.append(_blocker("source_bundle_raw_scope_not_candidate_specific_closure", candidate_id=candidate_id, kernel_id=kernel_id, raw_evidence_scope=source_bundle.get("raw_evidence_scope")))
+        if not source_bundle.get("candidate_parametric_source_hash"):
+            blockers.append(
+                _blocker(
+                    "candidate_parametric_source_hash_missing",
+                    candidate_id=candidate_id,
+                    kernel_id=kernel_id,
+                    reason=(
+                        "source bundle must prove generated RTL/source consumed design-shaping "
+                        "candidate parameters before parsed PPA can support best-architecture proof"
+                    ),
+                )
+            )
+        if not source_bundle.get("candidate_parameter_manifest"):
+            blockers.append(_blocker("candidate_parameter_manifest_missing", candidate_id=candidate_id, kernel_id=kernel_id))
+        if not isinstance(source_bundle.get("rtl_parameter_values"), Mapping):
+            blockers.append(_blocker("rtl_parameter_values_missing", candidate_id=candidate_id, kernel_id=kernel_id))
     if not tool_versions:
         blockers.append(_blocker("missing_tool_versions_manifest", candidate_id=candidate_id, kernel_id=kernel_id, path=str(tool_versions_path)))
     if not command_manifest:

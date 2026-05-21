@@ -309,6 +309,34 @@ def test_parser_run_writes_present_raw_parser_output_without_passing_gate(tmp_pa
     assert manifest["deliverable_complete"] is False
 
 
+def test_parser_run_accepts_parsed_hard_gate_results_as_parsed_root_without_double_prefix(tmp_path: Path) -> None:
+    run_dir = tmp_path / "run"
+    parsed_root = run_dir / "parsed_hard_gate_results"
+    packet_index = _packetized_run(run_dir)
+    unit = _unit_from_packet(run_dir)
+    _write_candidate_bundle(run_dir, unit)
+    _write_global_provenance_files(run_dir, unit)
+    raw_paths = _write_stage_raw_files(run_dir, unit, "golden_correctness", verdict="PASS")
+    _write_raw_transcript_refs(run_dir, unit, "golden_correctness", raw_paths)
+    write_dft_hardware_closure_evidence_intake(
+        run_dir,
+        closure_packet_index_path=packet_index,
+        evidence_root=run_dir,
+    )
+
+    parser_run = build_dft_hardware_closure_parser_run(
+        closure_evidence_intake_path=run_dir / "dft_hardware_closure_evidence_intake.json",
+        evidence_root=run_dir,
+        parsed_root=parsed_root,
+    )
+
+    row = next(row for row in parser_run["parser_rows"] if row["stage_id"] == "golden_correctness")
+    assert parser_run["parsed_result_written_count"] == 1
+    assert row["parsed_result"]["path"] == "cand-a/fft_ifft_ffft/golden_correctness_parsed_result.json"
+    assert (parsed_root / "cand-a" / "fft_ifft_ffft" / "golden_correctness_parsed_result.json").exists()
+    assert not (parsed_root / "parsed_hard_gate_results").exists()
+
+
 def test_parser_run_blocks_absolute_or_escaped_intake_paths(tmp_path: Path) -> None:
     run_dir = tmp_path / "run"
     packet_index = _packetized_run(run_dir)

@@ -72,6 +72,27 @@ def _expected_parsed_result_path(unit: Mapping[str, Any], stage: Mapping[str, An
     )
 
 
+def _expected_parsed_result_rel_path(
+    *,
+    parsed_root: Path,
+    unit: Mapping[str, Any],
+    stage: Mapping[str, Any],
+) -> str:
+    """Return the parsed-result path relative to ``parsed_root``.
+
+    ``parsed_root`` may be either the run/base directory or the canonical
+    ``parsed_hard_gate_results`` directory itself.  Avoid double-prefixing the
+    latter so parser-run output and parsed-evidence manifest lookup stay in
+    lockstep.
+    """
+
+    rel = _expected_parsed_result_path(unit, stage)
+    if Path(parsed_root).name == "parsed_hard_gate_results":
+        prefix = "parsed_hard_gate_results/"
+        return rel[len(prefix) :] if rel.startswith(prefix) else rel
+    return rel
+
+
 def _validate_parsed_stage_result(
     payload: Mapping[str, Any],
     *,
@@ -112,7 +133,7 @@ def _parsed_row(
     candidate_id = str(unit.get("candidate_id", ""))
     kernel_id = str(unit.get("kernel_id", ""))
     stage_id = str(stage.get("stage_id", ""))
-    rel_path = _expected_parsed_result_path(unit, stage)
+    rel_path = _expected_parsed_result_rel_path(parsed_root=parsed_root, unit=unit, stage=stage)
     path = parsed_root / rel_path
     present = path.exists() and path.is_file()
     payload = _load_json(path) if present else {}
