@@ -120,6 +120,8 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--candidate-id", default=None, help="Release candidate id to stamp into source-flow manifest")
+    parser.add_argument("--candidate-bundle", type=Path, default=None, help="Candidate bundle JSON used to derive candidate-parametric RTL source provenance")
+    parser.add_argument("--candidate-parameter-manifest", type=Path, default=None, help="Precomputed candidate parameter manifest JSON; overrides --candidate-bundle")
     parser.add_argument("--ssh-target", default="ic-eda")
     parser.add_argument("--remote-dir")
     parser.add_argument("--timeout-s", type=int, default=600)
@@ -129,7 +131,11 @@ def main(argv: list[str] | None = None) -> int:
 
     out_dir = args.out
     out_dir.mkdir(parents=True, exist_ok=True)
-    initialize_kinetic_add_rtl_flow(out_dir, candidate_id=args.candidate_id)
+    candidate_parameter_manifest = args.candidate_parameter_manifest or args.candidate_bundle
+    initialize_kinetic_add_rtl_flow(out_dir,
+        candidate_id=args.candidate_id,
+        candidate_parameter_manifest=candidate_parameter_manifest,
+    )
     remote_dir = args.remote_dir or f"/tmp/dft_accelerate_kinetic_add_{out_dir.name}"
     attempts: list[dict[str, Any]] = []
     if not args.skip_remote:

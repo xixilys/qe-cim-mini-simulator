@@ -22,6 +22,13 @@ from dse_v2.codesign.dft_hardware_evidence import (
 )
 
 
+from dse_v2.reference_workloads.dft_candidate_parametric_rtl import (
+    candidate_parameter_manifest_fields,
+    load_candidate_parameter_manifest,
+    parametrize_rtl_source,
+    write_candidate_parameter_manifest,
+)
+
 DMA_HBM_KERNEL_ID = "dma_hbm_movement_engine"
 DMA_HBM_FLOW_SCHEMA = "dse.dft_scf.dma_hbm_movement_engine_rtl_flow.v1"
 
@@ -234,7 +241,11 @@ def write_json(path: Path, payload: Any) -> None:
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
-def write_dma_hbm_rtl_sources(out_dir: Path) -> Dict[str, str]:
+def write_dma_hbm_rtl_sources(
+    out_dir: Path,
+    *,
+    candidate_parameter_manifest: Mapping[str, Any] | None = None,
+) -> Dict[str, str]:
     """Write RTL/testbench/TCL sources and return run-local file names."""
 
     out_dir = Path(out_dir)
@@ -244,7 +255,10 @@ def write_dma_hbm_rtl_sources(out_dir: Path) -> Dict[str, str]:
         "vivado_tcl": "vivado_synth.tcl",
         "dc_tcl": "dc_synth.tcl",
     }
-    _write_text(out_dir / files["rtl"], DMA_HBM_VERILOG)
+    _write_text(
+        out_dir / files["rtl"],
+        parametrize_rtl_source(DMA_HBM_KERNEL_ID, DMA_HBM_VERILOG, candidate_parameter_manifest),
+    )
     _write_text(out_dir / files["testbench"], DMA_HBM_TESTBENCH)
     _write_text(out_dir / files["vivado_tcl"], VIVADO_SYNTH_TCL)
     _write_text(out_dir / files["dc_tcl"], DC_SYNTH_TCL)
@@ -293,18 +307,30 @@ def write_golden_correctness(out_dir: Path) -> Dict[str, Any]:
     return payload
 
 
-def initialize_dma_hbm_rtl_flow(out_dir: Path, *, candidate_id: str | None = None) -> Dict[str, Any]:
+def initialize_dma_hbm_rtl_flow(
+    out_dir: Path,
+    *,
+    candidate_id: str | None = None,
+    candidate_parameter_manifest: Mapping[str, Any] | Path | str | None = None,
+) -> Dict[str, Any]:
     """Create all local source/golden artifacts for a DMA/HBM RTL run."""
 
     out_dir = Path(out_dir)
-    source_files = write_dma_hbm_rtl_sources(out_dir)
+    candidate_parameters = load_candidate_parameter_manifest(
+        candidate_parameter_manifest,
+        candidate_id=candidate_id,
+        kernel_id=DMA_HBM_KERNEL_ID,
+    )
+    source_files = write_dma_hbm_rtl_sources(out_dir, candidate_parameter_manifest=candidate_parameters)
     golden = write_golden_correctness(out_dir)
+    write_candidate_parameter_manifest(out_dir, candidate_parameters)
     manifest = {
         "schema_version": DMA_HBM_FLOW_SCHEMA,
         "kernel_id": DMA_HBM_KERNEL_ID,
         "candidate_id": candidate_id,
         "source_files": source_files,
         "golden_correctness": "golden_correctness.json",
+        **candidate_parameter_manifest_fields(candidate_parameters),
         "semantics": ["burst_copy", "strided_copy", "gather_copy", "scatter_copy"],
         "claim_boundary": (
             "DFT-scoped RTL smoke flow for one DMA/HBM movement address-generator microkernel. "

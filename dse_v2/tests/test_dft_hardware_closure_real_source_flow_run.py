@@ -31,6 +31,19 @@ def _write_json(path: Path, payload: object) -> Path:
     return path
 
 
+def _candidate_assignments(kernel_id: str) -> dict:
+    return {
+        "algorithm_variants": "iterative_diag_fft" if kernel_id == "fft_ifft_ffft" else "batched_gemm_exx",
+        "dft_phase_hotspot_selection": "scf_hpsi_density",
+        "evidence_fidelity_promotion_policy": "systemc_then_gem5_non_smoke",
+        "hardware_microarchitecture": "balanced_generic_systemc_v0",
+        "interface_descriptor_protocol": "genericaccel_descriptor_v1",
+        "mapping_data_layout": "fft_grid_hbm_tiled" if kernel_id == "fft_ifft_ffft" else "band_block_systolic",
+        "precision_policy": "fp64_strict",
+        "schedule_runtime_policy": "overlap_dma_compute",
+    }
+
+
 def _packetized_run(run_dir: Path) -> Path:
     work_items = []
     for kernel_id in KERNEL_IDS:
@@ -39,6 +52,8 @@ def _packetized_run(run_dir: Path) -> Path:
                 {
                     "work_item_id": f"{CANDIDATE_ID}:{kernel_id}:{stage_id}",
                     "candidate_id": CANDIDATE_ID,
+                    "design_candidate_id": f"design-{kernel_id}",
+                    "assignments": _candidate_assignments(kernel_id),
                     "kernel_id": kernel_id,
                     "kernel_name": kernel_id.replace("_", " "),
                     "kernel_family": "real_source_flow_run_test",
@@ -71,6 +86,21 @@ def _packetized_run(run_dir: Path) -> Path:
         run_dir,
         hardware_closure_shards_path=run_dir / "dft_hardware_closure_shards.json",
     )
+    for kernel_id in KERNEL_IDS:
+        _write_json(
+            run_dir
+            / "candidate_specific_bundles"
+            / CANDIDATE_ID
+            / kernel_id
+            / "candidate_bundle.json",
+            {
+                "schema_version": "unit-test.candidate_bundle.v1",
+                "candidate_id": CANDIDATE_ID,
+                "design_candidate_id": f"design-{kernel_id}",
+                "assignments": _candidate_assignments(kernel_id),
+                "kernel_id": kernel_id,
+            },
+        )
     return run_dir / "dft_hardware_closure_packet_index.json"
 
 
@@ -129,14 +159,20 @@ def test_real_source_flow_runner_cli_writes_candidate_stamped_map_without_claim_
     for row in payload["units"]:
         flow_dir = Path(row["source_flow_dir"])
         manifest = _load(flow_dir / "manifest.json")
+        candidate_parameter_manifest = _load(flow_dir / "candidate_parameter_manifest.json")
         matrix = _load(flow_dir / "dft_hardware_evidence_matrix.json")
         assert manifest["candidate_id"] == CANDIDATE_ID
         assert manifest["kernel_id"] == row["kernel_id"]
+        assert manifest["candidate_parametric_source_hash"]
+        assert candidate_parameter_manifest["candidate_parametric_source_hash"] == manifest["candidate_parametric_source_hash"]
         assert matrix["candidate_id"] == CANDIDATE_ID
         assert row["source_flow_ready"] is True
         assert row["hardware_completion_eligible"] is False
         assert row["deliverable_complete"] is False
         command = row["command"]
+        assert "--candidate-bundle" in command
+        candidate_bundle_path = Path(command[command.index("--candidate-bundle") + 1])
+        assert candidate_bundle_path.exists()
         assert "--remote-dir" in command
         remote_dir = command[command.index("--remote-dir") + 1]
         assert remote_dir.startswith("/tmp/dft_accelerate_real-source-flow-run_")

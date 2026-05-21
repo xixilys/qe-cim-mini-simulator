@@ -19,6 +19,25 @@ from dse_v2.reference_workloads.dft_fft_ifft_rtl_flow import (
 from dse_v2.scripts.dse.run_dft_fft_ifft_rtl_flow import main as run_fft_ifft_flow
 
 
+def _candidate_bundle_payload(*, candidate_id: str, design_candidate_id: str, hardware: str) -> dict:
+    return {
+        "schema_version": "unit-test.candidate_bundle.v1",
+        "candidate_id": candidate_id,
+        "design_candidate_id": design_candidate_id,
+        "assignments": {
+            "algorithm_variants": "iterative_diag_fft",
+            "dft_phase_hotspot_selection": "scf_hpsi_density",
+            "evidence_fidelity_promotion_policy": "systemc_then_gem5_non_smoke",
+            "hardware_microarchitecture": hardware,
+            "interface_descriptor_protocol": "genericaccel_descriptor_v1",
+            "mapping_data_layout": "fft_grid_hbm_tiled",
+            "precision_policy": "fp64_strict",
+            "schedule_runtime_policy": "host_orchestrated_sync",
+        },
+        "design_score": 9.5,
+    }
+
+
 def _assert_candidate_source_flow(out_dir, *, candidate_id: str, kernel_id: str) -> None:
     manifest = json.loads((out_dir / "manifest.json").read_text(encoding="utf-8"))
     matrix = json.loads((out_dir / "dft_hardware_evidence_matrix.json").read_text(encoding="utf-8"))
@@ -100,6 +119,66 @@ def test_fft_ifft_rtl_flow_generates_deterministic_sources_and_golden(tmp_path):
     assert golden["cases"]["fft_complex_4pt"]["expected"] == [[0, 0], [16, 0], [0, 0], [0, 0]]
     assert golden["cases"]["ifft_complex_4pt"]["expected"] == [[4, 0], [0, 4], [-4, 0], [0, -4]]
     assert golden["cases"]["ffft_real_4pt"]["expected"] == [[10, 0], [-2, 2], [-2, 0], [-2, -2]]
+
+
+def test_fft_ifft_rtl_flow_stamps_candidate_parametric_source_without_candidate_id_tie_break(tmp_path):
+    bundle_a = tmp_path / "bundle-a.json"
+    bundle_b = tmp_path / "bundle-b.json"
+    bundle_c = tmp_path / "bundle-c.json"
+    bundle_a.write_text(
+        json.dumps(
+            _candidate_bundle_payload(
+                candidate_id="cand-a",
+                design_candidate_id="design-same",
+                hardware="host_fpga_minimal_v0",
+            )
+        ),
+        encoding="utf-8",
+    )
+    bundle_b.write_text(
+        json.dumps(
+            _candidate_bundle_payload(
+                candidate_id="cand-b",
+                design_candidate_id="design-different-but-same-assignments",
+                hardware="host_fpga_minimal_v0",
+            )
+        ),
+        encoding="utf-8",
+    )
+    bundle_c.write_text(
+        json.dumps(
+            _candidate_bundle_payload(
+                candidate_id="cand-c",
+                design_candidate_id="design-different",
+                hardware="balanced_generic_systemc_v0",
+            )
+        ),
+        encoding="utf-8",
+    )
+
+    out_a = tmp_path / "out-a"
+    out_b = tmp_path / "out-b"
+    out_c = tmp_path / "out-c"
+    initialize_fft_ifft_ffft_rtl_flow(out_a, candidate_id="cand-a", candidate_parameter_manifest=bundle_a)
+    initialize_fft_ifft_ffft_rtl_flow(out_b, candidate_id="cand-b", candidate_parameter_manifest=bundle_b)
+    initialize_fft_ifft_ffft_rtl_flow(out_c, candidate_id="cand-c", candidate_parameter_manifest=bundle_c)
+
+    manifest_a = json.loads((out_a / "manifest.json").read_text(encoding="utf-8"))
+    manifest_b = json.loads((out_b / "manifest.json").read_text(encoding="utf-8"))
+    manifest_c = json.loads((out_c / "manifest.json").read_text(encoding="utf-8"))
+    source_a = (out_a / "fft_ifft_ffft.v").read_text(encoding="utf-8")
+    source_b = (out_b / "fft_ifft_ffft.v").read_text(encoding="utf-8")
+    source_c = (out_c / "fft_ifft_ffft.v").read_text(encoding="utf-8")
+
+    assert (out_a / "candidate_parameter_manifest.json").exists()
+    assert manifest_a["candidate_parameter_manifest"] == "candidate_parameter_manifest.json"
+    assert manifest_a["candidate_parametric_source_hash"]
+    assert manifest_a["rtl_parameter_values"]["rtl_kernel_variant"] >= 0
+    assert "DFT_CANDIDATE_PARAMETRIC_RTL_BEGIN" in source_a
+    assert manifest_a["candidate_parametric_source_hash"] == manifest_b["candidate_parametric_source_hash"]
+    assert source_a == source_b
+    assert manifest_a["candidate_parametric_source_hash"] != manifest_c["candidate_parametric_source_hash"]
+    assert source_a != source_c
 
 
 def test_fft_ifft_rtl_flow_is_fail_closed_before_remote_tool_outputs(tmp_path):

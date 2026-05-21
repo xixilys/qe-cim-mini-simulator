@@ -85,6 +85,17 @@ def _candidate_bundle(run_dir: Path, candidate_id: str, kernel_id: str) -> dict:
     return {
         "schema_version": "unit-test.candidate_bundle.v1",
         "candidate_id": candidate_id,
+        "design_candidate_id": f"design-{candidate_id}",
+        "assignments": {
+            "algorithm_variants": "batched_gemm_exx",
+            "dft_phase_hotspot_selection": "scf_hpsi_density",
+            "evidence_fidelity_promotion_policy": "systemc_then_gem5_non_smoke",
+            "hardware_microarchitecture": "balanced_generic_systemc_v0",
+            "interface_descriptor_protocol": "genericaccel_descriptor_v1",
+            "mapping_data_layout": "band_block_systolic",
+            "precision_policy": "fp64_strict",
+            "schedule_runtime_policy": "overlap_dma_compute",
+        },
         "kernel_id": kernel_id,
         "expected_evidence_files": files,
     }
@@ -227,6 +238,12 @@ def test_execution_skip_remote_clears_stale_raw_and_records_provenance(
     assert command_manifest["commands_executed"] is True
     assert source_bundle["fresh_execution_work_dir"]
     assert source_bundle["shared_microkernel_smoke_only"] is False
+    assert source_bundle["candidate_parameter_manifest"] == "candidate_parameter_manifest.json"
+    assert source_bundle["candidate_parametric_source_hash"]
+    assert source_bundle["rtl_parameter_values"]["rtl_kernel_variant"] >= 0
+    assert any(ref["path"].endswith("candidate_parameter_manifest.json") for ref in source_bundle["source_refs"])
+    unit = payload["units"][0]
+    assert "--candidate-bundle" in unit["runner_command"]
 
 
 def test_execution_missing_tie_breaker_queue_fails_closed_without_claim_upgrade(tmp_path: Path) -> None:

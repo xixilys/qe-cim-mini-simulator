@@ -164,6 +164,11 @@ def _command_for_unit(
         "--remote-dir",
         remote_dir,
     ]
+    candidate_bundle_json = str(
+        unit.get("candidate_bundle_json_resolved") or unit.get("candidate_bundle_json") or ""
+    )
+    if candidate_bundle_json:
+        command.extend(["--candidate-bundle", candidate_bundle_json])
     if skip_remote:
         command.append("--skip-remote")
     if allow_blocked:

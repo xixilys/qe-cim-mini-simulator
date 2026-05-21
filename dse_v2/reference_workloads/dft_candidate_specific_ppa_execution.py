@@ -801,9 +801,24 @@ def _write_unit_provenance(
     }
     write_json(unit_dir / "raw_transcript_index.json", raw_transcript_index)
 
+    source_flow_manifest = _load_json(work_dir / "manifest.json")
+    candidate_parameter_manifest_path = work_dir / "candidate_parameter_manifest.json"
+    candidate_parameter_manifest = _load_json(candidate_parameter_manifest_path)
+    candidate_parametric_source_hash = (
+        source_flow_manifest.get("candidate_parametric_source_hash")
+        or candidate_parameter_manifest.get("candidate_parametric_source_hash")
+    )
+    rtl_parameter_values = (
+        candidate_parameter_manifest.get("rtl_parameter_values")
+        if isinstance(candidate_parameter_manifest.get("rtl_parameter_values"), Mapping)
+        else source_flow_manifest.get("rtl_parameter_values")
+        if isinstance(source_flow_manifest.get("rtl_parameter_values"), Mapping)
+        else {}
+    )
     source_refs = [
         _source_ref(candidate_bundle_path, root=run_dir),
         _source_ref(work_dir / "manifest.json", root=run_dir, required=False),
+        _source_ref(candidate_parameter_manifest_path, root=run_dir, required=False),
         _source_ref(work_dir / "status.json", root=run_dir, required=False),
         _source_ref(unit_dir / "command_manifest.json", root=run_dir),
         _source_ref(unit_dir / "tool_versions.json", root=run_dir),
@@ -826,6 +841,17 @@ def _write_unit_provenance(
         "status": "fresh_candidate_specific_source_bundle_recorded",
         "fresh_command_run_id": command_run_id,
         "fresh_execution_work_dir": str(work_dir),
+        "candidate_parameter_manifest": (
+            str(Path(source_flow_manifest.get("candidate_parameter_manifest", "candidate_parameter_manifest.json")))
+            if candidate_parameter_manifest
+            else None
+        ),
+        "candidate_parametric_source_hash": candidate_parametric_source_hash,
+        "rtl_parameter_values": dict(rtl_parameter_values),
+        "candidate_parameter_basis": (
+            candidate_parameter_manifest.get("basis")
+            or source_flow_manifest.get("candidate_parameter_basis")
+        ),
         "source_refs": source_refs,
         "source_ref_count": len(source_refs),
         "stage_ids": list(stage_ids),
@@ -891,6 +917,8 @@ def _run_unit(
             str(work_dir),
             "--candidate-id",
             candidate_id,
+            "--candidate-bundle",
+            str(candidate_bundle_path),
             "--ssh-target",
             ssh_target,
             "--remote-dir",
@@ -946,6 +974,7 @@ def _run_unit(
         "removed_stale_files": removed,
         "tool_probe_status": tool_probe.get("probe_command", {}).get("status"),
         "runner_status": runner_row.get("status"),
+        "runner_command": runner_row.get("command", []),
         "runner_returncode": runner_row.get("returncode"),
         "materialized_raw_file_count": len(materialized_rows),
         "materialized_rows": materialized_rows,

@@ -694,8 +694,19 @@ python3 dse_v2/scripts/dse/run_dft_hardware_closure_real_source_flows.py \
 
 The runner selects candidate/kernel units from
 `dft_hardware_closure_packet_index.json`, dispatches the matching per-kernel
-RTL/HLS source-flow script with `--candidate-id`, and uses `--ssh-target
-ic-eda` by default unless `--skip-remote` is set.  It also passes a
+RTL/HLS source-flow script with `--candidate-id` plus the packet's resolved
+`--candidate-bundle` when available, and uses `--ssh-target ic-eda` by default
+unless `--skip-remote` is set.  Each per-kernel flow derives a
+`candidate_parameter_manifest.json` from design-shaping assignments
+(`algorithm_variants`, `hardware_microarchitecture`, `mapping_data_layout`,
+`schedule_runtime_policy`, `interface_descriptor_protocol`, and
+`precision_policy`), stamps generated RTL with
+`candidate_parametric_source_hash`, and explicitly excludes `candidate_id`,
+`design_candidate_id`, phase/hotspot selection, evidence/promotion policy, and
+`design_score` from that hash.  The hash is source-provenance only: it can prove
+that generated RTL
+changed with design parameters, but it cannot rank candidates or break PPA ties
+unless Vivado/DC physical metrics also differ.  The runner also passes a
 candidate/run/kernel-scoped `--remote-dir` to each kernel flow so parallel
 candidate shards do not clobber remote `/tmp/dft_accelerate_*` work
 directories.  It writes
@@ -1126,16 +1137,19 @@ winner, does not set `trusted_winner=true`, and does not set
 Current all36 current-route evidence
 `runs/dse/wave36_step5_current_route_all36_20260521T011801Z` now has
 `dft_hardware_ppa_ranking_status.json` with
-`ranking_eligible_candidate_count=36`, `pareto_candidate_count=36`,
-`hardware_completion_eligible=true`, and
-`winner_selection_status=tied_by_identical_kernel_ppa_no_single_winner`.
-This is the honest result of the present candidate-stamped kernel evidence:
-all release candidates close the hard gates, but their parsed kernel PPA
-signatures are tied, so `candidate_parametric_attribution_used=false` and a
-separate system-level/full-SCF tie-breaker cannot by itself declare a single best
-FPGA or ASIC architecture.  The PPA winner proof must come from physical
-candidate-parametric evidence: fresh generated RTL/tool runs whose source,
-parameter hashes, or raw Vivado/DC metrics actually vary by candidate.
+`ranking_eligible_candidate_count=0`,
+`status=blocked_hardware_ppa_ranking`,
+`winner_selection_status=blocked_no_hardware_ppa_winner`, and
+`candidate_parametric_attribution_used=false` under the stricter provenance
+rule.  All 36 candidates are currently blocked because candidate assignment
+sidecars are not enough: each candidate/kernel source bundle must distinguish
+generated RTL/source provenance through `candidate_parametric_source_hash`, and
+trusted FPGA/ASIC ranking still requires comparable golden/sim/synth/Vivado/DC
+physical metrics.  Candidate-id ordering, design scores, assignments, or
+fresh-but-static RTL source signatures remain non-ranking metadata.  The PPA
+winner proof must come from physical candidate-parametric evidence: fresh
+generated RTL/tool runs whose source, parameter hashes, and ultimately raw
+Vivado/DC metrics actually vary by candidate.
 
 Before a parsed PPA row can support that tie-breaker, Step5 must also run the
 candidate-specific provenance audit:
@@ -1173,6 +1187,11 @@ The runner probes IC/EDA tool versions, invokes the kernel RTL/HLS flow into a
 per-unit `fresh_tool_work/` directory, deletes stale raw/parsed files for the
 selected unit before writing new evidence, and records
 `dft_candidate_specific_ppa_execution.json`, validation, and status artifacts.
+It forwards the exact candidate bundle to the per-kernel flow, so the
+per-unit `source_bundle_manifest.json` must include
+`candidate_parameter_manifest`, `candidate_parametric_source_hash`,
+`rtl_parameter_values`, and a source ref to
+`candidate_parameter_manifest.json` when design assignments are available.
 Its `candidate_input_manifest.json` must use
 `input_source=fresh_candidate_specific_tool_execution` and must not contain
 `source_flow_dir`.  A successful run only removes provenance blockers for the

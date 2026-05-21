@@ -21,6 +21,13 @@ from dse_v2.codesign.dft_hardware_evidence import (
 )
 
 
+from dse_v2.reference_workloads.dft_candidate_parametric_rtl import (
+    candidate_parameter_manifest_fields,
+    load_candidate_parameter_manifest,
+    parametrize_rtl_source,
+    write_candidate_parameter_manifest,
+)
+
 REDUCTION_DOT_KERNEL_ID = "reduction_dot_tree"
 REDUCTION_DOT_FLOW_SCHEMA = "dse.dft_scf.reduction_dot_tree_rtl_flow.v1"
 
@@ -138,7 +145,11 @@ def write_json(path: Path, payload: Any) -> None:
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
-def write_reduction_dot_tree_rtl_sources(out_dir: Path) -> Dict[str, str]:
+def write_reduction_dot_tree_rtl_sources(
+    out_dir: Path,
+    *,
+    candidate_parameter_manifest: Mapping[str, Any] | None = None,
+) -> Dict[str, str]:
     """Write RTL/testbench/TCL sources and return run-local file names."""
 
     out_dir = Path(out_dir)
@@ -148,7 +159,10 @@ def write_reduction_dot_tree_rtl_sources(out_dir: Path) -> Dict[str, str]:
         "vivado_tcl": "vivado_synth.tcl",
         "dc_tcl": "dc_synth.tcl",
     }
-    _write_text(out_dir / files["rtl"], REDUCTION_DOT_VERILOG)
+    _write_text(
+        out_dir / files["rtl"],
+        parametrize_rtl_source(REDUCTION_DOT_KERNEL_ID, REDUCTION_DOT_VERILOG, candidate_parameter_manifest),
+    )
     _write_text(out_dir / files["testbench"], REDUCTION_DOT_TESTBENCH)
     _write_text(out_dir / files["vivado_tcl"], VIVADO_SYNTH_TCL)
     _write_text(out_dir / files["dc_tcl"], DC_SYNTH_TCL)
@@ -181,18 +195,30 @@ def write_golden_correctness(out_dir: Path) -> Dict[str, Any]:
     return payload
 
 
-def initialize_reduction_dot_tree_rtl_flow(out_dir: Path, *, candidate_id: str | None = None) -> Dict[str, Any]:
+def initialize_reduction_dot_tree_rtl_flow(
+    out_dir: Path,
+    *,
+    candidate_id: str | None = None,
+    candidate_parameter_manifest: Mapping[str, Any] | Path | str | None = None,
+) -> Dict[str, Any]:
     """Create all local source/golden artifacts for a reduction-dot RTL run."""
 
     out_dir = Path(out_dir)
-    source_files = write_reduction_dot_tree_rtl_sources(out_dir)
+    candidate_parameters = load_candidate_parameter_manifest(
+        candidate_parameter_manifest,
+        candidate_id=candidate_id,
+        kernel_id=REDUCTION_DOT_KERNEL_ID,
+    )
+    source_files = write_reduction_dot_tree_rtl_sources(out_dir, candidate_parameter_manifest=candidate_parameters)
     golden = write_golden_correctness(out_dir)
+    write_candidate_parameter_manifest(out_dir, candidate_parameters)
     manifest = {
         "schema_version": REDUCTION_DOT_FLOW_SCHEMA,
         "kernel_id": REDUCTION_DOT_KERNEL_ID,
         "candidate_id": candidate_id,
         "source_files": source_files,
         "golden_correctness": "golden_correctness.json",
+        **candidate_parameter_manifest_fields(candidate_parameters),
         "claim_boundary": (
             "DFT-scoped RTL smoke flow for one fixed-point reduction_dot_tree microkernel. "
             "It is not a full-SCF device-resident accelerator or all-kernel closure."

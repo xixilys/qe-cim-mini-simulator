@@ -262,6 +262,15 @@ def _all_units(packet_index_path: Path) -> tuple[Dict[str, Any], list[Dict[str, 
         for unit in packet.get("units", []) or []:
             if not isinstance(unit, Mapping):
                 continue
+            candidate_bundle_json = str(unit.get("candidate_bundle_json", ""))
+            candidate_bundle_resolved = ""
+            if candidate_bundle_json:
+                candidate_bundle_path, candidate_bundle_error = _safe_child_path(
+                    packet_index_path.parent,
+                    candidate_bundle_json,
+                )
+                if candidate_bundle_path is not None and candidate_bundle_error is None:
+                    candidate_bundle_resolved = str(candidate_bundle_path)
             units.append(
                 {
                     "unit_id": str(unit.get("unit_id", "")),
@@ -283,7 +292,8 @@ def _all_units(packet_index_path: Path) -> tuple[Dict[str, Any], list[Dict[str, 
                     ],
                     "expected_evidence_file_count": int(unit.get("expected_evidence_file_count", 0) or 0),
                     "unit_evidence_dir": str(unit.get("unit_evidence_dir", "")),
-                    "candidate_bundle_json": str(unit.get("candidate_bundle_json", "")),
+                    "candidate_bundle_json": candidate_bundle_json,
+                    "candidate_bundle_json_resolved": candidate_bundle_resolved,
                 }
             )
     return packet_index, units, errors
