@@ -107,10 +107,50 @@ def _seed_run(
             "candidates": [
                 {
                     "candidate_id": candidate_id,
+                    "evaluation_record_id": candidate_id,
+                    "legacy_candidate_id": candidate_id,
+                    "candidate_id_kind": "evaluation_record_id",
+                    "candidate_id_authoritative_for_design": False,
+                    "design_candidate_id_authoritative_for_design": True,
                     "design_candidate_id": f"design-{candidate_id}",
-                    "identity_assignments": {"hardware_microarchitecture": "host_fpga_minimal_v0"},
+                    "assignments": {
+                        "hardware_microarchitecture": "host_fpga_minimal_v0"
+                        if candidate_id == candidates[0]
+                        else "streaming_systolic_array_v0",
+                        "mapping_data_layout": "fft_grid_hbm_tiled"
+                        if candidate_id == candidates[0]
+                        else "band_block_systolic",
+                        "algorithm_variants": "iterative_diag_fft"
+                        if candidate_id == candidates[0]
+                        else "batched_gemm_exx",
+                        "schedule_runtime_policy": "host_orchestrated_sync"
+                        if candidate_id == candidates[0]
+                        else "overlap_dma_compute",
+                        "dft_phase_hotspot_selection": "scf_hpsi_density",
+                        "evidence_fidelity_promotion_policy": "systemc_gem5_eda_formal_ladder",
+                    },
+                    "identity_assignments": {
+                        "hardware_microarchitecture": "host_fpga_minimal_v0"
+                        if candidate_id == candidates[0]
+                        else "streaming_systolic_array_v0",
+                        "mapping_data_layout": "fft_grid_hbm_tiled"
+                        if candidate_id == candidates[0]
+                        else "band_block_systolic",
+                        "algorithm_variants": "iterative_diag_fft"
+                        if candidate_id == candidates[0]
+                        else "batched_gemm_exx",
+                        "schedule_runtime_policy": "host_orchestrated_sync"
+                        if candidate_id == candidates[0]
+                        else "overlap_dma_compute",
+                    },
                     "non_identity_assignments": {
                         "dft_phase_hotspot_selection": "scf_hpsi_density",
+                        "evidence_fidelity_promotion_policy": "systemc_gem5_eda_formal_ladder",
+                    },
+                    "applicability_assignments": {
+                        "dft_phase_hotspot_selection": "scf_hpsi_density",
+                    },
+                    "evaluation_policy_assignments": {
                         "evidence_fidelity_promotion_policy": "systemc_gem5_eda_formal_ladder",
                     },
                     "design_score": 4.2,
@@ -180,13 +220,95 @@ def test_hardware_ppa_ranking_marks_tied_candidates_without_deliverable_completi
     assert ranking["schema_version"] == DFT_HARDWARE_PPA_RANKING_SCHEMA
     assert ranking["hardware_completion_eligible"] is True
     assert ranking["deliverable_complete"] is False
-    assert ranking["winner_selection_status"] == "tied_by_identical_kernel_ppa_no_single_winner"
-    assert ranking["all_candidates_metric_tied"] is True
-    assert {row["rank"] for row in ranking["fpga_ranking"]} == {1}
-    assert {row["rank"] for row in ranking["asic_ranking"]} == {1}
+    assert ranking["winner_selection_status"] == "ranked_candidates_available"
+    assert ranking["all_candidates_physical_metric_tied"] is True
+    assert ranking["candidate_parametric_attribution_used"] is True
+    assert ranking["all_candidates_metric_tied"] is False
+    assert {row["rank"] for row in ranking["fpga_ranking"]} == {1, 2}
+    assert {row["rank"] for row in ranking["asic_ranking"]} == {1, 2}
     assert ranking["ranking_policy"]["non_identity_axes_excluded_from_score"] is True
+    first_row = ranking["candidate_rows"][0]
+    assert first_row["design_candidate_id"].startswith("design-")
+    assert first_row["assignments"]["hardware_microarchitecture"]
+    assert first_row["evaluation_record_id"] == first_row["candidate_id"]
+    assert first_row["candidate_parametric_ppa"]["candidate_id_used_as_factor"] is False
     assert validation["valid"] is True
     assert pareto["pareto_candidate_count"] == 2
+
+
+def test_hardware_ppa_ranking_discovers_release_domain_candidate_universe(tmp_path: Path) -> None:
+    run_dir = tmp_path / "run"
+    _seed_run(run_dir, candidates=("cand-a",))
+    release_domain = run_dir / "release_domain"
+    release_domain.mkdir()
+    (run_dir / "candidate_universe_manifest.json").replace(
+        release_domain / "candidate_universe_manifest.json"
+    )
+
+    status = write_dft_hardware_ppa_ranking(run_dir)
+    ranking = json.loads((run_dir / "dft_hardware_ppa_ranking.json").read_text(encoding="utf-8"))
+
+    assert status["status"] == "passed"
+    assert ranking["source_artifacts"]["candidate_universe_manifest"]["exists"] is True
+    assert ranking["candidate_metadata_context_available"] is True
+    assert ranking["candidate_rows"][0]["design_candidate_id"] == "design-cand-a"
+    assert ranking["candidate_rows"][0]["assignments"]["hardware_microarchitecture"] == "host_fpga_minimal_v0"
+
+
+def test_hardware_ppa_ranking_uses_assignment_parametric_attribution_when_physical_metrics_tie(tmp_path: Path) -> None:
+    run_dir = tmp_path / "run"
+    _seed_run(run_dir, candidates=("cand-minimal", "cand-balanced"))
+    _write_json(
+        run_dir / "candidate_universe_manifest.json",
+        {
+            "schema_version": "dse.codesign.candidate_universe_manifest.v1",
+            "candidates": [
+                {
+                    "candidate_id": "cand-minimal",
+                    "design_candidate_id": "design-minimal",
+                    "assignments": {
+                        "algorithm_variants": "iterative_diag_fft",
+                        "hardware_microarchitecture": "host_fpga_minimal_v0",
+                        "mapping_data_layout": "fft_grid_hbm_tiled",
+                        "schedule_runtime_policy": "host_orchestrated_sync",
+                    },
+                    "identity_assignments": {
+                        "algorithm_variants": "iterative_diag_fft",
+                        "hardware_microarchitecture": "host_fpga_minimal_v0",
+                        "mapping_data_layout": "fft_grid_hbm_tiled",
+                        "schedule_runtime_policy": "host_orchestrated_sync",
+                    },
+                },
+                {
+                    "candidate_id": "cand-balanced",
+                    "design_candidate_id": "design-balanced",
+                    "assignments": {
+                        "algorithm_variants": "batched_gemm_exx",
+                        "hardware_microarchitecture": "balanced_generic_systemc_v0",
+                        "mapping_data_layout": "band_block_systolic",
+                        "schedule_runtime_policy": "overlap_dma_compute",
+                    },
+                    "identity_assignments": {
+                        "algorithm_variants": "batched_gemm_exx",
+                        "hardware_microarchitecture": "balanced_generic_systemc_v0",
+                        "mapping_data_layout": "band_block_systolic",
+                        "schedule_runtime_policy": "overlap_dma_compute",
+                    },
+                },
+            ],
+        },
+    )
+
+    ranking = build_dft_hardware_ppa_ranking(run_dir)
+    validation = validate_dft_hardware_ppa_ranking(ranking)
+
+    assert validation["valid"] is True
+    assert ranking["all_candidates_physical_metric_tied"] is True
+    assert ranking["candidate_parametric_attribution_used"] is True
+    assert ranking["all_candidates_metric_tied"] is False
+    assert ranking["fpga_ranking"][0]["candidate_id"] == "cand-minimal"
+    assert ranking["asic_ranking"][0]["candidate_id"] == "cand-minimal"
+    assert ranking["candidate_rows"][0]["candidate_parametric_ppa"]["candidate_id_used_as_factor"] is False
 
 
 def test_hardware_ppa_ranking_blocks_fpga_claim_without_vivado_route(tmp_path: Path) -> None:

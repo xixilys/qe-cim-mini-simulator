@@ -90,6 +90,44 @@ def test_hardware_completion_workplan_expands_candidate_kernel_stage_items_fail_
     assert validation["valid"] is True
 
 
+def test_hardware_completion_workplan_auto_attaches_candidate_universe_metadata(tmp_path: Path) -> None:
+    run_dir = tmp_path / "run"
+    paths = _fixtures(run_dir / "dft_ledger")
+    _write_json(
+        run_dir / "release_domain_current36" / "candidate_universe_manifest.json",
+        {
+            "schema_version": "dse.codesign.candidate_universe_manifest.v1",
+            "candidates": [
+                {
+                    "candidate_id": "cand-a",
+                    "design_candidate_id": "design-a",
+                    "assignments": {
+                        "hardware_microarchitecture": "host_fpga_minimal_v0",
+                        "mapping_data_layout": "fft_grid_hbm_tiled",
+                    },
+                    "identity_assignments": {
+                        "hardware_microarchitecture": "host_fpga_minimal_v0",
+                        "mapping_data_layout": "fft_grid_hbm_tiled",
+                    },
+                    "non_identity_assignments": {"dft_phase_hotspot_selection": "scf_hpsi_density"},
+                }
+            ],
+        },
+    )
+
+    payload = build_dft_hardware_completion_workplan(
+        per_candidate_evidence_ledger_path=paths["ledger"],
+        dft_hardware_evidence_matrix_path=paths["matrix"],
+        ic_eda_tool_availability_path=paths["tools"],
+    )
+
+    cand_a_rows = [row for row in payload["work_items"] if row["candidate_id"] == "cand-a"]
+    assert cand_a_rows
+    assert cand_a_rows[0]["design_candidate_id"] == "design-a"
+    assert cand_a_rows[0]["assignments"]["hardware_microarchitecture"] == "host_fpga_minimal_v0"
+    assert payload["source_artifacts"]["candidate_universe_manifest"]["exists"] is True
+
+
 def test_hardware_completion_workplan_validator_rejects_claim_upgrade_and_fabricated_evidence(tmp_path: Path) -> None:
     paths = _fixtures(tmp_path)
     payload = build_dft_hardware_completion_workplan(

@@ -41,6 +41,8 @@ def _closure_shards(path: Path) -> Path:
             {
                 "unit_id": f"{candidate_id}:fft_ifft_ffft",
                 "candidate_id": candidate_id,
+                "design_candidate_id": f"design-{candidate_id}",
+                "assignments": {"hardware_microarchitecture": "host_fpga_minimal_v0"},
                 "kernel_id": "fft_ifft_ffft",
                 "kernel_name": "FFT / iFFT / fFFT",
                 "kernel_family": "spectral_transform",
@@ -122,6 +124,8 @@ def test_candidate_bundle_templates_are_written_without_raw_evidence_or_claim_up
     bundle_ref = index["bundles"][0]["candidate_bundle"]
     bundle = json.loads(Path(bundle_ref["path"]).read_text())
     assert bundle["status"] == "bundle_template_only_missing_raw_evidence"
+    assert bundle["design_candidate_id"] == "design-cand-a"
+    assert bundle["assignments"]["hardware_microarchitecture"] == "host_fpga_minimal_v0"
     assert bundle["raw_evidence_present"] is False
     assert bundle["hardware_completion_eligible"] is False
 
