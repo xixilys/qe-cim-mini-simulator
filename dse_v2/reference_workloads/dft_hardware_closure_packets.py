@@ -23,6 +23,14 @@ DFT_HARDWARE_CLOSURE_PACKETS_VALIDATION_SCHEMA = "dse.dft.hardware_closure_packe
 
 _PACKET_DIR = "dft_hardware_closure_packets"
 _BLOCKED_STATUS = "blocked_until_candidate_specific_bundle_and_real_tool_execution"
+_CANDIDATE_METADATA_FIELDS = (
+    "design_candidate_id",
+    "assignments",
+    "identity_assignments",
+    "non_identity_assignments",
+    "applicability_assignments",
+    "evaluation_policy_assignments",
+)
 _CLAIM_BOUNDARY = (
     "dft_hardware_closure_packet_index.json and per-shard closure packets are "
     "runbooks for candidate-specific RTL/HLS/Vivado/DC execution. They do not "
@@ -252,6 +260,15 @@ def _packet_payload(shard: Mapping[str, Any], *, release_id: Any, source_path: P
             {
                 "unit_id": str(unit.get("unit_id", "")),
                 "candidate_id": str(unit.get("candidate_id", "")),
+                **{
+                    field: (
+                        dict(unit.get(field, {}))
+                        if isinstance(unit.get(field), Mapping)
+                        else unit.get(field)
+                    )
+                    for field in _CANDIDATE_METADATA_FIELDS
+                    if unit.get(field) not in (None, {}, [])
+                },
                 "kernel_id": str(unit.get("kernel_id", "")),
                 "kernel_name": str(unit.get("kernel_name", unit.get("kernel_id", ""))),
                 "kernel_family": str(unit.get("kernel_family", "")),
