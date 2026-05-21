@@ -383,6 +383,26 @@ def _apply_candidate_parametric_source_blockers(candidate_rows: list[Dict[str, A
             if source.get("candidate_parametric_source_hash")
         }
         if len(signatures) == 1 and len(param_hashes) <= 1:
+            attribution_signatures = {
+                json.dumps(
+                    row.get("candidate_parametric_ppa", {}).get("assignments_used", {}),
+                    sort_keys=True,
+                )
+                for row, _source in rows_with_sources
+                if isinstance(row.get("candidate_parametric_ppa"), Mapping)
+                and row["candidate_parametric_ppa"].get("available") is True
+            }
+            if len(attribution_signatures) > 1:
+                for row, source in rows_with_sources:
+                    row.setdefault("candidate_parametric_source_warnings", []).append(
+                        {
+                            "candidate_id": row.get("candidate_id"),
+                            "kernel_id": kernel_id,
+                            "warning_id": "static_rtl_source_signature_ranked_by_assignment_attribution",
+                            "source_bundle_manifest": source.get("manifest", {}).get("path"),
+                        }
+                    )
+                continue
             for row, source in rows_with_sources:
                 row.setdefault("blockers", []).append(
                     {
@@ -772,8 +792,17 @@ def build_dft_hardware_ppa_ranking(
         and row["candidate_parametric_ppa"].get("available") is True
         for row in eligible_rows
     )
-    parametric_available = False
-    metric_signatures = set(physical_metric_signatures)
+    parametric_available = all_physical_metric_tied and parametric_sidecar_available
+    if parametric_available:
+        metric_signatures = {
+            json.dumps(
+                row.get("candidate_parametric_ppa", {}).get("attributed_totals", {}),
+                sort_keys=True,
+            )
+            for row in eligible_rows
+        }
+    else:
+        metric_signatures = set(physical_metric_signatures)
     all_metric_tied = bool(eligible_rows) and len(metric_signatures) == 1
     if not eligible_rows and not blockers:
         blockers.append({"blocker_id": "no_ranking_eligible_candidates"})
