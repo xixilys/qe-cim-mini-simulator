@@ -34,6 +34,7 @@ def test_schema_registry_is_semantically_valid_and_domain_neutral():
 
     assert "dse.contract.campaign.v1" in SCHEMA_REGISTRY
     assert "dse.contract.campaign_ledger.v1" in SCHEMA_REGISTRY
+    assert "dse.contract.campaign_evaluation_plan.v1" in SCHEMA_REGISTRY
     assert "dse.contract.trial.v1" in SCHEMA_REGISTRY
     assert "dse.contract.dft_profile.v1" in SCHEMA_REGISTRY
 
@@ -57,6 +58,7 @@ def test_artifact_catalog_has_unique_one_producer_bindings_and_examples():
     producers = {item.canonical_name: item.producer_stage for item in ARTIFACT_CATALOG}
     assert producers["campaign.json"] == "control_plane"
     assert producers["campaign_ledger.json"] == "control_plane"
+    assert producers["campaign_evaluation_plan.json"] == "control_plane"
     assert producers["architecture_search_space.json"] == "step2"
     assert producers["search_checkpoint.json"] == "step2"
     assert producers["top_k_candidate_queue.json"] == "step2"

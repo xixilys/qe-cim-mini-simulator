@@ -30,13 +30,16 @@ machine**。当前 Step2 已开始把分散的搜索记录收敛成通用
 `top_k_candidate_queue.json`，覆盖 candidate generation、screening、promotion、
 Top-K ordering provenance 和 Step3 queue admission；这解决了“搜索候选为什么来、
 为什么过/不过、Top-K 只是排序建议还是 Step3 admission、是否进入 Step3”的第一层账本问题。`run_full_flow_pilot.py` 现在也会写
-`campaign.json` 与 `campaign_ledger.json`，把一次 bounded pilot 的目标、预算、
-claim boundary、Step1/Step2/selected-entry Step3 artifact refs 和可选 SQLite
-lifecycle registry 串起来。
+`campaign.json`、`campaign_ledger.json` 与
+`campaign_evaluation_plan.json`，把一次 bounded pilot 的目标、预算、claim
+boundary、Step1/Step2/selected-entry Step3 artifact refs、预算约束的 Step3
+执行计划和可选 SQLite lifecycle registry 串起来。`campaign_evaluation_plan.json`
+是关键边界：它只允许真正进入 `step3_simulation_queue.json` 的 selected-entry
+执行，Top-K candidate 仍然只是 deferred provenance，不能自动触发大规模证据运行。
 
 现在文档里有 Step1、Step2、Step3、Reporting，Step2 也有了
-trial-level lifecycle ledger，pilot 也有了 campaign-level 运行账本；剩余工作是把
-这个 pilot-local ledger 推广成完整 Campaign Manager：预算调度、恢复策略、环境快照、
+trial-level lifecycle ledger，pilot 也有了 campaign-level 运行账本和预算化执行计划；剩余工作是把
+这个 pilot-local ledger/plan 推广成完整 Campaign Manager：预算调度、恢复策略、环境快照、
 跨 Step3/Step4/Step5 feedback loop，以及多 workload / 多候选 campaign 汇总。也就是说，
 系统开始知道每个 Step2 candidate 的状态，也开始知道一次 bounded run 的运行边界，
 但还需要一个更强的“运行账本”来回答：

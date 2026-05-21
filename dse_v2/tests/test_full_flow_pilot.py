@@ -129,10 +129,13 @@ def test_full_flow_pilot_writes_required_evidence(tmp_path):
 
     assert (out_dir / "campaign.json").exists()
     assert (out_dir / "campaign_ledger.json").exists()
+    assert (out_dir / "campaign_evaluation_plan.json").exists()
     campaign = json.loads((out_dir / "campaign.json").read_text())
     campaign_ledger = json.loads((out_dir / "campaign_ledger.json").read_text())
+    evaluation_plan = json.loads((out_dir / "campaign_evaluation_plan.json").read_text())
     validate_instance(campaign, SCHEMA_REGISTRY["dse.contract.campaign.v1"])
     validate_instance(campaign_ledger, SCHEMA_REGISTRY["dse.contract.campaign_ledger.v1"])
+    validate_instance(evaluation_plan, SCHEMA_REGISTRY["dse.contract.campaign_evaluation_plan.v1"])
     assert campaign["campaign_id"] == step2_ledger["campaign_id"]
     assert campaign["status"] == "active"
     assert campaign["final_completion_status"] is None
@@ -147,12 +150,30 @@ def test_full_flow_pilot_writes_required_evidence(tmp_path):
     assert campaign_ledger["trusted_final_claim"] is False
     assert campaign_ledger["release_completion_eligible"] is False
     assert campaign_ledger["workload_run_ref"]["workload_package"] == "step1/workload_package.json"
+    assert campaign_ledger["control_plane_refs"]["campaign_evaluation_plan"] == "campaign_evaluation_plan.json"
+    assert campaign_ledger["campaign_evaluation_plan_ref"] == "campaign_evaluation_plan.json"
     assert campaign_ledger["step2_refs"]["trial_state_ledger"] == "step2/trial_state_ledger.json"
     assert campaign_ledger["step2_refs"]["search_checkpoint"] == "step2/search_checkpoint.json"
     assert campaign_ledger["step3_refs"]["simulation_request"] == "simulation_request.json"
     assert campaign_ledger["step3_refs"]["simulation_result"] == "simulation_result.json"
     assert campaign_ledger["selected_trial_refs"]["queue_mode"] == "selected-entry-only"
     assert not any("dft rtl/ppa" in item.lower() for item in campaign_ledger["resume_next_actions"])
+    assert evaluation_plan["campaign_id"] == step2_ledger["campaign_id"]
+    assert evaluation_plan["workload_run_id"] == step2_ledger["workload_run_id"]
+    assert evaluation_plan["trial_id"] == step2_ledger["trial_id"]
+    assert evaluation_plan["plan_scope"] == "bounded_selected_entry_pilot"
+    assert evaluation_plan["selected_entry_only"] is True
+    assert evaluation_plan["broad_evidence_run"] is False
+    assert evaluation_plan["release_completion_eligible"] is False
+    assert evaluation_plan["trusted_final_claim"] is False
+    assert evaluation_plan["top_k_candidate_queue_ref"] == "step2/top_k_candidate_queue.json"
+    assert evaluation_plan["step3_simulation_queue_ref"] == "step2/step3_simulation_queue.json"
+    assert evaluation_plan["planned_entry_count"] == 1
+    assert len(evaluation_plan["planned_entries"]) == evaluation_plan["planned_entry_count"]
+    assert evaluation_plan["planned_entries"][0]["admission_source"] == "step2/step3_simulation_queue.json"
+    assert evaluation_plan["planned_entries"][0]["execution_allowed"] is True
+    ledger_candidate_ids = {row["candidate_id"] for row in step2_ledger["candidates"]}
+    assert evaluation_plan["planned_entries"][0]["mapping_candidate_id"] in ledger_candidate_ids
 
     verdict = json.loads((out_dir / "verdict.json").read_text())
     assert verdict["trusted_for_final_ranking"] is True
@@ -179,6 +200,7 @@ def test_full_flow_pilot_writes_required_evidence(tmp_path):
         assert artifacts[rel]["exists"] is True
     assert artifacts["campaign.json"]["exists"] is True
     assert artifacts["campaign_ledger.json"]["exists"] is True
+    assert artifacts["campaign_evaluation_plan.json"]["exists"] is True
     assert artifacts["step1/step1_status.json"]["exists"] is True
     assert artifacts["step1/step1_artifact_validation.json"]["exists"] is True
     assert artifacts["step2/search_checkpoint.json"]["exists"] is True
@@ -230,10 +252,15 @@ def test_generic_full_flow_pilot_campaign_ledger_is_domain_neutral(tmp_path):
     assert result.returncode == 0, result.stdout + result.stderr
 
     ledger = json.loads((out_dir / "campaign_ledger.json").read_text())
+    evaluation_plan = json.loads((out_dir / "campaign_evaluation_plan.json").read_text())
     assert ledger["workload_family"] == "ml_tensor"
     assert ledger["broad_evidence_run"] is False
     assert ledger["selected_trial_refs"]["queue_mode"] == "selected-entry-only"
+    assert evaluation_plan["planned_entry_count"] == 1
+    assert evaluation_plan["selected_entry_only"] is True
+    assert evaluation_plan["broad_evidence_run"] is False
     assert not any("dft" in item.lower() or "qe" in item.lower() for item in _flatten_strings(ledger))
+    assert not any("dft" in item.lower() or "qe" in item.lower() for item in _flatten_strings(evaluation_plan))
 
 
 def test_full_flow_pilot_optionally_records_registry_trial(tmp_path):
@@ -274,11 +301,13 @@ def test_full_flow_pilot_optionally_records_registry_trial(tmp_path):
     assert trials[0].artifacts["run_dir"] == str(out_dir)
     assert trials[0].artifacts["campaign"] == str(out_dir / "campaign.json")
     assert trials[0].artifacts["campaign_ledger"] == str(out_dir / "campaign_ledger.json")
+    assert trials[0].artifacts["campaign_evaluation_plan"] == str(out_dir / "campaign_evaluation_plan.json")
     assert trials[0].artifacts["verdict"] == str(out_dir / "verdict.json")
     artifact_refs = registry.list_artifact_refs(campaign_id=campaigns[0].campaign_id)
     assert {ref.path for ref in artifact_refs}.issuperset({
         "campaign.json",
         "campaign_ledger.json",
+        "campaign_evaluation_plan.json",
         "step1/workload_package.json",
         "step2/trial_state_ledger.json",
         "step2/step3_simulation_queue.json",
@@ -290,9 +319,13 @@ def test_full_flow_pilot_optionally_records_registry_trial(tmp_path):
         ref for ref in artifact_refs
         if ref.path.startswith("step2/") or ref.path in {"simulation_request.json", "simulation_result.json"}
     ]
+    plan_refs = [ref for ref in artifact_refs if ref.path == "campaign_evaluation_plan.json"]
     assert step1_refs
     assert all(ref.workload_run_id == workload_runs[0].workload_run_id for ref in step1_refs)
     assert all(ref.trial_id is None for ref in step1_refs)
+    assert len(plan_refs) == 1
+    assert plan_refs[0].workload_run_id == workload_runs[0].workload_run_id
+    assert plan_refs[0].trial_id == trials[0].trial_id
     assert trial_refs
     assert all(ref.workload_run_id == workload_runs[0].workload_run_id for ref in trial_refs)
     assert all(ref.trial_id == trials[0].trial_id for ref in trial_refs)

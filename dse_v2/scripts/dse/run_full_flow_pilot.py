@@ -422,6 +422,137 @@ def _selected_trial_refs(run_dir: Path) -> Dict[str, Any]:
     }
 
 
+def _top_k_lookup(top_k_queue: Mapping[str, Any]) -> Dict[str, Mapping[str, Any]]:
+    lookup: Dict[str, Mapping[str, Any]] = {}
+    entries = top_k_queue.get("entries", []) if isinstance(top_k_queue.get("entries", []), list) else []
+    for entry in entries:
+        if not isinstance(entry, Mapping):
+            continue
+        for key in ("mapping_candidate_id", "candidate_id", "top_k_entry_id"):
+            value = entry.get(key)
+            if value:
+                lookup[str(value)] = entry
+    return lookup
+
+
+def _build_campaign_evaluation_plan(
+    *,
+    args: argparse.Namespace,
+    run_dir: Path,
+    run_id: str,
+    workload_package: WorkloadPackage,
+    scope: Mapping[str, str],
+    budgets: Mapping[str, Any],
+) -> Dict[str, Any]:
+    """Build the budgeted Campaign Manager handoff from Step2 provenance.
+
+    The plan deliberately admits only the canonical Step3 queue entries.  Top-K
+    rows are retained as deferred provenance so a later Campaign Manager can
+    widen budgets explicitly without mistaking ranking hints for Step3 work.
+    """
+
+    queue = _load_json(run_dir / "step2" / "step3_simulation_queue.json")
+    top_k_queue = _load_json(run_dir / "step2" / "top_k_candidate_queue.json")
+    top_k_lookup = _top_k_lookup(top_k_queue)
+    queue_entries = queue.get("entries", []) if isinstance(queue.get("entries", []), list) else []
+    planned_entries: list[Dict[str, Any]] = []
+    planned_top_k_ids: set[str] = set()
+    for index, entry in enumerate(queue_entries):
+        if not isinstance(entry, Mapping):
+            continue
+        mapping_candidate_id = str(entry.get("mapping_candidate_id") or entry.get("candidate_id") or f"queue_entry_{index}")
+        top_k_entry = top_k_lookup.get(mapping_candidate_id) or top_k_lookup.get(str(entry.get("candidate_id", ""))) or {}
+        if top_k_entry:
+            planned_top_k_ids.add(str(top_k_entry.get("top_k_entry_id") or mapping_candidate_id))
+            planned_top_k_ids.add(str(top_k_entry.get("mapping_candidate_id") or mapping_candidate_id))
+            planned_top_k_ids.add(str(top_k_entry.get("candidate_id") or mapping_candidate_id))
+        planned_entries.append({
+            "plan_entry_id": f"campaign-plan::{entry.get('queue_entry_id') or index}",
+            "queue_entry_id": str(entry.get("queue_entry_id") or f"queue_entry_{index}"),
+            "candidate_id": str(entry.get("candidate_id") or ""),
+            "mapping_candidate_id": mapping_candidate_id,
+            "architecture_id": str(entry.get("architecture_id") or ""),
+            "design_point_id": str(entry.get("design_point_id") or ""),
+            "mapping_id": str(entry.get("mapping_id") or ""),
+            "top_k_rank": top_k_entry.get("top_k_rank") if isinstance(top_k_entry, Mapping) else None,
+            "parameter_hash": top_k_entry.get("parameter_hash") if isinstance(top_k_entry, Mapping) else None,
+            "priority_score": entry.get("priority_score", top_k_entry.get("priority_score") if isinstance(top_k_entry, Mapping) else None),
+            "admission_source": "step2/step3_simulation_queue.json",
+            "execution_stage": "step3",
+            "execution_allowed": bool(entry.get("promoted_for_simulation", False))
+            and str(entry.get("queue_state", "")).startswith("scheduled_for_simulation"),
+            "queue_state": entry.get("queue_state"),
+            "required_step3_artifacts": list(entry.get("required_step3_artifacts", []) or []),
+            "broad_evidence_run": False,
+            "release_completion_eligible": False,
+            "trusted_final_claim": False,
+        })
+
+    deferred_entries: list[Dict[str, Any]] = []
+    top_k_entries = top_k_queue.get("entries", []) if isinstance(top_k_queue.get("entries", []), list) else []
+    for index, entry in enumerate(top_k_entries):
+        if not isinstance(entry, Mapping):
+            continue
+        identities = {
+            str(entry.get("top_k_entry_id") or ""),
+            str(entry.get("mapping_candidate_id") or ""),
+            str(entry.get("candidate_id") or ""),
+        }
+        if identities & planned_top_k_ids:
+            continue
+        deferred_entries.append({
+            "top_k_entry_id": str(entry.get("top_k_entry_id") or f"top_k_entry_{index}"),
+            "candidate_id": str(entry.get("candidate_id") or ""),
+            "mapping_candidate_id": str(entry.get("mapping_candidate_id") or ""),
+            "architecture_id": str(entry.get("architecture_id") or ""),
+            "top_k_rank": entry.get("top_k_rank"),
+            "parameter_hash": entry.get("parameter_hash"),
+            "priority_score": entry.get("priority_score"),
+            "defer_reason": "not_admitted_by_selected_entry_budget",
+            "admission_required_before_execution": "step2/step3_simulation_queue.json",
+            "execution_allowed": False,
+            "provenance_only": True,
+            "release_completion_eligible": False,
+            "trusted_final_claim": False,
+        })
+
+    return {
+        "schema_version": CONTRACT_VERSION,
+        **dict(scope),
+        "plan_id": f"campaign_evaluation_plan::{run_id}",
+        "run_id": run_id,
+        "workload_id": workload_package.workload_id,
+        "workload_family": workload_package.workload_family,
+        "status": "active",
+        "plan_scope": "bounded_selected_entry_pilot",
+        "budget_policy": dict(budgets),
+        "step3_simulation_queue_ref": "step2/step3_simulation_queue.json",
+        "top_k_candidate_queue_ref": "step2/top_k_candidate_queue.json",
+        "search_checkpoint_ref": "step2/search_checkpoint.json",
+        "step3_queue_mode": queue.get("queue_mode"),
+        "top_k_queue_mode": top_k_queue.get("queue_mode"),
+        "planned_entry_count": len(planned_entries),
+        "planned_entries": planned_entries,
+        "deferred_entry_count": len(deferred_entries),
+        "deferred_entries": deferred_entries,
+        "budget_exhausted": len(deferred_entries) > 0,
+        "selected_entry_only": True,
+        "broad_evidence_run": False,
+        "release_completion_eligible": False,
+        "trusted_final_claim": False,
+        "claim_boundary": (
+            "Campaign evaluation plan is a budgeted Step3 work plan. It may execute only "
+            "entries admitted by step2/step3_simulation_queue.json; Top-K rows remain "
+            "deferred provenance until the campaign budget is explicitly widened."
+        ),
+        "resume_next_actions": [
+            "execute planned_entries through Step3 before considering deferred Top-K candidates",
+            "widen the campaign budget before converting deferred_entries into Step3 queue entries",
+            "keep final ranking blocked until Step4 adjudicates executed evidence",
+        ],
+    }
+
+
 def _write_campaign_control_artifacts(
     *,
     args: argparse.Namespace,
@@ -435,6 +566,14 @@ def _write_campaign_control_artifacts(
     objective = _campaign_objective(args, workload_package)
     budgets = _campaign_budgets(args, run_dir)
     selected_refs = _selected_trial_refs(run_dir)
+    evaluation_plan = _build_campaign_evaluation_plan(
+        args=args,
+        run_dir=run_dir,
+        run_id=run_id,
+        workload_package=workload_package,
+        scope=scope,
+        budgets=budgets,
+    )
     policies = {
         "claim_boundary": (
             "Pilot campaign links Step1/Step2/selected-entry Step3 evidence only; "
@@ -475,6 +614,11 @@ def _write_campaign_control_artifacts(
         "status": "active",
         "budgets": budgets,
         "policies": policies,
+        "control_plane_refs": {
+            "campaign": "campaign.json",
+            "campaign_ledger": "campaign_ledger.json",
+            "campaign_evaluation_plan": "campaign_evaluation_plan.json",
+        },
         "broad_evidence_run": False,
         "trusted_final_claim": False,
         "release_completion_eligible": False,
@@ -494,6 +638,7 @@ def _write_campaign_control_artifacts(
             "step3_simulation_queue": "step2/step3_simulation_queue.json",
             "step2_artifact_validation": "step2/step2_artifact_validation.json",
         },
+        "campaign_evaluation_plan_ref": "campaign_evaluation_plan.json",
         "step3_refs": {
             "simulation_request": "simulation_request.json",
             "simulation_result": "simulation_result.json",
@@ -521,10 +666,12 @@ def _write_campaign_control_artifacts(
     }
     _write_json(run_dir / "campaign.json", campaign)
     _write_json(run_dir / "campaign_ledger.json", ledger)
+    _write_json(run_dir / "campaign_evaluation_plan.json", evaluation_plan)
     return {
         "campaign": campaign,
         "campaign_ledger": ledger,
-        "artifact_paths": ["campaign.json", "campaign_ledger.json"],
+        "campaign_evaluation_plan": evaluation_plan,
+        "artifact_paths": ["campaign.json", "campaign_ledger.json", "campaign_evaluation_plan.json"],
     }
 
 
@@ -669,6 +816,7 @@ def _record_registry_lifecycle(
                 "run_dir": str(run_dir),
                 "campaign": str(run_dir / "campaign.json"),
                 "campaign_ledger": str(run_dir / "campaign_ledger.json"),
+                "campaign_evaluation_plan": str(run_dir / "campaign_evaluation_plan.json"),
                 "step1_workload_package": str(run_dir / "step1" / "workload_package.json"),
                 "step2_trial_state_ledger": str(run_dir / "step2" / "trial_state_ledger.json"),
                 "step3_simulation_queue": str(run_dir / "step2" / "step3_simulation_queue.json"),
@@ -704,7 +852,11 @@ def _record_registry_lifecycle(
             "campaign_ledger_write",
             status="succeeded",
             command={"script": "dse_v2/scripts/dse/run_full_flow_pilot.py"},
-            outputs={"campaign": "campaign.json", "campaign_ledger": "campaign_ledger.json"},
+            outputs={
+                "campaign": "campaign.json",
+                "campaign_ledger": "campaign_ledger.json",
+                "campaign_evaluation_plan": "campaign_evaluation_plan.json",
+            },
             provenance=_registry_provenance("write campaign control-plane artifacts"),
         )
         step1_activity = registry.create_activity(
@@ -732,7 +884,10 @@ def _record_registry_lifecycle(
             workload_run_id=workload_run.workload_run_id,
             trial_id=trial.trial_id,
             status="succeeded",
-            inputs={"step3_simulation_queue": "step2/step3_simulation_queue.json"},
+            inputs={
+                "campaign_evaluation_plan": "campaign_evaluation_plan.json",
+                "step3_simulation_queue": "step2/step3_simulation_queue.json",
+            },
             outputs={"simulation_result": "simulation_result.json"},
             provenance=_registry_provenance("register Step3 simulation artifacts"),
         )
@@ -759,14 +914,17 @@ def _record_registry_lifecycle(
         for rel_path, schema_id in [
             ("campaign.json", "dse.contract.campaign.v1"),
             ("campaign_ledger.json", "dse.contract.campaign_ledger.v1"),
+            ("campaign_evaluation_plan.json", "dse.contract.campaign_evaluation_plan.v1"),
         ]:
             _register_registry_artifact(
                 registry,
                 campaign_row_id=campaign.campaign_id,
+                workload_row_id=workload_run.workload_run_id if rel_path == "campaign_evaluation_plan.json" else None,
+                trial_row_id=trial.trial_id if rel_path == "campaign_evaluation_plan.json" else None,
                 run_dir=run_dir,
                 rel_path=rel_path,
                 schema_id=schema_id,
-                scope="campaign",
+                scope="trial" if rel_path == "campaign_evaluation_plan.json" else "campaign",
                 producing_activity_id=campaign_activity.activity_id,
                 metadata={"artifact_role": rel_path, "logical_campaign_id": campaign_payload.get("campaign_id")},
             )
