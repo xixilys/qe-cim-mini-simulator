@@ -44,6 +44,7 @@ from dse_v2.evidence.full_flow import (
     write_full_flow_evidence,
 )
 from dse_v2.mapping.search import run_mapping_search, select_initial_mapping
+from dse_v2.mapping.step2_workflow import run_step2_architecture_mapping_workflow_from_step1
 from dse_v2.registry import ExperimentRegistry
 
 
@@ -280,6 +281,36 @@ def _step1_extra_artifact_paths(step1_result) -> list[str]:
     return list(dict.fromkeys(
         str(Path("step1") / rel_path)
         for rel_path in step1_result.artifact_paths.values()
+    ))
+
+
+def _run_step2_sidecar(args: argparse.Namespace, run_dir: Path):
+    """Persist canonical Step2 search/Trial-ledger artifacts for pilot runs.
+
+    The pilot keeps its historical smoke design point for backward-compatible
+    evidence tests, but the front door now also exercises the generic Step2
+    search/queue/Trial-ledger contract without launching broad evidence runs.
+    """
+
+    step2_dir = run_dir / "step2"
+    result = run_step2_architecture_mapping_workflow_from_step1(
+        run_dir / "step1",
+        backend=args.backend,
+        evidence_mode=args.evidence_mode,
+        output_dir=step2_dir,
+        require_l4_proof=args.backend == "gem5_systemc",
+    )
+    if not (step2_dir / "trial_state_ledger.json").exists():
+        raise RuntimeError(f"Step2 sidecar did not write {step2_dir / 'trial_state_ledger.json'}")
+    return result
+
+
+def _step2_extra_artifact_paths(step2_result) -> list[str]:
+    if step2_result is None:
+        return []
+    return list(dict.fromkeys(
+        str(Path("step2") / rel_path)
+        for rel_path in step2_result.artifact_paths.values()
     ))
 
 
@@ -526,6 +557,12 @@ def main(argv: List[str] | None = None, *, cli_script: str = "dse_v2/scripts/dse
     if workload_package is None:
         return 2
     step1_artifact_paths = _step1_extra_artifact_paths(step1_result)
+    try:
+        step2_sidecar = _run_step2_sidecar(args, run_dir)
+    except Exception as exc:
+        print(f"ERROR: Step2 search/Trial-ledger sidecar failed: {exc}", file=sys.stderr)
+        return 2
+    step2_artifact_paths = _step2_extra_artifact_paths(step2_sidecar)
     graph = workload_package.graph
     required_coverage = workload_package.required_coverage()["required_coverage"]
     missing_nodes = [phase for phase in required_coverage if phase not in graph.nodes and phase not in graph.regions]
@@ -598,7 +635,7 @@ def main(argv: List[str] | None = None, *, cli_script: str = "dse_v2/scripts/dse
             gem5_attempted=True,
             gem5_log=run.get("gem5_log") or (gem5_log_path.read_text(encoding="utf-8") if gem5_log_path.exists() else None),
             gem5_source_artifacts=(run.get("gem5_l4_transport_proof") or {}).get("source_artifacts"),
-            extra_artifact_paths=step1_artifact_paths,
+            extra_artifact_paths=step1_artifact_paths + step2_artifact_paths,
             workload_package=workload_package,
         )
         _record_registry_trial(
@@ -614,6 +651,7 @@ def main(argv: List[str] | None = None, *, cli_script: str = "dse_v2/scripts/dse
             "run_dir": evidence["run_dir"],
             "trusted_for_final_ranking": evidence["trusted_for_final_ranking"],
             "missing_required_coverage": evidence["missing_required_coverage"],
+            "step2_trial_state_ledger": str(run_dir / "step2" / "trial_state_ledger.json"),
             "gem5_systemc": "verified" if evidence["trusted_for_final_ranking"] else "blocked",
         }, indent=2, sort_keys=True))
         return 0 if evidence["trusted_for_final_ranking"] else 2
@@ -666,7 +704,7 @@ def main(argv: List[str] | None = None, *, cli_script: str = "dse_v2/scripts/dse
         cli_command=["python3", cli_script] + argv,
         gem5_attempted=False,
         additional_feedback_samples=additional_samples,
-        extra_artifact_paths=step1_artifact_paths + extra_artifact_paths,
+        extra_artifact_paths=step1_artifact_paths + step2_artifact_paths + extra_artifact_paths,
         feedback_sample_budget=max(1, args.feedback_samples),
         workload_package=workload_package,
     )
@@ -685,6 +723,7 @@ def main(argv: List[str] | None = None, *, cli_script: str = "dse_v2/scripts/dse
         "trusted_for_final_ranking": evidence["trusted_for_final_ranking"],
         "missing_required_coverage": evidence["missing_required_coverage"],
         "simulator_returncode": run.get("returncode", 1),
+        "step2_trial_state_ledger": str(run_dir / "step2" / "trial_state_ledger.json"),
     }
     print(json.dumps(summary, indent=2, sort_keys=True))
 

@@ -84,6 +84,26 @@ def test_full_flow_pilot_writes_required_evidence(tmp_path):
     assert step1_status["importer_id"] == "qe_reference_fixture"
     assert step1_status["full_workload_eligible"] is True
 
+    for rel in [
+        "step2/step2_status.json",
+        "step2/architecture_search_space.json",
+        "step2/architecture_candidate_generation_report.json",
+        "step2/architecture_screening_report.json",
+        "step2/trial_state_ledger.json",
+        "step2/step3_simulation_queue.json",
+        "step2/step2_artifact_validation.json",
+    ]:
+        assert (out_dir / rel).exists(), f"missing Step2 artifact: {rel}"
+
+    step2_validation = json.loads((out_dir / "step2" / "step2_artifact_validation.json").read_text())
+    step2_ledger = json.loads((out_dir / "step2" / "trial_state_ledger.json").read_text())
+    assert step2_validation["valid"] is True
+    assert step2_ledger["schema_version"] == "dse.step2.trial_state_ledger.v1"
+    assert step2_ledger["trusted_final_claim"] is False
+    assert step2_ledger["queue_mode"] == "selected-entry-only"
+    assert step2_ledger["all_candidates_have_parameter_hash"] is True
+    assert "queued_for_step3" in step2_ledger["state_counts"]
+
     verdict = json.loads((out_dir / "verdict.json").read_text())
     assert verdict["trusted_for_final_ranking"] is True
     assert verdict["binding_status"]["standalone_systemc_full_workload"] == "implemented"
@@ -109,6 +129,8 @@ def test_full_flow_pilot_writes_required_evidence(tmp_path):
         assert artifacts[rel]["exists"] is True
     assert artifacts["step1/step1_status.json"]["exists"] is True
     assert artifacts["step1/step1_artifact_validation.json"]["exists"] is True
+    assert artifacts["step2/trial_state_ledger.json"]["exists"] is True
+    assert artifacts["step2/step2_artifact_validation.json"]["exists"] is True
 
     architecture = json.loads((out_dir / "architecture.json").read_text())
     accelerator_types = {
