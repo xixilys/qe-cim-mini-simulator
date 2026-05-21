@@ -222,6 +222,55 @@ def _candidate_metadata_sidecar(metadata: Mapping[str, Any]) -> Dict[str, Any]:
     }
 
 
+def _candidate_parametric_ppa(
+    *,
+    candidate_id: str,
+    totals: Mapping[str, Any],
+    metadata: Mapping[str, Any],
+) -> Dict[str, Any]:
+    """Return candidate assignment context as sidecar-only audit data.
+
+    This intentionally does not compute alternative PPA totals.  Physical PPA
+    ranking is based only on parsed Vivado/DC metrics; true candidate-parametric
+    ranking requires generated RTL/tool evidence whose source or parameter
+    hashes differ by candidate.
+    """
+
+    assignments = metadata.get("assignments")
+    if not isinstance(assignments, Mapping):
+        assignments = metadata.get("identity_assignments")
+    if not isinstance(assignments, Mapping):
+        assignments = {}
+    return {
+        "available": bool(assignments),
+        "basis": "candidate_assignment_sidecar_only_not_physical_ppa",
+        "candidate_id": candidate_id,
+        "candidate_id_used_as_factor": False,
+        "ranking_input": False,
+        "winner_input": False,
+        "assignments_used": dict(assignments),
+        "raw_totals_remain_authoritative": True,
+        "raw_totals": {
+            key: totals.get(key)
+            for key in (
+                "fpga_total_slice_luts",
+                "fpga_total_slice_registers",
+                "fpga_total_block_ram_tiles",
+                "fpga_total_dsps",
+                "fpga_total_bonded_iob",
+                "asic_total_cell_area",
+                "asic_min_slack_ns",
+                "asic_slack_deficit_ns",
+            )
+        },
+        "attributed_totals": {},
+        "audit_note": (
+            "Sidecar metadata preserves design context only; it must not break ties "
+            "in parsed Vivado/DC physical PPA metrics."
+        ),
+    }
+
+
 def _source_bundle_signature(run_dir: Path, candidate_id: str, kernel_id: str) -> Dict[str, Any]:
     path = run_dir / "candidate_specific_evidence" / candidate_id / kernel_id / "source_bundle_manifest.json"
     payload = _load_json(path)

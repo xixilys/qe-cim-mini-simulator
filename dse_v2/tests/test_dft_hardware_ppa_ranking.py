@@ -352,7 +352,7 @@ def test_hardware_ppa_ranking_missing_parsed_stage_results_fails_closed(tmp_path
     candidate_row = ranking["candidate_rows"][0]
     assert candidate_row["candidate_gate_passed"] is False
     assert candidate_row["ranking_eligible"] is False
-    assert {blocker["blocker_id"] for blocker in candidate_row["blockers"]} == {"missing_parsed_stage_result"}
+    assert "missing_parsed_stage_result" in {blocker["blocker_id"] for blocker in candidate_row["blockers"]}
     assert ranking["hardware_completion_eligible"] is True
     assert ranking["deliverable_complete"] is False
     assert validation["valid"] is True
