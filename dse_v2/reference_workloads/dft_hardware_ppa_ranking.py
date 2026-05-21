@@ -168,6 +168,19 @@ def _vivado_metrics(run_dir: Path, parsed_result: Mapping[str, Any]) -> Dict[str
     return metrics
 
 
+def _discover_candidate_universe_manifest(run_dir: Path, explicit: Optional[Path]) -> Optional[Path]:
+    if explicit is not None:
+        return Path(explicit)
+    for candidate in (
+        run_dir / "release_domain_current36" / "candidate_universe_manifest.json",
+        run_dir / "release_domain" / "candidate_universe_manifest.json",
+        run_dir / "candidate_universe_manifest.json",
+    ):
+        if candidate.exists() and candidate.is_file():
+            return candidate
+    return None
+
+
 def _candidate_universe_by_id(path: Optional[Path]) -> Dict[str, Dict[str, Any]]:
     if path is None or not path.exists() or not path.is_file():
         return {}
@@ -180,211 +193,141 @@ def _candidate_universe_by_id(path: Optional[Path]) -> Dict[str, Dict[str, Any]]
     }
 
 
-def _default_candidate_universe_manifest(run_dir: Path) -> Path | None:
-    """Return the most local candidate-universe manifest for a run, if present."""
+def _candidate_metadata_sidecar(metadata: Mapping[str, Any]) -> Dict[str, Any]:
+    """Return audit-only candidate metadata that must not affect PPA ordering."""
 
-    candidates = [
-        run_dir / "release_domain" / "candidate_universe_manifest.json",
-        run_dir / "release_domain_current36" / "candidate_universe_manifest.json",
-        run_dir / "candidate_universe_manifest.json",
-    ]
-    release_dirs = sorted(run_dir.glob("release_domain*/candidate_universe_manifest.json"))
-    for path in candidates + release_dirs:
-        if path.exists() and path.is_file():
-            return path
-    return None
+    return {
+        key: metadata.get(key)
+        for key in (
+            "candidate_id",
+            "legacy_candidate_id",
+            "design_candidate_id",
+            "candidate_id_kind",
+            "candidate_id_authoritative_for_design",
+            "design_candidate_id_authoritative_for_design",
+            "domain_hash",
+            "evaluation_record_id",
+            "assignments",
+            "identity_assignments",
+            "non_identity_assignments",
+            "applicability_assignments",
+            "evaluation_policy_assignments",
+            "design_score",
+            "design_legality",
+            "screening",
+            "promotion_requirements",
+            "provenance",
+        )
+        if key in metadata
+    }
 
 
-def _metadata_by_candidate_id(run_dir: Path, candidate_universe_manifest: Optional[Path]) -> Dict[str, Dict[str, Any]]:
-    """Load candidate metadata from the explicit or run-local universe manifest."""
-
-    universe_path = candidate_universe_manifest or _default_candidate_universe_manifest(run_dir)
-    metadata = _candidate_universe_by_id(universe_path)
-    binding = _load_json(run_dir / "dft_candidate_binding_map.json")
-    for row in binding.get("binding_rows", []) or []:
-        if not isinstance(row, Mapping):
+def _source_bundle_signature(run_dir: Path, candidate_id: str, kernel_id: str) -> Dict[str, Any]:
+    path = run_dir / "candidate_specific_evidence" / candidate_id / kernel_id / "source_bundle_manifest.json"
+    payload = _load_json(path)
+    refs = payload.get("source_refs", []) if isinstance(payload.get("source_refs"), list) else []
+    rtl_refs = []
+    for ref in refs:
+        if not isinstance(ref, Mapping):
             continue
-        candidate_id = str(row.get("release_candidate_id") or row.get("candidate_id") or "")
-        if not candidate_id:
+        ref_path = str(ref.get("path", ""))
+        if Path(ref_path).suffix != ".v":
             continue
-        existing = metadata.setdefault(candidate_id, {"candidate_id": candidate_id})
-        for source_field, dest_field in (
-            ("design_candidate_id", "design_candidate_id"),
-            ("release_assignments", "assignments"),
-            ("identity_assignments", "identity_assignments"),
-            ("non_identity_assignments", "non_identity_assignments"),
-            ("applicability_assignments", "applicability_assignments"),
-            ("evaluation_policy_assignments", "evaluation_policy_assignments"),
-        ):
-            value = row.get(source_field)
-            if value not in (None, {}, []):
-                existing.setdefault(dest_field, value)
-    return metadata
+        rtl_refs.append(
+            {
+                "path": ref_path,
+                "name": Path(ref_path).name,
+                "sha256": ref.get("sha256"),
+                "exists": ref.get("exists"),
+            }
+        )
+    param_hash = None
+    for key in (
+        "candidate_param_hash",
+        "candidate_parameter_hash",
+        "generated_rtl_param_hash",
+        "candidate_parametric_source_hash",
+    ):
+        if payload.get(key):
+            param_hash = str(payload.get(key))
+            break
+    return {
+        "manifest": _source_ref(path),
+        "rtl_source_refs": sorted(rtl_refs, key=lambda item: (str(item.get("name")), str(item.get("path")))),
+        "rtl_source_signature": json.dumps(
+            sorted(
+                [{"name": item.get("name"), "sha256": item.get("sha256")} for item in rtl_refs],
+                key=lambda item: str(item.get("name")),
+            ),
+            sort_keys=True,
+        )
+        if rtl_refs
+        else None,
+        "candidate_parametric_source_hash": param_hash,
+    }
 
 
-def _axis_factor(assignments: Mapping[str, Any], axis_id: str, table: Mapping[str, float]) -> float:
-    value = str(assignments.get(axis_id, ""))
-    return float(table.get(value, 1.0))
+def _apply_candidate_parametric_source_blockers(candidate_rows: list[Dict[str, Any]]) -> None:
+    """Fail closed when fresh source bundles prove static RTL across candidates.
 
-
-def _candidate_parametric_ppa(
-    *,
-    candidate_id: str,
-    totals: Mapping[str, Any],
-    metadata: Mapping[str, Any],
-) -> Dict[str, Any]:
-    """Return assignment-derived PPA attribution layered over real raw totals.
-
-    The attribution is deliberately based only on design/evaluation assignments,
-    not candidate ids.  It is used to distinguish candidates when every parsed
-    physical PPA signature is identical because the source flow emitted the same
-    candidate-stamped template for all candidates.
+    Candidate-universe assignments are useful audit context, but they are not
+    physical evidence. If fresh source manifests show all currently eligible
+    candidates used the same RTL source for a kernel and no explicit generated
+    RTL parameter hash differentiates them, physical PPA attribution is not
+    candidate-parametric enough to rank a trusted winner.
     """
 
-    assignments = metadata.get("assignments")
-    if not isinstance(assignments, Mapping):
-        assignments = metadata.get("identity_assignments")
-    if not isinstance(assignments, Mapping) or not assignments:
-        return {
-            "available": False,
-            "basis": "missing_candidate_assignments",
-            "candidate_id_used_as_factor": False,
-        }
-
-    fpga_lut_factor = (
-        _axis_factor(
-            assignments,
-            "hardware_microarchitecture",
-            {
-                "host_fpga_minimal_v0": 0.82,
-                "balanced_generic_systemc_v0": 1.0,
-                "streaming_systolic_array_v0": 1.12,
-            },
-        )
-        * _axis_factor(
-            assignments,
-            "mapping_data_layout",
-            {
-                "fft_grid_hbm_tiled": 0.96,
-                "band_block_systolic": 1.08,
-                "coalesced_hbm_stream": 1.02,
-            },
-        )
-        * _axis_factor(
-            assignments,
-            "schedule_runtime_policy",
-            {
-                "host_orchestrated_sync": 1.0,
-                "overlap_dma_compute": 1.06,
-            },
-        )
-    )
-    fpga_dsp_factor = (
-        _axis_factor(
-            assignments,
-            "hardware_microarchitecture",
-            {
-                "host_fpga_minimal_v0": 0.75,
-                "balanced_generic_systemc_v0": 1.0,
-                "streaming_systolic_array_v0": 1.25,
-            },
-        )
-        * _axis_factor(
-            assignments,
-            "algorithm_variants",
-            {
-                "iterative_diag_fft": 0.9,
-                "batched_gemm_exx": 1.15,
-            },
-        )
-    )
-    fpga_bram_factor = (
-        _axis_factor(
-            assignments,
-            "mapping_data_layout",
-            {
-                "fft_grid_hbm_tiled": 1.05,
-                "band_block_systolic": 0.94,
-                "coalesced_hbm_stream": 1.12,
-            },
-        )
-        * _axis_factor(
-            assignments,
-            "schedule_runtime_policy",
-            {
-                "host_orchestrated_sync": 1.0,
-                "overlap_dma_compute": 1.08,
-            },
-        )
-    )
-    asic_area_factor = (
-        _axis_factor(
-            assignments,
-            "hardware_microarchitecture",
-            {
-                "host_fpga_minimal_v0": 0.84,
-                "balanced_generic_systemc_v0": 1.0,
-                "streaming_systolic_array_v0": 1.16,
-            },
-        )
-        * _axis_factor(
-            assignments,
-            "mapping_data_layout",
-            {
-                "fft_grid_hbm_tiled": 0.98,
-                "band_block_systolic": 1.06,
-                "coalesced_hbm_stream": 1.03,
-            },
-        )
-        * _axis_factor(
-            assignments,
-            "algorithm_variants",
-            {
-                "iterative_diag_fft": 0.97,
-                "batched_gemm_exx": 1.08,
-            },
-        )
-    )
-    slack_offset = (
+    eligible_rows = [row for row in candidate_rows if row.get("ranking_eligible")]
+    if len(eligible_rows) < 2:
+        return
+    kernel_ids = sorted(
         {
-            "host_fpga_minimal_v0": -0.02,
-            "balanced_generic_systemc_v0": 0.0,
-            "streaming_systolic_array_v0": 0.04,
-        }.get(str(assignments.get("hardware_microarchitecture", "")), 0.0)
-        + {
-            "host_orchestrated_sync": 0.0,
-            "overlap_dma_compute": -0.03,
-        }.get(str(assignments.get("schedule_runtime_policy", "")), 0.0)
+            str(kernel.get("kernel_id"))
+            for row in eligible_rows
+            for kernel in row.get("kernel_rows", []) or []
+            if isinstance(kernel, Mapping) and kernel.get("kernel_id")
+        }
     )
-    raw_slack = _as_float(totals.get("asic_min_slack_ns"))
-    attributed_slack = None if raw_slack is None else raw_slack + slack_offset
-    return {
-        "available": True,
-        "basis": "assignment_parametric_attribution_over_real_tool_totals",
-        "candidate_id_used_as_factor": False,
-        "assignments_used": dict(assignments),
-        "factor_model": {
-            "fpga_lut_factor": round(fpga_lut_factor, 6),
-            "fpga_dsp_factor": round(fpga_dsp_factor, 6),
-            "fpga_bram_factor": round(fpga_bram_factor, 6),
-            "asic_area_factor": round(asic_area_factor, 6),
-            "asic_slack_offset_ns": round(slack_offset, 6),
-        },
-        "raw_totals_remain_authoritative": True,
-        "attributed_totals": {
-            "fpga_total_slice_luts": round(float(totals.get("fpga_total_slice_luts") or 0) * fpga_lut_factor, 6),
-            "fpga_total_dsps": round(float(totals.get("fpga_total_dsps") or 0) * fpga_dsp_factor, 6),
-            "fpga_total_block_ram_tiles": round(float(totals.get("fpga_total_block_ram_tiles") or 0) * fpga_bram_factor, 6),
-            "fpga_total_bonded_iob": float(totals.get("fpga_total_bonded_iob") or 0),
-            "asic_total_cell_area": round(float(totals.get("asic_total_cell_area") or 0.0) * asic_area_factor, 6),
-            "asic_min_slack_ns": None if attributed_slack is None else round(attributed_slack, 6),
-            "asic_slack_deficit_ns": 0.0 if attributed_slack is None else round(max(0.0, -attributed_slack), 6),
-        },
-        "audit_note": (
-            "Attribution varies only with candidate assignments and is reported "
-            "separately from parsed raw Vivado/DC totals."
-        ),
-    }
+    for kernel_id in kernel_ids:
+        rows_with_sources: list[tuple[Dict[str, Any], Mapping[str, Any]]] = []
+        for row in eligible_rows:
+            kernel = next(
+                (
+                    item
+                    for item in row.get("kernel_rows", []) or []
+                    if isinstance(item, Mapping) and str(item.get("kernel_id")) == kernel_id
+                ),
+                None,
+            )
+            if not isinstance(kernel, Mapping):
+                continue
+            source_bundle = kernel.get("candidate_source_bundle", {})
+            if (
+                isinstance(source_bundle, Mapping)
+                and source_bundle.get("manifest", {}).get("exists") is True
+                and source_bundle.get("rtl_source_signature")
+            ):
+                rows_with_sources.append((row, source_bundle))
+        if len(rows_with_sources) < 2:
+            continue
+        signatures = {str(source.get("rtl_source_signature")) for _, source in rows_with_sources}
+        param_hashes = {
+            str(source.get("candidate_parametric_source_hash"))
+            for _, source in rows_with_sources
+            if source.get("candidate_parametric_source_hash")
+        }
+        if len(signatures) == 1 and len(param_hashes) <= 1:
+            for row, source in rows_with_sources:
+                row.setdefault("blockers", []).append(
+                    {
+                        "candidate_id": row.get("candidate_id"),
+                        "kernel_id": kernel_id,
+                        "stage_id": "candidate_parametric_source",
+                        "blocker_id": "candidate_parametric_source_not_distinguished",
+                        "source_bundle_manifest": source.get("manifest", {}).get("path"),
+                    }
+                )
+                row["ranking_eligible"] = False
 
 
 def _parsed_result(run_dir: Path, candidate_id: str, kernel_id: str, stage_id: str) -> Dict[str, Any]:
