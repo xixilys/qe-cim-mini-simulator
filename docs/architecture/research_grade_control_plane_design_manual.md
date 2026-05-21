@@ -125,6 +125,18 @@ compatibility handoff files: `architecture_search_space.json`,
 Trial ledger, and JSONL files are candidate/screening/promotion records only;
 they do not establish final trust without Step3/Step4 evidence.
 
+Search-policy integration note (2026-05-21): Step2 now projects the default
+domain-neutral `SearchPolicy` (`hierarchical_funnel`) into the canonical
+search/provenance bundle.  `architecture_search_space.json`,
+`mapping_candidates.jsonl`, `top_k_candidate_queue.json`,
+`search_checkpoint.json`, `architecture_candidate_generation_report.json`,
+`architecture_screening_report.json`, and `trial_state_ledger.json` carry
+policy name, problem id, budget/proposed-count metadata, stable
+`parameter_hash` sidecars, and per-candidate SearchPolicy provenance.  This is
+still a Step2 ordering/audit surface only: `step3_simulation_queue.json`
+remains selected-entry-only, and Top-K/SearchPolicy rows cannot schedule
+evidence runs or upgrade final/release claims by themselves.
+
 Pilot control-plane status note (2026-05-21): `run_full_flow_pilot.py`
 now writes `campaign.json` and `campaign_ledger.json` before Step3 evidence
 collection so the run directory carries an explicit campaign objective,

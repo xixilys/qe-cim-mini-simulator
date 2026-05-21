@@ -113,19 +113,38 @@ def test_full_flow_pilot_writes_required_evidence(tmp_path):
     step2_ledger = json.loads((out_dir / "step2" / "trial_state_ledger.json").read_text())
     step2_checkpoint = json.loads((out_dir / "step2" / "search_checkpoint.json").read_text())
     step2_top_k = json.loads((out_dir / "step2" / "top_k_candidate_queue.json").read_text())
+    candidate_generation = json.loads((out_dir / "step2" / "architecture_candidate_generation_report.json").read_text())
+    screening_report = json.loads((out_dir / "step2" / "architecture_screening_report.json").read_text())
     assert step2_validation["valid"] is True
     assert step2_ledger["schema_version"] == "dse.step2.trial_state_ledger.v1"
     assert step2_ledger["trusted_final_claim"] is False
     assert step2_ledger["queue_mode"] == "selected-entry-only"
     assert step2_ledger["all_candidates_have_parameter_hash"] is True
     assert "queued_for_step3" in step2_ledger["state_counts"]
+    assert step2_checkpoint["policy_name"] == step2_top_k["policy_name"]
+    assert step2_checkpoint["policy_name"] == "hierarchical_funnel"
     assert step2_checkpoint["top_k_candidate_queue_artifact"] == "top_k_candidate_queue.json"
     assert step2_checkpoint["top_k_queue_provenance_only"] is True
+    assert step2_checkpoint["release_completion_eligible"] is False
     assert step2_checkpoint["trusted_final_claim"] is False
     assert step2_top_k["queue_mode"] == "top-k-provenance-only"
     assert step2_top_k["step3_queue_mode"] == "selected-entry-only"
+    assert step2_top_k["provenance_only"] is True
+    assert step2_top_k["execution_order_suggestion_only"] is True
     assert step2_top_k["top_k_or_representative_completion_allowed"] is False
+    assert step2_top_k["release_completion_eligible"] is False
     assert step2_top_k["trusted_final_claim"] is False
+    assert candidate_generation["search_checkpoint_artifact"] == "search_checkpoint.json"
+    assert candidate_generation["top_k_candidate_queue_artifact"] == "top_k_candidate_queue.json"
+    assert candidate_generation["trial_state_ledger_artifact"] == "trial_state_ledger.json"
+    assert candidate_generation["search_policy_name"] == "hierarchical_funnel"
+    assert candidate_generation["search_policy_provenance_only"] is True
+    assert candidate_generation["trusted_final_claim"] is False
+    assert screening_report["search_checkpoint_artifact"] == "search_checkpoint.json"
+    assert screening_report["top_k_candidate_queue_artifact"] == "top_k_candidate_queue.json"
+    assert screening_report["top_k_queue_mode"] == "top-k-provenance-only"
+    assert screening_report["top_k_queue_provenance_only"] is True
+    assert screening_report["trusted_final_claim"] is False
 
     assert (out_dir / "campaign.json").exists()
     assert (out_dir / "campaign_ledger.json").exists()

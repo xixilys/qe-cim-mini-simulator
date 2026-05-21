@@ -276,3 +276,47 @@ def test_hierarchical_funnel_declares_bounded_candidate_enumeration():
     assert enumeration["grid_candidate_enumerated_count"] == 4
     assert enumeration["complete_grid_enumeration"] is False
     assert enumeration["max_candidate_enumeration"] == 4
+
+
+def test_search_policy_records_are_safe_for_step2_canonical_artifact_projection():
+    problem = SearchProblem(
+        problem_id="p8",
+        workload_run_id="w8",
+        objective="maximize throughput",
+        parameters={
+            "release_lane": ["release"],
+            "mapping_candidate_id": ["m0", "m1"],
+            "pe_count": [1, 8],
+        },
+        constraints={
+            "formal_pareto_lane_field": "release_lane",
+            "release_lane": "release",
+            "hierarchical_funnel_stages": HIERARCHICAL_FUNNEL_STAGES,
+        },
+    )
+    policy = HierarchicalFunnelSearchPolicy()
+
+    payloads = [record.to_dict() for record in policy.propose(problem, budget=2)]
+    canonicalized_payloads = [{**payload, "trusted_final_claim": False} for payload in payloads]
+
+    assert all(payload["parameter_hash"].startswith("sha256:") for payload in payloads)
+    assert all(
+        payload["provenance"]["candidate_identity_policy"] == "stable_problem_policy_parameter_hash"
+        for payload in payloads
+    )
+    assert all(
+        {"proposal_order", "budget", "feedback_order", "transient_rank"}.issubset(
+            set(payload["provenance"]["candidate_identity_excludes"])
+        )
+        for payload in payloads
+    )
+    assert all(payload["provenance"]["policy_name"] == policy.policy_name for payload in payloads)
+    assert all(payload["trusted_final_claim"] is False for payload in canonicalized_payloads)
+    assert all(
+        payload["provenance"]["search_space_enumeration"]["claim_boundary"]
+        == (
+            "Search-space enumeration is Step2 candidate-generation provenance only; "
+            "it is not Step3 evidence or a trusted final ranking."
+        )
+        for payload in payloads
+    )

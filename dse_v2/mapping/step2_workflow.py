@@ -52,6 +52,11 @@ from dse_v2.dse.orchestrator import DesignPoint
 from dse_v2.dse.analytical_evaluator import EnhancedAnalyticalEvaluator
 from dse_v2.dse.tlm_evaluator import TLMEvaluator
 from dse_v2.mapping.search import mapping_violations, run_mapping_search, target_ids
+from dse_v2.mapping.search_policy import (
+    HIERARCHICAL_FUNNEL_STAGES,
+    HierarchicalFunnelSearchPolicy,
+    SearchProblem,
+)
 from dse_v2.mapping.domain_policy import (
     Step2CandidateHints,
     Step2DomainPolicyRegistry,
@@ -1903,6 +1908,7 @@ def build_step2_trial_state_ledger(
             queue_state=queue_state,
             blockers=blockers,
         )
+        search_policy = candidate.get("search_policy", {}) if isinstance(candidate.get("search_policy", {}), Mapping) else {}
         rows.append({
             "schema_version": "dse.step2.trial_candidate_record.v1",
             **dict(scope),
@@ -1922,11 +1928,20 @@ def build_step2_trial_state_ledger(
             "queue_state": queue_state,
             "trial_state": trial_state,
             "blockers": blockers,
+            "search_policy_name": str(candidate.get("search_policy_name") or search_policy.get("policy_name") or ""),
+            "search_policy_candidate_id": str(candidate.get("search_policy_candidate_id") or search_policy.get("candidate_id") or ""),
+            "search_policy_rank": candidate.get("search_policy_rank") or search_policy.get("search_policy_rank"),
+            "search_policy_provenance": dict(search_policy),
             "transition_history": [
                 {
                     "transition": "candidate_generated",
                     "status": "recorded",
                     "artifact": "architecture_candidate_set.json" if candidate_type == "architecture" else "mapping_candidates.jsonl",
+                },
+                {
+                    "transition": "search_policy_proposed",
+                    "status": "recorded" if search_policy else "not_available",
+                    "artifact": "search_checkpoint.json",
                 },
                 {
                     "transition": "screened",
@@ -2080,8 +2095,221 @@ def _candidate_priority_score(candidate: Mapping[str, Any]) -> float:
     ):
         number = _finite_float(value, default=float("nan"))
         if math.isfinite(number):
-            return number
+                return number
     return 0.0
+
+
+def _mapping_record_search_parameters(
+    record: Mapping[str, Any],
+    *,
+    index: int,
+    backend: str,
+    architecture_id: str,
+    mapping_policy: str,
+) -> Dict[str, Any]:
+    """Return the domain-neutral parameter record handed to SearchPolicy.
+
+    SearchPolicy is the Step2 candidate-generation/search contract.  The
+    current workflow still gets raw legal mappings from `run_mapping_search`,
+    so this bridge treats those mapping records as seed candidates and records
+    the policy's replayable ordering/provenance without widening Step3
+    admission.
+    """
+
+    mapping = dict(record.get("mapping", {}) or {})
+    candidate_id = str(record.get("candidate_id") or f"mapping_candidate_{index}")
+    priority = _candidate_priority_score(record)
+    return {
+        "architecture_id": str(record.get("architecture_id") or architecture_id),
+        "backend": backend,
+        "mapping_candidate_id": candidate_id,
+        "mapping_policy": mapping_policy,
+        "mapping": mapping,
+        "mapping_parameter_hash": str(record.get("parameter_hash") or _payload_sha256(mapping)),
+        "source_state": str(record.get("state") or "unknown"),
+        "source_seed_name": str(record.get("seed_name") or ""),
+        "step2_candidate_rank_score": priority,
+        "source_candidate_index": index,
+        "release_lane": "release" if not record.get("violations") else "blocked",
+    }
+
+
+def _build_step2_search_policy_payload(
+    *,
+    workload_package: WorkloadPackage,
+    mapping_candidate_records: Mapping[str, Any],
+    scope: Mapping[str, str],
+    backend: str,
+    architecture_id: str,
+    objective_directions: Mapping[str, str],
+    beam_width: int,
+    step3_queue: Mapping[str, Any],
+) -> Dict[str, Any]:
+    """Run the default SearchPolicy over Step2 seed candidates.
+
+    This is deliberately Step2-only provenance.  It does not schedule new
+    simulations and it does not alter `step3_simulation_queue.json`.
+    """
+
+    raw_records = [
+        dict(record)
+        for record in mapping_candidate_records.get("candidates", []) or []
+        if isinstance(record, Mapping)
+    ]
+    mapping_policy = str(mapping_candidate_records.get("algorithm") or "workflow_seeded_beam_local_search_v1")
+    seed_candidates = [
+        _mapping_record_search_parameters(
+            record,
+            index=index,
+            backend=backend,
+            architecture_id=architecture_id,
+            mapping_policy=mapping_policy,
+        )
+        for index, record in enumerate(raw_records)
+    ]
+    candidate_ids = [str(seed.get("mapping_candidate_id")) for seed in seed_candidates]
+    release_lanes = sorted({str(seed.get("release_lane")) for seed in seed_candidates if seed.get("release_lane")})
+    problem = SearchProblem(
+        problem_id=f"step2::{scope.get('trial_id', workload_package.workload_id)}::mapping_candidates",
+        workload_run_id=str(scope.get("workload_run_id") or workload_package.workload_id),
+        objective="rank_step2_mapping_candidates",
+        parameters={
+            "architecture_id": sorted({str(seed.get("architecture_id") or architecture_id) for seed in seed_candidates}) or [architecture_id],
+            "backend": [backend],
+            "mapping_candidate_id": candidate_ids,
+            "release_lane": release_lanes or ["release"],
+        },
+        constraints={
+            "objective_directions": dict(objective_directions),
+            "required_parameters": [
+                "architecture_id",
+                "backend",
+                "mapping_candidate_id",
+                "mapping_parameter_hash",
+            ],
+            "formal_pareto_lane_field": "release_lane",
+            "release_lane": "release",
+            "hierarchical_funnel_stages": list(HIERARCHICAL_FUNNEL_STAGES),
+            "max_candidate_enumeration": 0,
+            "candidate_source_artifact": "mapping_candidate_records.json",
+            "step3_admission_queue": "step3_simulation_queue.json",
+            "top_k_queue_role": "provenance_only_not_step3_admission",
+            "candidate_generation_only": True,
+            "trusted_final_claim": False,
+        },
+        seed_candidates=tuple(seed_candidates),
+    )
+    proposal_budget = len(seed_candidates)
+    policy = HierarchicalFunnelSearchPolicy(bottleneck_keys=("step2_candidate_rank_score",))
+    proposed = policy.propose(problem, budget=proposal_budget)
+    candidate_payloads: List[Dict[str, Any]] = []
+    for rank, record in enumerate(proposed, start=1):
+        payload = record.to_dict()
+        payload["search_policy_rank"] = rank
+        payload["not_a_step3_queue_entry"] = True
+        payload["provenance_only"] = True
+        payload["trusted_final_claim"] = False
+        candidate_payloads.append(payload)
+    checkpoint = policy.checkpoint(problem).to_dict()
+    checkpoint["candidates"] = candidate_payloads
+    checkpoint["candidate_count"] = len(candidate_payloads)
+    checkpoint["proposal_budget"] = proposal_budget
+    return {
+        "schema_version": "dse.step2.search_policy_payload.v1",
+        **dict(scope),
+        "workload_id": workload_package.workload_id,
+        "workload_family": workload_package.workload_family,
+        "policy_name": policy.policy_name,
+        "problem_id": problem.problem_id,
+        "problem": {
+            "problem_id": problem.problem_id,
+            "workload_run_id": problem.workload_run_id,
+            "objective": problem.objective,
+            "parameters": {key: list(values) for key, values in problem.parameters.items()},
+            "constraints": dict(problem.constraints),
+            "seed_candidate_count": len(seed_candidates),
+            "parameter_grid_size": problem.parameter_grid_size(),
+        },
+        "mapping_policy": mapping_policy,
+        "proposal_budget": proposal_budget,
+        "proposed_count": len(candidate_payloads),
+        "observed_count": int(checkpoint.get("observed_count", 0) or 0),
+        "best_candidate_id": checkpoint.get("best_candidate_id"),
+        "step3_simulation_queue_artifact": "step3_simulation_queue.json",
+        "step3_queue_mode": step3_queue.get("queue_mode"),
+        "step3_queue_entry_budget": int(step3_queue.get("entry_count", 0) or 0),
+        "top_k_queue_role": "provenance_only_not_step3_admission",
+        "candidate_source_artifact": "mapping_candidate_records.json",
+        "candidate_identity_policy": "stable_problem_policy_parameter_hash",
+        "candidates": candidate_payloads,
+        "checkpoint": checkpoint,
+        "release_completion_eligible": False,
+        "trusted_final_claim": False,
+        "claim_boundary": (
+            "SearchPolicy proposals are Step2 candidate-generation provenance. "
+            "They order and explain candidates but cannot admit work to Step3 except "
+            "through step3_simulation_queue.json."
+        ),
+    }
+
+
+def _search_policy_candidate_lookup(search_policy_payload: Optional[Mapping[str, Any]]) -> Dict[str, Dict[str, Any]]:
+    lookup: Dict[str, Dict[str, Any]] = {}
+    if not isinstance(search_policy_payload, Mapping):
+        return lookup
+    for candidate in search_policy_payload.get("candidates", []) or []:
+        if not isinstance(candidate, Mapping):
+            continue
+        parameters = candidate.get("parameters", {}) if isinstance(candidate.get("parameters", {}), Mapping) else {}
+        mapping_candidate_id = str(parameters.get("mapping_candidate_id") or "")
+        if mapping_candidate_id:
+            lookup[mapping_candidate_id] = dict(candidate)
+    return lookup
+
+
+def _compact_search_policy_candidate(candidate: Mapping[str, Any]) -> Dict[str, Any]:
+    provenance = candidate.get("provenance", {}) if isinstance(candidate.get("provenance", {}), Mapping) else {}
+    parameters = candidate.get("parameters", {}) if isinstance(candidate.get("parameters", {}), Mapping) else {}
+    return {
+        "policy_name": provenance.get("policy_name"),
+        "candidate_id": candidate.get("candidate_id"),
+        "mapping_candidate_id": parameters.get("mapping_candidate_id"),
+        "parameter_hash": candidate.get("parameter_hash"),
+        "search_policy_rank": candidate.get("search_policy_rank"),
+        "generation_reason": candidate.get("generation_reason"),
+        "score": candidate.get("score"),
+        "promotion_reasons": list(candidate.get("promotion_reasons", []) or []),
+        "blocker_reasons": list(candidate.get("blocker_reasons", []) or []),
+        "simulation_eligible": bool(candidate.get("simulation_eligible", False)),
+        "provenance": dict(provenance),
+        "trusted_final_claim": False,
+    }
+
+
+def _search_space_with_policy(
+    search_space: Mapping[str, Any],
+    search_policy_payload: Optional[Mapping[str, Any]],
+) -> Dict[str, Any]:
+    payload = dict(search_space)
+    if isinstance(search_policy_payload, Mapping) and search_policy_payload:
+        generation_provenance = dict(payload.get("generation_provenance", {}) or {})
+        generation_provenance["search_policy"] = {
+            "policy_name": search_policy_payload.get("policy_name"),
+            "problem_id": search_policy_payload.get("problem_id"),
+            "proposal_budget": search_policy_payload.get("proposal_budget"),
+            "proposed_count": search_policy_payload.get("proposed_count"),
+            "candidate_source_artifact": search_policy_payload.get("candidate_source_artifact"),
+            "step3_admission_queue": search_policy_payload.get("step3_simulation_queue_artifact"),
+            "top_k_queue_role": search_policy_payload.get("top_k_queue_role"),
+        }
+        payload["generation_provenance"] = generation_provenance
+        payload["search_policy_name"] = search_policy_payload.get("policy_name")
+        payload["search_policy_problem_id"] = search_policy_payload.get("problem_id")
+        payload["search_policy_budget"] = search_policy_payload.get("proposal_budget")
+        payload["search_policy_proposed_count"] = search_policy_payload.get("proposed_count")
+        payload["search_policy_candidate_source_artifact"] = search_policy_payload.get("candidate_source_artifact")
+    payload["search_space_hash"] = _payload_sha256({key: value for key, value in payload.items() if key != "search_space_hash"})
+    return payload
 
 
 def _checkpoint_candidate_summary(
@@ -2097,7 +2325,8 @@ def _checkpoint_candidate_summary(
         "architecture_id": candidate.get("architecture_id"),
         "mapping": candidate.get("mapping", {}),
     }))
-    return {
+    search_policy = candidate.get("search_policy", {}) if isinstance(candidate.get("search_policy", {}), Mapping) else {}
+    summary = {
         "candidate_type": candidate_type,
         "candidate_id": str(candidate.get("candidate_id") or ""),
         "architecture_id": str(candidate.get("architecture_id") or ""),
@@ -2119,6 +2348,20 @@ def _checkpoint_candidate_summary(
         "source_index": source_index,
         "trusted_final_claim": False,
     }
+    if search_policy:
+        summary.update({
+            "search_policy_name": str(candidate.get("search_policy_name") or search_policy.get("policy_name") or ""),
+            "search_policy_candidate_id": str(candidate.get("search_policy_candidate_id") or search_policy.get("candidate_id") or ""),
+            "search_policy_rank": candidate.get("search_policy_rank") or search_policy.get("search_policy_rank"),
+            "search_policy_parameter_hash": str(
+                candidate.get("search_policy_parameter_hash")
+                or search_policy.get("parameter_hash")
+                or ""
+            ),
+            "search_policy_generation_reason": str(search_policy.get("generation_reason") or ""),
+            "search_policy": dict(search_policy),
+        })
+    return summary
 
 
 def build_top_k_candidate_queue(
@@ -2131,6 +2374,7 @@ def build_top_k_candidate_queue(
     scope: Mapping[str, str],
     policy_scope: str,
     beam_width: int,
+    search_policy_payload: Optional[Mapping[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Build a provenance-only top-K ordering queue.
 
@@ -2144,6 +2388,13 @@ def build_top_k_candidate_queue(
         for candidate in mapping_candidates
         if isinstance(candidate, Mapping) and candidate.get("candidate_id")
     }
+    search_policy_by_mapping_id = _search_policy_candidate_lookup(search_policy_payload)
+    search_policy_name = (
+        str(search_policy_payload.get("policy_name"))
+        if isinstance(search_policy_payload, Mapping) and search_policy_payload.get("policy_name")
+        else ""
+    )
+    mapping_policy_name = str(mapping_candidate_records.get("algorithm", "workflow_seeded_beam_local_search_v1"))
     step3_entries = [
         entry
         for entry in step3_queue.get("entries", []) or []
@@ -2191,7 +2442,8 @@ def build_top_k_candidate_queue(
             })
         )
         top_k_state = "selected_entry" if str(source.get("state", "")) == "selected" else "candidate_order_suggestion"
-        entries.append({
+        search_policy_candidate = search_policy_by_mapping_id.get(candidate_id, {})
+        entry = {
             "top_k_rank": rank,
             "top_k_entry_id": f"top-k::{scope.get('trial_id', 'trial')}::{rank}::{candidate_id}",
             "candidate_id": candidate_id,
@@ -2212,7 +2464,18 @@ def build_top_k_candidate_queue(
             "top_k_or_representative_completion_allowed": False,
             "trusted_final_claim": False,
             "source_artifact": "mapping_candidate_records.json",
-        })
+        }
+        if search_policy_candidate:
+            search_policy_compact = _compact_search_policy_candidate(search_policy_candidate)
+            entry.update({
+                "search_policy_name": search_policy_name,
+                "search_policy_candidate_id": search_policy_compact.get("candidate_id"),
+                "search_policy_rank": search_policy_compact.get("search_policy_rank"),
+                "search_policy_parameter_hash": search_policy_compact.get("parameter_hash"),
+                "search_policy_generation_reason": search_policy_compact.get("generation_reason"),
+                "search_policy": search_policy_compact,
+            })
+        entries.append(entry)
 
     return {
         "schema_version": "dse.step2.top_k_candidate_queue.v1",
@@ -2220,7 +2483,12 @@ def build_top_k_candidate_queue(
         "workload_id": workload_package.workload_id,
         "workload_family": workload_package.workload_family,
         "policy_scope": policy_scope,
-        "policy_name": str(mapping_candidate_records.get("algorithm", "workflow_seeded_beam_local_search_v1")),
+        "policy_name": search_policy_name or mapping_policy_name,
+        "mapping_policy_name": mapping_policy_name,
+        "search_policy_name": search_policy_name or None,
+        "search_policy_problem_id": search_policy_payload.get("problem_id") if isinstance(search_policy_payload, Mapping) else None,
+        "search_policy_budget": search_policy_payload.get("proposal_budget") if isinstance(search_policy_payload, Mapping) else None,
+        "search_policy_proposed_count": search_policy_payload.get("proposed_count") if isinstance(search_policy_payload, Mapping) else None,
         "queue_mode": "top-k-provenance-only",
         "entry_count": len(entries),
         "requested_top_k": max(1, int(beam_width or 1)),
@@ -2254,6 +2522,7 @@ def build_step2_search_checkpoint_artifact(
     step3_queue: Mapping[str, Any],
     scope: Mapping[str, str],
     policy_scope: str,
+    search_policy_payload: Optional[Mapping[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Build a compact replay checkpoint over Step2 candidate/search state."""
 
@@ -2278,13 +2547,32 @@ def build_step2_search_checkpoint_artifact(
     feedback = mapping_feedback_state if isinstance(mapping_feedback_state, Mapping) else {}
     convergence = convergence_status if isinstance(convergence_status, Mapping) else {}
     simulation_samples = feedback.get("simulation_samples", []) if isinstance(feedback.get("simulation_samples", []), list) else []
+    search_policy_name = (
+        str(search_policy_payload.get("policy_name"))
+        if isinstance(search_policy_payload, Mapping) and search_policy_payload.get("policy_name")
+        else ""
+    )
+    mapping_policy_name = str(mapping_candidate_records.get("algorithm", "workflow_seeded_beam_local_search_v1"))
+    compact_policy_candidates = [
+        _compact_search_policy_candidate(candidate)
+        for candidate in (search_policy_payload.get("candidates", []) if isinstance(search_policy_payload, Mapping) else [])
+        if isinstance(candidate, Mapping)
+    ]
     return {
         "schema_version": "dse.step2.search_checkpoint_summary.v1",
         **dict(scope),
         "workload_id": workload_package.workload_id,
         "workload_family": workload_package.workload_family,
         "policy_scope": policy_scope,
-        "policy_name": str(mapping_candidate_records.get("algorithm", "workflow_seeded_beam_local_search_v1")),
+        "policy_name": search_policy_name or mapping_policy_name,
+        "mapping_policy_name": mapping_policy_name,
+        "search_policy_name": search_policy_name or None,
+        "search_policy_problem_id": search_policy_payload.get("problem_id") if isinstance(search_policy_payload, Mapping) else None,
+        "search_policy_proposal_budget": search_policy_payload.get("proposal_budget") if isinstance(search_policy_payload, Mapping) else None,
+        "search_policy_proposed_count": search_policy_payload.get("proposed_count") if isinstance(search_policy_payload, Mapping) else None,
+        "search_policy_observed_count": search_policy_payload.get("observed_count") if isinstance(search_policy_payload, Mapping) else None,
+        "search_policy_candidates": compact_policy_candidates,
+        "search_policy_checkpoint": search_policy_payload.get("checkpoint") if isinstance(search_policy_payload, Mapping) else None,
         "search_space_artifact": "architecture_search_space.json",
         "search_space_hash": search_space.get("search_space_hash"),
         "candidate_identity_policy": "stable_parameter_hash_sidecar",
@@ -2359,56 +2647,86 @@ def build_step2_search_artifacts(
         policy_scope=policy_scope,
         scope=scope,
     )
+    search_policy_architecture_id = str(
+        (promotion_decision or {}).get("architecture_id")
+        or (architecture_ids[0] if architecture_ids else "")
+    )
+    search_policy_payload = _build_step2_search_policy_payload(
+        workload_package=workload_package,
+        mapping_candidate_records=mapping_candidate_records,
+        scope=scope,
+        backend=backend,
+        architecture_id=search_policy_architecture_id,
+        objective_directions=objective_directions,
+        beam_width=beam_width,
+        step3_queue=step3_queue,
+    )
+    search_space = _search_space_with_policy(search_space, search_policy_payload)
+    search_policy_by_mapping_id = _search_policy_candidate_lookup(search_policy_payload)
     architecture_candidates = [
         dict(candidate)
         for candidate in architecture_candidate_set.get("candidates", []) or []
         if isinstance(candidate, Mapping)
     ]
-    mapping_candidates = [
-        {
+    mapping_candidates: List[Dict[str, Any]] = []
+    mapping_policy_name = str(mapping_candidate_records.get("algorithm", "workflow_seeded_beam_local_search_v1"))
+    for index, record in enumerate(mapping_candidate_records.get("candidates", []) or []):
+        if not isinstance(record, Mapping):
+            continue
+        candidate_id = str(record.get("candidate_id", f"mapping_candidate_{index}"))
+        architecture_id = str(record.get("architecture_id") or (promotion_decision or {}).get("architecture_id") or "")
+        mapping = dict(record.get("mapping", {}) or {})
+        parameters = {
+            "architecture_id": architecture_id,
+            "backend": backend,
+            "mapping": mapping,
+            "mapping_policy": mapping_policy_name,
+        }
+        provenance = {
+            "source_artifact": "mapping_candidate_records.json",
+            "source_index": index,
+            "algorithm": mapping_candidate_records.get("algorithm"),
+            "beam_width": mapping_candidate_records.get("beam_width"),
+        }
+        search_policy_candidate = search_policy_by_mapping_id.get(candidate_id, {})
+        row: Dict[str, Any] = {
             "schema_version": "dse.step2.mapping_candidate_record.v1",
             **dict(scope),
             "workload_id": workload_package.workload_id,
             "workload_family": workload_package.workload_family,
-            "candidate_id": str(record.get("candidate_id", f"mapping_candidate_{index}")),
-            "architecture_id": str(record.get("architecture_id") or (promotion_decision or {}).get("architecture_id") or ""),
-            "mapping": dict(record.get("mapping", {}) or {}),
-            "parameters": {
-                "architecture_id": str(record.get("architecture_id") or (promotion_decision or {}).get("architecture_id") or ""),
-                "backend": backend,
-                "mapping": dict(record.get("mapping", {}) or {}),
-                "mapping_policy": mapping_candidate_records.get("algorithm", "workflow_seeded_beam_local_search_v1"),
-            },
-            "parameter_hash": _payload_sha256({
-                "architecture_id": str(record.get("architecture_id") or (promotion_decision or {}).get("architecture_id") or ""),
-                "backend": backend,
-                "mapping": dict(record.get("mapping", {}) or {}),
-                "mapping_policy": mapping_candidate_records.get("algorithm", "workflow_seeded_beam_local_search_v1"),
-            }),
+            "candidate_id": candidate_id,
+            "architecture_id": architecture_id,
+            "mapping": mapping,
+            "parameters": parameters,
+            "parameter_hash": _payload_sha256(parameters),
             "candidate_identity_policy": "stable_mapping_parameters_hash_sidecar",
-            "provenance": {
-                "source_artifact": "mapping_candidate_records.json",
-                "source_index": index,
-                "algorithm": mapping_candidate_records.get("algorithm"),
-                "beam_width": mapping_candidate_records.get("beam_width"),
-            },
+            "provenance": provenance,
             "generation_reason": str(record.get("selection_reason") or record.get("state") or "mapping_search_candidate"),
             "score": _candidate_priority_score(record),
             "step2_screenable": not bool(record.get("violations")),
-            "step3_evaluable": bool((promotion_decision or {}).get("promoted_for_simulation", False) and record.get("candidate_id") == (promotion_decision or {}).get("candidate_id")),
-            "simulation_eligible": bool((promotion_decision or {}).get("promoted_for_simulation", False) and record.get("candidate_id") == (promotion_decision or {}).get("candidate_id")),
-            "simulation_blockers": [] if bool((promotion_decision or {}).get("promoted_for_simulation", False) and record.get("candidate_id") == (promotion_decision or {}).get("candidate_id")) else ["not_selected_for_step3_simulation"],
+            "step3_evaluable": bool((promotion_decision or {}).get("promoted_for_simulation", False) and candidate_id == (promotion_decision or {}).get("candidate_id")),
+            "simulation_eligible": bool((promotion_decision or {}).get("promoted_for_simulation", False) and candidate_id == (promotion_decision or {}).get("candidate_id")),
+            "simulation_blockers": [] if bool((promotion_decision or {}).get("promoted_for_simulation", False) and candidate_id == (promotion_decision or {}).get("candidate_id")) else ["not_selected_for_step3_simulation"],
             "promotion_reasons": [
                 str(reason.get("reason_id") if isinstance(reason, Mapping) else reason)
                 for reason in (promotion_decision or {}).get("reasons", []) or []
                 if isinstance(reason, (Mapping, str))
-            ] if record.get("candidate_id") == (promotion_decision or {}).get("candidate_id") else [],
+            ] if candidate_id == (promotion_decision or {}).get("candidate_id") else [],
             "blocker_reasons": [str(item) for item in record.get("violations", []) or []],
             "trusted_final_claim": False,
         }
-        for index, record in enumerate(mapping_candidate_records.get("candidates", []) or [])
-        if isinstance(record, Mapping)
-    ]
+        if search_policy_candidate:
+            search_policy_compact = _compact_search_policy_candidate(search_policy_candidate)
+            provenance["search_policy"] = search_policy_compact
+            row.update({
+                "search_policy_name": search_policy_payload.get("policy_name"),
+                "search_policy_candidate_id": search_policy_compact.get("candidate_id"),
+                "search_policy_rank": search_policy_compact.get("search_policy_rank"),
+                "search_policy_parameter_hash": search_policy_compact.get("parameter_hash"),
+                "search_policy_generation_reason": search_policy_compact.get("generation_reason"),
+                "search_policy": search_policy_compact,
+            })
+        mapping_candidates.append(row)
     promoted_mapping_ids = {
         str(candidate.get("candidate_id"))
         for candidate in mapping_candidates
@@ -2485,6 +2803,7 @@ def build_step2_search_artifacts(
         scope=scope,
         policy_scope=policy_scope,
         beam_width=beam_width,
+        search_policy_payload=search_policy_payload,
     )
     candidate_generation_report = {
         "schema_version": "dse.step2.architecture_candidate_generation_report.v1",
@@ -2499,6 +2818,17 @@ def build_step2_search_artifacts(
         "generated_candidate_ids": [str(candidate.get("candidate_id")) for candidate in architecture_candidates],
         "mapping_candidate_ids": [str(candidate.get("candidate_id")) for candidate in mapping_candidates],
         "candidate_identity_policy": "stable_parameter_hash_sidecar",
+        "search_policy_name": search_policy_payload.get("policy_name"),
+        "search_policy_problem_id": search_policy_payload.get("problem_id"),
+        "search_policy_budget": search_policy_payload.get("proposal_budget"),
+        "search_policy_proposed_count": search_policy_payload.get("proposed_count"),
+        "search_policy_candidate_count": len(search_policy_payload.get("candidates", []) or []),
+        "search_policy_candidate_ids": [
+            str(candidate.get("candidate_id"))
+            for candidate in search_policy_payload.get("candidates", []) or []
+            if isinstance(candidate, Mapping) and candidate.get("candidate_id")
+        ],
+        "search_policy_provenance_only": True,
         "architecture_candidate_parameter_hashes": [
             str(candidate.get("parameter_hash"))
             for candidate in architecture_candidates
@@ -2522,6 +2852,15 @@ def build_step2_search_artifacts(
             "top_k_candidate_queue_artifact": "top_k_candidate_queue.json",
             "jsonl_artifacts": ["mapping_candidates.jsonl"],
             "candidate_identity_policy": "stable_parameter_hash_sidecar",
+            "search_policy": {
+                "policy_name": search_policy_payload.get("policy_name"),
+                "problem_id": search_policy_payload.get("problem_id"),
+                "proposal_budget": search_policy_payload.get("proposal_budget"),
+                "proposed_count": search_policy_payload.get("proposed_count"),
+                "candidate_source_artifact": search_policy_payload.get("candidate_source_artifact"),
+                "step3_admission_queue": search_policy_payload.get("step3_simulation_queue_artifact"),
+                "top_k_queue_role": search_policy_payload.get("top_k_queue_role"),
+            },
         },
         "trial_state_ledger_artifact": "trial_state_ledger.json",
         "trusted_final_claim": False,
@@ -2543,6 +2882,10 @@ def build_step2_search_artifacts(
         "top_k_provenance_entry_count": int(top_k_candidate_queue.get("entry_count", 0) or 0),
         "top_k_queue_mode": top_k_candidate_queue.get("queue_mode"),
         "top_k_queue_provenance_only": True,
+        "search_policy_name": search_policy_payload.get("policy_name"),
+        "search_policy_problem_id": search_policy_payload.get("problem_id"),
+        "search_policy_proposed_count": search_policy_payload.get("proposed_count"),
+        "search_policy_provenance_only": True,
         "trusted_final_claim": False,
         "claim_boundary": "Step2 screening/promotions only; final trust requires Step3/Step4 evidence.",
     }
@@ -2569,6 +2912,7 @@ def build_step2_search_artifacts(
         step3_queue=step3_queue,
         scope=scope,
         policy_scope=policy_scope,
+        search_policy_payload=search_policy_payload,
     )
     return {
         "architecture_search_space": search_space,
@@ -2977,6 +3321,23 @@ def validate_step2_artifacts(artifacts: Mapping[str, Any]) -> Dict[str, Any]:
                 errors.append({"field": f"search_checkpoint.candidates[{idx}].trusted_final_claim", "message": "Search checkpoint candidates cannot claim trusted final winners"})
             if not candidate.get("parameter_hash"):
                 errors.append({"field": f"search_checkpoint.candidates[{idx}].parameter_hash", "message": "Search checkpoint candidates require stable parameter_hash sidecars"})
+        search_policy_checkpoint = search_checkpoint.get("search_policy_checkpoint", {})
+        if isinstance(search_policy_checkpoint, Mapping) and search_policy_checkpoint:
+            if search_policy_checkpoint.get("trusted_final_claim"):
+                errors.append({"field": "search_checkpoint.search_policy_checkpoint.trusted_final_claim", "message": "Search policy checkpoint cannot claim trusted final winners"})
+            if search_policy_checkpoint.get("release_completion_eligible"):
+                errors.append({"field": "search_checkpoint.search_policy_checkpoint.release_completion_eligible", "message": "Search policy checkpoint cannot establish release completion"})
+            policy_candidates = search_policy_checkpoint.get("candidates", []) or []
+            if len(policy_candidates) != int(search_policy_checkpoint.get("candidate_count", len(policy_candidates)) or 0):
+                errors.append({"field": "search_checkpoint.search_policy_checkpoint.candidate_count", "message": "Search policy checkpoint candidate_count must match candidates length"})
+            for idx, candidate in enumerate(policy_candidates):
+                if not isinstance(candidate, Mapping):
+                    errors.append({"field": f"search_checkpoint.search_policy_checkpoint.candidates[{idx}]", "message": "Search policy checkpoint candidate must be an object"})
+                    continue
+                if candidate.get("trusted_final_claim"):
+                    errors.append({"field": f"search_checkpoint.search_policy_checkpoint.candidates[{idx}].trusted_final_claim", "message": "Search policy checkpoint candidates cannot claim trusted final winners"})
+                if not candidate.get("parameter_hash"):
+                    errors.append({"field": f"search_checkpoint.search_policy_checkpoint.candidates[{idx}].parameter_hash", "message": "Search policy checkpoint candidates require stable parameter_hash sidecars"})
 
     trial_ledger = artifacts.get("trial_state_ledger", {})
     if isinstance(trial_ledger, Mapping) and trial_ledger:

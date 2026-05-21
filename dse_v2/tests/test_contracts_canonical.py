@@ -86,6 +86,30 @@ def test_artifact_catalog_has_unique_one_producer_bindings_and_examples():
     assert not any("dft" in field.lower() or "qe" in field.lower() for field in campaign_required)
 
 
+def test_search_policy_canonical_schemas_keep_policy_outputs_provenance_only():
+    checkpoint = SCHEMA_REGISTRY["dse.contract.search_checkpoint_summary.v1"]["properties"]
+    assert checkpoint["top_k_queue_provenance_only"]["const"] is True
+    assert checkpoint["release_completion_eligible"]["const"] is False
+    assert checkpoint["trusted_final_claim"]["const"] is False
+
+    top_k = SCHEMA_REGISTRY["dse.contract.top_k_candidate_queue.v1"]["properties"]
+    assert top_k["queue_mode"]["const"] == "top-k-provenance-only"
+    assert top_k["provenance_only"]["const"] is True
+    assert top_k["execution_order_suggestion_only"]["const"] is True
+    assert top_k["top_k_or_representative_completion_allowed"]["const"] is False
+    assert top_k["release_completion_eligible"]["const"] is False
+    assert top_k["trusted_final_claim"]["const"] is False
+
+    generation = SCHEMA_REGISTRY["dse.contract.architecture_candidate_generation_report.v1"]["properties"]
+    assert generation["trusted_final_claim"]["const"] is False
+
+    screening = SCHEMA_REGISTRY["dse.contract.architecture_screening_report.v1"]["properties"]
+    assert screening["trusted_final_claim"]["const"] is False
+
+    mapping_candidate = SCHEMA_REGISTRY["dse.contract.mapping_candidate_record.v1"]["properties"]
+    assert mapping_candidate["trusted_final_claim"]["const"] is False
+
+
 def test_artifact_catalog_rejects_duplicate_names_unknown_schemas_and_bad_examples():
     first = ARTIFACT_CATALOG[0]
     duplicate = ArtifactDefinition(

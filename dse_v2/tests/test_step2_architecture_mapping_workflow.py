@@ -406,6 +406,88 @@ def test_step2_runs_representative_non_qe_workloads_and_writes_required_artifact
         assert "npw" not in json.dumps(request)
 
 
+def test_step2_search_policy_candidate_records_flow_into_canonical_artifacts_without_claim_upgrade(tmp_path):
+    graph = create_sparse_spmv_graph("sparse_search_policy_bridge")
+    package = package_from_graph(graph, workload_family="sparse_la", importer_id="generic_json")
+
+    result = run_step2_architecture_mapping_workflow(package, output_dir=tmp_path)
+    assert result.status == "ready_for_step3_simulation"
+
+    search_space = _load_json(tmp_path / "architecture_search_space.json")
+    search_checkpoint = _load_json(tmp_path / "search_checkpoint.json")
+    top_k_queue = _load_json(tmp_path / "top_k_candidate_queue.json")
+    candidate_generation = _load_json(tmp_path / "architecture_candidate_generation_report.json")
+    screening_report = _load_json(tmp_path / "architecture_screening_report.json")
+    trial_ledger = _load_json(tmp_path / "trial_state_ledger.json")
+    step3_queue = _load_json(tmp_path / "step3_simulation_queue.json")
+
+    assert search_space["generation_provenance"]["search_policy"]["policy_name"] == "hierarchical_funnel"
+    assert search_space["search_policy_name"] == "hierarchical_funnel"
+    assert search_space["search_policy_candidate_source_artifact"] == "mapping_candidate_records.json"
+    assert search_space["constraints"]["step2_only"] is True
+    assert search_space["constraints"]["trusted_final_claim"] is False
+    assert search_space["freeze_gate_verdict"]["completion_evidence"] is False
+    assert search_space["trusted_final_claim"] is False
+
+    assert search_checkpoint["policy_name"] == "hierarchical_funnel"
+    assert search_checkpoint["mapping_policy_name"] == "workflow_seeded_beam_local_search_v1"
+    assert search_checkpoint["candidate_count"] == len(search_checkpoint["candidates"])
+    assert search_checkpoint["proposed_count"] == len(search_checkpoint["candidates"])
+    assert search_checkpoint["top_k_queue_provenance_only"] is True
+    assert search_checkpoint["release_completion_eligible"] is False
+    assert search_checkpoint["trusted_final_claim"] is False
+    assert search_checkpoint["search_policy_proposed_count"] == len(search_checkpoint["search_policy_candidates"])
+    assert all(candidate["parameter_hash"].startswith("sha256:") for candidate in search_checkpoint["candidates"])
+    assert all(candidate["trusted_final_claim"] is False for candidate in search_checkpoint["candidates"])
+    assert all(candidate["parameter_hash"].startswith("sha256:") for candidate in search_checkpoint["search_policy_candidates"])
+    assert all(candidate["trusted_final_claim"] is False for candidate in search_checkpoint["search_policy_candidates"])
+
+    assert top_k_queue["policy_name"] == "hierarchical_funnel"
+    assert top_k_queue["mapping_policy_name"] == "workflow_seeded_beam_local_search_v1"
+    assert top_k_queue["queue_mode"] == "top-k-provenance-only"
+    assert top_k_queue["step3_queue_mode"] == "selected-entry-only"
+    assert top_k_queue["provenance_only"] is True
+    assert top_k_queue["execution_order_suggestion_only"] is True
+    assert top_k_queue["top_k_or_representative_completion_allowed"] is False
+    assert top_k_queue["release_completion_eligible"] is False
+    assert top_k_queue["trusted_final_claim"] is False
+    assert top_k_queue["entry_count"] == len(top_k_queue["entries"])
+    assert all(entry["not_a_step3_queue_entry"] is True for entry in top_k_queue["entries"])
+    assert all("queue_state" not in entry for entry in top_k_queue["entries"])
+    assert all(entry["trusted_final_claim"] is False for entry in top_k_queue["entries"])
+    assert all(entry["search_policy_name"] == "hierarchical_funnel" for entry in top_k_queue["entries"])
+
+    assert candidate_generation["search_checkpoint_artifact"] == "search_checkpoint.json"
+    assert candidate_generation["top_k_candidate_queue_artifact"] == "top_k_candidate_queue.json"
+    assert candidate_generation["trial_state_ledger_artifact"] == "trial_state_ledger.json"
+    assert candidate_generation["search_policy_name"] == "hierarchical_funnel"
+    assert candidate_generation["search_policy_provenance_only"] is True
+    assert candidate_generation["trusted_final_claim"] is False
+    assert candidate_generation["all_generated_candidates_have_parameter_hash"] is True
+
+    assert screening_report["search_checkpoint_artifact"] == "search_checkpoint.json"
+    assert screening_report["top_k_candidate_queue_artifact"] == "top_k_candidate_queue.json"
+    assert screening_report["top_k_queue_mode"] == "top-k-provenance-only"
+    assert screening_report["top_k_queue_provenance_only"] is True
+    assert screening_report["search_policy_name"] == "hierarchical_funnel"
+    assert screening_report["search_policy_provenance_only"] is True
+    assert screening_report["trusted_final_claim"] is False
+
+    assert trial_ledger["queue_mode"] == "selected-entry-only"
+    assert trial_ledger["all_candidates_have_parameter_hash"] is True
+    assert trial_ledger["release_completion_eligible"] is False
+    assert trial_ledger["trusted_final_claim"] is False
+    assert all(row["trusted_final_claim"] is False for row in trial_ledger["candidates"])
+    mapping_rows = [row for row in trial_ledger["candidates"] if row["candidate_type"] == "mapping"]
+    assert mapping_rows
+    assert all(row["search_policy_name"] == "hierarchical_funnel" for row in mapping_rows)
+    assert all(row["search_policy_provenance"] for row in mapping_rows)
+
+    assert step3_queue["queue_mode"] == "selected-entry-only"
+    assert step3_queue["entry_count"] == 1
+    assert step3_queue["trusted_final_claim"] is False
+
+
 def test_step2_domain_policy_empty_registry_noops_for_generic_workload(tmp_path):
     graph = create_sparse_spmv_graph("sparse_empty_policy")
     package = package_from_graph(graph, workload_family="sparse_la", importer_id="generic_json")
@@ -869,12 +951,26 @@ def test_step2_artifact_validation_rejects_top_k_and_checkpoint_completion_claim
     checkpoint_candidates = [dict(candidate) for candidate in search_checkpoint["candidates"]]
     checkpoint_candidates[0]["trusted_final_claim"] = True
     checkpoint_candidates[0].pop("parameter_hash", None)
+    search_policy_checkpoint = dict(search_checkpoint["search_policy_checkpoint"])
+    search_policy_candidates = [
+        dict(candidate)
+        for candidate in search_policy_checkpoint["candidates"]
+    ]
+    search_policy_candidates[0]["trusted_final_claim"] = True
+    search_policy_candidates[0].pop("parameter_hash", None)
+    search_policy_checkpoint.update({
+        "trusted_final_claim": True,
+        "release_completion_eligible": True,
+        "candidate_count": int(search_policy_checkpoint["candidate_count"]) + 1,
+        "candidates": search_policy_candidates,
+    })
     search_checkpoint.update({
         "trusted_final_claim": True,
         "release_completion_eligible": True,
         "top_k_queue_provenance_only": False,
         "candidate_count": int(search_checkpoint["candidate_count"]) + 1,
         "candidates": checkpoint_candidates,
+        "search_policy_checkpoint": search_policy_checkpoint,
     })
 
     validation = validate_step2_artifacts({
@@ -899,6 +995,11 @@ def test_step2_artifact_validation_rejects_top_k_and_checkpoint_completion_claim
     assert "search_checkpoint.candidate_count" in error_fields
     assert "search_checkpoint.candidates[0].trusted_final_claim" in error_fields
     assert "search_checkpoint.candidates[0].parameter_hash" in error_fields
+    assert "search_checkpoint.search_policy_checkpoint.trusted_final_claim" in error_fields
+    assert "search_checkpoint.search_policy_checkpoint.release_completion_eligible" in error_fields
+    assert "search_checkpoint.search_policy_checkpoint.candidate_count" in error_fields
+    assert "search_checkpoint.search_policy_checkpoint.candidates[0].trusted_final_claim" in error_fields
+    assert "search_checkpoint.search_policy_checkpoint.candidates[0].parameter_hash" in error_fields
 
 
 def test_step2_screens_multiple_architectures_without_breaking_step3_handoff(tmp_path):
