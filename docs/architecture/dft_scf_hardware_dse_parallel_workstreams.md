@@ -29,7 +29,11 @@
   release candidates hardware-PPA-ranking/Pareto visible but tied by identical
   kernel-PPA signatures.  Treat it as tie-breaker input only: it does not name a
   FPGA/ASIC winner, does not close candidate-specific PPA provenance, and does
-  not upgrade final deliverable status.
+  not upgrade final deliverable status.  Candidate metadata and
+  assignment-derived candidate-parametric attribution are sidecar/audit context
+  only; they must not alter physical FPGA/ASIC ranking, Pareto membership, or
+  winner selection while raw Vivado/DC metrics and source/parameter hashes are
+  identical across candidates.
 - Current-goal L4 transport proof is present for the 36 × 6 target.
   `current_goal_l4_bridge/` is the exact structured crosswalk/provenance handoff;
   `runs/dse/current_goal_l4_regenerated_36x6_20260520T091000Z` contains 216/216
@@ -420,6 +424,10 @@ Before any stronger claim, verify:
 18. `dft_audit_semantic_closure.json` is present, source-hash backed, and
     passes all five semantic sections before the goal audit can clear the HIGH
     semantic findings;
-19. the goal audit remains `in_progress` until the full-system release gate says otherwise.
+19. assignment-derived candidate metadata remains sidecar-only and does not
+    convert identical physical PPA into `ranked_candidates_available`; physical
+    PPA winner proof requires generated RTL/tool evidence with candidate-varying
+    source hashes, parameter hashes, or raw Vivado/DC metrics;
+20. the goal audit remains `in_progress` until the full-system release gate says otherwise.
 
 Anti-downgrade rule: do not convert a vertical slice, fixed seed set, model-level run, h_psi-only proof, materialized-only packet set, or partially registered matrix into a deliverable-complete DFT/QE full-SCF hardware DSE claim.

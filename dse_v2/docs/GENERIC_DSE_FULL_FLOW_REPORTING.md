@@ -268,10 +268,13 @@ ASIC winner only when that deployment has exactly one rank-1 candidate backed by
 non-tied candidate-stamped hard-gate PPA metrics.  If the metric signatures are
 identical, it records `blocked_no_unique_hardware_ppa_winners` and enumerates
 the required next evidence rather than using candidate-id ordering, Step2
-scores, shared route-probe/source-flow evidence, or single-candidate full-SCF
-accounting as a tie-breaker.  If the provenance audit is missing or blocked,
-winner resolution also stays blocked even if a sorted PPA table has a unique
-rank-1 row.
+scores, assignment-derived candidate-parametric sidecars, shared
+route-probe/source-flow evidence, or single-candidate full-SCF accounting as a
+tie-breaker.  Candidate metadata may appear in audit/report sidecars, but it is
+separate from physical PPA and must not change `fpga_ranking`, `asic_ranking`,
+Pareto membership, `ranked_candidates_available`, or winner selection.  If the
+provenance audit is missing or blocked, winner resolution also stays blocked
+even if a sorted PPA table has a unique rank-1 row.
 
 Build the DFT candidate binding map before the trial ledger when Step2
 hierarchical IDs differ from the frozen seven-axis release IDs used by
@@ -508,7 +511,11 @@ show 36 ranking-eligible/Pareto-visible candidates, but identical parsed
 kernel-PPA signatures leave `winner_selection_status` at
 `tied_by_identical_kernel_ppa_no_single_winner`.  Reports must present this as
 tie-breaker input only, not as a selected FPGA/ASIC architecture, not as a
-trusted full-SCF winner, and not as deliverable completion.
+trusted full-SCF winner, and not as deliverable completion.  Candidate metadata
+or assignment-derived candidate-parametric attribution may be shown as
+sidecar/audit context only; with identical raw Vivado/DC physical metrics it
+must keep `candidate_parametric_attribution_used=false` and cannot make the PPA
+ranking, Pareto frontier, or winner status unique.
 
 The fail-closed Step5 sequence is:
 
@@ -542,8 +549,10 @@ hardware evidence.  Step5 may surface them through `trusted_ranking.json` and
 `pareto_frontier.json` with `hardware_ppa_only` scope, but they do not set a
 full-SCF trusted winner or deliverable completion.  If the candidate-stamped
 kernel PPA metrics tie, `winner_selection_status` remains
-`tied_by_identical_kernel_ppa_no_single_winner` until a separate system-level
-tie-breaker closes.
+`tied_by_identical_kernel_ppa_no_single_winner`; a separate system-level
+tie-breaker is not sufficient to break that physical PPA tie unless generated
+RTL/tool evidence varies by candidate through source hashes, parameter hashes,
+or raw Vivado/DC metrics.
 
 The architecture winner-resolution artifact is the machine-checkable place for
 that tie-breaker.  Final reporting may show its FPGA/ASIC status and required
