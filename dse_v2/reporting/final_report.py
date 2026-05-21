@@ -125,6 +125,27 @@ DFT_HARDWARE_CLOSURE_RELEASE_GATE_ARTIFACT_NAMES = {
     "dft_hardware_closure_release_gate_validation.json",
     "dft_hardware_closure_release_gate_status.json",
 }
+DFT_HARDWARE_PPA_RANKING_ARTIFACT_NAMES = {
+    "dft_hardware_ppa_ranking.json",
+    "dft_hardware_ppa_pareto_frontier.json",
+    "dft_hardware_ppa_ranking_validation.json",
+    "dft_hardware_ppa_ranking_status.json",
+}
+DFT_CANDIDATE_SPECIFIC_PPA_PROVENANCE_ARTIFACT_NAMES = {
+    "dft_candidate_specific_ppa_execution.json",
+    "dft_candidate_specific_ppa_execution_validation.json",
+    "dft_candidate_specific_ppa_execution_status.json",
+    "dft_candidate_specific_ppa_provenance_audit.json",
+    "dft_candidate_specific_ppa_provenance_audit_validation.json",
+    "dft_candidate_specific_ppa_provenance_audit_status.json",
+    "dft_hardware_tie_breaker_execution_queue.json",
+    "dft_hardware_tie_breaker_execution_queue_validation.json",
+}
+DFT_ARCHITECTURE_WINNER_RESOLUTION_ARTIFACT_NAMES = {
+    "dft_architecture_winner_resolution.json",
+    "dft_architecture_winner_resolution_validation.json",
+    "dft_architecture_winner_resolution_status.json",
+}
 DFT_L4_GOAL_BINDING_ARTIFACT_NAMES = {
     "dft_l4_goal_binding.json",
     "dft_l4_goal_binding_validation.json",
@@ -340,6 +361,9 @@ def build_evidence_index(
     paths.extend(DFT_HARDWARE_CLOSURE_PARSER_RUN_ARTIFACT_NAMES)
     paths.extend(DFT_HARDWARE_CLOSURE_GATE_ADJUDICATION_ARTIFACT_NAMES)
     paths.extend(DFT_HARDWARE_CLOSURE_RELEASE_GATE_ARTIFACT_NAMES)
+    paths.extend(DFT_HARDWARE_PPA_RANKING_ARTIFACT_NAMES)
+    paths.extend(DFT_CANDIDATE_SPECIFIC_PPA_PROVENANCE_ARTIFACT_NAMES)
+    paths.extend(DFT_ARCHITECTURE_WINNER_RESOLUTION_ARTIFACT_NAMES)
     paths.extend(DFT_L4_GOAL_BINDING_ARTIFACT_NAMES)
     paths.extend(DFT_AUDIT_SEMANTIC_CLOSURE_ARTIFACT_NAMES)
 
@@ -2710,6 +2734,322 @@ def _dft_hardware_closure_release_gate_section(
     }
 
 
+def _dft_hardware_ppa_ranking_section(
+    run_dir: Path,
+    evidence_index: Mapping[str, Mapping[str, Any]],
+) -> Dict[str, Any]:
+    """Summarize optional DFT hardware PPA ranking artifacts.
+
+    This section is scoped to candidate-stamped major-kernel hardware PPA.  It
+    deliberately does not upgrade full-workload Step4 trust or mark deliverable
+    completion.
+    """
+
+    artifact_refs: Dict[str, Dict[str, Any]] = {}
+    loaded: Dict[str, Dict[str, Any]] = {}
+    for name in sorted(DFT_HARDWARE_PPA_RANKING_ARTIFACT_NAMES):
+        rel_path, entry = _find_indexed_artifact(evidence_index, name)
+        artifact_refs[name] = {
+            "path": rel_path,
+            "exists": bool(entry.get("exists", False)),
+            "sha256": entry.get("sha256"),
+        }
+        if rel_path:
+            loaded[name] = _load_json(run_dir / rel_path)
+
+    ranking = loaded.get("dft_hardware_ppa_ranking.json", {})
+    validation = loaded.get("dft_hardware_ppa_ranking_validation.json", {})
+    status_artifact = loaded.get("dft_hardware_ppa_ranking_status.json", {})
+    pareto = loaded.get("dft_hardware_ppa_pareto_frontier.json", {})
+    present = bool(ranking)
+    validation_valid = validation.get("valid")
+    ranking_entries = (
+        ranking.get("fpga_ranking", [])
+        if isinstance(ranking.get("fpga_ranking", []), list)
+        else []
+    )
+    asic_entries = (
+        ranking.get("asic_ranking", [])
+        if isinstance(ranking.get("asic_ranking", []), list)
+        else []
+    )
+    pareto_entries = (
+        pareto.get("pareto_alternatives", [])
+        if isinstance(pareto.get("pareto_alternatives", []), list)
+        else []
+    )
+    trusted_hardware_scope = (
+        present
+        and validation_valid is True
+        and ranking.get("hardware_completion_eligible") is True
+        and bool(ranking_entries)
+    )
+    return {
+        "schema_version": "dse.final_report.dft_hardware_ppa_ranking.v1",
+        "present": present,
+        "status": (
+            "hardware_ppa_ranking_present"
+            if trusted_hardware_scope
+            else "invalid_hardware_ppa_ranking"
+            if present
+            else "not_present"
+        ),
+        "artifacts": artifact_refs,
+        "release_id": ranking.get("release_id"),
+        "candidate_count": ranking.get("candidate_count"),
+        "major_kernel_count": ranking.get("major_kernel_count"),
+        "ranking_eligible_candidate_count": ranking.get("ranking_eligible_candidate_count"),
+        "blocked_candidate_count": ranking.get("blocked_candidate_count"),
+        "hardware_completion_eligible": bool(ranking.get("hardware_completion_eligible", False)),
+        "deliverable_complete": False,
+        "winner_selection_status": ranking.get("winner_selection_status"),
+        "all_candidates_metric_tied": bool(ranking.get("all_candidates_metric_tied", False)),
+        "metric_signature_count": ranking.get("metric_signature_count"),
+        "fpga_top_candidate_ids": [
+            str(row.get("candidate_id"))
+            for row in ranking_entries
+            if isinstance(row, Mapping) and row.get("rank") == 1 and row.get("candidate_id")
+        ],
+        "asic_top_candidate_ids": [
+            str(row.get("candidate_id"))
+            for row in asic_entries
+            if isinstance(row, Mapping) and row.get("rank") == 1 and row.get("candidate_id")
+        ],
+        "pareto_candidate_count": pareto.get("pareto_candidate_count"),
+        "pareto_alternatives": pareto_entries,
+        "fpga_ranking": ranking_entries,
+        "asic_ranking": asic_entries,
+        "ranking_policy": ranking.get("ranking_policy", {}),
+        "status_artifact": status_artifact,
+        "validation": {
+            "present": bool(validation),
+            "valid": validation_valid,
+            "error_count": len(validation.get("errors", []) or []) if validation else None,
+        },
+        "trusted_final_claim": False,
+        "trusted_hardware_ppa_scope": bool(trusted_hardware_scope),
+        "completion_claim": "blocked",
+        "claim_boundary": (
+            ranking.get("claim_boundary")
+            or "DFT hardware PPA ranking is hardware-only evidence and cannot mark full deliverable completion."
+        ),
+    }
+
+
+def _dft_hardware_ppa_trusted_entries(section: Mapping[str, Any]) -> List[Dict[str, Any]]:
+    """Convert hardware PPA ranking rows into scoped Step5 ranking entries."""
+
+    if not section.get("trusted_hardware_ppa_scope"):
+        return []
+    entries: List[Dict[str, Any]] = []
+    for row in section.get("fpga_ranking", []) or []:
+        if not isinstance(row, Mapping):
+            continue
+        entries.append(
+            {
+                "design_point_id": str(row.get("candidate_id")),
+                "candidate_id": str(row.get("candidate_id")),
+                "design_candidate_id": row.get("design_candidate_id"),
+                "backend": "vivado_dc_candidate_hard_gate",
+                "status": "hardware_ppa_ranked",
+                "trusted_scope": (
+                    "candidate-stamped major-kernel hardware PPA only; not a "
+                    "generic Step4 full-workload ranking and not deliverable completion"
+                ),
+                "rank": row.get("rank"),
+                "winner_selection_status": section.get("winner_selection_status"),
+                "metrics": {
+                    "fpga_total_slice_luts": row.get("fpga_total_slice_luts"),
+                    "fpga_total_dsps": row.get("fpga_total_dsps"),
+                    "fpga_total_block_ram_tiles": row.get("fpga_total_block_ram_tiles"),
+                    "fpga_total_bonded_iob": row.get("fpga_total_bonded_iob"),
+                    "asic_total_cell_area": row.get("asic_total_cell_area"),
+                    "asic_min_slack_ns": row.get("asic_min_slack_ns"),
+                    "kernel_count": row.get("kernel_count"),
+                },
+                "validation": {
+                    "trusted": True,
+                    "validation_status": "trusted_hardware_ppa_scope_only",
+                    "not_full_dse_winner": True,
+                    "deliverable_complete": False,
+                },
+                "evidence_ids": [
+                    "dft_hardware_ppa_ranking.json",
+                    "dft_hardware_ppa_pareto_frontier.json",
+                    "dft_hardware_ppa_ranking_validation.json",
+                    "dft_hardware_closure_release_gate.json",
+                    "dft_hardware_closure_gate_adjudication.json",
+                    "dft_hardware_closure_parser_run.json",
+                ],
+            }
+        )
+    return entries
+
+
+def _dft_candidate_specific_ppa_provenance_section(
+    run_dir: Path,
+    evidence_index: Mapping[str, Mapping[str, Any]],
+) -> Dict[str, Any]:
+    """Summarize candidate-specific PPA provenance and fresh execution queue."""
+
+    artifact_refs: Dict[str, Dict[str, Any]] = {}
+    loaded: Dict[str, Dict[str, Any]] = {}
+    for name in sorted(DFT_CANDIDATE_SPECIFIC_PPA_PROVENANCE_ARTIFACT_NAMES):
+        rel_path, entry = _find_indexed_artifact(evidence_index, name)
+        artifact_refs[name] = {
+            "path": rel_path,
+            "exists": bool(entry.get("exists", False)),
+            "sha256": entry.get("sha256"),
+        }
+        if rel_path:
+            loaded[name] = _load_json(run_dir / rel_path)
+
+    audit = loaded.get("dft_candidate_specific_ppa_provenance_audit.json", {})
+    validation = loaded.get("dft_candidate_specific_ppa_provenance_audit_validation.json", {})
+    status_artifact = loaded.get("dft_candidate_specific_ppa_provenance_audit_status.json", {})
+    queue = loaded.get("dft_hardware_tie_breaker_execution_queue.json", {})
+    queue_validation = loaded.get("dft_hardware_tie_breaker_execution_queue_validation.json", {})
+    execution = loaded.get("dft_candidate_specific_ppa_execution.json", {})
+    execution_validation = loaded.get("dft_candidate_specific_ppa_execution_validation.json", {})
+    execution_status = loaded.get("dft_candidate_specific_ppa_execution_status.json", {})
+    present = bool(audit)
+    validation_valid = validation.get("valid")
+    winner_provenance_eligible = bool(audit.get("winner_provenance_eligible", False))
+    return {
+        "schema_version": "dse.final_report.dft_candidate_specific_ppa_provenance.v1",
+        "present": present,
+        "status": audit.get("status") if present else "not_present",
+        "artifacts": artifact_refs,
+        "candidate_count": audit.get("candidate_count"),
+        "major_kernel_count": audit.get("major_kernel_count"),
+        "unit_count": audit.get("unit_count"),
+        "stage_count": audit.get("stage_count"),
+        "trusted_unit_count": audit.get("trusted_unit_count"),
+        "blocked_unit_count": audit.get("blocked_unit_count"),
+        "trusted_stage_count": audit.get("trusted_stage_count"),
+        "blocked_stage_count": audit.get("blocked_stage_count"),
+        "blocker_count": audit.get("blocker_count"),
+        "blocker_id_counts": audit.get("blocker_id_counts", {}),
+        "winner_provenance_eligible": winner_provenance_eligible,
+        "tied_candidate_ids_requiring_fresh_ppa": audit.get("tied_candidate_ids_requiring_fresh_ppa", []),
+        "tie_breaker_queue_present": bool(queue),
+        "tie_breaker_work_item_count": queue.get("work_item_count"),
+        "tie_breaker_queue_status": queue.get("status"),
+        "fresh_execution_present": bool(execution),
+        "fresh_execution_status": execution.get("status"),
+        "fresh_execution_selected_unit_count": execution.get("selected_unit_count"),
+        "fresh_execution_executed_unit_count": execution.get("executed_unit_count"),
+        "fresh_execution_blocked_unit_count": execution.get("blocked_unit_count"),
+        "fresh_execution_materialized_raw_file_count": execution.get("materialized_raw_file_count"),
+        "validation": {
+            "present": bool(validation),
+            "valid": validation_valid,
+            "error_count": len(validation.get("errors", []) or []) if validation else None,
+        },
+        "queue_validation": {
+            "present": bool(queue_validation),
+            "valid": queue_validation.get("valid"),
+            "error_count": len(queue_validation.get("errors", []) or []) if queue_validation else None,
+        },
+        "fresh_execution_validation": {
+            "present": bool(execution_validation),
+            "valid": execution_validation.get("valid"),
+            "error_count": len(execution_validation.get("errors", []) or []) if execution_validation else None,
+        },
+        "fresh_execution_status_artifact": execution_status,
+        "status_artifact": status_artifact,
+        "hardware_completion_eligible": False,
+        "deliverable_complete": False,
+        "trusted_final_claim": False,
+        "completion_claim": (
+            "winner_provenance_ready_pending_unique_ppa_and_release_claim"
+            if winner_provenance_eligible
+            else "blocked"
+            if present
+            else "not_applicable"
+        ),
+        "claim_boundary": (
+            audit.get("claim_boundary")
+            or "Candidate-specific PPA provenance blocks winner proof when raw files lack fresh command/tool provenance."
+        ),
+    }
+
+
+def _dft_architecture_winner_resolution_section(
+    run_dir: Path,
+    evidence_index: Mapping[str, Mapping[str, Any]],
+) -> Dict[str, Any]:
+    """Summarize fail-closed FPGA/ASIC winner-resolution artifacts."""
+
+    artifact_refs: Dict[str, Dict[str, Any]] = {}
+    loaded: Dict[str, Dict[str, Any]] = {}
+    for name in sorted(DFT_ARCHITECTURE_WINNER_RESOLUTION_ARTIFACT_NAMES):
+        rel_path, entry = _find_indexed_artifact(evidence_index, name)
+        artifact_refs[name] = {
+            "path": rel_path,
+            "exists": bool(entry.get("exists", False)),
+            "sha256": entry.get("sha256"),
+        }
+        if rel_path:
+            loaded[name] = _load_json(run_dir / rel_path)
+
+    resolution = loaded.get("dft_architecture_winner_resolution.json", {})
+    validation = loaded.get("dft_architecture_winner_resolution_validation.json", {})
+    status_artifact = loaded.get("dft_architecture_winner_resolution_status.json", {})
+    present = bool(resolution)
+    deployments = resolution.get("deployments", {}) if isinstance(resolution.get("deployments", {}), Mapping) else {}
+    fpga = deployments.get("fpga", {}) if isinstance(deployments.get("fpga", {}), Mapping) else {}
+    asic = deployments.get("asic", {}) if isinstance(deployments.get("asic", {}), Mapping) else {}
+    validation_valid = validation.get("valid")
+    return {
+        "schema_version": "dse.final_report.dft_architecture_winner_resolution.v1",
+        "present": present,
+        "status": (
+            resolution.get("status")
+            if present
+            else "not_present"
+        ),
+        "artifacts": artifact_refs,
+        "release_id": resolution.get("release_id"),
+        "candidate_count": resolution.get("candidate_count"),
+        "ranking_eligible_candidate_count": resolution.get("ranking_eligible_candidate_count"),
+        "hardware_completion_eligible": bool(resolution.get("hardware_completion_eligible", False)),
+        "ppa_winner_selection_status": resolution.get("ppa_winner_selection_status"),
+        "all_candidates_metric_tied": bool(resolution.get("all_candidates_metric_tied", False)),
+        "metric_signature_count": resolution.get("metric_signature_count"),
+        "hardware_winner_resolution_eligible": bool(resolution.get("hardware_winner_resolution_eligible", False)),
+        "trusted_best_architecture_claim_eligible": False,
+        "deliverable_complete": False,
+        "fpga_status": fpga.get("status"),
+        "asic_status": asic.get("status"),
+        "fpga_top_rank_candidate_count": fpga.get("top_rank_candidate_count"),
+        "asic_top_rank_candidate_count": asic.get("top_rank_candidate_count"),
+        "fpga_top_candidate_ids": fpga.get("top_rank_candidate_ids", []),
+        "asic_top_candidate_ids": asic.get("top_rank_candidate_ids", []),
+        "fpga_best_architecture": resolution.get("fpga_best_architecture"),
+        "asic_best_architecture": resolution.get("asic_best_architecture"),
+        "full_scf_tie_breaker": resolution.get("full_scf_tie_breaker", {}),
+        "blocker_count": resolution.get("blocker_count"),
+        "blockers": resolution.get("blockers", []),
+        "required_next_evidence": {
+            "fpga": fpga.get("required_next_evidence", []),
+            "asic": asic.get("required_next_evidence", []),
+        },
+        "status_artifact": status_artifact,
+        "validation": {
+            "present": bool(validation),
+            "valid": validation_valid,
+            "error_count": len(validation.get("errors", []) or []) if validation else None,
+        },
+        "trusted_final_claim": False,
+        "completion_claim": resolution.get("completion_claim", "blocked" if present else "not_applicable"),
+        "claim_boundary": (
+            resolution.get("claim_boundary")
+            or "Winner resolution is fail-closed and cannot mark final deliverable completion."
+        ),
+    }
+
+
 def _dft_l4_goal_binding_section(
     run_dir: Path,
     evidence_index: Mapping[str, Mapping[str, Any]],
@@ -3030,6 +3370,18 @@ def generate_final_report(
         run_dir,
         evidence_index,
     )
+    dft_hardware_ppa_ranking = _dft_hardware_ppa_ranking_section(
+        run_dir,
+        evidence_index,
+    )
+    dft_candidate_specific_ppa_provenance = _dft_candidate_specific_ppa_provenance_section(
+        run_dir,
+        evidence_index,
+    )
+    dft_architecture_winner_resolution = _dft_architecture_winner_resolution_section(
+        run_dir,
+        evidence_index,
+    )
     dft_l4_goal_binding = _dft_l4_goal_binding_section(
         run_dir,
         evidence_index,
@@ -3111,6 +3463,10 @@ def generate_final_report(
         ]
     else:
         trusted_ranking = [candidate] if trusted_validation.get("trusted") else []
+    hardware_ppa_ranking_entries = _dft_hardware_ppa_trusted_entries(dft_hardware_ppa_ranking)
+    hardware_ppa_only_trusted_ranking = bool(not trusted_ranking and hardware_ppa_ranking_entries)
+    if hardware_ppa_only_trusted_ranking:
+        trusted_ranking = hardware_ppa_ranking_entries
     predicted_only_candidates = [
         {"claim": dict(claim), "validation": validation_by_id.get(str(claim.get("claim_id", claim.get("claim_type", "unknown"))), {})}
         for claim in claim_list
@@ -3143,6 +3499,32 @@ def generate_final_report(
                 proof_passed=bool(verdict.get("gem5_l4_proof_passed", False)),
             ),
         }
+    elif hardware_ppa_only_trusted_ranking:
+        winner_resolution_status = dft_architecture_winner_resolution.get("status")
+        selected_recommendation = {
+            "status": "not_selected",
+            "selection_status": "hardware_ppa_ranking_available_no_full_dse_winner",
+            "trusted_winner": False,
+            "design_point_id": trusted_ranking[0]["design_point_id"],
+            "rationale": (
+                "Candidate-stamped major-kernel FPGA/DC PPA ranking is available, "
+                "but all tied or scoped hardware-only entries remain outside the "
+                "full-SCF deliverable winner claim until a separate system-level "
+                "tie-breaker and release claim gate close."
+            ),
+            "winner_resolution_status": winner_resolution_status,
+            "evidence_ids": trusted_ranking[0]["evidence_ids"]
+            + (
+                ["dft_candidate_specific_ppa_provenance_audit.json"]
+                if dft_candidate_specific_ppa_provenance.get("present")
+                else []
+            )
+            + (
+                ["dft_architecture_winner_resolution.json"]
+                if dft_architecture_winner_resolution.get("present")
+                else []
+            ),
+        }
     elif trusted_ranking:
         selected_recommendation = {
             "status": "not_selected",
@@ -3171,6 +3553,20 @@ def generate_final_report(
         limitations.append("Software-visible co-design claim is blocked until codesign_verdict.json and gem5_l4_proof.json pass.")
     if not trusted_ranking:
         limitations.append("No trusted final ranking is available from the cited evidence.")
+    elif hardware_ppa_only_trusted_ranking:
+        limitations.append(
+            "No generic full-workload trusted final ranking is available; "
+            "trusted_ranking entries are scoped to candidate-stamped major-kernel "
+            "hardware PPA and cannot select a full-SCF DSE winner."
+        )
+    if (
+        dft_architecture_winner_resolution.get("present")
+        and dft_architecture_winner_resolution.get("hardware_winner_resolution_eligible") is not True
+    ):
+        limitations.append(
+            "FPGA/ASIC architecture winner resolution is blocked; tied or insufficient "
+            "candidate-stamped hardware PPA cannot be converted into a best-architecture claim."
+        )
     if convergence_status:
         limitations.extend(str(item) for item in convergence_status.get("limitations", []) or [])
         if convergence_status.get("stop_reason") == "budget_exhausted" and not convergence_status.get("converged"):
@@ -3278,6 +3674,18 @@ def generate_final_report(
         limitations.append(
             "DFT hardware closure release gates roll up candidate/kernel gate status only; "
             "they cannot directly mark deliverable completion or trusted Pareto winners."
+        )
+    if dft_hardware_ppa_ranking.get("present"):
+        limitations.append(
+            "DFT hardware PPA ranking compares candidate-stamped major-kernel PPA only; "
+            "it cannot mark full-SCF deliverable completion or choose a single end-to-end winner "
+            "while system-level tie-breakers/release gates remain open."
+        )
+    if dft_candidate_specific_ppa_provenance.get("present"):
+        limitations.append(
+            "Candidate-specific PPA provenance audit must be trusted before parsed hard-gate "
+            "files can support FPGA/ASIC best-architecture proof; copied/wrapped source-flow "
+            "or metadata-only evidence remains blocked and queued for fresh tool execution."
         )
     if dft_l4_goal_binding.get("present"):
         limitations.append(
@@ -3388,6 +3796,9 @@ def generate_final_report(
         "dft_hardware_closure_parser_run": dft_hardware_closure_parser_run,
         "dft_hardware_closure_gate_adjudication": dft_hardware_closure_gate_adjudication,
         "dft_hardware_closure_release_gate": dft_hardware_closure_release_gate,
+        "dft_hardware_ppa_ranking": dft_hardware_ppa_ranking,
+        "dft_candidate_specific_ppa_provenance": dft_candidate_specific_ppa_provenance,
+        "dft_architecture_winner_resolution": dft_architecture_winner_resolution,
         "dft_l4_goal_binding": dft_l4_goal_binding,
         "dft_audit_semantic_closure": dft_audit_semantic_closure,
         "dft_full_scf_evaluated_hybrid": dft_full_scf_hybrid,
@@ -3425,7 +3836,11 @@ def generate_final_report(
         "trusted_ranking": trusted_ranking,
         "predicted_only_candidates": predicted_only_candidates,
         "blocked_or_untrusted": blocked_or_untrusted,
-        "pareto_alternatives": [],
+        "pareto_alternatives": (
+            dft_hardware_ppa_ranking.get("pareto_alternatives", [])
+            if hardware_ppa_only_trusted_ranking
+            else []
+        ),
         "selected_recommendation": selected_recommendation,
         "claims": claim_list,
         "claim_validation": claim_validation,
@@ -3960,6 +4375,82 @@ def render_markdown_report(report: Mapping[str, Any]) -> str:
     if not dft_release_gate.get("present"):
         lines.append("- No DFT hardware closure release-gate artifact was indexed for this Step5 run.")
 
+    dft_ppa = report.get("dft_hardware_ppa_ranking", {})
+    dft_ppa = dft_ppa if isinstance(dft_ppa, Mapping) else {}
+    ppa_validation = (
+        dft_ppa.get("validation", {})
+        if isinstance(dft_ppa.get("validation", {}), Mapping)
+        else {}
+    )
+    lines.extend([
+        "",
+        "## DFT Hardware PPA Ranking",
+        f"- Present: `{dft_ppa.get('present')}`",
+        f"- Status: `{dft_ppa.get('status')}`",
+        f"- Release/candidates/kernels: `{dft_ppa.get('release_id')}` / `{dft_ppa.get('candidate_count')}` / `{dft_ppa.get('major_kernel_count')}`",
+        f"- Ranking-eligible candidates: `{dft_ppa.get('ranking_eligible_candidate_count')}`",
+        f"- Pareto candidates: `{dft_ppa.get('pareto_candidate_count')}`",
+        f"- Winner selection status: `{dft_ppa.get('winner_selection_status')}`",
+        f"- All candidates metric-tied: `{dft_ppa.get('all_candidates_metric_tied')}`",
+        f"- FPGA top candidate ids: `{', '.join(dft_ppa.get('fpga_top_candidate_ids', []) or []) or 'none'}`",
+        f"- ASIC top candidate ids: `{', '.join(dft_ppa.get('asic_top_candidate_ids', []) or []) or 'none'}`",
+        f"- Validation valid: `{ppa_validation.get('valid')}`",
+        f"- Hardware completion eligible: `{dft_ppa.get('hardware_completion_eligible')}`",
+        f"- Deliverable complete: `{dft_ppa.get('deliverable_complete')}`",
+        "- Boundary: hardware PPA ranking is candidate-stamped major-kernel evidence only; it is not a full-SCF deliverable-completion or single-winner claim.",
+    ])
+    if not dft_ppa.get("present"):
+        lines.append("- No DFT hardware PPA ranking artifact was indexed for this Step5 run.")
+
+    dft_ppa_prov = report.get("dft_candidate_specific_ppa_provenance", {})
+    dft_ppa_prov = dft_ppa_prov if isinstance(dft_ppa_prov, Mapping) else {}
+    ppa_prov_validation = (
+        dft_ppa_prov.get("validation", {})
+        if isinstance(dft_ppa_prov.get("validation", {}), Mapping)
+        else {}
+    )
+    lines.extend([
+        "",
+        "## DFT Candidate-Specific PPA Provenance",
+        f"- Present: `{dft_ppa_prov.get('present')}`",
+        f"- Status: `{dft_ppa_prov.get('status')}`",
+        f"- Winner provenance eligible: `{dft_ppa_prov.get('winner_provenance_eligible')}`",
+        f"- Units trusted/blocked: `{dft_ppa_prov.get('trusted_unit_count')}` / `{dft_ppa_prov.get('blocked_unit_count')}`",
+        f"- Stages trusted/blocked: `{dft_ppa_prov.get('trusted_stage_count')}` / `{dft_ppa_prov.get('blocked_stage_count')}`",
+        f"- Blocker count: `{dft_ppa_prov.get('blocker_count')}`",
+        f"- Tie-breaker queue items: `{dft_ppa_prov.get('tie_breaker_work_item_count')}`",
+        f"- Fresh execution present/status: `{dft_ppa_prov.get('fresh_execution_present')}` / `{dft_ppa_prov.get('fresh_execution_status')}`",
+        f"- Fresh execution units selected/executed/blocked: `{dft_ppa_prov.get('fresh_execution_selected_unit_count')}` / `{dft_ppa_prov.get('fresh_execution_executed_unit_count')}` / `{dft_ppa_prov.get('fresh_execution_blocked_unit_count')}`",
+        f"- Fresh execution raw files materialized: `{dft_ppa_prov.get('fresh_execution_materialized_raw_file_count')}`",
+        f"- Validation valid: `{ppa_prov_validation.get('valid')}`",
+        "- Boundary: fresh command/tool provenance is required before parsed PPA files can support best FPGA/ASIC architecture proof; this section does not run tools or mark completion.",
+    ])
+    if not dft_ppa_prov.get("present"):
+        lines.append("- No DFT candidate-specific PPA provenance audit was indexed for this Step5 run.")
+
+    dft_winner = report.get("dft_architecture_winner_resolution", {})
+    dft_winner = dft_winner if isinstance(dft_winner, Mapping) else {}
+    winner_validation = (
+        dft_winner.get("validation", {})
+        if isinstance(dft_winner.get("validation", {}), Mapping)
+        else {}
+    )
+    lines.extend([
+        "",
+        "## DFT Architecture Winner Resolution",
+        f"- Present: `{dft_winner.get('present')}`",
+        f"- Status: `{dft_winner.get('status')}`",
+        f"- Hardware winner resolution eligible: `{dft_winner.get('hardware_winner_resolution_eligible')}`",
+        f"- FPGA status/top-count: `{dft_winner.get('fpga_status')}` / `{dft_winner.get('fpga_top_rank_candidate_count')}`",
+        f"- ASIC status/top-count: `{dft_winner.get('asic_status')}` / `{dft_winner.get('asic_top_rank_candidate_count')}`",
+        f"- All candidates metric-tied: `{dft_winner.get('all_candidates_metric_tied')}`",
+        f"- Validation valid: `{winner_validation.get('valid')}`",
+        f"- Deliverable complete: `{dft_winner.get('deliverable_complete')}`",
+        "- Boundary: candidate-id tie order, Step2 design score, shared route-probe evidence, or a single-candidate full-SCF bundle cannot become a best FPGA/ASIC architecture proof.",
+    ])
+    if not dft_winner.get("present"):
+        lines.append("- No DFT architecture winner-resolution artifact was indexed for this Step5 run.")
+
     dft_semantic = report.get("dft_audit_semantic_closure", {})
     dft_semantic = dft_semantic if isinstance(dft_semantic, Mapping) else {}
     lines.extend([
@@ -4170,6 +4661,9 @@ def write_step5_report_artifacts(
         "dft_hardware_closure_parser_run_summary": report.get("dft_hardware_closure_parser_run", {}),
         "dft_hardware_closure_gate_adjudication_summary": report.get("dft_hardware_closure_gate_adjudication", {}),
         "dft_hardware_closure_release_gate_summary": report.get("dft_hardware_closure_release_gate", {}),
+        "dft_hardware_ppa_ranking_summary": report.get("dft_hardware_ppa_ranking", {}),
+        "dft_candidate_specific_ppa_provenance_summary": report.get("dft_candidate_specific_ppa_provenance", {}),
+        "dft_architecture_winner_resolution_summary": report.get("dft_architecture_winner_resolution", {}),
         "dft_l4_goal_binding_summary": report.get("dft_l4_goal_binding", {}),
         "dft_audit_semantic_closure_summary": report.get("dft_audit_semantic_closure", {}),
         "dft_full_scf_evaluated_hybrid_summary": report.get("dft_full_scf_evaluated_hybrid", {}),
@@ -4180,12 +4674,36 @@ def write_step5_report_artifacts(
         "schema_version": "dse.step5.trusted_ranking.v1",
         "generated_at": _now_iso(),
         "source_step4_artifacts": ["verdict.json", "claim_validation.json"],
+        "ranking_scope": (
+            "hardware_ppa_only"
+            if (report.get("selected_recommendation", {}) or {}).get("selection_status")
+            == "hardware_ppa_ranking_available_no_full_dse_winner"
+            else "generic_step5"
+        ),
+        "dft_hardware_ppa_ranking": "dft_hardware_ppa_ranking.json"
+        if (run_dir / "dft_hardware_ppa_ranking.json").exists()
+        else None,
+        "dft_architecture_winner_resolution": "dft_architecture_winner_resolution.json"
+        if (run_dir / "dft_architecture_winner_resolution.json").exists()
+        else None,
+        "dft_candidate_specific_ppa_provenance_audit": "dft_candidate_specific_ppa_provenance_audit.json"
+        if (run_dir / "dft_candidate_specific_ppa_provenance_audit.json").exists()
+        else None,
         "trusted_ranking": report.get("trusted_ranking", []),
     })
     _write_json(run_dir / "pareto_frontier.json", {
         "schema_version": "dse.step5.pareto_frontier.v1",
         "generated_at": _now_iso(),
         "source_step4_artifacts": ["verdict.json", "claim_validation.json"],
+        "frontier_scope": (
+            "hardware_ppa_only"
+            if (report.get("selected_recommendation", {}) or {}).get("selection_status")
+            == "hardware_ppa_ranking_available_no_full_dse_winner"
+            else "generic_step5"
+        ),
+        "dft_hardware_ppa_pareto_frontier": "dft_hardware_ppa_pareto_frontier.json"
+        if (run_dir / "dft_hardware_ppa_pareto_frontier.json").exists()
+        else None,
         "pareto_alternatives": report.get("pareto_alternatives", []),
     })
     return {

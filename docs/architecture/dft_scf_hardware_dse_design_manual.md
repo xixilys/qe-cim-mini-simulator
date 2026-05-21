@@ -1094,6 +1094,100 @@ deliverable completion requires the separate full-system release/goal claim
 gate, including full-SCF accounting, trusted reporting, and the active date
 horizon.
 
+The next Step5-visible hardware-specific comparison layer is
+`dft_hardware_ppa_ranking.json` plus
+`dft_hardware_ppa_pareto_frontier.json`.  It is generated after the release gate
+and before final reporting.  This layer is intentionally narrower than generic
+Step4 trusted ranking: it ranks only candidate-stamped major-kernel PPA rows
+whose golden correctness, HLS/RTL sim, HLS/RTL synth, Vivado route, and DC
+timing/area gates have already passed.  It also re-checks the claim-specific
+tool boundary: a FPGA row must carry Vivado route completion, while an ASIC row
+must carry DC timing/area against a real target library.  The Step5 report may
+surface these entries in `trusted_ranking.json` with
+`ranking_scope=hardware_ppa_only`, but this does **not** choose a full-SCF DSE
+winner, does not set `trusted_winner=true`, and does not set
+`deliverable_complete=true`.
+
+Current all36 current-route evidence
+`runs/dse/wave36_step5_current_route_all36_20260521T011801Z` now has
+`dft_hardware_ppa_ranking_status.json` with
+`ranking_eligible_candidate_count=36`, `pareto_candidate_count=36`,
+`hardware_completion_eligible=true`, and
+`winner_selection_status=tied_by_identical_kernel_ppa_no_single_winner`.
+This is the honest result of the present candidate-stamped kernel evidence:
+all release candidates close the hard gates, but their parsed kernel PPA
+signatures are tied, so a separate system-level/full-SCF tie-breaker is still
+required before declaring a single best FPGA or ASIC architecture.
+
+Before a parsed PPA row can support that tie-breaker, Step5 must also run the
+candidate-specific provenance audit:
+
+```bash
+python3 dse_v2/scripts/dse/build_dft_candidate_specific_ppa_provenance_audit.py \
+  --run-dir runs/dse/<step5_run>
+```
+
+This writes `dft_candidate_specific_ppa_provenance_audit.json`,
+`dft_candidate_specific_ppa_provenance_audit_validation.json`,
+`dft_candidate_specific_ppa_provenance_audit_status.json`,
+`dft_hardware_tie_breaker_execution_queue.json`, and its validation file.  The
+audit fails closed when a candidate/kernel PPA row is only copied/wrapped from a
+source-flow directory, when `tool_versions_recorded=false`, when
+`commands_executed=false`, or when the upstream source-flow manifest says
+`smoke`, `not full-SCF`, or otherwise non-closure.  Those rows remain useful
+progress evidence, but they are not winner proof; the queue is the machine
+readable list of fresh golden/sim/synth/Vivado/DC commands required for each
+tied candidate and major kernel.
+
+Execute queue slices with the fresh candidate-specific lane, not the legacy
+source-flow materializer:
+
+```bash
+python3 dse_v2/scripts/dse/run_dft_candidate_specific_ppa_execution.py \
+  --run-dir runs/dse/<step5_run> \
+  --candidate-id <candidate_id> \
+  --kernel-id <kernel_id> \
+  --max-units 1 \
+  --ssh-target ic-eda
+```
+
+The runner probes IC/EDA tool versions, invokes the kernel RTL/HLS flow into a
+per-unit `fresh_tool_work/` directory, deletes stale raw/parsed files for the
+selected unit before writing new evidence, and records
+`dft_candidate_specific_ppa_execution.json`, validation, and status artifacts.
+Its `candidate_input_manifest.json` must use
+`input_source=fresh_candidate_specific_tool_execution` and must not contain
+`source_flow_dir`.  A successful run only removes provenance blockers for the
+selected candidate/kernel after parser/adjudication/audit are rerun; it still
+does not set `deliverable_complete=true` or choose a FPGA/ASIC winner.
+
+Long runs may create many fresh execution shard directories.  Before report or
+goal-audit regeneration, fold them into the Step5 root:
+
+```bash
+python3 dse_v2/scripts/dse/build_dft_candidate_specific_ppa_execution_aggregate.py \
+  --run-dir runs/dse/<step5_run>
+```
+
+The aggregate is an execution-progress index: it de-duplicates candidate/kernel
+reruns, records how many fresh units and raw files were produced, and remains
+non-claim-upgrading until downstream parser, adjudication, release, provenance,
+and winner-resolution gates pass.
+
+The explicit tie-breaker gate is
+`dft_architecture_winner_resolution.json`.  It consumes
+`dft_hardware_ppa_ranking.json` plus the candidate-specific provenance audit and
+emits separate FPGA and ASIC winner resolution records.  A deployment winner is
+accepted only when the corresponding ranking has exactly one rank-1 candidate,
+the PPA metrics are not tied, and the PPA provenance audit is
+`winner_provenance_eligible=true`.
+Candidate-ID deterministic ordering, Step2 `design_score`, shared
+route-probe/source-flow evidence, or a single-candidate full-SCF bundle are
+forbidden tie-breakers.  When the current all36 run remains tied, the artifact
+must stay `blocked_no_unique_hardware_ppa_winners` and list the concrete next
+evidence: candidate-specific golden/sim/synth/Vivado/DC rows plus comparable
+full-SCF evaluated-hybrid accounting for every tied candidate.
+
 The trial-ledger helper writes:
 
 - `dft_trial_state_ledger.json`;
@@ -1281,6 +1375,15 @@ python3 dse_v2/scripts/dse/build_dft_hardware_evidence_matrix.py \
   --candidate-id <candidate_id> \
   --out runs/dse/<matrix_run>
 
+# For a full release-gate-backed all-candidate matrix, derive the
+# candidate × major-kernel matrix directly from the hard-gate rollup:
+python3 dse_v2/scripts/dse/build_dft_hardware_evidence_matrix.py \
+  --release-gate runs/dse/<step5_run>/dft_hardware_closure_release_gate.json \
+  --out runs/dse/<matrix_run>
+
+python3 dse_v2/scripts/dse/build_dft_architecture_winner_resolution.py \
+  --run-dir runs/dse/<step5_run>
+
 python3 dse_v2/scripts/dse/build_dft_candidate_evidence_ledger.py \
   --release-artifact-dir <release_domain_dir> \
   --ic-eda-tool-availability runs/dse/<ic_eda_probe_run>/ic_eda_tool_availability.json \
@@ -1294,6 +1397,15 @@ availability-only evidence.  The next required closure work is per-kernel
 golden correctness, HLS C-sim or RTL sim, HLS C-synth or RTL synth, Vivado
 synthesis/implementation for FPGA claims, and DC synthesis/timing/area for ASIC
 claims.
+
+The release-gate-backed matrix mode is stricter than the older per-candidate
+disposition mode.  It marks `trusted=true` only when the release gate schema is
+`dse.dft.hardware_closure_release_gate.v1`, `hardware_completion_eligible=true`,
+the expected kernel set is exactly the eight major SCF kernels, every candidate
+× kernel unit has all five hard-gate stages, and no unit/candidate/stage is
+blocked or failed.  It is still a Step5 evidence rollup, not a final
+deliverable-completion decision; `deliverable_complete` remains false until the
+separate goal/release claim gate and full-SCF winner policy pass.
 
 Wave24 refreshes that bridge with a fresh `probe_dft_ic_eda_tools.py` artifact
 and makes the claim boundary explicit in Step5: `ic_eda_tool_availability.json`

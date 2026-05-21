@@ -17,6 +17,7 @@ from dse_v2.codesign.dft_hardware_evidence import (
     MAJOR_SCF_KERNEL_IDS,
     build_ic_eda_tool_availability_report,
     build_major_kernel_evidence_matrix,
+    build_major_kernel_evidence_matrix_from_release_gate,
 )
 from dse_v2.reference_workloads.dft_codesign_domain import write_dft_seven_axis_artifacts
 from dse_v2.reference_workloads.dft_evidence_ledger import (
@@ -138,6 +139,7 @@ def test_dft_candidate_evidence_ledger_has_closed_hash_valid_row_for_every_legal
     matrix_coverage = {
         row["evidence_class"]: row for row in requirement_matrix["artifact_class_coverage"]
     }
+
     assert set(matrix_coverage) == set(DFT_EVIDENCE_ARTIFACT_CLASSES)
     assert matrix_coverage["requirement_evidence_matrix"]["coverage_status"] == "present_self_describing"
     assert matrix_coverage["requirement_evidence_matrix"]["artifact"]["hash_recorded_in"] == (
@@ -377,6 +379,70 @@ def test_dft_candidate_evidence_ledger_has_closed_hash_valid_row_for_every_legal
             assert ref["path"]
             assert ref["hash"]
             assert (out_dir / ref["path"]).exists()
+
+
+def test_release_gate_backed_major_kernel_matrix_trusts_only_complete_hard_gates():
+    required_stage_ids = [
+        "golden_correctness",
+        "hls_or_rtl_sim",
+        "hls_or_rtl_synth",
+        "vivado_fpga_synth_or_impl",
+        "dc_asic_synth_timing_area",
+    ]
+    candidate_ids = ["cand-a", "cand-b"]
+    unit_rows = [
+        {
+            "candidate_id": candidate_id,
+            "kernel_id": kernel_id,
+            "unit_gate_passed": True,
+            "observed_stage_ids": list(required_stage_ids),
+            "status": "unit_gate_passed",
+        }
+        for candidate_id in candidate_ids
+        for kernel_id in MAJOR_SCF_KERNEL_IDS
+    ]
+    release_gate = {
+        "schema_version": "dse.dft.hardware_closure_release_gate.v1",
+        "release_id": "release-test",
+        "expected_kernel_ids": list(MAJOR_SCF_KERNEL_IDS),
+        "candidate_count": len(candidate_ids),
+        "unit_count": len(unit_rows),
+        "stage_count": len(unit_rows) * len(required_stage_ids),
+        "stage_gate_passed_count": len(unit_rows) * len(required_stage_ids),
+        "unit_gate_passed_count": len(unit_rows),
+        "candidate_gate_passed_count": len(candidate_ids),
+        "blocked_stage_count": 0,
+        "failed_stage_count": 0,
+        "blocked_unit_count": 0,
+        "failed_unit_count": 0,
+        "blocked_candidate_count": 0,
+        "failed_candidate_count": 0,
+        "hardware_completion_eligible": True,
+        "deliverable_complete": False,
+        "candidate_rows": [{"candidate_id": candidate_id} for candidate_id in candidate_ids],
+        "unit_rows": unit_rows,
+    }
+
+    matrix = build_major_kernel_evidence_matrix_from_release_gate(
+        release_gate,
+        source_ref={"path": "dft_hardware_closure_release_gate.json", "exists": True},
+    )
+
+    assert matrix["status"] == "passed"
+    assert matrix["trusted"] is True
+    assert matrix["hardware_completion_eligible"] is True
+    assert matrix["deliverable_complete"] is False
+    assert matrix["candidate_count"] == 2
+    assert matrix["unit_count"] == 16
+    assert {row["kernel_id"] for row in matrix["kernel_rows"]} == set(MAJOR_SCF_KERNEL_IDS)
+    assert all(row["trusted"] is True for row in matrix["kernel_rows"])
+
+    broken = dict(release_gate)
+    broken["unit_rows"] = [dict(row) for row in unit_rows]
+    broken["unit_rows"][0]["observed_stage_ids"] = required_stage_ids[:-1]
+    blocked = build_major_kernel_evidence_matrix_from_release_gate(broken)
+    assert blocked["status"] == "blocked"
+    assert "release_gate_unit_missing_required_stages" in blocked["blocker_ids"]
 
 
 def test_dft_candidate_evidence_ledger_attaches_ic_eda_and_major_kernel_matrix_without_false_completion(tmp_path):

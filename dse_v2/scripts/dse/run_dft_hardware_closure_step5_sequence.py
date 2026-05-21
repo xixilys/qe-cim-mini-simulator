@@ -56,6 +56,15 @@ from dse_v2.reference_workloads.dft_hardware_closure_raw_transcript_registration
 from dse_v2.reference_workloads.dft_hardware_closure_release_gate import (  # noqa: E402
     write_dft_hardware_closure_release_gate,
 )
+from dse_v2.reference_workloads.dft_hardware_ppa_ranking import (  # noqa: E402
+    write_dft_hardware_ppa_ranking,
+)
+from dse_v2.reference_workloads.dft_candidate_specific_ppa_provenance import (  # noqa: E402
+    write_dft_candidate_specific_ppa_provenance_audit,
+)
+from dse_v2.reference_workloads.dft_architecture_winner_resolution import (  # noqa: E402
+    write_dft_architecture_winner_resolution,
+)
 from dse_v2.reference_workloads.dft_hardware_closure_unit_provenance import (  # noqa: E402
     write_dft_hardware_closure_unit_provenance,
 )
@@ -672,6 +681,7 @@ def run_sequence(
     closure_packet_index_path: Path,
     evidence_root: Path | None = None,
     parsed_root: Path | None = None,
+    candidate_universe_manifest: Path | None = None,
     candidate_ids: Sequence[str] = (),
     kernel_ids: Sequence[str] = (),
     source_flow_map_path: Path | None = None,
@@ -772,6 +782,16 @@ def run_sequence(
         out_dir,
         gate_adjudication_path=out_dir / statuses["gate_adjudication"]["gate_adjudication"],
     )
+    statuses["hardware_ppa_ranking"] = write_dft_hardware_ppa_ranking(
+        out_dir,
+        candidate_universe_manifest=candidate_universe_manifest,
+    )
+    statuses["candidate_specific_ppa_provenance"] = write_dft_candidate_specific_ppa_provenance_audit(
+        out_dir,
+    )
+    statuses["architecture_winner_resolution"] = write_dft_architecture_winner_resolution(
+        out_dir,
+    )
     _ensure_step4_prerequisites(out_dir)
     statuses["step5_report"] = write_step5_report_artifacts(out_dir, claims=[])
 
@@ -815,6 +835,7 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser.add_argument("--candidate-id", action="append", default=[], help="Candidate filter; repeatable or comma-separated")
     parser.add_argument("--kernel-id", action="append", default=[], help="Kernel filter; repeatable or comma-separated")
     parser.add_argument("--source-flow-map", type=Path, default=None, help="JSON map of candidate/kernel selectors to source flow directories")
+    parser.add_argument("--candidate-universe-manifest", type=Path, default=None, help="Optional candidate universe manifest for identity-axis context in PPA ranking")
     parser.add_argument("--source-flow-entry", action="append", default=[], help="Extra source flow entry: candidate:kernel=DIR, kernel=DIR, or DIR")
     parser.add_argument("--max-units", type=int, default=None, help="Optional per-stage unit limit for debugging/sharded runs")
     parser.add_argument("--quiet", action="store_true")
@@ -828,6 +849,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         closure_packet_index_path=args.closure_packet_index,
         evidence_root=args.evidence_root,
         parsed_root=args.parsed_root,
+        candidate_universe_manifest=args.candidate_universe_manifest,
         candidate_ids=_split_csv(args.candidate_id),
         kernel_ids=_split_csv(args.kernel_id),
         source_flow_map_path=args.source_flow_map,

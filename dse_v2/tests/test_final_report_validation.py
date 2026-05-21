@@ -6,7 +6,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from dse_v2.reporting.final_report import generate_final_report_artifacts, validate_report_claims
+from dse_v2.reporting.final_report import (
+    generate_final_report_artifacts,
+    validate_report_claims,
+    write_step5_report_artifacts,
+)
 
 
 def _write_json(path: Path, payload) -> None:
@@ -359,3 +363,197 @@ def test_selected_recommendation_rejects_nonlocal_evidence_path(tmp_path):
 
     assert validation["passed"] is False
     assert any("run-local relative path" in error for error in validation["errors"])
+
+
+def test_step5_surfaces_hardware_ppa_ranking_without_selecting_winner(tmp_path):
+    run_dir = tmp_path / "hardware_ppa_only"
+    _seed_minimal_trusted_run(run_dir)
+    verdict = json.loads((run_dir / "verdict.json").read_text(encoding="utf-8"))
+    verdict["trusted_for_final_ranking"] = False
+    _write_json(run_dir / "verdict.json", verdict)
+    _write_json(
+        run_dir / "claim_validation.json",
+        {
+            "schema_version": "dse.claim_validation.v1",
+            "passed": True,
+            "validations": [],
+            "errors": [],
+        },
+    )
+    _write_json(run_dir / "evidence_requirements.json", {"schema_version": "dse.evidence_requirements.v1"})
+    hardware_entry = {
+        "candidate_id": "cand-a",
+        "design_candidate_id": "design-cand-a",
+        "rank": 1,
+        "fpga_total_slice_luts": 100,
+        "fpga_total_dsps": 2,
+        "fpga_total_block_ram_tiles": 1,
+        "fpga_total_bonded_iob": 12,
+        "asic_total_cell_area": 1234.0,
+        "asic_min_slack_ns": 0.5,
+        "kernel_count": 8,
+    }
+    _write_json(
+        run_dir / "dft_hardware_ppa_ranking.json",
+        {
+            "schema_version": "dse.dft.hardware_ppa_ranking.v1",
+            "status": "trusted_hardware_ppa_ranking_tied",
+            "release_id": "release-ppa",
+            "candidate_count": 1,
+            "major_kernel_count": 8,
+            "ranking_eligible_candidate_count": 1,
+            "blocked_candidate_count": 0,
+            "hardware_completion_eligible": True,
+            "deliverable_complete": False,
+            "winner_selection_status": "tied_by_identical_kernel_ppa_no_single_winner",
+            "all_candidates_metric_tied": True,
+            "metric_signature_count": 1,
+            "fpga_ranking": [hardware_entry],
+            "asic_ranking": [hardware_entry],
+            "ranking_policy": {"non_identity_axes_excluded_from_score": True},
+            "pareto_frontier": {
+                "schema_version": "dse.dft.hardware_ppa_pareto_frontier.v1",
+                "pareto_candidate_count": 1,
+                "pareto_alternatives": [hardware_entry],
+            },
+            "claim_boundary": "hardware PPA only",
+        },
+    )
+    _write_json(
+        run_dir / "dft_hardware_ppa_pareto_frontier.json",
+        {
+            "schema_version": "dse.dft.hardware_ppa_pareto_frontier.v1",
+            "pareto_candidate_count": 1,
+            "pareto_alternatives": [hardware_entry],
+        },
+    )
+    _write_json(
+        run_dir / "dft_hardware_ppa_ranking_validation.json",
+        {"schema_version": "dse.dft.hardware_ppa_ranking_validation.v1", "valid": True, "errors": []},
+    )
+    _write_json(
+        run_dir / "dft_hardware_ppa_ranking_status.json",
+        {
+            "schema_version": "dse.dft.hardware_ppa_ranking_status.v1",
+            "status": "passed",
+            "ranking_status": "trusted_hardware_ppa_ranking_tied",
+            "deliverable_complete": False,
+        },
+    )
+    _write_json(
+        run_dir / "dft_architecture_winner_resolution.json",
+        {
+            "schema_version": "dse.dft.architecture_winner_resolution.v1",
+            "status": "blocked_no_unique_hardware_ppa_winners",
+            "release_id": "release-ppa",
+            "candidate_count": 1,
+            "ranking_eligible_candidate_count": 1,
+            "hardware_completion_eligible": True,
+            "ppa_winner_selection_status": "tied_by_identical_kernel_ppa_no_single_winner",
+            "all_candidates_metric_tied": True,
+            "metric_signature_count": 1,
+            "deployments": {
+                "fpga": {
+                    "status": "blocked_no_unique_hardware_ppa_winner",
+                    "resolved": False,
+                    "top_rank_candidate_count": 1,
+                    "top_rank_candidate_ids": ["cand-a"],
+                    "required_next_evidence": [{"task_id": "fpga_candidate_specific_ppa_tie_breaker"}],
+                },
+                "asic": {
+                    "status": "blocked_no_unique_hardware_ppa_winner",
+                    "resolved": False,
+                    "top_rank_candidate_count": 1,
+                    "top_rank_candidate_ids": ["cand-a"],
+                    "required_next_evidence": [{"task_id": "asic_candidate_specific_ppa_tie_breaker"}],
+                },
+            },
+            "fpga_best_architecture": None,
+            "asic_best_architecture": None,
+            "blockers": [{"blocker_id": "fpga_winner_not_resolved"}],
+            "blocker_count": 1,
+            "hardware_winner_resolution_eligible": False,
+            "trusted_best_architecture_claim_eligible": False,
+            "deliverable_complete": False,
+            "completion_claim": "blocked",
+            "claim_boundary": "winner resolution test fixture",
+        },
+    )
+    _write_json(
+        run_dir / "dft_architecture_winner_resolution_validation.json",
+        {"schema_version": "dse.dft.architecture_winner_resolution_validation.v1", "valid": True, "errors": []},
+    )
+    _write_json(
+        run_dir / "dft_architecture_winner_resolution_status.json",
+        {
+            "schema_version": "dse.dft.architecture_winner_resolution_status.v1",
+            "status": "passed",
+            "winner_resolution_status": "blocked_no_unique_hardware_ppa_winners",
+            "deliverable_complete": False,
+        },
+    )
+    _write_json(
+        run_dir / "dft_candidate_specific_ppa_provenance_audit.json",
+        {
+            "schema_version": "dse.dft.candidate_specific_ppa_provenance_audit.v1",
+            "status": "blocked_candidate_specific_ppa_provenance",
+            "winner_provenance_eligible": False,
+            "unit_count": 8,
+            "trusted_unit_count": 0,
+            "blocked_unit_count": 8,
+            "trusted_stage_count": 0,
+            "blocked_stage_count": 40,
+            "blocker_count": 40,
+            "blocker_id_counts": {"commands_not_executed": 40},
+            "tied_candidate_ids_requiring_fresh_ppa": ["cand-a"],
+            "hardware_completion_eligible": False,
+            "deliverable_complete": False,
+            "claim_boundary": "provenance test fixture",
+        },
+    )
+    _write_json(
+        run_dir / "dft_candidate_specific_ppa_provenance_audit_validation.json",
+        {"schema_version": "dse.dft.candidate_specific_ppa_provenance_audit_validation.v1", "valid": True, "errors": []},
+    )
+    _write_json(
+        run_dir / "dft_candidate_specific_ppa_provenance_audit_status.json",
+        {
+            "schema_version": "dse.dft.candidate_specific_ppa_provenance_audit_status.v1",
+            "status": "passed",
+            "winner_provenance_eligible": False,
+            "deliverable_complete": False,
+        },
+    )
+    _write_json(
+        run_dir / "dft_hardware_tie_breaker_execution_queue.json",
+        {
+            "schema_version": "dse.dft.hardware_tie_breaker_execution_queue.v1",
+            "status": "fresh_candidate_specific_ppa_execution_required",
+            "work_item_count": 40,
+            "hardware_completion_eligible": False,
+            "deliverable_complete": False,
+        },
+    )
+    _write_json(
+        run_dir / "dft_hardware_tie_breaker_execution_queue_validation.json",
+        {"schema_version": "dse.dft.hardware_tie_breaker_execution_queue_validation.v1", "valid": True, "errors": []},
+    )
+
+    write_step5_report_artifacts(run_dir, claims=[])
+
+    report = json.loads((run_dir / "final_report.json").read_text(encoding="utf-8"))
+    trusted = json.loads((run_dir / "trusted_ranking.json").read_text(encoding="utf-8"))
+    pareto = json.loads((run_dir / "pareto_frontier.json").read_text(encoding="utf-8"))
+    assert report["selected_recommendation"]["trusted_winner"] is False
+    assert report["selected_recommendation"]["selection_status"] == "hardware_ppa_ranking_available_no_full_dse_winner"
+    assert report["selected_recommendation"]["winner_resolution_status"] == "blocked_no_unique_hardware_ppa_winners"
+    assert report["dft_architecture_winner_resolution"]["present"] is True
+    assert report["dft_architecture_winner_resolution"]["hardware_winner_resolution_eligible"] is False
+    assert report["dft_candidate_specific_ppa_provenance"]["present"] is True
+    assert report["dft_candidate_specific_ppa_provenance"]["winner_provenance_eligible"] is False
+    assert report["dft_candidate_specific_ppa_provenance"]["tie_breaker_work_item_count"] == 40
+    assert report["trusted_ranking"][0]["trusted_scope"].startswith("candidate-stamped major-kernel hardware PPA only")
+    assert trusted["ranking_scope"] == "hardware_ppa_only"
+    assert trusted["dft_architecture_winner_resolution"] == "dft_architecture_winner_resolution.json"
+    assert pareto["frontier_scope"] == "hardware_ppa_only"
+    assert len(pareto["pareto_alternatives"]) == 1

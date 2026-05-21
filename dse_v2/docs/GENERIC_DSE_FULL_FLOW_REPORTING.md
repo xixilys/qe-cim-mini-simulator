@@ -187,6 +187,89 @@ If a Step5 run indexes the ledger artifacts but not the bundle files directly,
   `full_scf_accelerator_descriptor.json` cost model.  Missing or unreadable refs
 stay report-visible but do not satisfy required bundle presence.
 
+Build the DFT hardware evidence matrix either from explicit
+`kernel_dispositions`/`evidence_rows` for one candidate, or from the Step5
+release gate for the all-candidate closure route:
+
+```bash
+python3 dse_v2/scripts/dse/build_dft_hardware_evidence_matrix.py \
+  --release-gate runs/dse/<step5_run>/dft_hardware_closure_release_gate.json \
+  --out runs/dse/<matrix_run>
+```
+
+The release-gate-backed mode is fail-closed: it trusts the matrix only when the
+release gate has schema `dse.dft.hardware_closure_release_gate.v1`, all expected
+major SCF kernels are present, every candidate × kernel unit has the five hard
+gates (`golden_correctness`, `hls_or_rtl_sim`, `hls_or_rtl_synth`,
+`vivado_synth_impl`, `dc_synth_timing_area`), and there are no blocked or failed
+candidate/unit/stage rows.  This can make the ledger/workplan current with the
+release-gate rollup, but it still cannot by itself choose a full-SCF winner or
+set `deliverable_complete=true`.
+
+Build the FPGA/ASIC best-architecture resolution gate after hardware PPA
+ranking and the candidate-specific PPA provenance audit:
+
+```bash
+python3 dse_v2/scripts/dse/build_dft_candidate_specific_ppa_provenance_audit.py \
+  --run-dir runs/dse/<step5_run>
+```
+
+The provenance audit is fail-closed.  It blocks winner proof if candidate PPA
+files were copied/wrapped from source-flow outputs, if the source-flow manifest
+is smoke or not-full-SCF scoped, or if `tool_versions_recorded` /
+`commands_executed` are false.  It also writes
+`dft_hardware_tie_breaker_execution_queue.json`, a candidate × kernel × gate
+queue for fresh golden/sim/synth/Vivado/DC execution.  The queue is planning
+evidence only and never upgrades completion.
+
+Run fresh candidate-specific queue slices with:
+
+```bash
+python3 dse_v2/scripts/dse/run_dft_candidate_specific_ppa_execution.py \
+  --run-dir runs/dse/<step5_run> \
+  --candidate-id <candidate_id> \
+  --kernel-id <kernel_id> \
+  --max-units 1 \
+  --ssh-target ic-eda
+```
+
+This runner writes `dft_candidate_specific_ppa_execution.json`, validation, and
+status artifacts, plus per-unit `tool_versions.json`, `command_manifest.json`,
+`raw_transcript_index.json`, `source_bundle_manifest.json`, and fresh raw stage
+files under `candidate_specific_evidence/<candidate>/<kernel>/`.  It deletes
+stale selected raw/parsed files before execution so old copied source-flow rows
+cannot satisfy provenance.  Re-run raw transcript registration, evidence intake,
+parser, adjudication, release gate, PPA ranking, provenance audit, winner
+resolution, and final reporting after each accepted queue slice.
+
+When multiple execution shards are run over time, aggregate them into the run
+root before final reporting:
+
+```bash
+python3 dse_v2/scripts/dse/build_dft_candidate_specific_ppa_execution_aggregate.py \
+  --run-dir runs/dse/<step5_run>
+```
+
+The aggregate de-duplicates rerun candidate/kernel units and keeps the latest
+fresh execution row for report visibility only; it still cannot upgrade any
+hard-gate, PPA, winner, or deliverable claim without the downstream parser and
+adjudication artifacts.
+
+```bash
+python3 dse_v2/scripts/dse/build_dft_architecture_winner_resolution.py \
+  --run-dir runs/dse/<step5_run>
+```
+
+This gate is intentionally stricter than a sorted ranking.  It names a FPGA or
+ASIC winner only when that deployment has exactly one rank-1 candidate backed by
+non-tied candidate-stamped hard-gate PPA metrics.  If the metric signatures are
+identical, it records `blocked_no_unique_hardware_ppa_winners` and enumerates
+the required next evidence rather than using candidate-id ordering, Step2
+scores, shared route-probe/source-flow evidence, or single-candidate full-SCF
+accounting as a tie-breaker.  If the provenance audit is missing or blocked,
+winner resolution also stays blocked even if a sorted PPA table has a unique
+rank-1 row.
+
 Build the DFT candidate binding map before the trial ledger when Step2
 hierarchical IDs differ from the frozen seven-axis release IDs used by
 candidate evidence rows:
@@ -431,8 +514,30 @@ The fail-closed Step5 sequence is:
 11. refreshed `dft_hardware_closure_parsed_evidence_manifest.json`;
 12. `dft_hardware_closure_gate_adjudication.json`;
 13. `dft_hardware_closure_release_gate.json`;
-14. `dft_trial_state_ledger.json`, `final_report.json`, and
+14. `dft_hardware_ppa_ranking.json` and
+    `dft_hardware_ppa_pareto_frontier.json` for hardware-only PPA ranking
+    visibility after all hard gates pass;
+15. `dft_candidate_specific_ppa_provenance_audit.json` and
+    `dft_hardware_tie_breaker_execution_queue.json` to ensure parsed PPA rows
+    are backed by fresh candidate-specific command/tool provenance;
+16. `dft_architecture_winner_resolution.json` for fail-closed FPGA/ASIC
+    winner-resolution gating;
+17. `dft_trial_state_ledger.json`, `final_report.json`, and
     `dft_scf_hardware_goal_completion_audit.json`.
+
+The PPA ranking artifacts are scoped to candidate-stamped major-kernel
+hardware evidence.  Step5 may surface them through `trusted_ranking.json` and
+`pareto_frontier.json` with `hardware_ppa_only` scope, but they do not set a
+full-SCF trusted winner or deliverable completion.  If the candidate-stamped
+kernel PPA metrics tie, `winner_selection_status` remains
+`tied_by_identical_kernel_ppa_no_single_winner` until a separate system-level
+tie-breaker closes.
+
+The architecture winner-resolution artifact is the machine-checkable place for
+that tie-breaker.  Final reporting may show its FPGA/ASIC status and required
+next evidence, but `trusted_winner` remains false until the winner-resolution
+gate, candidate-specific PPA provenance audit, full-SCF accounting, and final
+release/goal claim gate all close.
 
 `run_dft_hardware_closure_step5_sequence.py --source-flow-map
 runs/dse/<source_flow_map_run>/source_flow_map.json` follows this ordering for

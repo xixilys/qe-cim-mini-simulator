@@ -357,6 +357,51 @@ def _base_report(*, deliverable_complete: bool = False, trusted_winner: bool = F
             "validation": {"present": True, "valid": True, "error_count": 0},
             "claim_boundary": "hardware closure release gate is rollup only",
         },
+        "dft_candidate_specific_ppa_provenance": {
+            "present": True,
+            "status": (
+                "trusted_candidate_specific_ppa_provenance"
+                if deliverable_complete
+                else "blocked_candidate_specific_ppa_provenance"
+            ),
+            "validation": {"present": True, "valid": True, "error_count": 0},
+            "winner_provenance_eligible": deliverable_complete,
+            "unit_count": 8,
+            "trusted_unit_count": 8 if deliverable_complete else 0,
+            "blocked_unit_count": 0 if deliverable_complete else 8,
+            "blocker_count": 0 if deliverable_complete else 8,
+            "blocker_id_counts": {} if deliverable_complete else {"commands_not_executed": 8},
+            "tie_breaker_work_item_count": 0 if deliverable_complete else 40,
+            "hardware_completion_eligible": False,
+            "deliverable_complete": False,
+            "claim_boundary": "candidate-specific PPA provenance blocks winner proof if command/tool provenance is missing",
+        },
+        "dft_architecture_winner_resolution": {
+            "present": True,
+            "status": (
+                "resolved_hardware_ppa_deployment_winners"
+                if deliverable_complete
+                else "blocked_no_unique_hardware_ppa_winners"
+            ),
+            "validation": {"present": True, "valid": True, "error_count": 0},
+            "hardware_winner_resolution_eligible": deliverable_complete,
+            "trusted_best_architecture_claim_eligible": False,
+            "deliverable_complete": False,
+            "fpga_status": (
+                "resolved_unique_hardware_ppa_winner"
+                if deliverable_complete
+                else "blocked_no_unique_hardware_ppa_winner"
+            ),
+            "asic_status": (
+                "resolved_unique_hardware_ppa_winner"
+                if deliverable_complete
+                else "blocked_no_unique_hardware_ppa_winner"
+            ),
+            "fpga_top_rank_candidate_count": 1 if deliverable_complete else 2,
+            "asic_top_rank_candidate_count": 1 if deliverable_complete else 2,
+            "all_candidates_metric_tied": not deliverable_complete,
+            "claim_boundary": "winner resolution is separate from deliverable completion",
+        },
         "dft_l4_goal_binding": {
             "present": True,
             "status": "fail_closed_l4_goal_binding_present",

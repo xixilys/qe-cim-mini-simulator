@@ -13,7 +13,11 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from dse_v2.codesign.dft_hardware_evidence import build_major_kernel_evidence_matrix  # noqa: E402
+from dse_v2.codesign.dft_hardware_evidence import (  # noqa: E402
+    build_major_kernel_evidence_matrix,
+    build_major_kernel_evidence_matrix_from_release_gate,
+)
+from dse_v2.codesign.evidence_ledger import sha256_file  # noqa: E402
 
 
 def _load_json(path: Path) -> Any:
@@ -36,19 +40,37 @@ def _write_json(path: Path, payload: Any) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--kernel-dispositions", type=Path, required=True)
+    source = parser.add_mutually_exclusive_group(required=True)
+    source.add_argument("--kernel-dispositions", type=Path)
+    source.add_argument(
+        "--release-gate",
+        type=Path,
+        help="Build an all-candidate matrix from dft_hardware_closure_release_gate.json",
+    )
     parser.add_argument("--evidence-rows", type=Path)
     parser.add_argument("--candidate-id")
     parser.add_argument("--out", type=Path, required=True)
     args = parser.parse_args()
 
-    dispositions = _rows(_load_json(args.kernel_dispositions), "kernel_dispositions")
-    evidence_rows = _rows(_load_json(args.evidence_rows), "evidence_rows") if args.evidence_rows else []
-    matrix = build_major_kernel_evidence_matrix(
-        dispositions,
-        evidence_rows=evidence_rows,
-        candidate_id=args.candidate_id,
-    )
+    if args.release_gate:
+        release_gate = _load_json(args.release_gate)
+        matrix = build_major_kernel_evidence_matrix_from_release_gate(
+            release_gate,
+            source_ref={
+                "path": str(args.release_gate),
+                "exists": args.release_gate.exists(),
+                "sha256": sha256_file(args.release_gate) if args.release_gate.exists() else None,
+                "hash_algorithm": "sha256",
+            },
+        )
+    else:
+        dispositions = _rows(_load_json(args.kernel_dispositions), "kernel_dispositions")
+        evidence_rows = _rows(_load_json(args.evidence_rows), "evidence_rows") if args.evidence_rows else []
+        matrix = build_major_kernel_evidence_matrix(
+            dispositions,
+            evidence_rows=evidence_rows,
+            candidate_id=args.candidate_id,
+        )
     output_path = args.out / "dft_hardware_evidence_matrix.json"
     _write_json(output_path, matrix)
     print(json.dumps({
@@ -63,4 +85,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

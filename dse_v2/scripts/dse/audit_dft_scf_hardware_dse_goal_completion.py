@@ -342,6 +342,8 @@ def build_dft_scf_hardware_goal_completion_audit(
     dft_hardware_parser_run = _mapping(report.get("dft_hardware_closure_parser_run"))
     dft_hardware_gate_adjudication = _mapping(report.get("dft_hardware_closure_gate_adjudication"))
     dft_hardware_release_gate = _mapping(report.get("dft_hardware_closure_release_gate"))
+    dft_candidate_specific_ppa_provenance = _mapping(report.get("dft_candidate_specific_ppa_provenance"))
+    dft_architecture_winner_resolution = _mapping(report.get("dft_architecture_winner_resolution"))
     dft_l4_goal_binding = _mapping(report.get("dft_l4_goal_binding"))
     release_claim_gate = _mapping(dft_ledger.get("release_claim_gate"))
     eda_summary = _mapping(dft_ledger.get("eda_summary"))
@@ -393,6 +395,11 @@ def build_dft_scf_hardware_goal_completion_audit(
     gate_adjudication_deliverable_complete = bool(dft_hardware_gate_adjudication.get("deliverable_complete", False))
     gate_adjudication_hardware_completion_eligible = bool(dft_hardware_gate_adjudication.get("hardware_completion_eligible", False))
     release_gate_deliverable_complete = bool(dft_hardware_release_gate.get("deliverable_complete", False))
+    ppa_provenance_present = dft_candidate_specific_ppa_provenance.get("present") is True
+    ppa_provenance_validation = _mapping(dft_candidate_specific_ppa_provenance.get("validation"))
+    ppa_provenance_winner_eligible = bool(
+        dft_candidate_specific_ppa_provenance.get("winner_provenance_eligible", False)
+    )
     l4_goal_binding_deliverable_complete = bool(dft_l4_goal_binding.get("deliverable_complete", False))
     l4_goal_binding_final_closure_eligible = bool(dft_l4_goal_binding.get("final_closure_eligible", False))
     l4_goal_binding_validation = _mapping(dft_l4_goal_binding.get("validation"))
@@ -424,6 +431,11 @@ def build_dft_scf_hardware_goal_completion_audit(
         )
         or release_gate_details.get("hardware_completion_eligible", False)
     )
+    winner_resolution_present = dft_architecture_winner_resolution.get("present") is True
+    winner_resolution_eligible = bool(
+        dft_architecture_winner_resolution.get("hardware_winner_resolution_eligible", False)
+    )
+    winner_resolution_validation = _mapping(dft_architecture_winner_resolution.get("validation"))
     release_hardware_blockers = _synthesized_release_hardware_blockers(release_gate_details)
     release_deliverable_blockers = _release_deliverable_blockers(
         release_gate_details,
@@ -1115,6 +1127,50 @@ def build_dft_scf_hardware_goal_completion_audit(
                 "selection_status": selected.get("selection_status"),
             },
         ),
+        _status_item(
+            "Candidate-specific PPA provenance is fresh-tool-backed before winner proof",
+            "passed"
+            if ppa_provenance_present
+            and ppa_provenance_validation.get("valid") is True
+            and ppa_provenance_winner_eligible
+            else "blocked",
+            {
+                "present": ppa_provenance_present,
+                "status": dft_candidate_specific_ppa_provenance.get("status"),
+                "validation_valid": ppa_provenance_validation.get("valid"),
+                "winner_provenance_eligible": ppa_provenance_winner_eligible,
+                "unit_count": dft_candidate_specific_ppa_provenance.get("unit_count"),
+                "blocked_unit_count": dft_candidate_specific_ppa_provenance.get("blocked_unit_count"),
+                "blocker_count": dft_candidate_specific_ppa_provenance.get("blocker_count"),
+                "blocker_id_counts": dft_candidate_specific_ppa_provenance.get("blocker_id_counts"),
+                "tie_breaker_work_item_count": dft_candidate_specific_ppa_provenance.get(
+                    "tie_breaker_work_item_count"
+                ),
+                "claim_boundary": dft_candidate_specific_ppa_provenance.get("claim_boundary"),
+            },
+        ),
+        _status_item(
+            "FPGA and ASIC best-architecture winner resolution is unique and evidence-backed",
+            "passed" if winner_resolution_present and winner_resolution_eligible else "blocked",
+            {
+                "present": winner_resolution_present,
+                "status": dft_architecture_winner_resolution.get("status"),
+                "validation_valid": winner_resolution_validation.get("valid"),
+                "hardware_winner_resolution_eligible": winner_resolution_eligible,
+                "fpga_status": dft_architecture_winner_resolution.get("fpga_status"),
+                "asic_status": dft_architecture_winner_resolution.get("asic_status"),
+                "fpga_top_rank_candidate_count": dft_architecture_winner_resolution.get(
+                    "fpga_top_rank_candidate_count"
+                ),
+                "asic_top_rank_candidate_count": dft_architecture_winner_resolution.get(
+                    "asic_top_rank_candidate_count"
+                ),
+                "all_candidates_metric_tied": dft_architecture_winner_resolution.get(
+                    "all_candidates_metric_tied"
+                ),
+                "claim_boundary": dft_architecture_winner_resolution.get("claim_boundary"),
+            },
+        ),
     ]
 
     failed = [item for item in checklist if item["status"] == "failed"]
@@ -1166,6 +1222,10 @@ def build_dft_scf_hardware_goal_completion_audit(
             "dft_hardware_closure_parser_run_present": dft_hardware_parser_run.get("present") is True,
             "dft_hardware_closure_gate_adjudication_present": dft_hardware_gate_adjudication.get("present") is True,
             "dft_hardware_closure_release_gate_present": dft_hardware_release_gate.get("present") is True,
+            "dft_candidate_specific_ppa_provenance_present": ppa_provenance_present,
+            "dft_candidate_specific_ppa_provenance_winner_eligible": ppa_provenance_winner_eligible,
+            "dft_architecture_winner_resolution_present": winner_resolution_present,
+            "dft_architecture_winner_resolution_eligible": winner_resolution_eligible,
             "dft_l4_goal_binding_present": dft_l4_goal_binding.get("present") is True,
             "dft_audit_semantic_closure_present": dft_audit_semantic_closure.get("present") is True,
             "dft_audit_semantic_closure_valid": dft_audit_semantic_closure.get("valid") is True,
