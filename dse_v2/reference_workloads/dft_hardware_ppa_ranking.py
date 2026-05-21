@@ -193,6 +193,41 @@ def _candidate_universe_by_id(path: Optional[Path]) -> Dict[str, Dict[str, Any]]
     }
 
 
+def _metadata_by_candidate_id(run_dir: Path, candidate_universe_manifest: Optional[Path]) -> Dict[str, Dict[str, Any]]:
+    """Load design metadata for audit context without making it a PPA rank input."""
+
+    universe_path = _discover_candidate_universe_manifest(run_dir, candidate_universe_manifest)
+    metadata = _candidate_universe_by_id(universe_path)
+    binding = _load_json(run_dir / "dft_candidate_binding_map.json")
+    for row in binding.get("binding_rows", []) or []:
+        if not isinstance(row, Mapping):
+            continue
+        candidate_id = str(row.get("release_candidate_id") or row.get("candidate_id") or "")
+        if not candidate_id:
+            continue
+        existing = metadata.setdefault(candidate_id, {"candidate_id": candidate_id})
+        for source_field, dest_field in (
+            ("design_candidate_id", "design_candidate_id"),
+            ("evaluation_record_id", "evaluation_record_id"),
+            ("legacy_candidate_id", "legacy_candidate_id"),
+            ("candidate_id_kind", "candidate_id_kind"),
+            ("release_assignments", "assignments"),
+            ("assignments", "assignments"),
+            ("identity_assignments", "identity_assignments"),
+            ("non_identity_assignments", "non_identity_assignments"),
+            ("applicability_assignments", "applicability_assignments"),
+            ("evaluation_policy_assignments", "evaluation_policy_assignments"),
+            ("design_score", "design_score"),
+        ):
+            value = row.get(source_field)
+            if value not in (None, {}, []):
+                existing.setdefault(dest_field, value)
+    for existing in metadata.values():
+        if not existing.get("assignments") and isinstance(existing.get("identity_assignments"), Mapping):
+            existing["assignments"] = dict(existing["identity_assignments"])
+    return metadata
+
+
 def _candidate_metadata_sidecar(metadata: Mapping[str, Any]) -> Dict[str, Any]:
     """Return audit-only candidate metadata that must not affect PPA ordering."""
 
@@ -219,6 +254,52 @@ def _candidate_metadata_sidecar(metadata: Mapping[str, Any]) -> Dict[str, Any]:
             "provenance",
         )
         if key in metadata
+    }
+
+
+def _candidate_parametric_ppa(
+    *,
+    candidate_id: str,
+    totals: Mapping[str, Any],
+    metadata: Mapping[str, Any],
+) -> Dict[str, Any]:
+    """Return candidate design context as a sidecar, never as ranking evidence."""
+
+    assignments = metadata.get("assignments")
+    if not isinstance(assignments, Mapping):
+        assignments = metadata.get("identity_assignments")
+    if not isinstance(assignments, Mapping):
+        assignments = {}
+    return {
+        "available": bool(assignments),
+        "basis": (
+            "candidate_assignment_sidecar_only_not_physical_ppa; true candidate-parametric "
+            "ranking requires generated RTL/tool evidence whose source/parameter hashes vary by candidate"
+        ),
+        "candidate_id": candidate_id,
+        "candidate_id_used_as_factor": False,
+        "ranking_input": False,
+        "winner_input": False,
+        "assignments_used": dict(assignments),
+        "raw_totals_remain_authoritative": True,
+        "raw_totals": {
+            key: totals.get(key)
+            for key in (
+                "fpga_total_slice_luts",
+                "fpga_total_slice_registers",
+                "fpga_total_block_ram_tiles",
+                "fpga_total_dsps",
+                "fpga_total_bonded_iob",
+                "asic_total_cell_area",
+                "asic_min_slack_ns",
+                "asic_slack_deficit_ns",
+            )
+        },
+        "attributed_totals": {},
+        "audit_note": (
+            "This sidecar preserves design metadata for audit/debugging only; it must not break "
+            "ties in parsed Vivado/DC physical PPA metrics."
+        ),
     }
 
 
@@ -519,14 +600,10 @@ def _pareto_rows(rows: Sequence[Dict[str, Any]]) -> list[Dict[str, Any]]:
 
 
 def _ranking_metric(row: Mapping[str, Any], raw_key: str, *, parametric_available: bool) -> float:
-    if parametric_available:
-        ppa = row.get("candidate_parametric_ppa", {})
-        if isinstance(ppa, Mapping):
-            attributed = ppa.get("attributed_totals", {})
-            if isinstance(attributed, Mapping):
-                value = attributed.get(raw_key)
-                if value is not None:
-                    return float(value)
+    # ``parametric_available`` is intentionally ignored for ranking.  Candidate
+    # assignments are audit context until generated RTL/tool evidence varies by
+    # candidate; using assignment heuristics here would silently turn a physical
+    # Vivado/DC tie into an unsupported winner claim.
     return float(row.get(raw_key) or 0.0)
 
 
@@ -544,7 +621,7 @@ def build_dft_hardware_ppa_ranking(
     release_gate = _load_json(release_gate_path)
     release_validation = _load_json(release_validation_path)
     parser_run = _load_json(parser_run_path)
-    resolved_candidate_universe_manifest = candidate_universe_manifest or _default_candidate_universe_manifest(run_dir)
+    resolved_candidate_universe_manifest = _discover_candidate_universe_manifest(run_dir, candidate_universe_manifest)
     universe = _metadata_by_candidate_id(run_dir, resolved_candidate_universe_manifest)
     blockers: list[Dict[str, Any]] = []
 
@@ -668,6 +745,7 @@ def build_dft_hardware_ppa_ranking(
                 "applicability_assignments": metadata.get("applicability_assignments", {}),
                 "evaluation_policy_assignments": metadata.get("evaluation_policy_assignments", {}),
                 "design_score": metadata.get("design_score"),
+                "candidate_metadata_sidecar": _candidate_metadata_sidecar(metadata),
                 "candidate_parameter_signature": json.dumps(
                     {
                         "identity_assignments": metadata.get("identity_assignments", {}),
@@ -690,21 +768,13 @@ def build_dft_hardware_ppa_ranking(
     eligible_rows = [row for row in candidate_rows if row.get("ranking_eligible")]
     physical_metric_signatures = {_candidate_metric_signature(row) for row in eligible_rows}
     all_physical_metric_tied = bool(eligible_rows) and len(physical_metric_signatures) == 1
-    parametric_available = (
-        all_physical_metric_tied
-        and any(
-            isinstance(row.get("candidate_parametric_ppa"), Mapping)
-            and row["candidate_parametric_ppa"].get("available") is True
-            for row in eligible_rows
-        )
+    parametric_sidecar_available = any(
+        isinstance(row.get("candidate_parametric_ppa"), Mapping)
+        and row["candidate_parametric_ppa"].get("available") is True
+        for row in eligible_rows
     )
-    def _comparison_signature(row: Mapping[str, Any]) -> str:
-        if parametric_available:
-            attributed = row.get("candidate_parametric_ppa", {}).get("attributed_totals", {})
-            return json.dumps(attributed, sort_keys=True)
-        return _candidate_metric_signature(row)
-
-    metric_signatures = {_comparison_signature(row) for row in eligible_rows}
+    parametric_available = False
+    metric_signatures = set(physical_metric_signatures)
     all_metric_tied = bool(eligible_rows) and len(metric_signatures) == 1
     if not eligible_rows and not blockers:
         blockers.append({"blocker_id": "no_ranking_eligible_candidates"})
@@ -769,28 +839,31 @@ def build_dft_hardware_ppa_ranking(
                 "min fpga_total_dsps",
                 "min fpga_total_block_ram_tiles",
                 "min fpga_total_bonded_iob",
-                "candidate_id deterministic tie order",
+                "candidate_id stable display order only; not a rank tie-break factor",
             ],
             "asic_sort_order": [
                 "min asic_total_cell_area",
                 "max asic_min_slack_ns",
-                "candidate_id deterministic tie order",
+                "candidate_id stable display order only; not a rank tie-break factor",
             ],
             "non_identity_axes_excluded_from_score": True,
             "system_level_tie_breaker_required": all_metric_tied,
             "physical_metric_signature_count": len(physical_metric_signatures),
             "all_candidates_physical_metric_tied": all_physical_metric_tied,
-            "candidate_parametric_attribution_used": parametric_available,
+            "candidate_parametric_sidecar_available": parametric_sidecar_available,
+            "candidate_parametric_attribution_used": False,
             "candidate_parametric_attribution_policy": (
-                "Use assignment-derived attribution over real raw totals only "
-                "when all parsed physical PPA signatures are identical; never "
-                "use candidate_id as a winner tie-break factor."
+                "Candidate assignments are reported as sidecar audit context only. "
+                "They must not alter physical Vivado/DC PPA ranking, Pareto membership, "
+                "or winner status; true candidate-parametric ranking requires generated "
+                "RTL/tool evidence whose source or parameter hashes vary by candidate."
             ),
         },
         "winner_selection_status": winner_selection_status,
         "all_candidates_metric_tied": all_metric_tied,
         "all_candidates_physical_metric_tied": all_physical_metric_tied,
-        "candidate_parametric_attribution_used": parametric_available,
+        "candidate_parametric_sidecar_available": parametric_sidecar_available,
+        "candidate_parametric_attribution_used": False,
         "metric_signature_count": len(metric_signatures),
         "ranking_eligible_candidate_count": len(eligible_rows),
         "blocked_candidate_count": len(candidate_rows) - len(eligible_rows),

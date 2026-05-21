@@ -220,12 +220,13 @@ def test_hardware_ppa_ranking_marks_tied_candidates_without_deliverable_completi
     assert ranking["schema_version"] == DFT_HARDWARE_PPA_RANKING_SCHEMA
     assert ranking["hardware_completion_eligible"] is True
     assert ranking["deliverable_complete"] is False
-    assert ranking["winner_selection_status"] == "ranked_candidates_available"
+    assert ranking["winner_selection_status"] == "tied_by_identical_kernel_ppa_no_single_winner"
     assert ranking["all_candidates_physical_metric_tied"] is True
-    assert ranking["candidate_parametric_attribution_used"] is True
-    assert ranking["all_candidates_metric_tied"] is False
-    assert {row["rank"] for row in ranking["fpga_ranking"]} == {1, 2}
-    assert {row["rank"] for row in ranking["asic_ranking"]} == {1, 2}
+    assert ranking["candidate_parametric_sidecar_available"] is True
+    assert ranking["candidate_parametric_attribution_used"] is False
+    assert ranking["all_candidates_metric_tied"] is True
+    assert {row["rank"] for row in ranking["fpga_ranking"]} == {1}
+    assert {row["rank"] for row in ranking["asic_ranking"]} == {1}
     assert ranking["ranking_policy"]["non_identity_axes_excluded_from_score"] is True
     first_row = ranking["candidate_rows"][0]
     assert first_row["design_candidate_id"].startswith("design-")
@@ -255,7 +256,7 @@ def test_hardware_ppa_ranking_discovers_release_domain_candidate_universe(tmp_pa
     assert ranking["candidate_rows"][0]["assignments"]["hardware_microarchitecture"] == "host_fpga_minimal_v0"
 
 
-def test_hardware_ppa_ranking_uses_assignment_parametric_attribution_when_physical_metrics_tie(tmp_path: Path) -> None:
+def test_hardware_ppa_ranking_keeps_assignment_sidecar_out_of_physical_tie_break(tmp_path: Path) -> None:
     run_dir = tmp_path / "run"
     _seed_run(run_dir, candidates=("cand-minimal", "cand-balanced"))
     _write_json(
@@ -304,11 +305,14 @@ def test_hardware_ppa_ranking_uses_assignment_parametric_attribution_when_physic
 
     assert validation["valid"] is True
     assert ranking["all_candidates_physical_metric_tied"] is True
-    assert ranking["candidate_parametric_attribution_used"] is True
-    assert ranking["all_candidates_metric_tied"] is False
-    assert ranking["fpga_ranking"][0]["candidate_id"] == "cand-minimal"
-    assert ranking["asic_ranking"][0]["candidate_id"] == "cand-minimal"
+    assert ranking["candidate_parametric_sidecar_available"] is True
+    assert ranking["candidate_parametric_attribution_used"] is False
+    assert ranking["all_candidates_metric_tied"] is True
+    assert ranking["winner_selection_status"] == "tied_by_identical_kernel_ppa_no_single_winner"
+    assert {row["rank"] for row in ranking["fpga_ranking"]} == {1}
+    assert {row["rank"] for row in ranking["asic_ranking"]} == {1}
     assert ranking["candidate_rows"][0]["candidate_parametric_ppa"]["candidate_id_used_as_factor"] is False
+    assert ranking["candidate_rows"][0]["candidate_parametric_ppa"]["ranking_input"] is False
 
 
 def test_hardware_ppa_ranking_blocks_fpga_claim_without_vivado_route(tmp_path: Path) -> None:
