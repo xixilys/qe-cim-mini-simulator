@@ -39,6 +39,15 @@ _CLAIM_BOUNDARY = (
     "trusted Pareto, or deliverable completion without separate adjudication."
 )
 
+_CANDIDATE_METADATA_FIELDS = (
+    "design_candidate_id",
+    "assignments",
+    "identity_assignments",
+    "non_identity_assignments",
+    "applicability_assignments",
+    "evaluation_policy_assignments",
+)
+
 _PASS_MARKERS = ("PASS", "PASSED", "SUCCESS", "MET")
 _FAIL_MARKERS = ("FAIL", "FAILED", "ERROR", "VIOLATED", "FATAL")
 
@@ -472,6 +481,15 @@ def _write_parsed_result(
     payload = {
         "schema_version": DFT_HARDWARE_PARSED_STAGE_RESULT_SCHEMA,
         "candidate_id": str(unit.get("candidate_id", "")),
+        **{
+            field: (
+                dict(unit.get(field, {}))
+                if isinstance(unit.get(field), Mapping)
+                else unit.get(field)
+            )
+            for field in _CANDIDATE_METADATA_FIELDS
+            if unit.get(field) not in (None, {}, [])
+        },
         "kernel_id": str(unit.get("kernel_id", "")),
         "stage_id": stage_id,
         "verdict": verdict,
@@ -557,6 +575,15 @@ def _parser_row(*, evidence_root: Path, parsed_root: Path, packet: Mapping[str, 
         "shard_id": packet.get("shard_id"),
         "unit_id": unit.get("unit_id"),
         "candidate_id": unit.get("candidate_id"),
+        **{
+            field: (
+                dict(unit.get(field, {}))
+                if isinstance(unit.get(field), Mapping)
+                else unit.get(field)
+            )
+            for field in _CANDIDATE_METADATA_FIELDS
+            if unit.get(field) not in (None, {}, [])
+        },
         "kernel_id": unit.get("kernel_id"),
         "stage_id": stage_id,
         "candidate_bundle_present": bundle_present,

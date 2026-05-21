@@ -38,6 +38,15 @@ _CLAIM_BOUNDARY = (
     "goal/release claim gate."
 )
 
+_CANDIDATE_METADATA_FIELDS = (
+    "design_candidate_id",
+    "assignments",
+    "identity_assignments",
+    "non_identity_assignments",
+    "applicability_assignments",
+    "evaluation_policy_assignments",
+)
+
 
 def _load_json(path: Path) -> Dict[str, Any]:
     if not Path(path).exists():
@@ -340,6 +349,15 @@ def _unit_rollup(row: Mapping[str, Any]) -> Dict[str, Any]:
     return {
         "unit_id": row.get("unit_id"),
         "candidate_id": str(row.get("candidate_id", "")),
+        **{
+            field: (
+                dict(row.get(field, {}))
+                if isinstance(row.get(field), Mapping)
+                else row.get(field)
+            )
+            for field in _CANDIDATE_METADATA_FIELDS
+            if row.get(field) not in (None, {}, [])
+        },
         "kernel_id": str(row.get("kernel_id", "")),
         "kernel_name": row.get("kernel_name"),
         "stage_count": int(row.get("stage_count", 0) or 0),
@@ -375,6 +393,7 @@ def _candidate_rollups(
         grouped.setdefault(str(row.get("candidate_id", "")), []).append(row)
     candidates: list[Dict[str, Any]] = []
     for candidate_id, rows in sorted(grouped.items()):
+        metadata_source = rows[0] if rows else {}
         distinct_kernel_ids = sorted(str(row.get("kernel_id", "")) for row in rows)
         unique_kernel_ids = sorted(set(distinct_kernel_ids))
         expected_ids = sorted(set(expected_kernel_ids or []))
@@ -517,6 +536,15 @@ def _candidate_rollups(
         candidates.append(
             {
                 "candidate_id": candidate_id,
+                **{
+                    field: (
+                        dict(metadata_source.get(field, {}))
+                        if isinstance(metadata_source.get(field), Mapping)
+                        else metadata_source.get(field)
+                    )
+                    for field in _CANDIDATE_METADATA_FIELDS
+                    if metadata_source.get(field) not in (None, {}, [])
+                },
                 "unit_count": len(rows),
                 "kernel_ids": unique_kernel_ids,
                 "expected_kernel_ids": expected_ids,
