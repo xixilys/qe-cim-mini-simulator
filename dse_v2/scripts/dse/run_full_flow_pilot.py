@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import subprocess
@@ -43,6 +44,7 @@ from dse_v2.evidence.full_flow import (
     build_phase_results,
     write_full_flow_evidence,
 )
+from dse_v2.contracts.schema_registry import CONTRACT_VERSION
 from dse_v2.mapping.search import run_mapping_search, select_initial_mapping
 from dse_v2.mapping.step2_workflow import run_step2_architecture_mapping_workflow_from_step1
 from dse_v2.registry import ExperimentRegistry
@@ -69,6 +71,42 @@ def _write_json(path: Path, payload) -> None:
 def _write_text(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
+
+
+def _load_json(path: Path) -> Dict[str, Any]:
+    if not path.exists():
+        return {}
+    data = json.loads(path.read_text(encoding="utf-8"))
+    return dict(data) if isinstance(data, Mapping) else {}
+
+
+def _file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _payload_schema_version(path: Path) -> str:
+    payload = _load_json(path)
+    version = payload.get("schema_version")
+    return str(version) if version else "v1"
+
+
+def _git_revision() -> str | None:
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--short=12", "HEAD"],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except Exception:
+        return None
+    revision = result.stdout.strip()
+    return revision if result.returncode == 0 and revision else None
 
 
 def _process_text(value: str | bytes | None) -> str:
@@ -314,37 +352,292 @@ def _step2_extra_artifact_paths(step2_result) -> list[str]:
     ))
 
 
-def _record_registry_trial(
+def _campaign_scope_from_step2(run_dir: Path, *, run_id: str, workload_package: WorkloadPackage) -> Dict[str, str]:
+    ledger = _load_json(run_dir / "step2" / "trial_state_ledger.json")
+    queue = _load_json(run_dir / "step2" / "step3_simulation_queue.json")
+    entries = queue.get("entries", []) if isinstance(queue.get("entries", []), list) else []
+    first_entry = entries[0] if entries and isinstance(entries[0], Mapping) else {}
+    return {
+        "campaign_id": str(
+            ledger.get("campaign_id")
+            or queue.get("campaign_id")
+            or f"campaign::{workload_package.workload_id}"
+        ),
+        "workload_run_id": str(
+            ledger.get("workload_run_id")
+            or queue.get("workload_run_id")
+            or first_entry.get("workload_run_id")
+            or f"workload_run::{workload_package.workload_id}"
+        ),
+        "trial_id": str(
+            ledger.get("trial_id")
+            or queue.get("trial_id")
+            or first_entry.get("trial_id")
+            or f"trial::{run_id}"
+        ),
+    }
+
+
+def _campaign_objective(args: argparse.Namespace, workload_package: WorkloadPackage) -> str:
+    return (
+        f"Run a bounded {workload_package.workload_family}/{args.backend} DSE pilot "
+        "that preserves Campaign/WorkloadRun/Trial provenance across Step1, Step2, "
+        "and one selected-entry Step3 evidence path without broad evidence fanout."
+    )
+
+
+def _campaign_budgets(args: argparse.Namespace, run_dir: Path) -> Dict[str, Any]:
+    queue = _load_json(run_dir / "step2" / "step3_simulation_queue.json")
+    top_k = _load_json(run_dir / "step2" / "top_k_candidate_queue.json")
+    return {
+        "backend": args.backend,
+        "evidence_mode": args.evidence_mode,
+        "timeout_seconds": args.timeout,
+        "feedback_sample_budget": max(1, int(args.feedback_samples)),
+        "step3_queue_entry_budget": int(queue.get("entry_count", 0) or 0),
+        "top_k_provenance_entry_count": int(top_k.get("entry_count", 0) or 0),
+        "broad_evidence_run": False,
+        "evidence_fanout_policy": "selected_entry_only_for_pilot",
+    }
+
+
+def _selected_trial_refs(run_dir: Path) -> Dict[str, Any]:
+    queue = _load_json(run_dir / "step2" / "step3_simulation_queue.json")
+    entries = queue.get("entries", []) if isinstance(queue.get("entries", []), list) else []
+    normalized_entries = [dict(entry) for entry in entries if isinstance(entry, Mapping)]
+    return {
+        "step3_simulation_queue": "step2/step3_simulation_queue.json",
+        "queue_mode": queue.get("queue_mode"),
+        "entry_count": int(queue.get("entry_count", len(normalized_entries)) or 0),
+        "queue_entry_ids": [str(entry.get("queue_entry_id")) for entry in normalized_entries if entry.get("queue_entry_id")],
+        "candidate_ids": [str(entry.get("candidate_id")) for entry in normalized_entries if entry.get("candidate_id")],
+        "mapping_candidate_ids": [
+            str(entry.get("mapping_candidate_id"))
+            for entry in normalized_entries
+            if entry.get("mapping_candidate_id")
+        ],
+        "design_point_ids": [str(entry.get("design_point_id")) for entry in normalized_entries if entry.get("design_point_id")],
+        "mapping_ids": [str(entry.get("mapping_id")) for entry in normalized_entries if entry.get("mapping_id")],
+        "architecture_ids": [str(entry.get("architecture_id")) for entry in normalized_entries if entry.get("architecture_id")],
+    }
+
+
+def _write_campaign_control_artifacts(
+    *,
+    args: argparse.Namespace,
+    run_dir: Path,
+    run_id: str,
+    workload_package: WorkloadPackage,
+) -> Dict[str, Any]:
+    """Write campaign-level control-plane artifacts without widening evidence runs."""
+
+    scope = _campaign_scope_from_step2(run_dir, run_id=run_id, workload_package=workload_package)
+    objective = _campaign_objective(args, workload_package)
+    budgets = _campaign_budgets(args, run_dir)
+    selected_refs = _selected_trial_refs(run_dir)
+    policies = {
+        "claim_boundary": (
+            "Pilot campaign links Step1/Step2/selected-entry Step3 evidence only; "
+            "it does not prove broad DSE, all-candidate RTL/PPA closure, or release completion."
+        ),
+        "step2_trial_ledger": "step2/trial_state_ledger.json",
+        "step3_admission_queue": "step2/step3_simulation_queue.json",
+        "top_k_queue_role": "provenance_only_not_step3_admission",
+        "promotion_policy": "Step2 may promote only selected-entry queue rows to Step3.",
+        "registry_campaign_name": args.registry_campaign if args.registry_db is not None else None,
+    }
+    campaign = {
+        "schema_version": CONTRACT_VERSION,
+        "campaign_id": scope["campaign_id"],
+        "objective": objective,
+        "status": "active",
+        "budgets": budgets,
+        "policies": policies,
+        "environment_ref": "provenance.json",
+        "git_revision": _git_revision(),
+        "global_stop_criteria": [
+            "step1_workload_ingestion_complete",
+            "step2_search_checkpoint_and_trial_ledger_written",
+            "step3_selected_entry_evidence_attempted",
+            "no_broad_evidence_or_release_claim_from_pilot",
+        ],
+        "final_completion_status": None,
+    }
+    ledger = {
+        "schema_version": CONTRACT_VERSION,
+        **scope,
+        "run_id": run_id,
+        "workload_id": workload_package.workload_id,
+        "workload_family": workload_package.workload_family,
+        "profile_id": workload_package.profile_id,
+        "importer_id": workload_package.importer_id,
+        "objective": objective,
+        "status": "active",
+        "budgets": budgets,
+        "policies": policies,
+        "broad_evidence_run": False,
+        "trusted_final_claim": False,
+        "release_completion_eligible": False,
+        "claim_boundary": policies["claim_boundary"],
+        "workload_run_ref": {
+            "step1_status": "step1/step1_status.json",
+            "workload_package": "step1/workload_package.json",
+            "workload_graph": "step1/workload_graph.json",
+            "graph_lowering_report": "step1/graph_lowering_report.json",
+            "executable_graph": "step1/executable_graph.json",
+        },
+        "step2_refs": {
+            "architecture_search_space": "step2/architecture_search_space.json",
+            "search_checkpoint": "step2/search_checkpoint.json",
+            "top_k_candidate_queue": "step2/top_k_candidate_queue.json",
+            "trial_state_ledger": "step2/trial_state_ledger.json",
+            "step3_simulation_queue": "step2/step3_simulation_queue.json",
+            "step2_artifact_validation": "step2/step2_artifact_validation.json",
+        },
+        "step3_refs": {
+            "simulation_request": "simulation_request.json",
+            "simulation_result": "simulation_result.json",
+            "simulation_result_raw": "simulation_result.raw.json",
+            "systemc_stdout": "systemc_stdout.log",
+            "systemc_stderr": "systemc_stderr.log",
+        },
+        "step4_refs": {
+            "verdict": "verdict.json",
+            "claim_validation": "claim_validation.json",
+            "feedback_update": "feedback_update.json",
+            "calibration_record": "calibration_record.json",
+        },
+        "step5_refs": {
+            "final_report": "final_report.json",
+            "final_report_markdown": "final_report.md",
+        },
+        "selected_trial_refs": selected_refs,
+        "resume_next_actions": [
+            "resume Step2 from step2/search_checkpoint.json if candidate ordering must be replayed",
+            "use step2/step3_simulation_queue.json, not top_k_candidate_queue.json, for Step3 admission",
+            "run Step3/Step4/Step5 only for selected queued entries unless campaign budgets are explicitly widened",
+            "leave workload-family-specific physical evidence closure to profile-owned evidence lanes",
+        ],
+    }
+    _write_json(run_dir / "campaign.json", campaign)
+    _write_json(run_dir / "campaign_ledger.json", ledger)
+    return {
+        "campaign": campaign,
+        "campaign_ledger": ledger,
+        "artifact_paths": ["campaign.json", "campaign_ledger.json"],
+    }
+
+
+def _registry_provenance(reason: str) -> Dict[str, object]:
+    return {"actor": "run_full_flow_pilot", "reason": reason}
+
+
+def _register_registry_artifact(
+    registry: ExperimentRegistry,
+    *,
+    campaign_row_id: int,
+    run_dir: Path,
+    rel_path: str,
+    schema_id: str,
+    scope: str,
+    workload_row_id: int | None = None,
+    trial_row_id: int | None = None,
+    producing_activity_id: int | None = None,
+    metadata: Mapping[str, object] | None = None,
+) -> None:
+    path = run_dir / rel_path
+    if not path.exists() or not path.is_file():
+        return
+    registry.register_artifact_ref(
+        campaign_id=campaign_row_id,
+        workload_run_id=workload_row_id if scope in {"workload_run", "trial"} else None,
+        trial_id=trial_row_id if scope == "trial" else None,
+        scope=scope,
+        path=rel_path,
+        schema_id=schema_id,
+        schema_version=_payload_schema_version(path),
+        content_hash=_file_sha256(path),
+        content_hash_alg="sha256",
+        producing_activity_id=producing_activity_id,
+        metadata=dict(metadata or {}),
+    )
+
+
+def _record_registry_lifecycle(
     *,
     registry_db: Path | None,
     campaign_name: str,
     args: argparse.Namespace,
+    workload_package: WorkloadPackage,
     evidence: Mapping[str, Any],
     run_dir: Path,
     simulator_returncode: int,
+    campaign_artifacts: Mapping[str, Any],
 ) -> None:
     if registry_db is None:
         return
 
     with ExperimentRegistry(registry_db) as registry:
         campaign = next((item for item in registry.list_campaigns() if item.name == campaign_name), None)
+        campaign_payload = dict(campaign_artifacts.get("campaign", {}) or {})
+        ledger_payload = dict(campaign_artifacts.get("campaign_ledger", {}) or {})
         if campaign is None:
             campaign = registry.create_campaign(campaign_name, metadata={
                 "runner": "run_full_flow_pilot",
                 "workload": args.workload or args.profile,
                 "profile": args.profile,
                 "importer": args.importer,
+                "objective": campaign_payload.get("objective"),
+                "budgets": campaign_payload.get("budgets", {}),
+                "policies": campaign_payload.get("policies", {}),
+                "logical_campaign_id": campaign_payload.get("campaign_id"),
             })
+        if campaign.status == "created":
+            campaign = registry.transition_campaign(
+                campaign.campaign_id,
+                "running",
+                provenance=_registry_provenance("start bounded full-flow pilot campaign"),
+            )
+
+        workload_run = registry.create_workload_run(
+            campaign.campaign_id,
+            {
+                "logical_workload_run_id": ledger_payload.get("workload_run_id"),
+                "workload_id": workload_package.workload_id,
+                "workload_family": workload_package.workload_family,
+                "profile": args.profile,
+                "importer": args.importer,
+                "step1_status": "step1/step1_status.json",
+                "workload_package": "step1/workload_package.json",
+            },
+            provenance=_registry_provenance("create workload run from Step1 pilot artifacts"),
+            resume={
+                "resume_from": "step1/workload_package.json",
+                "next_step": "step2_architecture_mapping",
+            },
+        )
+        for status, reason in [
+            ("ingesting", "record Step1 ingestion start"),
+            ("lowered", "Step1 workload graph lowered"),
+            ("validated", "Step1 artifacts validated"),
+            ("ready_for_step2", "Step1 handoff is ready for Step2 search"),
+        ]:
+            workload_run = registry.transition_workload_run(
+                workload_run.workload_run_id,
+                status,
+                provenance=_registry_provenance(reason),
+            )
 
         trusted = bool(evidence.get("trusted_for_final_ranking", False))
         missing_required_coverage = list(
             evidence.get("missing_required_coverage", []) or []
         )
         fidelity = "L4" if args.backend == "gem5_systemc" else "L3"
-        status = "completed" if trusted else "completed_untrusted"
-        registry.add_trial(
-            campaign.campaign_id,
+        selected_refs = dict(ledger_payload.get("selected_trial_refs", {}) or {})
+        trial = registry.create_trial(
+            workload_run.workload_run_id,
             params={
+                "logical_trial_id": ledger_payload.get("trial_id"),
                 "workload": args.workload,
                 "profile": args.profile,
                 "importer": args.importer,
@@ -353,6 +646,9 @@ def _record_registry_trial(
                 "backend": args.backend,
                 "evidence_mode": args.evidence_mode,
                 "run_id": evidence.get("run_id"),
+                "candidate_ids": list(selected_refs.get("candidate_ids", []) or []),
+                "mapping_candidate_ids": list(selected_refs.get("mapping_candidate_ids", []) or []),
+                "design_point_ids": list(selected_refs.get("design_point_ids", []) or []),
                 "npw": args.npw,
                 "nkb": args.nkb,
                 "m": args.m,
@@ -360,7 +656,8 @@ def _record_registry_trial(
                 "feedback_samples": args.feedback_samples,
             },
             fidelity=fidelity,
-            status=status,
+            generation_reasons=["selected_entry_from_step2_simulation_queue"],
+            provenance=_registry_provenance("create selected pilot trial from Step2 queue"),
             metrics={
                 "trusted_for_final_ranking": trusted,
                 "missing_required_coverage_count": len(missing_required_coverage),
@@ -370,12 +667,156 @@ def _record_registry_trial(
             },
             artifacts={
                 "run_dir": str(run_dir),
+                "campaign": str(run_dir / "campaign.json"),
+                "campaign_ledger": str(run_dir / "campaign_ledger.json"),
+                "step1_workload_package": str(run_dir / "step1" / "workload_package.json"),
+                "step2_trial_state_ledger": str(run_dir / "step2" / "trial_state_ledger.json"),
+                "step3_simulation_queue": str(run_dir / "step2" / "step3_simulation_queue.json"),
                 "manifest": str(run_dir / "manifest.json"),
                 "verdict": str(run_dir / "verdict.json"),
                 "simulation_result": str(run_dir / "simulation_result.json"),
                 "final_report": str(run_dir / "final_report.json"),
             },
         )
+        trial_artifacts = dict(trial.artifacts)
+        trial_metrics = dict(trial.metrics)
+        for status, reason in [
+            ("screened", "Step2 screening produced selected queue candidate"),
+            ("promoted", "Step2 promotion decision admitted selected candidate"),
+            ("scheduled_for_sim", "Step3 selected-entry simulation queue scheduled trial"),
+            ("simulated", "Step3 simulator attempt completed for selected trial"),
+        ]:
+            trial = registry.transition_trial(
+                trial.trial_id,
+                status,
+                provenance=_registry_provenance(reason),
+                metrics=trial_metrics if status == "simulated" else None,
+                artifacts=trial_artifacts if status == "simulated" else None,
+                resume={
+                    "resume_from": "simulation_result.json",
+                    "next_step": "step4_adjudication",
+                    "broad_evidence_run": False,
+                } if status == "simulated" else None,
+            )
+
+        campaign_activity = registry.create_activity(
+            campaign.campaign_id,
+            "campaign_ledger_write",
+            status="succeeded",
+            command={"script": "dse_v2/scripts/dse/run_full_flow_pilot.py"},
+            outputs={"campaign": "campaign.json", "campaign_ledger": "campaign_ledger.json"},
+            provenance=_registry_provenance("write campaign control-plane artifacts"),
+        )
+        step1_activity = registry.create_activity(
+            campaign.campaign_id,
+            "step1_workload_ingestion",
+            workload_run_id=workload_run.workload_run_id,
+            status="succeeded",
+            command={"profile": args.profile, "importer": args.importer},
+            outputs={"workload_package": "step1/workload_package.json"},
+            provenance=_registry_provenance("register Step1 workload artifacts"),
+        )
+        step2_activity = registry.create_activity(
+            campaign.campaign_id,
+            "step2_search_and_promotion",
+            workload_run_id=workload_run.workload_run_id,
+            trial_id=trial.trial_id,
+            status="succeeded",
+            inputs={"workload_package": "step1/workload_package.json"},
+            outputs={"trial_state_ledger": "step2/trial_state_ledger.json"},
+            provenance=_registry_provenance("register Step2 search artifacts"),
+        )
+        step3_activity = registry.create_activity(
+            campaign.campaign_id,
+            "step3_selected_simulation",
+            workload_run_id=workload_run.workload_run_id,
+            trial_id=trial.trial_id,
+            status="succeeded",
+            inputs={"step3_simulation_queue": "step2/step3_simulation_queue.json"},
+            outputs={"simulation_result": "simulation_result.json"},
+            provenance=_registry_provenance("register Step3 simulation artifacts"),
+        )
+        step4_activity = registry.create_activity(
+            campaign.campaign_id,
+            "step4_evidence_adjudication",
+            workload_run_id=workload_run.workload_run_id,
+            trial_id=trial.trial_id,
+            status="succeeded",
+            inputs={"simulation_result": "simulation_result.json"},
+            outputs={"verdict": "verdict.json", "claim_validation": "claim_validation.json"},
+            provenance=_registry_provenance("register Step4 adjudication artifacts"),
+        )
+        step5_activity = registry.create_activity(
+            campaign.campaign_id,
+            "step5_report_generation",
+            workload_run_id=workload_run.workload_run_id,
+            trial_id=trial.trial_id,
+            status="succeeded",
+            inputs={"claim_validation": "claim_validation.json"},
+            outputs={"final_report": "final_report.json"},
+            provenance=_registry_provenance("register Step5 report artifacts"),
+        )
+        for rel_path, schema_id in [
+            ("campaign.json", "dse.contract.campaign.v1"),
+            ("campaign_ledger.json", "dse.contract.campaign_ledger.v1"),
+        ]:
+            _register_registry_artifact(
+                registry,
+                campaign_row_id=campaign.campaign_id,
+                run_dir=run_dir,
+                rel_path=rel_path,
+                schema_id=schema_id,
+                scope="campaign",
+                producing_activity_id=campaign_activity.activity_id,
+                metadata={"artifact_role": rel_path, "logical_campaign_id": campaign_payload.get("campaign_id")},
+            )
+        for rel_path, schema_id in [
+            ("step1/step1_status.json", "dse.step1.status.v1"),
+            ("step1/workload_package.json", "dse.contract.workload_package.v1"),
+            ("step1/workload_graph.json", "dse.contract.compute_graph.v1"),
+            ("step1/graph_lowering_report.json", "dse.step1.graph_lowering_report.v1"),
+            ("step1/executable_graph.json", "dse.contract.executable_graph.v1"),
+        ]:
+            _register_registry_artifact(
+                registry,
+                campaign_row_id=campaign.campaign_id,
+                workload_row_id=workload_run.workload_run_id,
+                run_dir=run_dir,
+                rel_path=rel_path,
+                schema_id=schema_id,
+                scope="workload_run",
+                producing_activity_id=step1_activity.activity_id,
+                metadata={"artifact_role": rel_path, "logical_workload_run_id": ledger_payload.get("workload_run_id")},
+            )
+        for rel_path, schema_id, activity_id in [
+            ("step2/search_checkpoint.json", "dse.step2.search_checkpoint_summary.v1", step2_activity.activity_id),
+            ("step2/top_k_candidate_queue.json", "dse.step2.top_k_candidate_queue.v1", step2_activity.activity_id),
+            ("step2/trial_state_ledger.json", "dse.step2.trial_state_ledger.v1", step2_activity.activity_id),
+            ("step2/step3_simulation_queue.json", "dse.step3.simulation_queue.v1", step2_activity.activity_id),
+            ("simulation_request.json", "gsim.request.v1", step3_activity.activity_id),
+            ("simulation_result.json", "gsim.result.v1", step3_activity.activity_id),
+            ("verdict.json", "dse.contract.verdict.v1", step4_activity.activity_id),
+            ("claim_validation.json", "dse.contract.claim_validation.v1", step4_activity.activity_id),
+            ("feedback_update.json", "dse.contract.feedback_update.v1", step4_activity.activity_id),
+            ("calibration_record.json", "dse.contract.calibration_record.v1", step4_activity.activity_id),
+            ("final_report.json", "dse.contract.final_report.v1", step5_activity.activity_id),
+        ]:
+            _register_registry_artifact(
+                registry,
+                campaign_row_id=campaign.campaign_id,
+                workload_row_id=workload_run.workload_run_id,
+                trial_row_id=trial.trial_id,
+                run_dir=run_dir,
+                rel_path=rel_path,
+                schema_id=schema_id,
+                scope="trial",
+                producing_activity_id=activity_id,
+                metadata={
+                    "artifact_role": rel_path,
+                    "logical_trial_id": ledger_payload.get("trial_id"),
+                    "broad_evidence_run": False,
+                },
+            )
 
 
 def _additional_systemc_feedback_samples(
@@ -591,6 +1032,13 @@ def main(argv: List[str] | None = None, *, cli_script: str = "dse_v2/scripts/dse
             "status": "p0_p1_vertical_slice",
         },
     )
+    campaign_artifacts = _write_campaign_control_artifacts(
+        args=args,
+        run_dir=run_dir,
+        run_id=run_id,
+        workload_package=workload_package,
+    )
+    campaign_artifact_paths = list(campaign_artifacts.get("artifact_paths", []) or [])
 
     if args.backend == "gem5_systemc":
         backend = GenericSystemCBackend(
@@ -635,22 +1083,26 @@ def main(argv: List[str] | None = None, *, cli_script: str = "dse_v2/scripts/dse
             gem5_attempted=True,
             gem5_log=run.get("gem5_log") or (gem5_log_path.read_text(encoding="utf-8") if gem5_log_path.exists() else None),
             gem5_source_artifacts=(run.get("gem5_l4_transport_proof") or {}).get("source_artifacts"),
-            extra_artifact_paths=step1_artifact_paths + step2_artifact_paths,
+            extra_artifact_paths=campaign_artifact_paths + step1_artifact_paths + step2_artifact_paths,
             workload_package=workload_package,
         )
-        _record_registry_trial(
+        _record_registry_lifecycle(
             registry_db=args.registry_db,
             campaign_name=args.registry_campaign,
             args=args,
+            workload_package=workload_package,
             evidence=evidence,
             run_dir=run_dir,
             simulator_returncode=int(run.get("returncode", 2)),
+            campaign_artifacts=campaign_artifacts,
         )
         print(json.dumps({
             "run_id": evidence["run_id"],
             "run_dir": evidence["run_dir"],
             "trusted_for_final_ranking": evidence["trusted_for_final_ranking"],
             "missing_required_coverage": evidence["missing_required_coverage"],
+            "campaign": str(run_dir / "campaign.json"),
+            "campaign_ledger": str(run_dir / "campaign_ledger.json"),
             "step2_trial_state_ledger": str(run_dir / "step2" / "trial_state_ledger.json"),
             "gem5_systemc": "verified" if evidence["trusted_for_final_ranking"] else "blocked",
         }, indent=2, sort_keys=True))
@@ -704,17 +1156,19 @@ def main(argv: List[str] | None = None, *, cli_script: str = "dse_v2/scripts/dse
         cli_command=["python3", cli_script] + argv,
         gem5_attempted=False,
         additional_feedback_samples=additional_samples,
-        extra_artifact_paths=step1_artifact_paths + step2_artifact_paths + extra_artifact_paths,
+        extra_artifact_paths=campaign_artifact_paths + step1_artifact_paths + step2_artifact_paths + extra_artifact_paths,
         feedback_sample_budget=max(1, args.feedback_samples),
         workload_package=workload_package,
     )
-    _record_registry_trial(
+    _record_registry_lifecycle(
         registry_db=args.registry_db,
         campaign_name=args.registry_campaign,
         args=args,
+        workload_package=workload_package,
         evidence=evidence,
         run_dir=run_dir,
         simulator_returncode=int(run.get("returncode", 1)),
+        campaign_artifacts=campaign_artifacts,
     )
 
     summary = {
@@ -723,6 +1177,8 @@ def main(argv: List[str] | None = None, *, cli_script: str = "dse_v2/scripts/dse
         "trusted_for_final_ranking": evidence["trusted_for_final_ranking"],
         "missing_required_coverage": evidence["missing_required_coverage"],
         "simulator_returncode": run.get("returncode", 1),
+        "campaign": str(run_dir / "campaign.json"),
+        "campaign_ledger": str(run_dir / "campaign_ledger.json"),
         "step2_trial_state_ledger": str(run_dir / "step2" / "trial_state_ledger.json"),
     }
     print(json.dumps(summary, indent=2, sort_keys=True))

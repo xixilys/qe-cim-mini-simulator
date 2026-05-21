@@ -13,6 +13,7 @@ import dse_v2.backends.gem5_systemc_adapter as gem5_adapter_module
 from dse_v2.backends.generic_systemc_bridge import GenericSystemCBackend
 from dse_v2.backends.gem5_systemc_adapter import Gem5SystemCClosureAdapter
 from dse_v2.codesign.artifacts import build_codesign_l4_evidence, build_default_codesign_artifacts
+from dse_v2.contracts import SCHEMA_REGISTRY, validate_instance
 from dse_v2.core.workload import create_sparse_spmv_graph, package_from_graph
 from dse_v2.reference_workloads.dft_qe import QE_SCF_REQUIRED_COVERAGE, create_qe_reference_package
 from dse_v2.dse.orchestrator import DesignPoint
@@ -58,6 +59,17 @@ def _run_pilot(tmp_path, backend: str, extra_args=None):
         cmd.extend(extra_args)
     result = subprocess.run(cmd, cwd=REPO_ROOT, capture_output=True, text=True, timeout=30)
     return out_dir, result
+
+
+def _flatten_strings(value):
+    if isinstance(value, str):
+        yield value
+    elif isinstance(value, dict):
+        for item in value.values():
+            yield from _flatten_strings(item)
+    elif isinstance(value, list):
+        for item in value:
+            yield from _flatten_strings(item)
 
 
 def test_full_flow_pilot_writes_required_evidence(tmp_path):
@@ -115,6 +127,33 @@ def test_full_flow_pilot_writes_required_evidence(tmp_path):
     assert step2_top_k["top_k_or_representative_completion_allowed"] is False
     assert step2_top_k["trusted_final_claim"] is False
 
+    assert (out_dir / "campaign.json").exists()
+    assert (out_dir / "campaign_ledger.json").exists()
+    campaign = json.loads((out_dir / "campaign.json").read_text())
+    campaign_ledger = json.loads((out_dir / "campaign_ledger.json").read_text())
+    validate_instance(campaign, SCHEMA_REGISTRY["dse.contract.campaign.v1"])
+    validate_instance(campaign_ledger, SCHEMA_REGISTRY["dse.contract.campaign_ledger.v1"])
+    assert campaign["campaign_id"] == step2_ledger["campaign_id"]
+    assert campaign["status"] == "active"
+    assert campaign["final_completion_status"] is None
+    assert campaign["budgets"]["broad_evidence_run"] is False
+    assert campaign["budgets"]["step3_queue_entry_budget"] == 1
+    assert campaign["policies"]["top_k_queue_role"] == "provenance_only_not_step3_admission"
+    assert "DFT" not in "".join(campaign.keys())
+    assert campaign_ledger["campaign_id"] == step2_ledger["campaign_id"]
+    assert campaign_ledger["workload_run_id"] == step2_ledger["workload_run_id"]
+    assert campaign_ledger["trial_id"] == step2_ledger["trial_id"]
+    assert campaign_ledger["broad_evidence_run"] is False
+    assert campaign_ledger["trusted_final_claim"] is False
+    assert campaign_ledger["release_completion_eligible"] is False
+    assert campaign_ledger["workload_run_ref"]["workload_package"] == "step1/workload_package.json"
+    assert campaign_ledger["step2_refs"]["trial_state_ledger"] == "step2/trial_state_ledger.json"
+    assert campaign_ledger["step2_refs"]["search_checkpoint"] == "step2/search_checkpoint.json"
+    assert campaign_ledger["step3_refs"]["simulation_request"] == "simulation_request.json"
+    assert campaign_ledger["step3_refs"]["simulation_result"] == "simulation_result.json"
+    assert campaign_ledger["selected_trial_refs"]["queue_mode"] == "selected-entry-only"
+    assert not any("dft rtl/ppa" in item.lower() for item in campaign_ledger["resume_next_actions"])
+
     verdict = json.loads((out_dir / "verdict.json").read_text())
     assert verdict["trusted_for_final_ranking"] is True
     assert verdict["binding_status"]["standalone_systemc_full_workload"] == "implemented"
@@ -138,6 +177,8 @@ def test_full_flow_pilot_writes_required_evidence(tmp_path):
     artifacts = {entry["path"]: entry for entry in artifact_manifest["artifacts"]}
     for rel in REQUIRED_EVIDENCE_FILES:
         assert artifacts[rel]["exists"] is True
+    assert artifacts["campaign.json"]["exists"] is True
+    assert artifacts["campaign_ledger.json"]["exists"] is True
     assert artifacts["step1/step1_status.json"]["exists"] is True
     assert artifacts["step1/step1_artifact_validation.json"]["exists"] is True
     assert artifacts["step2/search_checkpoint.json"]["exists"] is True
@@ -175,6 +216,26 @@ def test_full_flow_pilot_writes_required_evidence(tmp_path):
     assert replay["simulator_replay_command"]
 
 
+def test_generic_full_flow_pilot_campaign_ledger_is_domain_neutral(tmp_path):
+    out_dir, result = _run_pilot(tmp_path, "systemc", extra_args=[
+        "--workload",
+        "generic_tensor_chain",
+        "--profile",
+        "ml_tensor",
+        "--importer",
+        "generic_json",
+        "--generator",
+        "tensor_chain",
+    ])
+    assert result.returncode == 0, result.stdout + result.stderr
+
+    ledger = json.loads((out_dir / "campaign_ledger.json").read_text())
+    assert ledger["workload_family"] == "ml_tensor"
+    assert ledger["broad_evidence_run"] is False
+    assert ledger["selected_trial_refs"]["queue_mode"] == "selected-entry-only"
+    assert not any("dft" in item.lower() or "qe" in item.lower() for item in _flatten_strings(ledger))
+
+
 def test_full_flow_pilot_optionally_records_registry_trial(tmp_path):
     registry_db = tmp_path / "campaign.sqlite"
     out_dir, result = _run_pilot(
@@ -191,18 +252,50 @@ def test_full_flow_pilot_optionally_records_registry_trial(tmp_path):
 
     registry = ExperimentRegistry(registry_db)
     campaigns = registry.list_campaigns()
-    trials = registry.query_trials(campaign_id=campaigns[0].campaign_id, status="completed", fidelity="L3")
 
     assert len(campaigns) == 1
     assert campaigns[0].name == "pilot_campaign"
+    assert campaigns[0].status == "running"
     assert campaigns[0].metadata["runner"] == "run_full_flow_pilot"
+    assert campaigns[0].metadata["logical_campaign_id"].startswith("campaign::")
+    workload_runs = registry.query_workload_runs(campaign_id=campaigns[0].campaign_id)
+    assert len(workload_runs) == 1
+    assert workload_runs[0].status == "ready_for_step2"
+    assert workload_runs[0].campaign_id == campaigns[0].campaign_id
+
+    trials = registry.query_trials(campaign_id=campaigns[0].campaign_id, fidelity="L3")
     assert len(trials) == 1
+    assert trials[0].status == "simulated"
+    assert trials[0].workload_run_id == workload_runs[0].workload_run_id
     assert trials[0].params["workload"] == "qe_scf_shell"
     assert trials[0].params["backend"] == "systemc"
     assert trials[0].params["run_id"] == "qe_scf_reference_systemc"
     assert trials[0].metrics["trusted_for_final_ranking"] is True
     assert trials[0].artifacts["run_dir"] == str(out_dir)
+    assert trials[0].artifacts["campaign"] == str(out_dir / "campaign.json")
+    assert trials[0].artifacts["campaign_ledger"] == str(out_dir / "campaign_ledger.json")
     assert trials[0].artifacts["verdict"] == str(out_dir / "verdict.json")
+    artifact_refs = registry.list_artifact_refs(campaign_id=campaigns[0].campaign_id)
+    assert {ref.path for ref in artifact_refs}.issuperset({
+        "campaign.json",
+        "campaign_ledger.json",
+        "step1/workload_package.json",
+        "step2/trial_state_ledger.json",
+        "step2/step3_simulation_queue.json",
+        "simulation_request.json",
+        "simulation_result.json",
+    })
+    step1_refs = [ref for ref in artifact_refs if ref.path.startswith("step1/")]
+    trial_refs = [
+        ref for ref in artifact_refs
+        if ref.path.startswith("step2/") or ref.path in {"simulation_request.json", "simulation_result.json"}
+    ]
+    assert step1_refs
+    assert all(ref.workload_run_id == workload_runs[0].workload_run_id for ref in step1_refs)
+    assert all(ref.trial_id is None for ref in step1_refs)
+    assert trial_refs
+    assert all(ref.workload_run_id == workload_runs[0].workload_run_id for ref in trial_refs)
+    assert all(ref.trial_id == trials[0].trial_id for ref in trial_refs)
 
 
 def test_missing_required_phase_blocks_systemc_trusted_verdict(tmp_path):

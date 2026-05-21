@@ -33,6 +33,7 @@ def test_schema_registry_is_semantically_valid_and_domain_neutral():
     validate_schema_registry()
 
     assert "dse.contract.campaign.v1" in SCHEMA_REGISTRY
+    assert "dse.contract.campaign_ledger.v1" in SCHEMA_REGISTRY
     assert "dse.contract.trial.v1" in SCHEMA_REGISTRY
     assert "dse.contract.dft_profile.v1" in SCHEMA_REGISTRY
 
@@ -54,6 +55,8 @@ def test_artifact_catalog_has_unique_one_producer_bindings_and_examples():
     )
 
     producers = {item.canonical_name: item.producer_stage for item in ARTIFACT_CATALOG}
+    assert producers["campaign.json"] == "control_plane"
+    assert producers["campaign_ledger.json"] == "control_plane"
     assert producers["architecture_search_space.json"] == "step2"
     assert producers["search_checkpoint.json"] == "step2"
     assert producers["top_k_candidate_queue.json"] == "step2"
@@ -74,6 +77,11 @@ def test_artifact_catalog_has_unique_one_producer_bindings_and_examples():
         if item.required:
             assert item.example
             validate_instance(item.example, SCHEMA_REGISTRY[item.schema_id])
+
+    campaign_schema = SCHEMA_REGISTRY["dse.contract.campaign.v1"]
+    campaign_required = set(campaign_schema["required"])
+    assert {"schema_version", "campaign_id", "objective", "status"}.issubset(campaign_required)
+    assert not any("dft" in field.lower() or "qe" in field.lower() for field in campaign_required)
 
 
 def test_artifact_catalog_rejects_duplicate_names_unknown_schemas_and_bad_examples():

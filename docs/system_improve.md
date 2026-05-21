@@ -29,13 +29,17 @@ machine**。当前 Step2 已开始把分散的搜索记录收敛成通用
 `trial_state_ledger.json`，并补了 `search_checkpoint.json` 与
 `top_k_candidate_queue.json`，覆盖 candidate generation、screening、promotion、
 Top-K ordering provenance 和 Step3 queue admission；这解决了“搜索候选为什么来、
-为什么过/不过、Top-K 只是排序建议还是 Step3 admission、是否进入 Step3”的第一层账本问题。剩余缺口是 campaign 级预算/恢复/环境/跨
-Step3/Step4/Step5 反馈闭环的一等公民 ledger。
+为什么过/不过、Top-K 只是排序建议还是 Step3 admission、是否进入 Step3”的第一层账本问题。`run_full_flow_pilot.py` 现在也会写
+`campaign.json` 与 `campaign_ledger.json`，把一次 bounded pilot 的目标、预算、
+claim boundary、Step1/Step2/selected-entry Step3 artifact refs 和可选 SQLite
+lifecycle registry 串起来。
 
 现在文档里有 Step1、Step2、Step3、Reporting，Step2 也有了
-trial-level lifecycle ledger；但还没有把一次完整 DSE 运行定义成一个
-稳定的、可恢复的、可查询的 campaign ledger。也就是说，系统开始知道每个
-Step2 candidate 的状态，但还需要一个更强的“运行账本”来回答：
+trial-level lifecycle ledger，pilot 也有了 campaign-level 运行账本；剩余工作是把
+这个 pilot-local ledger 推广成完整 Campaign Manager：预算调度、恢复策略、环境快照、
+跨 Step3/Step4/Step5 feedback loop，以及多 workload / 多候选 campaign 汇总。也就是说，
+系统开始知道每个 Step2 candidate 的状态，也开始知道一次 bounded run 的运行边界，
+但还需要一个更强的“运行账本”来回答：
 
 * 这个 campaign 的目标函数是什么？
 * 预算是什么？
