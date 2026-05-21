@@ -31,9 +31,13 @@
   and Pareto-visible, but `winner_selection_status` remains
   `tied_by_identical_kernel_ppa_no_single_winner`.  Reporting may cite this as
   tied kernel-PPA progress only; it must not select a FPGA/ASIC winner, mark a
-  trusted full-SCF winner, or set `deliverable_complete=true` until
-  candidate-specific PPA provenance, fresh tie-breaker evidence,
-  winner-resolution, full-SCF accounting, and the goal/release claim gate close.
+  trusted full-SCF winner, or set `deliverable_complete=true`.  Candidate
+  metadata and assignment-derived candidate-parametric attribution may be
+  preserved as audit sidecars only; they must not alter the physical FPGA/ASIC
+  rankings, Pareto frontier, or winner selection.  Identical raw Vivado/DC
+  metrics and source/parameter hashes remain a no-winner tie until generated
+  RTL/tool evidence varies by candidate and the provenance, winner-resolution,
+  full-SCF accounting, and goal/release claim gates close.
 - Current-goal L4/gem5 transport proof is now present and bound for the
   36-candidate × 6-SCF target.  The bridge under
   `runs/dse/wave36_step5_real_source_flow_all288_20260520T061902Z/current_goal_l4_bridge/`
@@ -1127,8 +1131,11 @@ Current all36 current-route evidence
 `winner_selection_status=tied_by_identical_kernel_ppa_no_single_winner`.
 This is the honest result of the present candidate-stamped kernel evidence:
 all release candidates close the hard gates, but their parsed kernel PPA
-signatures are tied, so a separate system-level/full-SCF tie-breaker is still
-required before declaring a single best FPGA or ASIC architecture.
+signatures are tied, so `candidate_parametric_attribution_used=false` and a
+separate system-level/full-SCF tie-breaker cannot by itself declare a single best
+FPGA or ASIC architecture.  The PPA winner proof must come from physical
+candidate-parametric evidence: fresh generated RTL/tool runs whose source,
+parameter hashes, or raw Vivado/DC metrics actually vary by candidate.
 
 Before a parsed PPA row can support that tie-breaker, Step5 must also run the
 candidate-specific provenance audit:
@@ -1192,12 +1199,17 @@ emits separate FPGA and ASIC winner resolution records.  A deployment winner is
 accepted only when the corresponding ranking has exactly one rank-1 candidate,
 the PPA metrics are not tied, and the PPA provenance audit is
 `winner_provenance_eligible=true`.
-Candidate-ID deterministic ordering, Step2 `design_score`, shared
-route-probe/source-flow evidence, or a single-candidate full-SCF bundle are
-forbidden tie-breakers.  When the current all36 run remains tied, the artifact
-must stay `blocked_no_unique_hardware_ppa_winners` and list the concrete next
-evidence: candidate-specific golden/sim/synth/Vivado/DC rows plus comparable
-full-SCF evaluated-hybrid accounting for every tied candidate.
+Candidate-ID deterministic ordering, Step2 `design_score`, assignment-derived
+candidate-parametric sidecars, shared route-probe/source-flow evidence, or a
+single-candidate full-SCF bundle are forbidden tie-breakers.  Those sidecars may
+explain candidate intent and mapping context, but they are separate from
+physical PPA and must not change `fpga_ranking`, `asic_ranking`, Pareto
+membership, `ranked_candidates_available`, or winner selection.  When the
+current all36 run remains tied, the artifact must stay
+`blocked_no_unique_hardware_ppa_winners` and list the concrete next evidence:
+candidate-specific golden/sim/synth/Vivado/DC rows with varied generated
+RTL/tool source or parameter hashes plus comparable full-SCF evaluated-hybrid
+accounting for every tied candidate.
 
 The trial-ledger helper writes:
 
