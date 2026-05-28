@@ -27,9 +27,11 @@ from dse_v2.core.workload.package import WorkloadPackage, package_from_graph
 from dse_v2.core.workload.workflows import required_coverage_from_workflow
 from dse_v2.contracts import CONTRACT_VERSION
 from dse_v2.dse.campaign_manager import build_campaign_search_admission_plan
+from dse_v2.dse.step3_admission_queue_validation import validate_step3_admission_queue
 from dse_v2.dse.orchestrator import DesignPoint
 from dse_v2.mapping.search import run_mapping_search
 from dse_v2.mapping.search_policy import build_search_iteration_plan
+from dse_v2.mapping.search_plan_validation import validate_search_iteration_plan
 
 def _profile_required_coverage(
     workload_package: WorkloadPackage,
@@ -1873,6 +1875,8 @@ def write_full_flow_evidence(
         if search_iteration_plan:
             campaign_evaluation_plan = _load_optional_json(run_dir / "campaign_evaluation_plan.json")
             step3_simulation_queue = _load_optional_json(run_dir / "step2" / "step3_simulation_queue.json")
+            search_iteration_plan_validation = validate_search_iteration_plan(search_iteration_plan)
+            _write_json(run_dir / "search_iteration_plan_validation.json", search_iteration_plan_validation)
             try:
                 campaign_search_admission_plan = build_campaign_search_admission_plan(
                     search_iteration_plan=search_iteration_plan,
@@ -1881,6 +1885,7 @@ def write_full_flow_evidence(
                     refs={
                         "campaign_evaluation_plan": "campaign_evaluation_plan.json",
                         "search_iteration_plan": "search_iteration_plan.json",
+                        "search_iteration_plan_validation": "search_iteration_plan_validation.json",
                         "step3_simulation_queue": "step2/step3_simulation_queue.json",
                     },
                 )
@@ -1925,6 +1930,19 @@ def write_full_flow_evidence(
                     ],
                 }
             _write_json(run_dir / "campaign_search_admission_plan.json", campaign_search_admission_plan)
+            step3_admission_queue_validation = validate_step3_admission_queue(
+                step3_simulation_queue=step3_simulation_queue if isinstance(step3_simulation_queue, Mapping) else None,
+                campaign_evaluation_plan=campaign_evaluation_plan if isinstance(campaign_evaluation_plan, Mapping) else None,
+                search_iteration_plan=search_iteration_plan,
+                campaign_search_admission_plan=campaign_search_admission_plan,
+                refs={
+                    "search_iteration_plan_validation": "search_iteration_plan_validation.json",
+                    "campaign_evaluation_plan": "campaign_evaluation_plan.json",
+                    "campaign_search_admission_plan": "campaign_search_admission_plan.json",
+                    "step3_simulation_queue": "step2/step3_simulation_queue.json",
+                },
+            )
+            _write_json(run_dir / "step3_admission_queue_validation.json", step3_admission_queue_validation)
             campaign_ledger_path = run_dir / "campaign_ledger.json"
             campaign_ledger = _load_optional_json(campaign_ledger_path)
             if campaign_ledger:
@@ -1933,7 +1951,9 @@ def write_full_flow_evidence(
                 campaign_ledger["control_plane_refs"] = control_refs
                 step4_refs = dict(campaign_ledger.get("step4_refs", {}) or {})
                 step4_refs["search_iteration_plan"] = "search_iteration_plan.json"
+                step4_refs["search_iteration_plan_validation"] = "search_iteration_plan_validation.json"
                 step4_refs["campaign_search_admission_plan"] = "campaign_search_admission_plan.json"
+                step4_refs["step3_admission_queue_validation"] = "step3_admission_queue_validation.json"
                 campaign_ledger["step4_refs"] = step4_refs
                 campaign_ledger["campaign_search_admission_plan_ref"] = "campaign_search_admission_plan.json"
                 _write_json(campaign_ledger_path, campaign_ledger)
@@ -1975,8 +1995,10 @@ def write_full_flow_evidence(
     ]
     if search_iteration_plan_written:
         provenance_outputs.append("search_iteration_plan.json")
+        provenance_outputs.append("search_iteration_plan_validation.json")
     if campaign_search_admission_plan_written:
         provenance_outputs.append("campaign_search_admission_plan.json")
+        provenance_outputs.append("step3_admission_queue_validation.json")
     _write_json(run_dir / "provenance.json", {
         "schema_version": "dse.step4.provenance.v1",
         "run_id": run_id,
@@ -2054,7 +2076,9 @@ def write_full_flow_evidence(
             "provenance.json",
         ]
         + (["search_iteration_plan.json"] if search_iteration_plan_written else [])
+        + (["search_iteration_plan_validation.json"] if search_iteration_plan_written else [])
         + (["campaign_search_admission_plan.json"] if campaign_search_admission_plan_written else [])
+        + (["step3_admission_queue_validation.json"] if campaign_search_admission_plan_written else [])
         + (["l4_interface_metrics.json"] if backend == "gem5_systemc" else [])
         + codesign_paths
         + list(extra_artifact_paths or [])

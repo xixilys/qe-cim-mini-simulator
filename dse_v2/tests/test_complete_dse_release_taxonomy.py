@@ -14,9 +14,12 @@ from dse_v2.codesign.complete_dse_search_space import (
     build_legality_pruning_report,
     build_release_pruning_rationale_report,
     build_release_subset_manifest,
+    build_runtime_schedule_space,
     build_schedule_legality_report,
     build_workload_architecture_prior_report,
     classify_candidate_legality,
+    default_release_candidate_seed_rows,
+    default_release_seed_rows,
 )
 
 
@@ -44,18 +47,20 @@ def test_release_taxonomy_contains_required_base_families_and_finite_hybrids():
     )
 
 
-def test_release_subset_has_one_legal_candidate_per_required_taxonomy_entry():
+def test_release_subset_covers_bounded_release_universe_per_required_taxonomy_entry():
     manifest = build_release_subset_manifest()
     included = set(manifest["included_taxonomy_ids"])
+    release_seed_rows = default_release_candidate_seed_rows()
 
     assert manifest["finite"] is True
     assert manifest["predeclared"] is True
-    assert manifest["candidate_count"] == len(REQUIRED_BASE_FAMILIES) + len(
-        REQUIRED_HYBRID_TEMPLATES
-    )
+    assert manifest["candidate_count"] == len(release_seed_rows)
     assert manifest["legal_candidate_count"] == manifest["candidate_count"]
     assert set(REQUIRED_BASE_FAMILIES).issubset(included)
     assert set(REQUIRED_HYBRID_TEMPLATES).issubset(included)
+    assert {
+        row["taxonomy_id"] for row in release_seed_rows
+    } == set(REQUIRED_BASE_FAMILIES) | set(REQUIRED_HYBRID_TEMPLATES)
     assert len(manifest["legal_candidate_ids"]) == len(
         set(manifest["legal_candidate_ids"])
     )
@@ -83,10 +88,17 @@ def test_legality_rejects_ad_hoc_hybrid_and_incompatible_schedule_bindings():
     incompatible = copy.deepcopy(
         manifest["candidates"][0]["identity"]["identity_layers"]
     )
+    taxonomy_id = incompatible["architecture_parameters"]["taxonomy_id"]
+    runtime = next(
+        row
+        for row in build_runtime_schedule_space()["runtime_schedules"]
+        if taxonomy_id not in row["compatible_taxonomy_ids"]
+    )
     incompatible["runtime_scheduling_parameters"] = {
-        "runtime_schedule_id": "multi_engine_work_stealing",
-        "queue_policy": "work_stealing_ready_queue",
-        "engine_assignment": "kernel_class_affinity",
+        "runtime_schedule_id": runtime["id"],
+        "co_scheduling_policy_id": runtime["queue_policy"],
+        "queue_policy": runtime["queue_policy"],
+        "engine_assignment": runtime["engine_assignment"],
     }
     legal, reasons = classify_candidate_legality(incompatible)
     assert legal is False
@@ -121,9 +133,7 @@ def test_workload_priors_and_schedule_legality_are_pre_freeze_only():
     assert prior["status"] == "passed"
     assert prior["workload_facts_affect_identity"] is False
     assert prior["workload_facts_affect_post_freeze_pruning"] is False
-    assert prior["seed_row_count"] == len(REQUIRED_BASE_FAMILIES) + len(
-        REQUIRED_HYBRID_TEMPLATES
-    )
+    assert prior["seed_row_count"] == len(default_release_seed_rows())
     assert all(
         row["candidate_identity_participation"] is False
         and row["may_remove_frozen_rows"] is False
@@ -132,8 +142,7 @@ def test_workload_priors_and_schedule_legality_are_pre_freeze_only():
 
     assert schedule["status"] == "passed"
     assert schedule["summary"] == {
-        "row_count": len(REQUIRED_BASE_FAMILIES)
-        + len(REQUIRED_HYBRID_TEMPLATES),
+        "row_count": len(default_release_seed_rows()),
         "all_algorithm_bindings_legal": True,
         "all_mapping_bindings_legal": True,
         "all_compile_schedule_bindings_legal": True,

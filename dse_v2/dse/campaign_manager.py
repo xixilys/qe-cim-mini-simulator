@@ -182,7 +182,13 @@ def _normalize_materialized_step3_entry(
     payload.setdefault("priority_score", _candidate_priority(candidate))
     payload.setdefault("queue_state", "scheduled_for_simulation")
     payload.setdefault("promoted_for_simulation", True)
+    payload.setdefault("step2_screenable", bool(candidate.get("step2_screenable", True)))
+    payload.setdefault("step3_evaluable", bool(candidate.get("step3_evaluable", True)))
+    payload.setdefault("simulation_eligible", bool(candidate.get("simulation_eligible", True)))
+    payload.setdefault("simulation_blockers", list(candidate.get("simulation_blockers", []) or []))
+    payload.setdefault("claim_status", "legacy_pilot_only")
     payload.setdefault("admission_source", "campaign_search_admission_plan.json")
+    payload.setdefault("admission_required_before_execution", "step2/step3_simulation_queue.json")
     payload.setdefault("source_artifact", search_iteration_plan_ref)
     payload.setdefault("required_step3_artifacts", [
         "simulation_request.json",
@@ -217,6 +223,7 @@ def build_campaign_search_admission_plan(
     queue = _as_mapping(step3_simulation_queue)
     refs_payload = {
         "search_iteration_plan": "search_iteration_plan.json",
+        "search_iteration_plan_validation": "search_iteration_plan_validation.json",
         "campaign_evaluation_plan": "campaign_evaluation_plan.json",
         "step3_simulation_queue": "step2/step3_simulation_queue.json",
         **dict(refs or {}),
@@ -272,6 +279,7 @@ def build_campaign_search_admission_plan(
                 "execution_allowed": False,
                 "reason": "existing step3_simulation_queue already owns this candidate alias",
                 "not_a_step3_queue_entry": True,
+                "admission_required_before_execution": refs_payload["step3_simulation_queue"],
             })
             continue
         if not eligible:
@@ -282,6 +290,7 @@ def build_campaign_search_admission_plan(
                 "execution_allowed": False,
                 "reason": "candidate is not Step3-evaluable in the search iteration plan",
                 "not_a_step3_queue_entry": True,
+                "admission_required_before_execution": refs_payload["step3_simulation_queue"],
             })
             continue
         if not materialization_allowed or authorized_count >= requested_budget:
@@ -293,6 +302,7 @@ def build_campaign_search_admission_plan(
                 "budget_widening_requested": widening_requested,
                 "budget_widening_allowed": widening_allowed,
                 "not_a_step3_queue_entry": True,
+                "admission_required_before_execution": refs_payload["step3_simulation_queue"],
             })
             continue
 
@@ -349,6 +359,7 @@ def build_campaign_search_admission_plan(
         "budget_policy": dict(combined_budget),
         "campaign_evaluation_plan_ref": refs_payload["campaign_evaluation_plan"],
         "search_iteration_plan_ref": refs_payload["search_iteration_plan"],
+        "search_iteration_plan_validation_ref": refs_payload["search_iteration_plan_validation"],
         "step3_simulation_queue_ref": refs_payload["step3_simulation_queue"],
         "search_iteration_applied_feedback_count": int(search_iteration_plan.get("applied_feedback_count", 0) or 0),
         "next_candidate_count": len(next_candidates),

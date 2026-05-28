@@ -1657,6 +1657,7 @@ def build_step3_simulation_queue(
     mapping_candidate_id = str(selected_record.get("candidate_id") or promotion_decision.get("candidate_id") or "selected_mapping")
     architecture_id = str(architecture_artifact.get("architecture_id") or design_point.config.get("architecture_id") or design_point.system_architecture.system_id)
     mapping_id = str(promotion_decision.get("mapping_id") or design_point.config.get("mapping_id") or f"{design_point.design_point_id}_mapping")
+    scheduled_for_simulation = str(queue_state).startswith("scheduled_for_simulation")
     entry = {
         "queue_entry_id": f"step2-selected::{architecture_id}::{mapping_candidate_id}",
         "candidate_id": f"{architecture_id}::{mapping_candidate_id}",
@@ -1681,6 +1682,11 @@ def build_step3_simulation_queue(
         "trusted_final_eligible_before_step3": bool(architecture_artifact.get("trusted_final_eligible", False)),
         "step3_search_blockers": list(architecture_artifact.get("step3_search_blockers", []) or []),
         "queue_state": queue_state,
+        "step2_screenable": scheduled_for_simulation,
+        "step3_evaluable": scheduled_for_simulation,
+        "simulation_eligible": scheduled_for_simulation,
+        "simulation_blockers": [] if scheduled_for_simulation else list(selected_record.get("simulation_blockers", []) or []),
+        "admission_source": "step2/step3_simulation_queue.json",
         "blocked_reasons": _queue_blocked_reasons(
             queue_state=queue_state,
             promotion_decision=promotion_decision,

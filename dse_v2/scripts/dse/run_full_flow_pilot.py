@@ -478,6 +478,7 @@ def _build_campaign_evaluation_plan(
             planned_top_k_ids.add(str(top_k_entry.get("top_k_entry_id") or mapping_candidate_id))
             planned_top_k_ids.add(str(top_k_entry.get("mapping_candidate_id") or mapping_candidate_id))
             planned_top_k_ids.add(str(top_k_entry.get("candidate_id") or mapping_candidate_id))
+        scheduled_for_simulation = str(entry.get("queue_state", "")).startswith("scheduled_for_simulation")
         planned_entries.append({
             "plan_entry_id": f"campaign-plan::{entry.get('queue_entry_id') or index}",
             "queue_entry_id": str(entry.get("queue_entry_id") or f"queue_entry_{index}"),
@@ -494,6 +495,11 @@ def _build_campaign_evaluation_plan(
             "execution_allowed": bool(entry.get("promoted_for_simulation", False))
             and str(entry.get("queue_state", "")).startswith("scheduled_for_simulation"),
             "queue_state": entry.get("queue_state"),
+            "step2_screenable": scheduled_for_simulation,
+            "step3_evaluable": scheduled_for_simulation,
+            "simulation_eligible": scheduled_for_simulation,
+            "simulation_blockers": [] if scheduled_for_simulation else list(entry.get("simulation_blockers", []) or []),
+            "claim_status": entry.get("claim_status", "legacy_pilot_only"),
             "required_step3_artifacts": list(entry.get("required_step3_artifacts", []) or []),
             "broad_evidence_run": False,
             "release_completion_eligible": False,

@@ -20,7 +20,7 @@ def test_release_cardinality_budget_enforces_ambition_floor_and_caps():
     assert budget["legal_release_candidates_target_min"] == 64
     assert budget["legal_release_candidates_target_max"] == 256
     assert budget["legal_release_candidates_hard_cap"] == 512
-    assert budget["frozen_workload_cases_hard_cap"] == 8
+    assert budget["frozen_workload_cases_hard_cap"] == 6
     assert budget["l4_evidence_rows_hard_cap"] == 4096
     assert budget["research_to_release_ratio_cap"] == 0.05
     assert (

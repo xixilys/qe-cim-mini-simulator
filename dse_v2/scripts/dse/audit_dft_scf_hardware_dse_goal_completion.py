@@ -20,10 +20,30 @@ from pathlib import Path
 from typing import Any, Dict, Mapping, Optional, Sequence
 from zoneinfo import ZoneInfo
 
+REPO_ROOT = Path(__file__).resolve().parents[3]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from dse_v2.reference_workloads.dft_candidate_set_consistency import (
+    validate_dft_candidate_set_consistency,
+)
+from dse_v2.reporting import complete_dse_claims
+
 
 AUDIT_SCHEMA = "dse.dft_scf_hardware.goal_completion_audit.v1"
 DEFAULT_HORIZON_LOCAL = "2026-06-01 12:00:00"
 LOCAL_TZ = ZoneInfo("Asia/Shanghai")
+GOAL_STATUS_TAXONOMY = (
+    "vertical_slice_only",
+    "MVP_partial",
+    "blocked",
+    "projection_only",
+    "deliverable_complete",
+)
+
+
+def _expected_requirement_evidence_row_count() -> int:
+    return len(complete_dse_claims.GOAL_REQUIREMENT_EVIDENCE_SPECS)
 
 
 def _load_json(path: Path) -> Dict[str, Any]:
@@ -110,10 +130,13 @@ def _load_semantic_closure_payload(
         actual = _sha256(resolved)
         if actual != ref.get("sha256"):
             source_hash_errors.append(f"{label}:source_hash_mismatch")
+    if embedded_report_section and required_source_count > 0:
+        source_hash_errors.append("semantic_closure_requires_file_backed_source_hashes")
     missing_checks = sorted(required_check_ids - check_ids)
     failed_checks = [str(item.get("check_id")) for item in checks if item.get("passed") is not True]
     source_hash_backed = (
         bool(source_artifacts)
+        and not embedded_report_section
         and required_source_count > 0
         and hashed_required_source_count == required_source_count
         and not source_hash_errors
@@ -166,6 +189,12 @@ def _list_of_mappings(value: Any) -> list[Dict[str, Any]]:
     return [dict(item) for item in value if isinstance(item, Mapping)]
 
 
+def _string_list(value: Any) -> list[str]:
+    if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
+        return []
+    return [str(item) for item in value if str(item)]
+
+
 def _status_item(requirement: str, status: str, evidence: Mapping[str, Any]) -> Dict[str, Any]:
     return {
         "requirement": requirement,
@@ -174,12 +203,126 @@ def _status_item(requirement: str, status: str, evidence: Mapping[str, Any]) -> 
     }
 
 
+def _goal_status_defaults() -> Dict[str, bool]:
+    return {status: False for status in GOAL_STATUS_TAXONOMY}
+
+
+def _normalise_goal_statuses(value: Any, *, blocked: bool = False) -> Dict[str, bool]:
+    statuses = _goal_status_defaults()
+    if isinstance(value, Mapping):
+        for status in GOAL_STATUS_TAXONOMY:
+            statuses[status] = bool(value.get(status, False))
+        if "mvp_partial" in value and "MVP_partial" not in value:
+            statuses["MVP_partial"] = bool(value.get("mvp_partial", False))
+    statuses["blocked"] = bool(statuses["blocked"] or blocked)
+    if statuses["deliverable_complete"]:
+        statuses["blocked"] = False
+    return statuses
+
+
+def _load_requirement_evidence_matrix_payload(
+    *,
+    run_dir: Optional[Path],
+    report: Mapping[str, Any],
+) -> Dict[str, Any]:
+    payload = _mapping(report.get("requirement_evidence_matrix"))
+    source = {"kind": "final_report_section", "path": None, "sha256": None}
+    if not payload and run_dir is not None:
+        path = Path(run_dir) / "requirement_evidence_matrix.json"
+        if path.exists():
+            payload = _load_json(path)
+            source = {"kind": "file", "path": str(path), "sha256": _sha256(path)}
+    present = bool(payload)
+    status_taxonomy = [str(item) for item in payload.get("status_taxonomy", []) or []]
+    missing_statuses = sorted(set(GOAL_STATUS_TAXONOMY) - set(status_taxonomy))
+    rows_raw = payload.get("requirement_rows", [])
+    rows = _list_of_mappings(rows_raw) if isinstance(rows_raw, list) else []
+    blocked_rows = [
+        row
+        for row in rows
+        if row.get("claimable") is not True or row.get("blockers")
+    ]
+    blocked = bool(
+        not present
+        or payload.get("claimability") == "blocked"
+        or int(payload.get("blocked_requirement_count", 0) or 0) > 0
+    )
+    expected_requirement_count = _expected_requirement_evidence_row_count()
+    completion_statuses = _normalise_goal_statuses(
+        payload.get("completion_statuses"),
+        blocked=blocked,
+    )
+    deliverable_allowed = bool(payload.get("deliverable_complete_allowed", False))
+    trusted_final_claim = bool(payload.get("trusted_final_claim", False))
+    matrix_errors: list[str] = []
+    if not present:
+        matrix_errors.append("matrix_missing")
+    if payload.get("schema_version") != "dse.complete_dse.requirement_evidence_audit_matrix.v1":
+        matrix_errors.append("unsupported_schema_version")
+    if payload.get("source_goal", "docs/goal.md") != "docs/goal.md":
+        matrix_errors.append("source_goal_not_docs_goal_md")
+    if missing_statuses:
+        matrix_errors.append("missing_status_taxonomy:" + ",".join(missing_statuses))
+    if not rows:
+        matrix_errors.append("requirement_rows_missing")
+    if len(rows) != expected_requirement_count:
+        matrix_errors.append(
+            f"requirement_row_count_mismatch:{len(rows)}!={expected_requirement_count}"
+        )
+    if payload.get("requirement_count") != len(rows):
+        matrix_errors.append("requirement_count_mismatch")
+    if payload.get("blocked_requirement_count") != len(blocked_rows):
+        matrix_errors.append("blocked_requirement_count_mismatch")
+    if deliverable_allowed and blocked_rows:
+        matrix_errors.append("deliverable_allowed_with_blocked_rows")
+    if deliverable_allowed and completion_statuses.get("deliverable_complete") is not True:
+        matrix_errors.append("deliverable_allowed_without_deliverable_status")
+    if deliverable_allowed and any(
+        completion_statuses.get(status) is True
+        for status in ("vertical_slice_only", "MVP_partial", "blocked", "projection_only")
+    ):
+        matrix_errors.append("deliverable_allowed_with_noncomplete_status")
+    if deliverable_allowed != trusted_final_claim:
+        matrix_errors.append("deliverable_allowed_trusted_final_claim_mismatch")
+    if completion_statuses["deliverable_complete"] != deliverable_allowed:
+        matrix_errors.append("deliverable_status_allowed_mismatch")
+    valid_fail_closed = bool(
+        present
+        and not matrix_errors
+    )
+    return {
+        "present": present,
+        "valid_fail_closed": valid_fail_closed,
+        "source": source,
+        "schema_version": payload.get("schema_version"),
+        "source_goal": payload.get("source_goal"),
+        "claimability": payload.get("claimability", "not_present"),
+        "expected_requirement_count": expected_requirement_count,
+        "requirement_count": payload.get("requirement_count"),
+        "blocked_requirement_count": payload.get("blocked_requirement_count"),
+        "deliverable_complete_allowed": deliverable_allowed,
+        "trusted_final_claim": trusted_final_claim,
+        "status_taxonomy": status_taxonomy or list(GOAL_STATUS_TAXONOMY),
+        "missing_statuses": missing_statuses,
+        "completion_statuses": completion_statuses,
+        "matrix_errors": matrix_errors,
+        "blockers": payload.get("blockers", []) if isinstance(payload.get("blockers", []), list) else [],
+    }
+
+
 def _final_report_path(*, run_dir: Optional[Path], final_report: Optional[Path]) -> Path:
     if final_report is not None:
         return Path(final_report)
     if run_dir is None:
         raise ValueError("Either run_dir or final_report is required")
-    return Path(run_dir) / "final_report.json"
+    run_dir = Path(run_dir)
+    root_report = run_dir / "final_report.json"
+    if root_report.exists():
+        return root_report
+    queue_report = run_dir / "step3_queue" / "final_report.json"
+    if queue_report.exists():
+        return queue_report
+    return root_report
 
 
 def _release_gate_detail_payload(
@@ -205,6 +348,64 @@ def _release_gate_detail_payload(
     section = dict(final_report_section)
     section["detail_source"] = "final_report.dft_hardware_closure_release_gate"
     return section
+
+
+def _candidate_set_release_gates_with_fresh_sidecar(
+    release_completion_gates: Mapping[str, Any],
+    *,
+    run_dir: Optional[Path],
+    report_path: Path,
+) -> Dict[str, Any]:
+    """Overlay final-report candidate-set gates with fresh sidecar validation."""
+
+    gates = dict(release_completion_gates)
+    candidate_run_dir = Path(run_dir) if run_dir is not None else report_path.parent
+    sidecar_path = candidate_run_dir / "dft_candidate_set_consistency.json"
+    if not sidecar_path.exists():
+        return gates
+
+    validation = validate_dft_candidate_set_consistency(sidecar_path)
+    recomputed = _mapping(validation.get("recomputed"))
+    source_only = _mapping(recomputed.get("source_only_candidate_ids"))
+    source_missing = _mapping(recomputed.get("source_missing_candidate_ids"))
+    fresh_valid = validation.get("valid") is True
+    blockers = _list_of_mappings(recomputed.get("blockers"))
+    if not fresh_valid:
+        blockers.append({
+            "blocker_id": "candidate_set_consistency_validation_not_passed",
+            "fresh_validation_valid": fresh_valid,
+            "fresh_validation_error_count": len(validation.get("errors", []) or []),
+            "fresh_validation_errors": list(validation.get("errors", []) or [])[:5],
+            "reason": (
+                "Audit recomputed dft_candidate_set_consistency.json from "
+                "candidate_sets and rejected stale or forged derived fields."
+            ),
+        })
+
+    status = str(
+        recomputed.get("candidate_set_consistency_status")
+        or ("candidate_sets_match" if recomputed.get("status") == "passed" else "candidate_set_mismatch")
+    )
+    if not fresh_valid:
+        status = "candidate_sets_not_checked_validation_invalid"
+
+    gates.update({
+        "candidate_set_consistency_status": status,
+        "candidate_set_consistency_source": "dft_candidate_set_consistency.json:fresh_audit_validation",
+        "candidate_set_consistency_checked": True,
+        "candidate_set_consistency_artifact_status": recomputed.get("status"),
+        "candidate_set_consistency_validation_valid": fresh_valid,
+        "candidate_set_missing_sources": _string_list(recomputed.get("missing_sources")),
+        "candidate_set_empty_sources": _string_list(recomputed.get("empty_sources")),
+        "release_gate_only_candidate_ids": _string_list(source_only.get("release_gate")),
+        "binding_map_only_candidate_ids": _string_list(source_only.get("binding_map")),
+        "trial_ledger_only_candidate_ids": _string_list(source_only.get("trial_ledger")),
+        "release_gate_missing_candidate_ids": _string_list(source_missing.get("release_gate")),
+        "binding_map_missing_candidate_ids": _string_list(source_missing.get("binding_map")),
+        "trial_ledger_missing_candidate_ids": _string_list(source_missing.get("trial_ledger")),
+        "candidate_set_blockers": blockers,
+    })
+    return gates
 
 
 def _synthesized_release_hardware_blockers(release_gate: Mapping[str, Any]) -> list[Dict[str, Any]]:
@@ -270,6 +471,150 @@ def _synthesized_release_hardware_blockers(release_gate: Mapping[str, Any]) -> l
     return blockers
 
 
+def _candidate_set_consistency_blocker(release_completion_gates: Mapping[str, Any]) -> Dict[str, Any] | None:
+    status = str(release_completion_gates.get("candidate_set_consistency_status") or "")
+    if status not in {
+        "candidate_set_mismatch",
+        "candidate_sets_not_checked_missing_sources",
+        "candidate_sets_empty",
+        "candidate_sets_not_checked_validation_invalid",
+    }:
+        return None
+    return {
+        "blocker_id": "candidate_set_consistency_not_passed",
+        "candidate_set_consistency_status": status,
+        "candidate_set_consistency_source": release_completion_gates.get("candidate_set_consistency_source"),
+        "candidate_set_consistency_validation_valid": release_completion_gates.get(
+            "candidate_set_consistency_validation_valid"
+        ),
+        "release_gate_only_candidate_ids": _string_list(
+            release_completion_gates.get("release_gate_only_candidate_ids")
+        ),
+        "binding_map_only_candidate_ids": _string_list(
+            release_completion_gates.get("binding_map_only_candidate_ids")
+        ),
+        "trial_ledger_only_candidate_ids": _string_list(
+            release_completion_gates.get("trial_ledger_only_candidate_ids")
+        ),
+        "release_gate_missing_candidate_ids": _string_list(
+            release_completion_gates.get("release_gate_missing_candidate_ids")
+        ),
+        "binding_map_missing_candidate_ids": _string_list(
+            release_completion_gates.get("binding_map_missing_candidate_ids")
+        ),
+        "trial_ledger_missing_candidate_ids": _string_list(
+            release_completion_gates.get("trial_ledger_missing_candidate_ids")
+        ),
+        "missing_sources": _string_list(release_completion_gates.get("candidate_set_missing_sources")),
+        "empty_sources": _string_list(release_completion_gates.get("candidate_set_empty_sources")),
+        "candidate_set_blockers": _list_of_mappings(
+            release_completion_gates.get("candidate_set_blockers")
+        ),
+        "reason": "Release-gate candidate IDs must match the Step2 binding map and trial ledger before hardware completion can be trusted.",
+    }
+
+
+def _deployment_candidate_alignment_blocker(
+    release_completion_gates: Mapping[str, Any],
+) -> Dict[str, Any] | None:
+    status = str(release_completion_gates.get("deployment_candidate_alignment_status") or "")
+    if status in {
+        "",
+        "deployment_candidate_alignment_passed",
+        "deployment_candidate_alignment_not_checked_no_recommendations",
+    }:
+        return None
+    return {
+        "blocker_id": "deployment_candidate_alignment_not_passed",
+        "deployment_candidate_alignment_status": status,
+        "deployment_recommendation_candidate_ids": _mapping(
+            release_completion_gates.get("deployment_recommendation_candidate_ids")
+        ),
+        "candidate_set_missing": _mapping(
+            release_completion_gates.get("deployment_candidate_ids_missing_from_candidate_set")
+        ),
+        "full_scf_missing": _mapping(
+            release_completion_gates.get("deployment_candidate_ids_missing_from_full_scf")
+        ),
+        "alignment_blockers": _list_of_mappings(
+            release_completion_gates.get("deployment_candidate_alignment_blockers")
+        ),
+        "reason": (
+            "FPGA/ASIC deployment recommendations must reference candidates that "
+            "are present in the trusted release candidate set and full-SCF "
+            "comparison before hardware completion can be trusted."
+        ),
+    }
+
+
+def _deployment_source_consensus_blocker(
+    release_completion_gates: Mapping[str, Any],
+) -> Dict[str, Any] | None:
+    status = str(release_completion_gates.get("deployment_source_consensus_status") or "")
+    if status in {
+        "",
+        "deployment_source_consensus_passed",
+        "deployment_source_consensus_not_checked_no_candidates",
+    }:
+        return None
+    blocker_id = (
+        "deployment_source_consensus_mismatch"
+        if status == "deployment_source_consensus_mismatch"
+        else "deployment_source_consensus_not_passed"
+    )
+    return {
+        "blocker_id": blocker_id,
+        "deployment_source_consensus_status": status,
+        "recommendation_bearing_deployments": _string_list(
+            release_completion_gates.get(
+                "deployment_source_consensus_recommendation_bearing_deployments"
+            )
+        ),
+        "source_consensus_blockers": _list_of_mappings(
+            release_completion_gates.get("deployment_source_consensus_blockers")
+        ),
+        "reason": (
+            "FPGA/ASIC deployment recommendation sources must agree on candidate "
+            "and design identity, with enough independent sources, before "
+            "hardware completion can be trusted."
+        ),
+    }
+
+
+def _deployment_target_consensus_blocker(
+    release_completion_gates: Mapping[str, Any],
+) -> Dict[str, Any] | None:
+    status = str(release_completion_gates.get("deployment_target_consensus_status") or "")
+    if status in {
+        "",
+        "deployment_target_consensus_passed",
+        "deployment_target_consensus_not_checked_no_targets",
+    }:
+        return None
+    blocker_id = (
+        "deployment_target_consensus_mismatch"
+        if status == "deployment_target_consensus_mismatch"
+        else "deployment_target_consensus_not_passed"
+    )
+    return {
+        "blocker_id": blocker_id,
+        "deployment_target_consensus_status": status,
+        "recommendation_bearing_deployments": _string_list(
+            release_completion_gates.get(
+                "deployment_target_consensus_recommendation_bearing_deployments"
+            )
+        ),
+        "target_consensus_blockers": _list_of_mappings(
+            release_completion_gates.get("deployment_target_consensus_blockers")
+        ),
+        "reason": (
+            "FPGA/ASIC deployment target artifacts must agree on selected device, "
+            "part, package, or target library, with enough independent sources, "
+            "before hardware completion can be trusted."
+        ),
+    }
+
+
 def _release_deliverable_blockers(
     release_gate: Mapping[str, Any],
     *,
@@ -314,10 +659,15 @@ def build_dft_scf_hardware_goal_completion_audit(
 
     report_path = _final_report_path(run_dir=run_dir, final_report=final_report)
     report = _load_json(report_path)
+    artifact_dir = report_path.parent if report_path.exists() else run_dir
     dft_audit_semantic_closure = _load_semantic_closure_payload(
-        run_dir=run_dir,
+        run_dir=artifact_dir,
         report=report,
         semantic_closure_path=semantic_closure_path,
+    )
+    requirement_evidence_matrix = _load_requirement_evidence_matrix_payload(
+        run_dir=artifact_dir,
+        report=report,
     )
     now_dt = now or datetime.now(LOCAL_TZ)
     if now_dt.tzinfo is None:
@@ -344,7 +694,19 @@ def build_dft_scf_hardware_goal_completion_audit(
     dft_hardware_release_gate = _mapping(report.get("dft_hardware_closure_release_gate"))
     dft_candidate_specific_ppa_provenance = _mapping(report.get("dft_candidate_specific_ppa_provenance"))
     dft_architecture_winner_resolution = _mapping(report.get("dft_architecture_winner_resolution"))
+    dft_deployment_readiness = _mapping(report.get("dft_hardware_deployment_recommendation_readiness"))
+    dft_deployment_comparator = _mapping(report.get("dft_deployment_comparator"))
+    dft_deployment_selector = _mapping(report.get("dft_deployment_selector"))
     dft_l4_goal_binding = _mapping(report.get("dft_l4_goal_binding"))
+    dft_deployment_decision_support = _mapping(report.get("dft_deployment_decision_support"))
+    dft_deployment_release_gates = _mapping(
+        dft_deployment_decision_support.get("release_completion_gates")
+    )
+    dft_deployment_release_gates = _candidate_set_release_gates_with_fresh_sidecar(
+        dft_deployment_release_gates,
+        run_dir=run_dir,
+        report_path=report_path,
+    )
     release_claim_gate = _mapping(dft_ledger.get("release_claim_gate"))
     eda_summary = _mapping(dft_ledger.get("eda_summary"))
     dft_hybrid = _mapping(report.get("dft_full_scf_evaluated_hybrid"))
@@ -404,6 +766,7 @@ def build_dft_scf_hardware_goal_completion_audit(
     l4_goal_binding_final_closure_eligible = bool(dft_l4_goal_binding.get("final_closure_eligible", False))
     l4_goal_binding_validation = _mapping(dft_l4_goal_binding.get("validation"))
     l4_current_goal_binding = _mapping(dft_l4_goal_binding.get("current_goal_binding"))
+    l4_accelerated_qe_summary = _mapping(dft_l4_goal_binding.get("accelerated_qe_blocker_summary"))
     trusted_winner = bool(selected.get("trusted_winner", False))
     hybrid_completion_claim = bool(dft_hybrid.get("completion_claim", False))
     hybrid_ppa_claim = bool(dft_hybrid.get("ppa_claim_eligible", False))
@@ -421,7 +784,7 @@ def build_dft_scf_hardware_goal_completion_audit(
         dft_hardware_release_gate.get("hardware_completion_eligible", False)
     )
     release_gate_details = _release_gate_detail_payload(
-        run_dir=run_dir,
+        run_dir=artifact_dir,
         final_report_section=dft_hardware_release_gate,
     )
     current_release_hardware_completion_eligible = bool(
@@ -431,15 +794,167 @@ def build_dft_scf_hardware_goal_completion_audit(
         )
         or release_gate_details.get("hardware_completion_eligible", False)
     )
+    release_claim_gate_hardware_release_eligible = bool(
+        release_claim_gate.get("hardware_release_gate_eligible", False)
+    )
+    release_claim_gate_candidate_requirement_satisfied = bool(
+        release_claim_gate.get(
+            "candidate_claim_requirement_satisfied",
+            release_claim_gate.get("all_candidate_claims_eligible", False),
+        )
+    )
     winner_resolution_present = dft_architecture_winner_resolution.get("present") is True
     winner_resolution_eligible = bool(
         dft_architecture_winner_resolution.get("hardware_winner_resolution_eligible", False)
     )
     winner_resolution_validation = _mapping(dft_architecture_winner_resolution.get("validation"))
+    deployment_readiness_present = dft_deployment_readiness.get("present") is True
+    deployment_readiness_validation = _mapping(dft_deployment_readiness.get("validation"))
+    deployment_readiness_can_name_hardware = bool(
+        dft_deployment_readiness.get("can_name_hardware_ppa_winners", False)
+    )
+    deployment_readiness_target_selection_ready = bool(
+        dft_deployment_readiness.get("deployment_target_selection_ready", False)
+    )
+    deployment_readiness_targeted_ready = bool(
+        dft_deployment_readiness.get("can_name_targeted_deployment_recommendation", False)
+    )
+    deployment_readiness_upgrade_detected = bool(
+        dft_deployment_readiness.get("readiness_upgrade_detected", False)
+    )
+    deployment_readiness_final_ready = bool(
+        dft_deployment_readiness.get("can_name_final_recommendation", False)
+    )
+    deployment_readiness_deliverable_complete = bool(
+        dft_deployment_readiness.get("deliverable_complete", False)
+    )
+    deployment_readiness_target_trust_gates = _mapping(
+        dft_deployment_readiness.get("deployment_target_selection_trust_gates")
+    )
+    deployment_readiness_target_trust_gate_summary = _mapping(
+        dft_deployment_readiness.get("deployment_target_selection_trust_gate_summary")
+    )
+    deployment_readiness_target_trust_gate_rows = _mapping(
+        deployment_readiness_target_trust_gates.get("gates")
+    )
+    if not deployment_readiness_target_trust_gate_summary and deployment_readiness_target_trust_gates:
+        deployment_readiness_target_trust_gate_summary = {
+            "present": bool(deployment_readiness_target_trust_gates.get("present", False)),
+            "all_trusted": bool(deployment_readiness_target_trust_gates.get("all_trusted", False)),
+            "trusted_gate_count": sum(
+                1
+                for gate in deployment_readiness_target_trust_gate_rows.values()
+                if isinstance(gate, Mapping) and gate.get("trusted") is True
+            ),
+            "gate_count": len(deployment_readiness_target_trust_gate_rows),
+            "blocked_gate_count": sum(
+                1
+                for gate in deployment_readiness_target_trust_gate_rows.values()
+                if isinstance(gate, Mapping) and gate.get("blockers")
+            ),
+        }
+    deployment_readiness_target_trust_gates_present = bool(
+        deployment_readiness_target_trust_gate_summary.get("present", False)
+    )
+    deployment_readiness_target_trust_gates_all_trusted = bool(
+        deployment_readiness_target_trust_gate_summary.get("all_trusted", False)
+    )
+    deployment_readiness_target_trust_gate_count = int(
+        deployment_readiness_target_trust_gate_summary.get("gate_count", 0) or 0
+    )
+    deployment_readiness_target_trusted_gate_count = int(
+        deployment_readiness_target_trust_gate_summary.get("trusted_gate_count", 0) or 0
+    )
+    deployment_readiness_target_blocked_gate_count = int(
+        deployment_readiness_target_trust_gate_summary.get("blocked_gate_count", 0) or 0
+    )
+    deployment_readiness_target_input_trust_gates = _mapping(
+        dft_deployment_readiness.get("target_selection_input_trust_gates")
+    )
+    deployment_comparator_present = dft_deployment_comparator.get("present") is True
+    deployment_comparator_validation = _mapping(dft_deployment_comparator.get("validation"))
+    deployment_comparator_cross_target_winner = dft_deployment_comparator.get("single_cross_target_winner")
+    deployment_comparator_cross_target_eligible = (
+        dft_deployment_comparator.get("cross_target_comparison_eligible") is True
+    )
+    deployment_comparator_completion_eligible = (
+        dft_deployment_comparator.get("hardware_completion_eligible_for_deployment_comparison") is True
+    )
+    deployment_comparator_safe = (
+        deployment_comparator_present
+        and deployment_comparator_validation.get("valid") is True
+        and deployment_comparator_cross_target_eligible
+        and deployment_comparator_completion_eligible
+        and dft_deployment_comparator.get("non_physical_tie_breakers_used") is False
+        and deployment_comparator_cross_target_winner is None
+        and dft_deployment_comparator.get("deliverable_complete") is not True
+        and dft_deployment_comparator.get("cross_target_recommendation_status")
+        == "no_single_cross_target_winner_without_user_objective"
+        and dft_deployment_comparator.get("fpga_recommendation_status")
+        in {
+            "unique_physical_winner",
+            "physical_tie_no_single_fpga_winner",
+        }
+        and dft_deployment_comparator.get("asic_recommendation_status")
+        in {
+            "unique_physical_winner",
+            "physical_tie_no_single_asic_winner",
+        }
+    )
+    deployment_selector_present = dft_deployment_selector.get("present") is True
+    deployment_selector_validation = _mapping(dft_deployment_selector.get("validation"))
+    deployment_selector_objective_present = dft_deployment_selector.get("objective_present") is True
+    deployment_selector_selected_candidate_id = dft_deployment_selector.get("selected_candidate_id")
+    deployment_selector_safe = (
+        deployment_selector_present
+        and deployment_selector_validation.get("valid") is True
+        and dft_deployment_selector.get("non_physical_tie_breakers_used") is False
+        and dft_deployment_selector.get("deliverable_complete") is not True
+        and (
+            deployment_selector_objective_present
+            or (
+                dft_deployment_selector.get("selection_status") == "blocked_missing_explicit_objective"
+                and deployment_selector_selected_candidate_id is None
+            )
+        )
+    )
     release_hardware_blockers = _synthesized_release_hardware_blockers(release_gate_details)
+    candidate_set_blocker = _candidate_set_consistency_blocker(dft_deployment_release_gates)
+    if candidate_set_blocker is not None:
+        release_hardware_blockers.append(candidate_set_blocker)
+        current_release_hardware_completion_eligible = False
+    deployment_alignment_blocker = _deployment_candidate_alignment_blocker(
+        dft_deployment_release_gates
+    )
+    if deployment_alignment_blocker is not None:
+        release_hardware_blockers.append(deployment_alignment_blocker)
+        current_release_hardware_completion_eligible = False
+    deployment_source_blocker = _deployment_source_consensus_blocker(
+        dft_deployment_release_gates
+    )
+    if deployment_source_blocker is not None:
+        release_hardware_blockers.append(deployment_source_blocker)
+        current_release_hardware_completion_eligible = False
+    deployment_target_blocker = _deployment_target_consensus_blocker(
+        dft_deployment_release_gates
+    )
+    if deployment_target_blocker is not None:
+        release_hardware_blockers.append(deployment_target_blocker)
+        current_release_hardware_completion_eligible = False
     release_deliverable_blockers = _release_deliverable_blockers(
         release_gate_details,
         deliverable_complete=deliverable_complete,
+    )
+    release_claim_gate_fail_closed_after_hardware = bool(
+        not deliverable_complete
+        and (
+            current_release_hardware_completion_eligible
+            or release_claim_gate_hardware_release_eligible
+        )
+        and (
+            release_deliverable_blockers
+            or _list_of_mappings(release_claim_gate.get("deliverable_completion_blockers"))
+        )
     )
     release_candidate_kernel_blockers = _list_of_mappings(
         release_gate_details.get("candidate_kernel_blockers")
@@ -466,6 +981,26 @@ def build_dft_scf_hardware_goal_completion_audit(
             "Step5 final_report.json is present and readable",
             "passed" if bool(report) else "failed",
             {"final_report": str(report_path), "schema_version": report.get("schema_version")},
+        ),
+        _status_item(
+            "docs/goal.md Done-when requirement-evidence matrix is present and fail-closed",
+            "passed" if requirement_evidence_matrix.get("valid_fail_closed") is True else "blocked",
+            {
+                "present": requirement_evidence_matrix.get("present"),
+                "source": requirement_evidence_matrix.get("source"),
+                "schema_version": requirement_evidence_matrix.get("schema_version"),
+                "source_goal": requirement_evidence_matrix.get("source_goal"),
+                "claimability": requirement_evidence_matrix.get("claimability"),
+                "requirement_count": requirement_evidence_matrix.get("requirement_count"),
+                "blocked_requirement_count": requirement_evidence_matrix.get("blocked_requirement_count"),
+                "deliverable_complete_allowed": requirement_evidence_matrix.get("deliverable_complete_allowed"),
+                "trusted_final_claim": requirement_evidence_matrix.get("trusted_final_claim"),
+                "status_taxonomy": requirement_evidence_matrix.get("status_taxonomy"),
+                "missing_statuses": requirement_evidence_matrix.get("missing_statuses"),
+                "completion_statuses": requirement_evidence_matrix.get("completion_statuses"),
+                "matrix_errors": requirement_evidence_matrix.get("matrix_errors"),
+                "blockers": requirement_evidence_matrix.get("blockers"),
+            },
         ),
         _status_item(
             "DFT semantic audit closure artifact is source-hash backed and passed",
@@ -996,6 +1531,7 @@ def build_dft_scf_hardware_goal_completion_audit(
                 "deliverable_complete": l4_goal_binding_deliverable_complete,
                 "l4_matrix": dft_l4_goal_binding.get("l4_matrix"),
                 "row_level_proofs": dft_l4_goal_binding.get("row_level_proofs"),
+                "accelerated_qe_blocker_summary": l4_accelerated_qe_summary,
                 "validation": dft_l4_goal_binding.get("validation"),
                 "blockers": dft_l4_goal_binding.get("blockers"),
                 "claim_boundary": dft_l4_goal_binding.get("claim_boundary"),
@@ -1040,9 +1576,26 @@ def build_dft_scf_hardware_goal_completion_audit(
         ),
         _status_item(
             "Release claim gate allows deliverable_complete only after all required evidence closes",
-            "passed" if deliverable_complete else "blocked",
+            "passed" if deliverable_complete or release_claim_gate_fail_closed_after_hardware else "blocked",
             {
                 "deliverable_complete": deliverable_complete,
+                "hardware_release_gate_eligible": release_claim_gate_hardware_release_eligible,
+                "current_release_gate_hardware_completion_eligible": (
+                    current_release_hardware_completion_eligible
+                ),
+                "ledger_candidate_claims_eligible": release_claim_gate.get(
+                    "ledger_candidate_claims_eligible"
+                ),
+                "candidate_claim_requirement_satisfied": (
+                    release_claim_gate_candidate_requirement_satisfied
+                ),
+                "candidate_claim_requirement_source": release_claim_gate.get(
+                    "candidate_claim_requirement_source"
+                ),
+                "fail_closed_after_hardware_release_gate": (
+                    release_claim_gate_fail_closed_after_hardware
+                ),
+                "deliverable_completion_blockers": release_deliverable_blockers,
                 "release_claim_gate": release_claim_gate,
                 "claim_boundary": dft_ledger.get("claim_boundary"),
             },
@@ -1071,13 +1624,23 @@ def build_dft_scf_hardware_goal_completion_audit(
             },
         ),
         _status_item(
-            "Step5 reports kernel and end-to-end full-SCF cost fields",
-            "passed" if hybrid_costs.get("required_cost_fields_present") is True else "blocked",
+            "Full-SCF hybrid cost accounting exposes end-to-end host/transfer/sync costs",
+            "passed"
+            if hybrid_costs.get("required_cost_fields_present") is True
+            and hybrid_costs.get("host_bound_compute_cost_ms") is not None
+            and hybrid_costs.get("transfer_cost_ms") is not None
+            and hybrid_costs.get("synchronization_queueing_layout_cost_ms") is not None
+            else "blocked",
             {
                 "source": hybrid_costs.get("source"),
                 "required_cost_fields_present": hybrid_costs.get("required_cost_fields_present"),
                 "kernel_speedup": hybrid_costs.get("kernel_speedup"),
                 "end_to_end_scf_speedup": hybrid_costs.get("end_to_end_scf_speedup"),
+                "host_bound_compute_cost_ms": hybrid_costs.get("host_bound_compute_cost_ms"),
+                "transfer_cost_ms": hybrid_costs.get("transfer_cost_ms"),
+                "synchronization_queueing_layout_cost_ms": hybrid_costs.get(
+                    "synchronization_queueing_layout_cost_ms"
+                ),
             },
         ),
         _status_item(
@@ -1171,6 +1734,137 @@ def build_dft_scf_hardware_goal_completion_audit(
                 "claim_boundary": dft_architecture_winner_resolution.get("claim_boundary"),
             },
         ),
+        _status_item(
+            "DFT deployment recommendation readiness is Step5-visible and non-final",
+            "failed"
+            if (
+                deployment_readiness_upgrade_detected
+                or deployment_readiness_targeted_ready
+                or deployment_readiness_final_ready
+                or deployment_readiness_deliverable_complete
+            )
+            else "passed"
+            if deployment_readiness_present
+            and deployment_readiness_validation.get("valid") is True
+            else "blocked",
+            {
+                "present": deployment_readiness_present,
+                "status": dft_deployment_readiness.get("status"),
+                "validation_valid": deployment_readiness_validation.get("valid"),
+                "can_name_hardware_ppa_winners": deployment_readiness_can_name_hardware,
+                "deployment_target_selection_ready": deployment_readiness_target_selection_ready,
+                "can_name_targeted_deployment_recommendation": deployment_readiness_targeted_ready,
+                "readiness_upgrade_detected": deployment_readiness_upgrade_detected,
+                "safety_findings": dft_deployment_readiness.get("safety_findings"),
+                "can_name_final_recommendation": deployment_readiness_final_ready,
+                "deliverable_complete": deployment_readiness_deliverable_complete,
+                "fpga_status": dft_deployment_readiness.get("fpga_status"),
+                "asic_status": dft_deployment_readiness.get("asic_status"),
+                "fpga_can_name_winner": dft_deployment_readiness.get("fpga_can_name_winner"),
+                "asic_can_name_winner": dft_deployment_readiness.get("asic_can_name_winner"),
+                "required_next_evidence_counts": dft_deployment_readiness.get(
+                    "required_next_evidence_counts"
+                ),
+                "final_recommendation_required_next_evidence_counts": dft_deployment_readiness.get(
+                    "final_recommendation_required_next_evidence_counts"
+                ),
+                "claim_boundary": dft_deployment_readiness.get("claim_boundary"),
+            },
+        ),
+        _status_item(
+            "DFT deployment target-selection trust gates are Step5-visible and non-final",
+            "failed"
+            if (
+                deployment_readiness_targeted_ready
+                or deployment_readiness_final_ready
+                or deployment_readiness_deliverable_complete
+            )
+            else "passed"
+            if (
+                deployment_readiness_present
+                and deployment_readiness_target_trust_gates_present
+                and deployment_readiness_target_trust_gates_all_trusted
+                and deployment_readiness_target_trust_gate_count > 0
+            )
+            else "blocked",
+            {
+                "present": deployment_readiness_present,
+                "deployment_target_selection_ready": deployment_readiness_target_selection_ready,
+                "trust_gate_summary": deployment_readiness_target_trust_gate_summary,
+                "deployment_target_selection_trust_gates": deployment_readiness_target_trust_gates,
+                "target_selection_input_trust_gates": deployment_readiness_target_input_trust_gates,
+                "can_name_targeted_deployment_recommendation": deployment_readiness_targeted_ready,
+                "can_name_final_recommendation": deployment_readiness_final_ready,
+                "deliverable_complete": deployment_readiness_deliverable_complete,
+                "claim_boundary": (
+                    "Target-selection trust gates are consumed as audit evidence only; "
+                    "they do not name final recommendations or complete the deliverable."
+                ),
+            },
+        ),
+        _status_item(
+            "FPGA-vs-ASIC deployment comparator is replayable and does not collapse physical ties",
+            "passed" if deployment_comparator_safe else "blocked",
+            {
+                "present": deployment_comparator_present,
+                "status": dft_deployment_comparator.get("status"),
+                "validation_valid": deployment_comparator_validation.get("valid"),
+                "deployment_comparison_status": dft_deployment_comparator.get(
+                    "deployment_comparison_status"
+                ),
+                "fpga_recommendation_status": dft_deployment_comparator.get(
+                    "fpga_recommendation_status"
+                ),
+                "fpga_recommendation_kind": dft_deployment_comparator.get(
+                    "fpga_recommendation_kind"
+                ),
+                "fpga_top_candidate_count": dft_deployment_comparator.get(
+                    "fpga_top_candidate_count"
+                ),
+                "asic_recommendation_status": dft_deployment_comparator.get(
+                    "asic_recommendation_status"
+                ),
+                "asic_recommendation_kind": dft_deployment_comparator.get(
+                    "asic_recommendation_kind"
+                ),
+                "cross_target_recommendation_status": dft_deployment_comparator.get(
+                    "cross_target_recommendation_status"
+                ),
+                "target_recommendation_available_count": dft_deployment_comparator.get(
+                    "target_recommendation_available_count"
+                ),
+                "cross_target_comparison_eligible": dft_deployment_comparator.get(
+                    "cross_target_comparison_eligible"
+                ),
+                "hardware_completion_eligible_for_deployment_comparison": dft_deployment_comparator.get(
+                    "hardware_completion_eligible_for_deployment_comparison"
+                ),
+                "single_cross_target_winner": deployment_comparator_cross_target_winner,
+                "non_physical_tie_breakers_used": dft_deployment_comparator.get(
+                    "non_physical_tie_breakers_used"
+                ),
+                "deliverable_complete": dft_deployment_comparator.get("deliverable_complete"),
+                "claim_boundary": dft_deployment_comparator.get("claim_boundary"),
+            },
+        ),
+        _status_item(
+            "Objective-driven deployment selector is explicit-objective gated",
+            "passed" if deployment_selector_safe else "blocked",
+            {
+                "present": deployment_selector_present,
+                "status": dft_deployment_selector.get("status"),
+                "selection_status": dft_deployment_selector.get("selection_status"),
+                "validation_valid": deployment_selector_validation.get("valid"),
+                "objective_present": deployment_selector_objective_present,
+                "selected_deployment_target": dft_deployment_selector.get("selected_deployment_target"),
+                "selected_candidate_id": deployment_selector_selected_candidate_id,
+                "non_physical_tie_breakers_used": dft_deployment_selector.get(
+                    "non_physical_tie_breakers_used"
+                ),
+                "deliverable_complete": dft_deployment_selector.get("deliverable_complete"),
+                "claim_boundary": dft_deployment_selector.get("claim_boundary"),
+            },
+        ),
     ]
 
     failed = [item for item in checklist if item["status"] == "failed"]
@@ -1185,6 +1879,21 @@ def build_dft_scf_hardware_goal_completion_audit(
         decision = "do_not_mark_complete_before_date_horizon"
     else:
         decision = "do_not_mark_complete_blocked_or_incomplete"
+    status_classification = _normalise_goal_statuses(
+        requirement_evidence_matrix.get("completion_statuses"),
+        blocked=bool(blocked or failed),
+    )
+    status_classification["deliverable_complete"] = bool(
+        deliverable_complete
+        and requirement_evidence_matrix.get("deliverable_complete_allowed") is True
+        and not blocked
+        and not failed
+        and not in_progress
+    )
+    if status_classification["deliverable_complete"]:
+        status_classification["blocked"] = False
+    elif blocked or failed:
+        status_classification["blocked"] = True
 
     return {
         "schema_version": AUDIT_SCHEMA,
@@ -1193,6 +1902,9 @@ def build_dft_scf_hardware_goal_completion_audit(
         "completion_decision": decision,
         "horizon_reached": horizon_reached,
         "final_report": str(report_path),
+        "status_taxonomy": list(GOAL_STATUS_TAXONOMY),
+        "status_classification": status_classification,
+        "requirement_evidence_matrix": requirement_evidence_matrix,
         "prompt_to_artifact_checklist": checklist,
         "failed_requirements": failed,
         "blocked_requirements": blocked,
@@ -1226,6 +1938,41 @@ def build_dft_scf_hardware_goal_completion_audit(
             "dft_candidate_specific_ppa_provenance_winner_eligible": ppa_provenance_winner_eligible,
             "dft_architecture_winner_resolution_present": winner_resolution_present,
             "dft_architecture_winner_resolution_eligible": winner_resolution_eligible,
+            "dft_hardware_deployment_recommendation_readiness_present": deployment_readiness_present,
+            "dft_hardware_deployment_recommendation_readiness_can_name_hardware": (
+                deployment_readiness_can_name_hardware
+            ),
+            "dft_hardware_deployment_recommendation_readiness_target_selection_ready": (
+                deployment_readiness_target_selection_ready
+            ),
+            "dft_hardware_deployment_recommendation_readiness_targeted_ready": (
+                deployment_readiness_targeted_ready
+            ),
+            "dft_hardware_deployment_recommendation_readiness_upgrade_detected": (
+                deployment_readiness_upgrade_detected
+            ),
+            "dft_hardware_deployment_recommendation_readiness_final_ready": (
+                deployment_readiness_final_ready
+            ),
+            "dft_hardware_deployment_recommendation_readiness_target_trust_gates_present": (
+                deployment_readiness_target_trust_gates_present
+            ),
+            "dft_hardware_deployment_recommendation_readiness_target_trust_gates_all_trusted": (
+                deployment_readiness_target_trust_gates_all_trusted
+            ),
+            "dft_hardware_deployment_recommendation_readiness_target_trust_gate_count": (
+                deployment_readiness_target_trust_gate_count
+            ),
+            "dft_hardware_deployment_recommendation_readiness_target_trusted_gate_count": (
+                deployment_readiness_target_trusted_gate_count
+            ),
+            "dft_hardware_deployment_recommendation_readiness_target_blocked_gate_count": (
+                deployment_readiness_target_blocked_gate_count
+            ),
+            "dft_deployment_comparator_present": deployment_comparator_present,
+            "dft_deployment_comparator_safe": deployment_comparator_safe,
+            "dft_deployment_selector_present": deployment_selector_present,
+            "dft_deployment_selector_safe": deployment_selector_safe,
             "dft_l4_goal_binding_present": dft_l4_goal_binding.get("present") is True,
             "dft_audit_semantic_closure_present": dft_audit_semantic_closure.get("present") is True,
             "dft_audit_semantic_closure_valid": dft_audit_semantic_closure.get("valid") is True,
@@ -1233,6 +1980,7 @@ def build_dft_scf_hardware_goal_completion_audit(
             "l4_software_visible_proof_present": dft_l4_goal_binding.get("l4_software_visible_proof_present") is True,
             "current_goal_l4_bound": l4_current_goal_binding.get("current_goal_l4_bound") is True,
             "l4_goal_binding_final_closure_eligible": l4_goal_binding_final_closure_eligible,
+            "l4_accelerated_qe_blocker_status": l4_accelerated_qe_summary.get("status"),
             "ic_eda_availability_bridge_completion_claim": availability_completion_claim,
             "ic_eda_availability_kernel_ppa_evidence": availability_kernel_ppa_evidence,
             "ic_eda_availability_probe_present": availability_probe_present,
@@ -1243,6 +1991,11 @@ def build_dft_scf_hardware_goal_completion_audit(
                 eda_summary.get("hardware_completion_eligible") is True
                 or current_release_hardware_completion_eligible
             ),
+            "release_claim_gate_hardware_release_eligible": release_claim_gate_hardware_release_eligible,
+            "release_claim_gate_candidate_requirement_satisfied": (
+                release_claim_gate_candidate_requirement_satisfied
+            ),
+            "release_claim_gate_fail_closed_after_hardware": release_claim_gate_fail_closed_after_hardware,
             "current_release_gate_hardware_completion_eligible": current_release_hardware_completion_eligible,
             "hardware_eligibility_blocker_count": len(release_hardware_blockers),
             "deliverable_completion_blocker_count": len(release_deliverable_blockers),
