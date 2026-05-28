@@ -1,0 +1,162 @@
+{
+  "candidate_id": "cand_0715923dc14b29cd",
+  "claim_boundary": "Hardware side progress artifact only: parsed golden/VCS-or-RTL/Vivado/DC candidate-kernel evidence is not trusted QE-consumed numeric evidence and does not emit strict runtime events. Full-SCF trusted seed remains blocked until QE mainflow consumption, per-kernel numeric errors, and non-proxy runtime/accounting rows are produced and replayed.",
+  "deliverable_complete": false,
+  "executable_repair_queue": [
+    {
+      "blocking_reasons": [
+        "qe_mainflow_consumption_evidence_missing::reduction_dot_tree",
+        "trusted_qe_consumed_numeric_row_missing::reduction_dot_tree",
+        "trusted_runtime_event_missing::reduction_dot_tree"
+      ],
+      "kernel_id": "reduction_dot_tree",
+      "kind": "kernel_runtime_and_numeric_row",
+      "next_command_or_fix": "Hardware side evidence exists only after the candidate-specific PPA stages pass. To turn reduction_dot_tree into trusted full-SCF evidence, use the selected-kernel producer surface: instrument the QE diagonalization/s_psi path or its offload runtime to emit QE_OFFLOAD_KERNEL_EVIDENCE_JSON and QE_OFFLOAD_PROVENANCE_JSON rows with kernel_id=reduction_dot_tree, full_kernel_recomputed=true, qe_mainflow_integrated=true, accelerated_results_consumed_by_qe=true, finite absolute_error/relative_error, candidate/workload identity, and a passed non-proxy runtime/L4 execution proof; then rerun dse_v2/scripts/dse/run_qe_accelerated_numeric_producer.py for the candidate/workload and replay build_dft_full_scf_numerical_rows.py --fail-on-blocked.",
+      "priority": 1,
+      "required_fields": [
+        "trusted accelerated_kernel runtime event",
+        "QE_OFFLOAD_KERNEL_EVIDENCE_JSON row",
+        "QE_OFFLOAD_PROVENANCE_JSON row",
+        "full_kernel_recomputed=true",
+        "qe_mainflow_integrated=true",
+        "accelerated_results_consumed_by_qe=true",
+        "finite absolute_error/relative_error",
+        "passed non-proxy runtime/L4 execution proof",
+        "candidate_id/workload_case_id match",
+        "no proxy/callsite/smoke/timing/model markers"
+      ],
+      "status": "producer_required_after_hardware_side_evidence_found"
+    }
+  ],
+  "full_scf_seed_eligible": false,
+  "generated_at": "2026-05-27T16:33:17Z",
+  "hardware_side_evidence_found": true,
+  "hardware_stage_pass_count": 5,
+  "hardware_stage_required_count": 5,
+  "kernel_id": "reduction_dot_tree",
+  "missing_or_blocked_stage_ids": [],
+  "passed_stage_ids": [
+    "golden_correctness",
+    "hls_or_rtl_sim",
+    "hls_or_rtl_synth",
+    "vivado_fpga_synth_or_impl",
+    "dc_asic_synth_timing_area"
+  ],
+  "remaining_blockers": [
+    "qe_mainflow_consumption_evidence_missing::reduction_dot_tree",
+    "trusted_qe_consumed_numeric_row_missing::reduction_dot_tree",
+    "trusted_runtime_event_missing::reduction_dot_tree"
+  ],
+  "scanned_json_file_count": 5,
+  "schema_version": "dse.dft.kernel_hardware_side_evidence_progress.v1",
+  "stage_records": [
+    {
+      "best_observation": {
+        "blocker_ids": [],
+        "candidate_id": "cand_0715923dc14b29cd",
+        "kernel_id": "reduction_dot_tree",
+        "locator": "/mnt/f/phd/year_2/project/dft_accelerate.omx-worktrees/launch-run3/runs/dse/run3_step5_fresh_candidate_full8_real/parsed_hard_gate_results/cand_0715923dc14b29cd/reduction_dot_tree/golden_correctness_parsed_result.json",
+        "metrics": {
+          "max_abs_error": 0.0
+        },
+        "parser_id": "dft_golden_correctness_parser_v1",
+        "passed": true,
+        "raw_evidence_ref_count": 3,
+        "stage_id": "golden_correctness",
+        "verdict": "passed"
+      },
+      "observation_count": 1,
+      "passed": true,
+      "stage_id": "golden_correctness",
+      "status": "passed_hardware_side_stage"
+    },
+    {
+      "best_observation": {
+        "blocker_ids": [],
+        "candidate_id": "cand_0715923dc14b29cd",
+        "kernel_id": "reduction_dot_tree",
+        "locator": "/mnt/f/phd/year_2/project/dft_accelerate.omx-worktrees/launch-run3/runs/dse/run3_step5_fresh_candidate_full8_real/parsed_hard_gate_results/cand_0715923dc14b29cd/reduction_dot_tree/hls_or_rtl_sim_parsed_result.json",
+        "metrics": {},
+        "parser_id": "dft_hls_or_rtl_sim_parser_v1",
+        "passed": true,
+        "raw_evidence_ref_count": 3,
+        "stage_id": "hls_or_rtl_sim",
+        "verdict": "passed"
+      },
+      "observation_count": 1,
+      "passed": true,
+      "stage_id": "hls_or_rtl_sim",
+      "status": "passed_hardware_side_stage"
+    },
+    {
+      "best_observation": {
+        "blocker_ids": [],
+        "candidate_id": "cand_0715923dc14b29cd",
+        "kernel_id": "reduction_dot_tree",
+        "locator": "/mnt/f/phd/year_2/project/dft_accelerate.omx-worktrees/launch-run3/runs/dse/run3_step5_fresh_candidate_full8_real/parsed_hard_gate_results/cand_0715923dc14b29cd/reduction_dot_tree/hls_or_rtl_synth_parsed_result.json",
+        "metrics": {},
+        "parser_id": "dft_hls_or_rtl_synth_parser_v1",
+        "passed": true,
+        "raw_evidence_ref_count": 3,
+        "stage_id": "hls_or_rtl_synth",
+        "verdict": "passed"
+      },
+      "observation_count": 1,
+      "passed": true,
+      "stage_id": "hls_or_rtl_synth",
+      "status": "passed_hardware_side_stage"
+    },
+    {
+      "best_observation": {
+        "blocker_ids": [],
+        "candidate_id": "cand_0715923dc14b29cd",
+        "kernel_id": "reduction_dot_tree",
+        "locator": "/mnt/f/phd/year_2/project/dft_accelerate.omx-worktrees/launch-run3/runs/dse/run3_step5_fresh_candidate_full8_real/parsed_hard_gate_results/cand_0715923dc14b29cd/reduction_dot_tree/vivado_fpga_synth_or_impl_parsed_result.json",
+        "metrics": {
+          "implementation_route_completed": true,
+          "implementation_route_completed_source": "vivado_log_marker"
+        },
+        "parser_id": "dft_vivado_fpga_synth_or_impl_parser_v1",
+        "passed": true,
+        "raw_evidence_ref_count": 4,
+        "stage_id": "vivado_fpga_synth_or_impl",
+        "verdict": "passed"
+      },
+      "observation_count": 1,
+      "passed": true,
+      "stage_id": "vivado_fpga_synth_or_impl",
+      "status": "passed_hardware_side_stage"
+    },
+    {
+      "best_observation": {
+        "blocker_ids": [],
+        "candidate_id": "cand_0715923dc14b29cd",
+        "kernel_id": "reduction_dot_tree",
+        "locator": "/mnt/f/phd/year_2/project/dft_accelerate.omx-worktrees/launch-run3/runs/dse/run3_step5_fresh_candidate_full8_real/parsed_hard_gate_results/cand_0715923dc14b29cd/reduction_dot_tree/dc_asic_synth_timing_area_parsed_result.json",
+        "metrics": {
+          "area": 79532.410204,
+          "dc_target_libraries": [
+            "fsa0a_c_generic_core_tt1p8v25c"
+          ],
+          "dc_target_library_discovery": "real_target_library_present",
+          "slack_ns": 0.03
+        },
+        "parser_id": "dft_dc_asic_synth_timing_area_parser_v1",
+        "passed": true,
+        "raw_evidence_ref_count": 5,
+        "stage_id": "dc_asic_synth_timing_area",
+        "verdict": "passed"
+      },
+      "observation_count": 1,
+      "passed": true,
+      "stage_id": "dc_asic_synth_timing_area",
+      "status": "passed_hardware_side_stage"
+    }
+  ],
+  "status": "hardware_side_evidence_found_qe_consumption_required",
+  "trusted_numeric_rows_emitted": [],
+  "trusted_qe_consumed_numeric_row_found": false,
+  "trusted_runtime_event_found": false,
+  "trusted_runtime_events_emitted": [],
+  "workload_case_id": "small_multi_k_scf_case"
+}
