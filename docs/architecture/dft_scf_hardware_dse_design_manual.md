@@ -1226,6 +1226,37 @@ reruns, records how many fresh units and raw files were produced, and remains
 non-claim-upgrading until downstream parser, adjudication, release, provenance,
 and winner-resolution gates pass.
 
+When a full-SCF repair loop needs to acknowledge a single candidate/kernel
+hardware result without weakening QE-consumption gates, use the fail-closed
+hardware-side probe:
+
+```bash
+python3 dse_v2/scripts/dse/probe_dft_full_scf_kernel_hardware_side_evidence.py \
+  --candidate-id cand_0715923dc14b29cd \
+  --workload-case-id small_multi_k_scf_case \
+  --kernel-id complex_gemm_gemv_tile \
+  --source-root runs/dse/<step5_run> \
+  --out runs/dse/<repair_run>/complex_gemm_gemv_tile_hardware_side_evidence_progress.json
+```
+
+`dse.dft.kernel_hardware_side_evidence_progress.v1` scans parsed hard-gate
+JSON for the exact candidate/kernel, rejects a declared workload mismatch, and
+can record golden, VCS/RTL, Vivado route, and DC timing/area stage passes as
+hardware-side progress.  It always
+keeps `full_scf_seed_eligible=false`, emits no trusted runtime events or
+QE-consumed numeric rows, and preserves explicit blockers such as
+`trusted_runtime_event_missing::<kernel>` and
+`trusted_qe_consumed_numeric_row_missing::<kernel>`.  This artifact is useful
+for producer repair queues only; it is not a substitute for QE mainflow
+consumption, per-kernel numeric error evidence, non-proxy runtime/L4 proof, or
+full-SCF accounting replay.
+
+For `h_psi` / local-potential rows, the repair guidance must point at the
+`h_psi`/`vloc_psi` producer surface, such as
+`run_qe_accelerated_numeric_producer.py --enable-hpsi-component-sidecar` or an
+equivalent non-reference-assisted producer, rather than the diagonalization or
+`s_psi` runtime hooks.
+
 The explicit tie-breaker gate is
 `dft_architecture_winner_resolution.json`.  It consumes
 `dft_hardware_ppa_ranking.json` plus the candidate-specific provenance audit and

@@ -13,9 +13,6 @@ import argparse
 import os
 from pathlib import Path
 
-import m5
-from m5.objects import *
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MMIO_BASE = 0xF0000000
 MMIO_SIZE = 0x10000
@@ -44,6 +41,21 @@ def parse_args():
 
 
 def create_system(args):
+    from m5.objects import (
+        AddrRange,
+        AtomicSimpleCPU,
+        DDR3_1600_8x8,
+        GenericAccel,
+        MemCtrl,
+        Process,
+        SEWorkload,
+        SrcClockDomain,
+        System,
+        SystemXBar,
+        VoltageDomain,
+        X86TimingSimpleCPU,
+    )
+
     if not args.binary.exists():
         raise FileNotFoundError(f"L4 driver binary not found: {args.binary}")
     if not args.request.exists():
@@ -93,6 +105,9 @@ def create_system(args):
 
 
 def main():
+    import m5
+    from m5.objects import Root
+
     args = parse_args()
     system = create_system(args)
     root = Root(full_system=False, system=system)
