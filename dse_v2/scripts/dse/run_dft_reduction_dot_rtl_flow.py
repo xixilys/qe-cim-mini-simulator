@@ -73,7 +73,7 @@ def _remote_tool_attempts(out_dir: Path, *, ssh_target: str, remote_dir: str, ti
         (
             "vcs",
             (
-                "source ~/.bashrc; "
+                "source ~/.bashrc; mkdir -p \"$HOME/tmp\"; export TMPDIR=$HOME/tmp TEMP=$HOME/tmp TMP=$HOME/tmp; "
                 "vcs -full64 -sverilog reduction_dot_tree.v tb_reduction_dot_tree.v -o simv > vcs_compile.log 2>&1 "
                 "&& ./simv > vcs_run.log 2>&1; "
                 "tar czf results_vcs.tgz vcs_compile.log vcs_run.log simv* csrc 2>/dev/null "
@@ -95,7 +95,7 @@ def _remote_tool_attempts(out_dir: Path, *, ssh_target: str, remote_dir: str, ti
         (
             "dc_shell",
             (
-                "source ~/.bashrc; "
+                "source ~/.bashrc; mkdir -p \"$HOME/tmp\"; export TMPDIR=$HOME/tmp TEMP=$HOME/tmp TMP=$HOME/tmp; "
                 "dc_shell -f dc_synth.tcl > dc_stdout.log 2> dc_stderr.log; "
                 "dc_files=\"$(ls dc_*.rpt dc_stdout.log dc_stderr.log reduction_dot_tree_dc_mapped.v dc_synth.ddc command.log 2>/dev/null || true)\"; [ -n \"$dc_files\" ] && tar czf results_dc.tgz $dc_files "
                 "2>/dev/null || true"

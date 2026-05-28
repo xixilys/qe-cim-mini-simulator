@@ -225,6 +225,74 @@ def test_provenance_audit_missing_candidate_specific_files_fails_closed_and_queu
     assert queue_validation["valid"] is True
 
 
+def test_provenance_audit_falls_back_to_target_worklist_when_release_gate_empty(tmp_path: Path) -> None:
+    run_dir = tmp_path / "run"
+    _write_json(
+        run_dir / "dft_hardware_closure_release_gate.json",
+        {
+            "schema_version": "dse.dft.hardware_closure_release_gate.v1",
+            "release_gate_result": "failed_empty_gate_adjudication",
+            "candidate_rows": [],
+            "hardware_completion_eligible": False,
+            "deliverable_complete": False,
+        },
+    )
+    _write_json(
+        run_dir / "dft_hardware_ppa_ranking.json",
+        {
+            "schema_version": "dse.dft.hardware_ppa_ranking.v1",
+            "ranking_status": "blocked_hardware_ppa_ranking",
+            "hardware_completion_eligible": False,
+            "deliverable_complete": False,
+        },
+    )
+    _write_json(
+        run_dir / "candidate_kernel_target_ppa_gate_worklist.json",
+        {
+            "schema_version": "dse.dft.run2.candidate_kernel_target_ppa_gate_worklist.v1",
+            "status": "recorded_fail_closed_worklist",
+            "work_items": [
+                {
+                    "candidate_id": "cand-a",
+                    "kernel_id": "fft_ifft_ffft",
+                    "target_platform_kind": "fpga",
+                    "dominant_status": "blocked_missing_input",
+                },
+                {
+                    "candidate_id": "cand-b",
+                    "kernel_id": "hpsi_local_potential",
+                    "target_platform_kind": "asic",
+                    "dominant_status": "blocked_missing_input",
+                },
+            ],
+            "hardware_completion_eligible": False,
+            "deliverable_complete": False,
+        },
+    )
+
+    status = write_dft_candidate_specific_ppa_provenance_audit(run_dir)
+    audit = json.loads((run_dir / "dft_candidate_specific_ppa_provenance_audit.json").read_text(encoding="utf-8"))
+    queue = json.loads((run_dir / "dft_hardware_tie_breaker_execution_queue.json").read_text(encoding="utf-8"))
+
+    assert status["status"] == "passed"
+    assert audit["source_artifacts"]["candidate_kernel_target_ppa_gate_worklist"]["exists"] is True
+    assert audit["candidate_ids"] == ["cand-a", "cand-b"]
+    assert audit["kernel_ids"] == ["fft_ifft_ffft", "hpsi_local_potential"]
+    assert audit["unit_count"] == 2
+    assert audit["trusted_unit_count"] == 0
+    assert audit["winner_provenance_eligible"] is False
+    assert queue["status"] == "fresh_candidate_specific_ppa_execution_required"
+    assert queue["work_item_count"] == 2 * len(REQUIRED_STAGE_IDS)
+    assert {item["candidate_id"] for item in queue["work_items"]} == {"cand-a", "cand-b"}
+    assert {item["kernel_id"] for item in queue["work_items"]} == {
+        "fft_ifft_ffft",
+        "hpsi_local_potential",
+    }
+    assert all("candidate_specific_bundles" in item["candidate_bundle_json"] for item in queue["work_items"])
+    assert queue["hardware_completion_eligible"] is False
+    assert queue["deliverable_complete"] is False
+
+
 def test_provenance_audit_accepts_fresh_candidate_specific_command_tool_provenance(tmp_path: Path) -> None:
     run_dir = tmp_path / "run"
     _seed_run(run_dir, fresh=True)

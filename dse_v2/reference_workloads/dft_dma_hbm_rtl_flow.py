@@ -199,12 +199,13 @@ foreach lib $candidate_target_libraries {
     break
   }
 }
+set synthetic_library [list standard.sldb]
 if {$selected_target_library ne ""} {
   set target_library [list $selected_target_library]
-  set link_library [concat "*" $target_library]
+  set link_library [concat "*" $target_library $synthetic_library]
 } else {
   set target_library [list your_library.db]
-  set link_library [list "*" your_library.db]
+  set link_library [concat "*" $target_library $synthetic_library]
 }
 analyze -format verilog {dma_hbm_movement_engine.v}
 elaborate dma_hbm_movement_engine

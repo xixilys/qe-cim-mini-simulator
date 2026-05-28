@@ -58,7 +58,9 @@ _UNIT_CLAIM_BOUNDARY = (
 _TOOL_PROBE_REMOTE = (
     "source ~/.bashrc; "
     "printf '__DFT_TOOL__ dc_shell\\n'; which dc_shell || true; dc_shell -version || true; "
-    "printf '__DFT_TOOL__ vcs\\n'; which vcs || true; vcs -ID || true; "
+    "mkdir -p ~/tmp; "
+    "printf '__DFT_TOOL__ vcs\\n'; which vcs || true; "
+    "TMPDIR=$HOME/tmp TEMP=$HOME/tmp TMP=$HOME/tmp vcs -ID || true; "
     "printf '__DFT_TOOL__ vivado\\n'; which vivado || true; LC_ALL=C LANG=C vivado -version || true"
 )
 
@@ -871,6 +873,7 @@ def _run_unit(
     run_dir: Path,
     queue_unit: Mapping[str, Any],
     ssh_target: str,
+    remote_base_dir: str,
     timeout_s: int,
     skip_remote: bool,
     allow_blocked: bool,
@@ -909,7 +912,8 @@ def _run_unit(
         "command_text": "",
     }
     if script and not blockers:
-        remote_dir = f"/tmp/dft_accelerate_fresh_ppa_{candidate_id}_{kernel_id}_{int(time.time())}"
+        remote_root = str(remote_base_dir or "/tmp").rstrip("/") or "/tmp"
+        remote_dir = f"{remote_root}/dft_accelerate_fresh_ppa_{candidate_id}_{kernel_id}_{int(time.time())}"
         command = [
             sys.executable,
             script,
@@ -995,6 +999,7 @@ def build_dft_candidate_specific_ppa_execution(
     stage_ids: Sequence[str] = (),
     max_units: int | None = None,
     ssh_target: str = "ic-eda",
+    remote_base_dir: str = "/tmp",
     timeout_s: int = 900,
     skip_remote: bool = False,
     allow_blocked: bool = True,
@@ -1021,6 +1026,7 @@ def build_dft_candidate_specific_ppa_execution(
             run_dir=run_dir,
             queue_unit=unit,
             ssh_target=ssh_target,
+            remote_base_dir=remote_base_dir,
             timeout_s=timeout_s,
             skip_remote=skip_remote,
             allow_blocked=allow_blocked,
@@ -1048,6 +1054,7 @@ def build_dft_candidate_specific_ppa_execution(
             "tie_breaker_queue": _source_ref(queue_path, required=True),
         },
         "ssh_target": ssh_target,
+        "remote_base_dir": remote_base_dir,
         "timeout_s": timeout_s,
         "skip_remote": skip_remote,
         "allow_blocked": allow_blocked,
@@ -1114,6 +1121,7 @@ def write_dft_candidate_specific_ppa_execution(
     stage_ids: Sequence[str] = (),
     max_units: int | None = None,
     ssh_target: str = "ic-eda",
+    remote_base_dir: str = "/tmp",
     timeout_s: int = 900,
     skip_remote: bool = False,
     allow_blocked: bool = True,
@@ -1128,6 +1136,7 @@ def write_dft_candidate_specific_ppa_execution(
         stage_ids=stage_ids,
         max_units=max_units,
         ssh_target=ssh_target,
+        remote_base_dir=remote_base_dir,
         timeout_s=timeout_s,
         skip_remote=skip_remote,
         allow_blocked=allow_blocked,

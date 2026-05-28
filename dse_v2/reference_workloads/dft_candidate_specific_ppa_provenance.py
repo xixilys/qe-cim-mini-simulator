@@ -67,6 +67,8 @@ _FORBIDDEN_SHORTCUTS = (
     "metadata-only source bundles or staged command templates treated as raw tool execution",
 )
 
+_TARGET_WORKLIST_NAME = "candidate_kernel_target_ppa_gate_worklist.json"
+
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
@@ -132,11 +134,50 @@ def _release_candidate_ids(release_gate: Mapping[str, Any]) -> list[str]:
     return sorted(set(ids))
 
 
+def _target_worklist(run_dir: Path) -> Dict[str, Any]:
+    return _load_json(run_dir / _TARGET_WORKLIST_NAME)
+
+
+def _target_worklist_candidate_ids(run_dir: Path) -> list[str]:
+    worklist = _target_worklist(run_dir)
+    return sorted(
+        {
+            str(item.get("candidate_id"))
+            for item in worklist.get("work_items", []) or []
+            if isinstance(item, Mapping) and item.get("candidate_id")
+        }
+    )
+
+
+def _target_worklist_kernel_ids(run_dir: Path) -> list[str]:
+    worklist = _target_worklist(run_dir)
+    return sorted(
+        {
+            str(item.get("kernel_id"))
+            for item in worklist.get("work_items", []) or []
+            if isinstance(item, Mapping) and item.get("kernel_id")
+        }
+    )
+
+
+def _target_worklist_candidate_kernel_pairs(run_dir: Path) -> list[tuple[str, str]]:
+    worklist = _target_worklist(run_dir)
+    return sorted(
+        {
+            (str(item.get("candidate_id")), str(item.get("kernel_id")))
+            for item in worklist.get("work_items", []) or []
+            if isinstance(item, Mapping) and item.get("candidate_id") and item.get("kernel_id")
+        }
+    )
+
+
 def _fallback_candidate_ids(run_dir: Path) -> list[str]:
+    ids: set[str] = set(_target_worklist_candidate_ids(run_dir))
     root = run_dir / "candidate_specific_evidence"
     if not root.exists():
-        return []
-    return sorted(path.name for path in root.iterdir() if path.is_dir())
+        return sorted(ids)
+    ids.update(path.name for path in root.iterdir() if path.is_dir())
+    return sorted(ids)
 
 
 def _kernel_ids(release_gate: Mapping[str, Any]) -> list[str]:
@@ -390,12 +431,21 @@ def build_dft_candidate_specific_ppa_provenance_audit(run_dir: Path) -> Dict[str
     ppa_path = run_dir / "dft_hardware_ppa_ranking.json"
     release_gate = _load_json(release_gate_path)
     ppa = _load_json(ppa_path)
-    candidate_ids = _release_candidate_ids(release_gate) or _fallback_candidate_ids(run_dir)
+    release_candidate_ids = _release_candidate_ids(release_gate)
+    target_worklist_pairs = _target_worklist_candidate_kernel_pairs(run_dir)
+    candidate_ids = release_candidate_ids or _fallback_candidate_ids(run_dir)
+    target_worklist_kernel_ids = _target_worklist_kernel_ids(run_dir)
     kernel_ids = _kernel_ids(release_gate)
+    if not release_candidate_ids and target_worklist_kernel_ids:
+        kernel_ids = target_worklist_kernel_ids
+    unit_pairs = (
+        target_worklist_pairs
+        if not release_candidate_ids and target_worklist_pairs
+        else [(candidate_id, kernel_id) for candidate_id in candidate_ids for kernel_id in kernel_ids]
+    )
     unit_rows = [
         _unit_audit(run_dir, candidate_id=candidate_id, kernel_id=kernel_id)
-        for candidate_id in candidate_ids
-        for kernel_id in kernel_ids
+        for candidate_id, kernel_id in unit_pairs
     ]
     blockers = [dict(blocker) for unit in unit_rows for blocker in unit.get("blockers", []) or []]
     blocker_counts: Dict[str, int] = {}
@@ -419,6 +469,10 @@ def build_dft_candidate_specific_ppa_provenance_audit(run_dir: Path) -> Dict[str
         "source_artifacts": {
             "release_gate": _source_ref(release_gate_path, required=False),
             "dft_hardware_ppa_ranking": _source_ref(ppa_path, required=False),
+            "candidate_kernel_target_ppa_gate_worklist": _source_ref(
+                run_dir / _TARGET_WORKLIST_NAME,
+                required=False,
+            ),
         },
         "candidate_count": len(candidate_ids),
         "major_kernel_count": len(kernel_ids),
@@ -519,30 +573,34 @@ def build_dft_hardware_tie_breaker_execution_queue(
         for unit in audit.get("unit_rows", []) or []
         if isinstance(unit, Mapping)
     }
+    audit_pairs = sorted(audit_unit_by_key) or [
+        (candidate_id, kernel_id)
+        for candidate_id in candidate_ids
+        for kernel_id in kernel_ids
+    ]
     work_items: list[Dict[str, Any]] = []
-    for candidate_id in candidate_ids:
-        for kernel_id in kernel_ids:
-            unit = audit_unit_by_key.get((candidate_id, kernel_id), {})
-            stage_by_id = {
-                str(stage.get("stage_id")): dict(stage)
-                for stage in unit.get("stage_rows", []) or []
-                if isinstance(stage, Mapping)
-            }
-            for stage_id in REQUIRED_STAGE_IDS:
-                stage = stage_by_id.get(stage_id, {})
-                stage_trusted = stage.get("provenance_trusted") is True
-                unit_trusted = unit.get("provenance_trusted") is True
-                if unit_trusted and stage_trusted:
-                    continue
-                work_items.append(
-                    _queue_stage_item(
-                        run_dir,
-                        audit_unit_by_key=audit_unit_by_key,
-                        candidate_id=candidate_id,
-                        kernel_id=kernel_id,
-                        stage_id=stage_id,
-                    )
+    for candidate_id, kernel_id in audit_pairs:
+        unit = audit_unit_by_key.get((candidate_id, kernel_id), {})
+        stage_by_id = {
+            str(stage.get("stage_id")): dict(stage)
+            for stage in unit.get("stage_rows", []) or []
+            if isinstance(stage, Mapping)
+        }
+        for stage_id in REQUIRED_STAGE_IDS:
+            stage = stage_by_id.get(stage_id, {})
+            stage_trusted = stage.get("provenance_trusted") is True
+            unit_trusted = unit.get("provenance_trusted") is True
+            if unit_trusted and stage_trusted:
+                continue
+            work_items.append(
+                _queue_stage_item(
+                    run_dir,
+                    audit_unit_by_key=audit_unit_by_key,
+                    candidate_id=candidate_id,
+                    kernel_id=kernel_id,
+                    stage_id=stage_id,
                 )
+            )
     queued_candidate_ids = sorted({str(item.get("candidate_id")) for item in work_items if item.get("candidate_id")})
     queued_kernel_ids = sorted({str(item.get("kernel_id")) for item in work_items if item.get("kernel_id")})
     return {

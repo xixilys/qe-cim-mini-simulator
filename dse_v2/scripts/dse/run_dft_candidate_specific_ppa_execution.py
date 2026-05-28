@@ -38,6 +38,11 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser.add_argument("--stage-id", action="append", default=[], help="Stage filter; repeatable or comma-separated")
     parser.add_argument("--max-units", type=int, default=None)
     parser.add_argument("--ssh-target", default="ic-eda")
+    parser.add_argument(
+        "--remote-base-dir",
+        default="/tmp",
+        help="Remote scratch root for candidate-specific IC/EDA runner work dirs",
+    )
     parser.add_argument("--timeout-s", type=int, default=900)
     parser.add_argument("--skip-remote", action="store_true", help="Only initialize/local golden evidence; record remote tool probe but skip EDA runs")
     parser.add_argument("--strict-returncode", action="store_true", help="Return nonzero when execution status is blocked")
@@ -57,6 +62,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         stage_ids=_split_csv(args.stage_id),
         max_units=args.max_units,
         ssh_target=args.ssh_target,
+        remote_base_dir=args.remote_base_dir,
         timeout_s=args.timeout_s,
         skip_remote=args.skip_remote,
         allow_blocked=not args.strict_returncode,

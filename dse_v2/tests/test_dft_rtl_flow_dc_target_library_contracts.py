@@ -53,7 +53,9 @@ def test_all_dft_rtl_flows_emit_real_dc_target_library_discovery_and_ddc_write(t
         assert "fsa0a_c_generic_core_ss1p62v125c.db" in dc_tcl
         assert "foreach lib $candidate_target_libraries" in dc_tcl
         assert "file exists $lib" in dc_tcl
+        assert "set synthetic_library [list standard.sldb]" in dc_tcl
         assert "set target_library [list $selected_target_library]" in dc_tcl
+        assert 'set link_library [concat "*" $target_library $synthetic_library]' in dc_tcl
         assert "set target_library [list your_library.db]" in dc_tcl
         assert "create_clock -name $dft_clock_name -period 10" in dc_tcl
         assert "write -format ddc -hierarchy -output dc_synth.ddc" in dc_tcl
@@ -65,6 +67,9 @@ def test_all_dft_rtl_flow_runners_archive_existing_dc_synth_ddc_without_fallback
         source = (scripts_dir / script_name).read_text(encoding="utf-8")
         assert "dc_synth.ddc" in source
         assert "dc_files=" in source
+        assert r'mkdir -p \"$HOME/tmp\"' in source
+        assert "export TMPDIR=$HOME/tmp TEMP=$HOME/tmp TMP=$HOME/tmp" in source
+        assert "dc_shell -f dc_synth.tcl" in source
         assert "ls dc_*.rpt dc_stdout.log dc_stderr.log" in source
         assert "tar czf results_dc.tgz $dc_files" in source
         assert "tar czf results_dc.tgz dc_stdout.log dc_stderr.log" not in source
