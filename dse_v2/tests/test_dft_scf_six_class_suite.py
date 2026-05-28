@@ -518,6 +518,31 @@ def test_stale_reference_admission_ledger_entry_fails_closed_even_when_ledger_ha
     assert "reference_output_sha256" in mismatch["mismatches"]
 
 
+def test_local_qe_runner_resolves_relative_pw_x_from_invocation_cwd(tmp_path, monkeypatch):
+    _write_local_test_pseudos(tmp_path / "local_pseudos")
+    tools_dir = tmp_path / "tools"
+    tools_dir.mkdir()
+    _write_fake_converged_pw(tools_dir / "pw.x")
+    monkeypatch.chdir(tmp_path)
+
+    status = write_dft_scf_six_class_bundle(
+        tmp_path / "bundle",
+        use_local_pseudos=True,
+        local_pseudo_dir=tmp_path / "local_pseudos",
+        run_local_qe=True,
+        local_pw_x=Path("tools/pw.x"),
+        qe_run_timeout_seconds=5,
+    )
+
+    assert status["status"] == "passed"
+    assert status["local_qe_reference_run_complete"] is True
+    manifest = json.loads((tmp_path / "bundle" / DFT_SCF_SIX_CLASS_MANIFEST_NAME).read_text(encoding="utf-8"))
+    assert manifest["final_real_qe_evidence"] is True
+    for case in manifest["cases"]:
+        assert case["reference_output"]["status"] == "local_pw_x_reference_output_hash_from_converged_scf_run"
+        assert Path(case["reference_output"]["command"][0]).is_absolute()
+
+
 def test_local_qe_runner_can_reuse_existing_converged_outputs_without_rerun(tmp_path):
     _write_local_test_pseudos(tmp_path / "local_pseudos")
     first_pw = tmp_path / "first-pw.x"

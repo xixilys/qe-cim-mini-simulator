@@ -94,6 +94,20 @@ def test_complex_gemm_gemv_rtl_flow_generates_deterministic_sources_and_golden(t
     assert golden["expected"] == {"y": [[5, 16], [8, 11]]}
 
 
+def test_complex_gemm_gemv_rtl_avoids_dc_designware_arithmetic_in_hot_path(tmp_path):
+    initialize_complex_gemm_gemv_rtl_flow(tmp_path)
+
+    rtl = (tmp_path / "complex_gemm_gemv_tile.v").read_text(encoding="utf-8")
+
+    assert "function signed [15:0] dft_mul8_signed" in rtl
+    assert "function signed [19:0] dft_add20_signed" in rtl
+    assert "function signed [19:0] dft_sub20_signed" in rtl
+    assert "a00r * x0r" not in rtl
+    assert "a00i * x0i" not in rtl
+    assert "p00r + p01r" not in rtl
+    assert "p00r - p01r" not in rtl
+
+
 def test_complex_gemm_gemv_rtl_flow_is_fail_closed_before_remote_tool_outputs(tmp_path):
     initialize_complex_gemm_gemv_rtl_flow(tmp_path)
     evidence = build_complex_gemm_gemv_evidence_rows(tmp_path)

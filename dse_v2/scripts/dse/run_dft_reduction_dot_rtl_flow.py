@@ -22,6 +22,7 @@ from dse_v2.reference_workloads.dft_reduction_dot_rtl_flow import (  # noqa: E40
     write_reduction_dot_tree_major_kernel_matrix,
 )
 
+from dse_v2.scripts.dse.dft_remote_vcs import remote_vcs_command  # noqa: E402
 
 REMOTE_FILES = ("reduction_dot_tree.v", "tb_reduction_dot_tree.v", "vivado_synth.tcl", "dc_synth.tcl")
 
@@ -72,13 +73,7 @@ def _remote_tool_attempts(out_dir: Path, *, ssh_target: str, remote_dir: str, ti
     tool_commands = [
         (
             "vcs",
-            (
-                "source ~/.bashrc; "
-                "vcs -full64 -sverilog reduction_dot_tree.v tb_reduction_dot_tree.v -o simv > vcs_compile.log 2>&1 "
-                "&& ./simv > vcs_run.log 2>&1; "
-                "tar czf results_vcs.tgz vcs_compile.log vcs_run.log simv* csrc 2>/dev/null "
-                "|| tar czf results_vcs.tgz vcs_compile.log vcs_run.log"
-            ),
+            remote_vcs_command(remote_dir, "reduction_dot_tree.v", "tb_reduction_dot_tree.v"),
             "results_vcs.tgz",
         ),
         (

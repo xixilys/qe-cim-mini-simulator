@@ -896,6 +896,9 @@ def build_dft_scf_six_class_bundle_manifest(
     """Materialize the six descriptors, QE inputs, pseudo refs, run scripts, and manifest."""
 
     out_root = Path(out_dir)
+    local_pw_x = Path(local_pw_x).expanduser()
+    if run_local_qe:
+        local_pw_x = local_pw_x.resolve(strict=False)
     qe_input_dir = out_root / "qe_inputs"
     pseudo_dir = out_root / "pseudos"
     descriptor_dir = out_root / "descriptors"

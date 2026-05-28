@@ -22,6 +22,8 @@ from dse_v2.reference_workloads.dft_hpsi_local_rtl_flow import (  # noqa: E402
     write_json,
 )
 
+from dse_v2.scripts.dse.dft_remote_vcs import remote_vcs_command  # noqa: E402
+
 REMOTE_FILES = ("hpsi_local_potential.v", "tb_hpsi_local_potential.v", "vivado_synth.tcl", "dc_synth.tcl")
 
 
@@ -41,7 +43,7 @@ def _copy_to_remote(out_dir: Path, *, ssh_target: str, remote_dir: str, timeout_
 
 def _remote_tool_attempts(out_dir: Path, *, ssh_target: str, remote_dir: str, timeout_s: int) -> list[dict[str, Any]]:
     tool_commands = [
-        ("vcs", "source ~/.bashrc; vcs -full64 -sverilog hpsi_local_potential.v tb_hpsi_local_potential.v -o simv > vcs_compile.log 2>&1 && ./simv > vcs_run.log 2>&1; tar czf results_vcs.tgz vcs_compile.log vcs_run.log simv* csrc 2>/dev/null || tar czf results_vcs.tgz vcs_compile.log vcs_run.log", "results_vcs.tgz"),
+        ("vcs", remote_vcs_command(remote_dir, "hpsi_local_potential.v", "tb_hpsi_local_potential.v"), "results_vcs.tgz"),
         ("vivado", "source ~/.bashrc; LC_ALL=C LANG=C vivado -mode batch -source vivado_synth.tcl > vivado_stdout.log 2> vivado_stderr.log; tar czf results_vivado.tgz vivado*.log vivado_*.rpt hpsi_local_potential_synth.dcp *_routed.dcp vivado_route_status.rpt vivado_route_timing_summary.rpt .Xil 2>/dev/null || tar czf results_vivado.tgz vivado*.log vivado_*.rpt 2>/dev/null || true", "results_vivado.tgz"),
         ("dc_shell", "source ~/.bashrc; dc_shell -f dc_synth.tcl > dc_stdout.log 2> dc_stderr.log; dc_files=\"$(ls dc_*.rpt dc_stdout.log dc_stderr.log hpsi_local_potential_dc_mapped.v dc_synth.ddc command.log 2>/dev/null || true)\"; [ -n \"$dc_files\" ] && tar czf results_dc.tgz $dc_files 2>/dev/null || true", "results_dc.tgz"),
     ]

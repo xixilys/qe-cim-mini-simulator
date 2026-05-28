@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from dse_v2.codesign.complete_dse_search_space import build_release_subset_manifest
 from dse_v2.reference_workloads.dft_hardware_ppa_ranking import (
     DFT_HARDWARE_PPA_RANKING_SCHEMA,
     build_dft_hardware_ppa_ranking,
@@ -246,6 +247,44 @@ def test_hardware_ppa_ranking_auto_discovers_candidate_universe(tmp_path: Path) 
     assert ranking["candidate_rows"][0]["design_candidate_id"].startswith("design-")
     assert ranking["candidate_rows"][0]["candidate_metadata"]["assignments"]
     assert ranking["winner_selection_status"] == "tied_by_identical_kernel_ppa_no_single_winner"
+    assert validation["valid"] is True
+
+
+def test_hardware_ppa_ranking_auto_discovers_release_subset_manifest_without_cand_sidecar(
+    tmp_path: Path,
+) -> None:
+    run_dir = tmp_path / "run"
+    release_subset = build_release_subset_manifest()
+    cdse_candidate_id = release_subset["legal_candidate_ids"][0]
+    _seed_run(run_dir, candidates=(cdse_candidate_id,))
+    (run_dir / "candidate_universe_manifest.json").unlink()
+    _write_json(run_dir / "release_subset_manifest.json", release_subset)
+
+    ranking = build_dft_hardware_ppa_ranking(run_dir)
+    validation = validate_dft_hardware_ppa_ranking(ranking)
+
+    assert ranking["source_artifacts"]["candidate_universe_manifest"]["exists"] is True
+    assert (
+        Path(ranking["source_artifacts"]["candidate_universe_manifest"]["path"]).name
+        == "release_subset_manifest.json"
+    )
+    assert ranking["candidate_metadata_context_available"] is True
+    assert ranking["ranking_eligible_candidate_count"] == 1
+    assert ranking["candidate_rows"][0]["candidate_id"] == cdse_candidate_id
+    assert ranking["candidate_rows"][0]["candidate_metadata"]["candidate_id"] == cdse_candidate_id
+    target_kind = release_subset["candidates"][0]["identity"]["identity_layers"][
+        "target_platform_parameters"
+    ]["platform_kind"]
+    if target_kind == "fpga":
+        assert [row["candidate_id"] for row in ranking["fpga_ranking"]] == [cdse_candidate_id]
+        assert ranking["asic_ranking"] == []
+    else:
+        assert ranking["fpga_ranking"] == []
+        assert [row["candidate_id"] for row in ranking["asic_ranking"]] == [cdse_candidate_id]
+    assert not any(
+        blocker["blocker_id"] == "missing_candidate_universe_metadata"
+        for blocker in ranking["blockers"]
+    )
     assert validation["valid"] is True
 
 

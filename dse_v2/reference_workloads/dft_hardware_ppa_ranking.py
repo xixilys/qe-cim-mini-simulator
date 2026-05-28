@@ -172,13 +172,35 @@ def _discover_candidate_universe_manifest(run_dir: Path, explicit: Optional[Path
     if explicit is not None:
         return Path(explicit)
     for candidate in (
+        run_dir / "release_subset_manifest.json",
+        run_dir / "search_space" / "release_subset_manifest.json",
+        run_dir / "candidate_universe_manifest.json",
         run_dir / "release_domain_current36" / "candidate_universe_manifest.json",
         run_dir / "release_domain" / "candidate_universe_manifest.json",
-        run_dir / "candidate_universe_manifest.json",
     ):
         if candidate.exists() and candidate.is_file():
             return candidate
     return None
+
+
+def _normalise_candidate_metadata(row: Mapping[str, Any]) -> Dict[str, Any]:
+    metadata = dict(row)
+    candidate_id = str(metadata.get("candidate_id") or "")
+    identity = metadata.get("identity", {})
+    layers = identity.get("identity_layers", {}) if isinstance(identity, Mapping) else {}
+    layers = layers if isinstance(layers, Mapping) else {}
+    if candidate_id and not metadata.get("design_candidate_id"):
+        metadata["design_candidate_id"] = candidate_id
+    if layers and not isinstance(metadata.get("assignments"), Mapping):
+        metadata["assignments"] = {key: dict(value) if isinstance(value, Mapping) else value for key, value in layers.items()}
+    if layers and not isinstance(metadata.get("identity_assignments"), Mapping):
+        metadata["identity_assignments"] = {
+            key: dict(value) if isinstance(value, Mapping) else value
+            for key, value in layers.items()
+        }
+    if not metadata.get("candidate_id_kind") and candidate_id.startswith("cdse_"):
+        metadata["candidate_id_kind"] = "complete_dse_candidate_id"
+    return metadata
 
 
 def _candidate_universe_by_id(path: Optional[Path]) -> Dict[str, Dict[str, Any]]:
@@ -187,7 +209,7 @@ def _candidate_universe_by_id(path: Optional[Path]) -> Dict[str, Dict[str, Any]]
     payload = _load_json(path)
     rows = payload.get("candidates", []) if isinstance(payload.get("candidates"), list) else []
     return {
-        str(row.get("candidate_id")): dict(row)
+        str(row.get("candidate_id")): _normalise_candidate_metadata(row)
         for row in rows
         if isinstance(row, Mapping) and row.get("candidate_id")
     }
@@ -570,6 +592,36 @@ def _candidate_metric_signature(candidate: Mapping[str, Any]) -> str:
     return json.dumps(sorted(rows, key=lambda item: str(item["kernel_id"])), sort_keys=True)
 
 
+def _metadata_target_platform_kind(metadata: Mapping[str, Any]) -> str:
+    identity = metadata.get("identity", {})
+    layers = identity.get("identity_layers", {}) if isinstance(identity, Mapping) else {}
+    layers = layers if isinstance(layers, Mapping) else {}
+    target = layers.get("target_platform_parameters", {})
+    if isinstance(target, Mapping):
+        kind = str(target.get("platform_kind") or "").lower()
+        if kind in {"fpga", "asic"}:
+            return kind
+    for source_key in ("target_platform_parameters", "identity_assignments", "assignments"):
+        source = metadata.get(source_key, {})
+        if not isinstance(source, Mapping):
+            continue
+        nested_target = source.get("target_platform_parameters", {})
+        if isinstance(nested_target, Mapping):
+            kind = str(nested_target.get("platform_kind") or "").lower()
+            if kind in {"fpga", "asic"}:
+                return kind
+        for key in ("platform_kind", "hardware_target", "target", "deployment"):
+            kind = str(source.get(key) or "").lower()
+            if kind in {"fpga", "asic"}:
+                return kind
+    return ""
+
+
+def _row_matches_target(row: Mapping[str, Any], target: str) -> bool:
+    kind = str(row.get("target_platform_kind") or "").lower()
+    return kind in {"", target}
+
+
 def _rank_with_ties(rows: Sequence[Dict[str, Any]], key: Any) -> list[Dict[str, Any]]:
     ranked: list[Dict[str, Any]] = []
     previous_key = None
@@ -756,10 +808,12 @@ def build_dft_hardware_ppa_ranking(
             totals={**totals, "asic_slack_deficit_ns": asic_slack_deficit},
             metadata=metadata,
         )
+        target_platform_kind = _metadata_target_platform_kind(metadata)
         candidate_rows.append(
             {
                 "candidate_id": candidate_id,
                 "design_candidate_id": metadata.get("design_candidate_id"),
+                "target_platform_kind": target_platform_kind,
                 "candidate_metadata": _candidate_metadata_sidecar(metadata),
                 "assignments": metadata.get("assignments", {}),
                 "identity_assignments": metadata.get("identity_assignments", {}),
@@ -811,8 +865,10 @@ def build_dft_hardware_ppa_ranking(
     if not eligible_rows and not blockers:
         blockers.append({"blocker_id": "no_ranking_eligible_candidates"})
 
+    fpga_eligible_rows = [row for row in eligible_rows if _row_matches_target(row, "fpga")]
+    asic_eligible_rows = [row for row in eligible_rows if _row_matches_target(row, "asic")]
     fpga_ranking = _rank_with_ties(
-        eligible_rows,
+        fpga_eligible_rows,
         key=lambda item: (
             _ranking_metric(item, "fpga_total_slice_luts", parametric_available=parametric_available),
             _ranking_metric(item, "fpga_total_dsps", parametric_available=parametric_available),
@@ -821,7 +877,7 @@ def build_dft_hardware_ppa_ranking(
         ),
     )
     asic_ranking = _rank_with_ties(
-        eligible_rows,
+        asic_eligible_rows,
         key=lambda item: (
             _ranking_metric(item, "asic_total_cell_area", parametric_available=parametric_available),
             -_ranking_metric(item, "asic_min_slack_ns", parametric_available=parametric_available),

@@ -31,18 +31,139 @@ COMPLEX_GEMM_GEMV_VERILOG = r"""module complex_gemm_gemv_tile #(
     input  signed [WIDTH-1:0] x0r, x0i, x1r, x1i,
     output signed [OUT_WIDTH-1:0] y0r, y0i, y1r, y1i
 );
-    wire signed [(2*WIDTH)-1:0] p00r = a00r * x0r - a00i * x0i;
-    wire signed [(2*WIDTH)-1:0] p00i = a00r * x0i + a00i * x0r;
-    wire signed [(2*WIDTH)-1:0] p01r = a01r * x1r - a01i * x1i;
-    wire signed [(2*WIDTH)-1:0] p01i = a01r * x1i + a01i * x1r;
-    wire signed [(2*WIDTH)-1:0] p10r = a10r * x0r - a10i * x0i;
-    wire signed [(2*WIDTH)-1:0] p10i = a10r * x0i + a10i * x0r;
-    wire signed [(2*WIDTH)-1:0] p11r = a11r * x1r - a11i * x1i;
-    wire signed [(2*WIDTH)-1:0] p11i = a11r * x1i + a11i * x1r;
-    assign y0r = p00r + p01r;
-    assign y0i = p00i + p01i;
-    assign y1r = p10r + p11r;
-    assign y1i = p10i + p11i;
+    function [7:0] dft_neg8;
+        input [7:0] value;
+        integer bit_index;
+        reg carry;
+        begin
+            carry = 1'b1;
+            for (bit_index = 0; bit_index < 8; bit_index = bit_index + 1) begin
+                dft_neg8[bit_index] = (~value[bit_index]) ^ carry;
+                carry = (~value[bit_index]) & carry;
+            end
+        end
+    endfunction
+
+    function [15:0] dft_neg16;
+        input [15:0] value;
+        integer bit_index;
+        reg carry;
+        begin
+            carry = 1'b1;
+            for (bit_index = 0; bit_index < 16; bit_index = bit_index + 1) begin
+                dft_neg16[bit_index] = (~value[bit_index]) ^ carry;
+                carry = (~value[bit_index]) & carry;
+            end
+        end
+    endfunction
+
+    function [19:0] dft_neg20;
+        input [19:0] value;
+        integer bit_index;
+        reg carry;
+        begin
+            carry = 1'b1;
+            for (bit_index = 0; bit_index < 20; bit_index = bit_index + 1) begin
+                dft_neg20[bit_index] = (~value[bit_index]) ^ carry;
+                carry = (~value[bit_index]) & carry;
+            end
+        end
+    endfunction
+
+    function [15:0] dft_add16_unsigned;
+        input [15:0] lhs;
+        input [15:0] rhs;
+        integer bit_index;
+        reg carry;
+        begin
+            carry = 1'b0;
+            for (bit_index = 0; bit_index < 16; bit_index = bit_index + 1) begin
+                dft_add16_unsigned[bit_index] = lhs[bit_index] ^ rhs[bit_index] ^ carry;
+                carry = (lhs[bit_index] & rhs[bit_index]) | (lhs[bit_index] & carry) | (rhs[bit_index] & carry);
+            end
+        end
+    endfunction
+
+    function signed [19:0] dft_add20_signed;
+        input signed [19:0] lhs;
+        input signed [19:0] rhs;
+        integer bit_index;
+        reg carry;
+        begin
+            carry = 1'b0;
+            for (bit_index = 0; bit_index < 20; bit_index = bit_index + 1) begin
+                dft_add20_signed[bit_index] = lhs[bit_index] ^ rhs[bit_index] ^ carry;
+                carry = (lhs[bit_index] & rhs[bit_index]) | (lhs[bit_index] & carry) | (rhs[bit_index] & carry);
+            end
+        end
+    endfunction
+
+    function signed [19:0] dft_sub20_signed;
+        input signed [19:0] lhs;
+        input signed [19:0] rhs;
+        begin
+            dft_sub20_signed = dft_add20_signed(lhs, dft_neg20(rhs));
+        end
+    endfunction
+
+    function [15:0] dft_shifted_partial8;
+        input [7:0] value;
+        input [2:0] shift_index;
+        begin
+            case (shift_index)
+                3'd0: dft_shifted_partial8 = {8'b0, value};
+                3'd1: dft_shifted_partial8 = {7'b0, value, 1'b0};
+                3'd2: dft_shifted_partial8 = {6'b0, value, 2'b0};
+                3'd3: dft_shifted_partial8 = {5'b0, value, 3'b0};
+                3'd4: dft_shifted_partial8 = {4'b0, value, 4'b0};
+                3'd5: dft_shifted_partial8 = {3'b0, value, 5'b0};
+                3'd6: dft_shifted_partial8 = {2'b0, value, 6'b0};
+                default: dft_shifted_partial8 = {1'b0, value, 7'b0};
+            endcase
+        end
+    endfunction
+
+    function signed [15:0] dft_mul8_signed;
+        input signed [7:0] lhs;
+        input signed [7:0] rhs;
+        integer bit_index;
+        reg [7:0] lhs_mag;
+        reg [7:0] rhs_mag;
+        reg [15:0] accum;
+        reg [15:0] partial;
+        begin
+            lhs_mag = lhs[7] ? dft_neg8(lhs) : lhs;
+            rhs_mag = rhs[7] ? dft_neg8(rhs) : rhs;
+            accum = 16'b0;
+            for (bit_index = 0; bit_index < 8; bit_index = bit_index + 1) begin
+                partial = dft_shifted_partial8(lhs_mag, bit_index[2:0]);
+                if (rhs_mag[bit_index]) begin
+                    accum = dft_add16_unsigned(accum, partial);
+                end
+            end
+            dft_mul8_signed = (lhs[7] ^ rhs[7]) ? dft_neg16(accum) : accum;
+        end
+    endfunction
+
+    function signed [19:0] dft_sext16_to20;
+        input signed [15:0] value;
+        begin
+            dft_sext16_to20 = {{4{value[15]}}, value};
+        end
+    endfunction
+
+    wire signed [19:0] p00r = dft_sub20_signed(dft_sext16_to20(dft_mul8_signed(a00r, x0r)), dft_sext16_to20(dft_mul8_signed(a00i, x0i)));
+    wire signed [19:0] p00i = dft_add20_signed(dft_sext16_to20(dft_mul8_signed(a00r, x0i)), dft_sext16_to20(dft_mul8_signed(a00i, x0r)));
+    wire signed [19:0] p01r = dft_sub20_signed(dft_sext16_to20(dft_mul8_signed(a01r, x1r)), dft_sext16_to20(dft_mul8_signed(a01i, x1i)));
+    wire signed [19:0] p01i = dft_add20_signed(dft_sext16_to20(dft_mul8_signed(a01r, x1i)), dft_sext16_to20(dft_mul8_signed(a01i, x1r)));
+    wire signed [19:0] p10r = dft_sub20_signed(dft_sext16_to20(dft_mul8_signed(a10r, x0r)), dft_sext16_to20(dft_mul8_signed(a10i, x0i)));
+    wire signed [19:0] p10i = dft_add20_signed(dft_sext16_to20(dft_mul8_signed(a10r, x0i)), dft_sext16_to20(dft_mul8_signed(a10i, x0r)));
+    wire signed [19:0] p11r = dft_sub20_signed(dft_sext16_to20(dft_mul8_signed(a11r, x1r)), dft_sext16_to20(dft_mul8_signed(a11i, x1i)));
+    wire signed [19:0] p11i = dft_add20_signed(dft_sext16_to20(dft_mul8_signed(a11r, x1i)), dft_sext16_to20(dft_mul8_signed(a11i, x1r)));
+    assign y0r = dft_add20_signed(p00r, p01r);
+    assign y0i = dft_add20_signed(p00i, p01i);
+    assign y1r = dft_add20_signed(p10r, p11r);
+    assign y1i = dft_add20_signed(p10i, p11i);
 endmodule
 """
 

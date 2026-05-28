@@ -22,6 +22,7 @@ from dse_v2.reference_workloads.dft_fft_ifft_rtl_flow import (  # noqa: E402
     write_json,
 )
 
+from dse_v2.scripts.dse.dft_remote_vcs import remote_vcs_command  # noqa: E402
 
 REMOTE_FILES = ("fft_ifft_ffft.v", "tb_fft_ifft_ffft.v", "vivado_synth.tcl", "dc_synth.tcl")
 
@@ -70,13 +71,7 @@ def _remote_tool_attempts(out_dir: Path, *, ssh_target: str, remote_dir: str, ti
     tool_commands = [
         (
             "vcs",
-            (
-                "source ~/.bashrc; "
-                "vcs -full64 -sverilog fft_ifft_ffft.v tb_fft_ifft_ffft.v -o simv > vcs_compile.log 2>&1 "
-                "&& ./simv > vcs_run.log 2>&1; "
-                "tar czf results_vcs.tgz vcs_compile.log vcs_run.log simv* csrc 2>/dev/null "
-                "|| tar czf results_vcs.tgz vcs_compile.log vcs_run.log"
-            ),
+            remote_vcs_command(remote_dir, "fft_ifft_ffft.v", "tb_fft_ifft_ffft.v"),
             "results_vcs.tgz",
         ),
         (

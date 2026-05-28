@@ -220,6 +220,7 @@ def test_execution_skip_remote_clears_stale_raw_and_records_provenance(
         candidate_ids=[candidate_id],
         kernel_ids=[kernel_id],
         max_units=1,
+        remote_base_dir="/home/ICer/tmp",
         skip_remote=True,
         timeout_s=60,
     )
@@ -244,6 +245,9 @@ def test_execution_skip_remote_clears_stale_raw_and_records_provenance(
     assert any(ref["path"].endswith("candidate_parameter_manifest.json") for ref in source_bundle["source_refs"])
     unit = payload["units"][0]
     assert "--candidate-bundle" in unit["runner_command"]
+    assert payload["remote_base_dir"] == "/home/ICer/tmp"
+    remote_dir = unit["runner_command"][unit["runner_command"].index("--remote-dir") + 1]
+    assert remote_dir.startswith("/home/ICer/tmp/dft_accelerate_fresh_ppa_")
 
 
 def test_execution_missing_tie_breaker_queue_fails_closed_without_claim_upgrade(tmp_path: Path) -> None:
