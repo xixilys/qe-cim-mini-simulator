@@ -1,0 +1,75 @@
+{
+  "schema_version": "dse.qe_profile.v1",
+  "case_id": "qe_profile_small",
+  "problem": {
+    "code": "Quantum ESPRESSO",
+    "calculation": "scf",
+    "system": "Si2",
+    "ecutwfc_ry": 30,
+    "kpoints": [1, 1, 1],
+    "bands": 4,
+    "npw": 128,
+    "fft_grid": [8, 8, 8]
+  },
+  "phases": [
+    {
+      "phase_id": "charge_density_fft",
+      "op_type": "fft3d",
+      "flops": 18432,
+      "memory_bytes": 16384,
+      "inputs": ["rho_g"],
+      "outputs": ["rho_r"],
+      "input_specs": {
+        "rho_g": {"shape": [512], "dtype": "COMPLEX_FP64"}
+      },
+      "output_specs": {
+        "rho_r": {"shape": [512], "dtype": "COMPLEX_FP64"}
+      }
+    },
+    {
+      "phase_id": "h_psi_apply",
+      "op_type": "h_psi",
+      "flops": 65536,
+      "memory_bytes": 32768,
+      "inputs": ["rho_r", "psi_in"],
+      "outputs": ["hpsi_out"],
+      "input_specs": {
+        "rho_r": {"shape": [512], "dtype": "COMPLEX_FP64"},
+        "psi_in": {"shape": [128, 4], "dtype": "COMPLEX_FP64"}
+      },
+      "output_specs": {
+        "hpsi_out": {"shape": [128, 4], "dtype": "COMPLEX_FP64"}
+      }
+    },
+    {
+      "phase_id": "band_residual_reduce",
+      "op_type": "reduction",
+      "flops": 4096,
+      "memory_bytes": 8192,
+      "inputs": ["hpsi_out"],
+      "outputs": ["residual_norm"],
+      "input_specs": {
+        "hpsi_out": {"shape": [128, 4], "dtype": "COMPLEX_FP64"}
+      },
+      "output_specs": {
+        "residual_norm": {"shape": [4], "dtype": "FP64"}
+      }
+    }
+  ],
+  "edges": [
+    {
+      "source": "charge_density_fft",
+      "target": "h_psi_apply",
+      "tensor_name": "rho_r",
+      "tensor_spec": {"shape": [512], "dtype": "COMPLEX_FP64"},
+      "bytes": 8192
+    },
+    {
+      "source": "h_psi_apply",
+      "target": "band_residual_reduce",
+      "tensor_name": "hpsi_out",
+      "tensor_spec": {"shape": [128, 4], "dtype": "COMPLEX_FP64"},
+      "bytes": 8192
+    }
+  ]
+}
