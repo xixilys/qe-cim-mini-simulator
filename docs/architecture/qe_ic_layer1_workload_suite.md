@@ -102,10 +102,13 @@ The motif registry also carries Layer-2 taxonomy hints:
 - `known_gpu_strength`
 - `known_fpga_risk`
 - `layer2_readiness`
+- `hint_status`
+- `requires_layer2_measurement`
 
 These fields keep motif profiling from becoming plain text matching. They are
-still Layer-1 hints; Layer-2 must replace them with measured or justified
-profile evidence.
+heuristic Layer-1 priors and warnings only; Layer-2 must replace them with
+measured or justified profile evidence before any target-viability or promotion
+decision can use them.
 
 ## Checked-In Fixture Strategy
 
@@ -124,8 +127,9 @@ python3 dse_v2/scripts/dse/build_qe_ic_workload_suite.py \
 ```
 
 `write_qe_ic_workload_suite_artifacts()` is fail-closed for invalid suites: it
-only writes `qe_ic_workload_suite_validation.json` when validation fails. It
-does not write a canonical suite, manifest, or README for invalid input.
+removes stale canonical suite, manifest, and README files, then writes only
+`qe_ic_workload_suite_validation.json` when validation fails. It does not leave
+a stale canonical suite, manifest, or README beside a failed validation result.
 
 ## Claim Boundary
 
@@ -150,4 +154,5 @@ python3 -m compileall dse_v2
 The full repository suite had one known unrelated failure during the Layer-1
 push audit. It is recorded in
 `docs/architecture/qe_ic_layer1_known_failures.json` with test name, observed
-state, reason, owner, and `layer1_regression=false`.
+state, reason, owner, `introduced_or_observed_at_commit`,
+`last_reviewed_at_commit`, and `layer1_regression=false`.

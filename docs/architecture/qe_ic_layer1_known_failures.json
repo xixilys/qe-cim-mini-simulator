@@ -1,6 +1,7 @@
 {
   "schema_version": "dse.qe_ic.layer1_known_failures.v1",
-  "layer1_commit": "8709cb7",
+  "introduced_or_observed_at_commit": "8709cb7",
+  "last_reviewed_at_commit": "d2a05c9",
   "known_failures": [
     {
       "test": "dse_v2/tests/test_dft_trial_state_ledger.py::test_dft_trial_state_ledger_ties_search_evidence_step5_audit",

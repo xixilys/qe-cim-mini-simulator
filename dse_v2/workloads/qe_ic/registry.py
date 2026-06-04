@@ -35,6 +35,8 @@ def _motif(
         "known_gpu_strength": known_gpu_strength or defaults["known_gpu_strength"],
         "known_fpga_risk": known_fpga_risk or defaults["known_fpga_risk"],
         "layer2_readiness": "provisional" if provisional else "ready",
+        "hint_status": "heuristic_prior",
+        "requires_layer2_measurement": True,
     }
 
 
