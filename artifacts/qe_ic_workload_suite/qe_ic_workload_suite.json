@@ -1,0 +1,469 @@
+{
+  "claim_boundary": "This artifact defines workload scope only. It does not contain profiling results, architecture candidates, performance estimates, target viability results, or promotion decisions.",
+  "downstream_contract": {
+    "next_layer": "motif_profiling",
+    "required_consumers": [
+      "layer2_motif_profiling",
+      "layer3_target_viability_test",
+      "promotion_policy"
+    ]
+  },
+  "excluded_workflows": [
+    {
+      "reason": "deferred; image-level scheduling is a separate system-level problem",
+      "workflow": "NEB"
+    },
+    {
+      "reason": "deferred; time-step stability and trajectory validation increase scope",
+      "workflow": "CP_MD"
+    },
+    {
+      "reason": "deferred; many-body and optical workflows are outside mobility-centered v1",
+      "workflow": "GW_BSE"
+    },
+    {
+      "reason": "deferred; time-propagation motifs require separate modeling",
+      "workflow": "TDDFT"
+    },
+    {
+      "reason": "deferred; device-level quantum transport may require a non-QE software stack",
+      "workflow": "NEGF"
+    }
+  ],
+  "motif_registry": {
+    "batch_scheduling": {
+      "category": "workflow_parallelism",
+      "description": "Scheduling many related calculations under a shared campaign.",
+      "motif_name": "Batch scheduling",
+      "provisional": false
+    },
+    "bte_collision_integral": {
+      "category": "transport",
+      "description": "Boltzmann transport collision-integral evaluation.",
+      "motif_name": "BTE collision integral",
+      "provisional": false
+    },
+    "charge_density_analysis": {
+      "category": "post_processing",
+      "description": "Charge-density, orbital, and projected-density analysis.",
+      "motif_name": "Charge-density analysis",
+      "provisional": false
+    },
+    "communication": {
+      "category": "communication",
+      "description": "General inter-rank data exchange beyond explicit reductions.",
+      "motif_name": "Communication",
+      "provisional": true
+    },
+    "cross_run_reuse": {
+      "category": "workflow_parallelism",
+      "description": "Reuse of electronic, phonon, or interpolation artifacts across runs.",
+      "motif_name": "Cross-run reuse",
+      "provisional": false
+    },
+    "dense_kq_interpolation": {
+      "category": "transport",
+      "description": "Wannier or dense-grid k/q interpolation for transport studies.",
+      "motif_name": "Dense k/q interpolation",
+      "provisional": false
+    },
+    "dense_linear_algebra": {
+      "category": "linear_algebra",
+      "description": "GEMM/GEMV, orthogonalization, and dense eigensolver support.",
+      "motif_name": "Dense linear algebra",
+      "provisional": false
+    },
+    "density_update": {
+      "category": "scf_state_update",
+      "description": "Charge-density construction, update, and mixing inputs.",
+      "motif_name": "Density update",
+      "provisional": false
+    },
+    "diagonalization": {
+      "category": "linear_algebra",
+      "description": "Kohn-Sham subspace diagonalization and solver orchestration.",
+      "motif_name": "Diagonalization",
+      "provisional": false
+    },
+    "electron_phonon_matrix": {
+      "category": "transport",
+      "description": "Electron-phonon matrix-element construction and traversal.",
+      "motif_name": "Electron-phonon matrix",
+      "provisional": false
+    },
+    "fft_transpose": {
+      "category": "spectral_transform",
+      "description": "Plane-wave FFTs and distributed transpose traffic.",
+      "motif_name": "FFT and transpose",
+      "provisional": false
+    },
+    "hpsi": {
+      "category": "operator_application",
+      "description": "Repeated H psi application in iterative electronic solves.",
+      "motif_name": "Hamiltonian application",
+      "provisional": false
+    },
+    "incremental_update": {
+      "category": "workflow_parallelism",
+      "description": "Reusing and incrementally updating state across neighboring sweep points.",
+      "motif_name": "Incremental update",
+      "provisional": true
+    },
+    "io_checkpoint": {
+      "category": "io_memory",
+      "description": "Restart files, intermediate outputs, and checkpoint pressure.",
+      "motif_name": "I/O checkpoint",
+      "provisional": false
+    },
+    "large_data_staging": {
+      "category": "io_memory",
+      "description": "Movement of wavefunction, matrix-element, and checkpoint data.",
+      "motif_name": "Large data staging",
+      "provisional": false
+    },
+    "large_supercell": {
+      "category": "structure_scale",
+      "description": "Large real-space cell and gamma/sparse-k electronic solves.",
+      "motif_name": "Large supercell",
+      "provisional": false
+    },
+    "localized_state_analysis": {
+      "category": "post_processing",
+      "description": "Projection and analysis of localized defect or interface states.",
+      "motif_name": "Localized-state analysis",
+      "provisional": false
+    },
+    "memory_bandwidth": {
+      "category": "memory",
+      "description": "Bandwidth-bound sweeps over dense numerical arrays.",
+      "motif_name": "Memory bandwidth",
+      "provisional": false
+    },
+    "memory_capacity": {
+      "category": "memory",
+      "description": "Capacity pressure from large cells, bands, and retained arrays.",
+      "motif_name": "Memory capacity",
+      "provisional": false
+    },
+    "parameter_sweep": {
+      "category": "workflow_parallelism",
+      "description": "Generic parameter sweep where the driving physical axis is family-specific.",
+      "motif_name": "Parameter sweep",
+      "provisional": true
+    },
+    "perturbation_rhs": {
+      "category": "response_solve",
+      "description": "DFPT perturbation-source construction and solve RHS handling.",
+      "motif_name": "Perturbation right-hand side",
+      "provisional": false
+    },
+    "potential_alignment": {
+      "category": "post_processing",
+      "description": "Electrostatic and band-edge alignment across regions or materials.",
+      "motif_name": "Potential alignment",
+      "provisional": false
+    },
+    "projector_nonlocal": {
+      "category": "operator_application",
+      "description": "Pseudopotential projector application and accumulation.",
+      "motif_name": "Nonlocal projector",
+      "provisional": false
+    },
+    "q_point_sweep": {
+      "category": "workflow_parallelism",
+      "description": "Independent or weakly coupled phonon q-point evaluations.",
+      "motif_name": "q-point sweep",
+      "provisional": false
+    },
+    "reduction_collective": {
+      "category": "communication",
+      "description": "Dot products, global sums, and collective reductions.",
+      "motif_name": "Reduction collective",
+      "provisional": false
+    },
+    "repeated_ground_state_solve": {
+      "category": "workflow_parallelism",
+      "description": "Multiple related SCF solves for structures, defects, or interfaces.",
+      "motif_name": "Repeated ground-state solve",
+      "provisional": true
+    },
+    "repeated_runs": {
+      "category": "workflow_parallelism",
+      "description": "Repeated program invocations in a parameter or operating-condition sweep.",
+      "motif_name": "Repeated runs",
+      "provisional": true
+    },
+    "response_accumulation": {
+      "category": "response_solve",
+      "description": "Accumulation of dielectric, phonon, and response tensors.",
+      "motif_name": "Response accumulation",
+      "provisional": false
+    },
+    "small_dense_linear_algebra": {
+      "category": "linear_algebra",
+      "description": "Small-matrix DFPT and response tensor linear algebra.",
+      "motif_name": "Small dense linear algebra",
+      "provisional": true
+    },
+    "wavefunction_memory": {
+      "category": "memory",
+      "description": "Large wavefunction-array footprint, layout, and reuse pressure.",
+      "motif_name": "Wavefunction memory",
+      "provisional": false
+    },
+    "workflow_parameter_sweep": {
+      "category": "workflow_parallelism",
+      "description": "Scenario-level repeated workflows over physical parameters.",
+      "motif_name": "Workflow parameter sweep",
+      "provisional": false
+    }
+  },
+  "primary_scenario_id": "mobility_centered_ic_device",
+  "scenarios": [
+    {
+      "description": "IC device workload distribution centered on carrier mobility and electron-phonon transport.",
+      "scenario_id": "mobility_centered_ic_device",
+      "weights": {
+        "electron_phonon_mobility": 0.35,
+        "ground_state_band_structure": 0.2,
+        "interface_band_offset_defect": 0.1,
+        "phonon_dfpt": 0.2,
+        "strain_doping_field_sweep": 0.15
+      }
+    },
+    {
+      "description": "IC device workload distribution centered on interfaces, band offsets, and defects.",
+      "scenario_id": "interface_centered_ic_device",
+      "weights": {
+        "electron_phonon_mobility": 0.2,
+        "ground_state_band_structure": 0.2,
+        "interface_band_offset_defect": 0.35,
+        "phonon_dfpt": 0.1,
+        "strain_doping_field_sweep": 0.15
+      }
+    }
+  ],
+  "schema_version": "dse.qe_ic.workload_suite.v1",
+  "suite_id": "qe_ic_device_suite_v1",
+  "suite_scope": "IC-device-oriented DFT workload suite",
+  "workload_families": [
+    {
+      "depends_on_families": [],
+      "device_relevance": [
+        "band_structure",
+        "effective_mass",
+        "wavefunction_generation",
+        "density_generation",
+        "input_to_phonon_and_transport"
+      ],
+      "expected_motifs": [
+        "fft_transpose",
+        "hpsi",
+        "projector_nonlocal",
+        "dense_linear_algebra",
+        "diagonalization",
+        "density_update",
+        "reduction_collective",
+        "wavefunction_memory"
+      ],
+      "family_id": "ground_state_band_structure",
+      "family_name": "Ground-state and band-structure",
+      "first_version_required": true,
+      "priority": "required",
+      "profiling_contract": {
+        "expected_profile_fields": [
+          "runtime_breakdown",
+          "op_mix",
+          "memory_movement",
+          "communication_pattern",
+          "parallel_axes",
+          "reuse_opportunities",
+          "gpu_baseline_required"
+        ],
+        "gpu_baseline_required": true,
+        "required_next_layer": "motif_profiling"
+      },
+      "representative_programs": [
+        "pw.x",
+        "bands.x",
+        "dos.x"
+      ]
+    },
+    {
+      "depends_on_families": [
+        "ground_state_band_structure"
+      ],
+      "device_relevance": [
+        "phonon_dispersion",
+        "dielectric_response",
+        "born_effective_charge",
+        "input_to_electron_phonon_transport"
+      ],
+      "expected_motifs": [
+        "q_point_sweep",
+        "perturbation_rhs",
+        "response_accumulation",
+        "fft_transpose",
+        "hpsi",
+        "small_dense_linear_algebra",
+        "reduction_collective",
+        "communication"
+      ],
+      "family_id": "phonon_dfpt",
+      "family_name": "Phonon and DFPT",
+      "first_version_required": true,
+      "priority": "required",
+      "profiling_contract": {
+        "expected_profile_fields": [
+          "runtime_breakdown",
+          "op_mix",
+          "memory_movement",
+          "communication_pattern",
+          "parallel_axes",
+          "reuse_opportunities",
+          "gpu_baseline_required"
+        ],
+        "gpu_baseline_required": true,
+        "required_next_layer": "motif_profiling"
+      },
+      "representative_programs": [
+        "ph.x"
+      ]
+    },
+    {
+      "depends_on_families": [
+        "ground_state_band_structure",
+        "phonon_dfpt"
+      ],
+      "device_relevance": [
+        "carrier_mobility",
+        "conductivity",
+        "phonon_limited_transport",
+        "scattering_rate"
+      ],
+      "expected_motifs": [
+        "dense_kq_interpolation",
+        "electron_phonon_matrix",
+        "bte_collision_integral",
+        "dense_linear_algebra",
+        "memory_bandwidth",
+        "large_data_staging",
+        "io_checkpoint"
+      ],
+      "external_programs": [
+        "perturbo"
+      ],
+      "family_id": "electron_phonon_mobility",
+      "family_name": "Electron-phonon mobility and transport",
+      "first_version_required": true,
+      "notes": [
+        "Perturbo is tracked as a reference external transport program, not as a core QE executable."
+      ],
+      "priority": "primary",
+      "profiling_contract": {
+        "expected_profile_fields": [
+          "runtime_breakdown",
+          "op_mix",
+          "memory_movement",
+          "communication_pattern",
+          "parallel_axes",
+          "reuse_opportunities",
+          "gpu_baseline_required"
+        ],
+        "gpu_baseline_required": true,
+        "required_next_layer": "motif_profiling"
+      },
+      "representative_programs": [
+        "epw.x",
+        "perturbo"
+      ]
+    },
+    {
+      "depends_on_families": [
+        "ground_state_band_structure",
+        "phonon_dfpt",
+        "electron_phonon_mobility"
+      ],
+      "device_relevance": [
+        "strain_effect",
+        "carrier_concentration_dependence",
+        "electric_field_dependence",
+        "temperature_dependence",
+        "channel_orientation_sweep"
+      ],
+      "expected_motifs": [
+        "workflow_parameter_sweep",
+        "repeated_runs",
+        "cross_run_reuse",
+        "batch_scheduling",
+        "incremental_update"
+      ],
+      "family_id": "strain_doping_field_sweep",
+      "family_name": "Strain, doping, field, and operating-condition sweep",
+      "first_version_required": true,
+      "priority": "required",
+      "profiling_contract": {
+        "expected_profile_fields": [
+          "runtime_breakdown",
+          "op_mix",
+          "memory_movement",
+          "communication_pattern",
+          "parallel_axes",
+          "reuse_opportunities",
+          "gpu_baseline_required"
+        ],
+        "gpu_baseline_required": true,
+        "required_next_layer": "motif_profiling"
+      },
+      "representative_programs": [
+        "pw.x",
+        "ph.x",
+        "epw.x"
+      ]
+    },
+    {
+      "depends_on_families": [
+        "ground_state_band_structure"
+      ],
+      "device_relevance": [
+        "semiconductor_oxide_interface",
+        "high_k_interface",
+        "metal_semiconductor_contact",
+        "band_offset",
+        "defect_trap_level",
+        "formation_energy"
+      ],
+      "expected_motifs": [
+        "large_supercell",
+        "repeated_ground_state_solve",
+        "localized_state_analysis",
+        "potential_alignment",
+        "charge_density_analysis",
+        "memory_capacity",
+        "parameter_sweep"
+      ],
+      "family_id": "interface_band_offset_defect",
+      "family_name": "Interface, band-offset, and defect",
+      "first_version_required": true,
+      "priority": "required",
+      "profiling_contract": {
+        "expected_profile_fields": [
+          "runtime_breakdown",
+          "op_mix",
+          "memory_movement",
+          "communication_pattern",
+          "parallel_axes",
+          "reuse_opportunities",
+          "gpu_baseline_required"
+        ],
+        "gpu_baseline_required": true,
+        "required_next_layer": "motif_profiling"
+      },
+      "representative_programs": [
+        "pw.x",
+        "pp.x",
+        "projwfc.x"
+      ]
+    }
+  ]
+}
