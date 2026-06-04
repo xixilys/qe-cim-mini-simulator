@@ -19,13 +19,109 @@ def _motif(
     category: str,
     description: str,
     provisional: bool = False,
+    measurable_profile_fields: list[str] | None = None,
+    possible_target_relevance: list[str] | None = None,
+    known_gpu_strength: str | None = None,
+    known_fpga_risk: str | None = None,
 ) -> dict[str, Any]:
+    defaults = _motif_taxonomy_defaults(category)
     return {
         "motif_name": name,
         "category": category,
         "description": description,
         "provisional": provisional,
+        "measurable_profile_fields": measurable_profile_fields or defaults["measurable_profile_fields"],
+        "possible_target_relevance": possible_target_relevance or defaults["possible_target_relevance"],
+        "known_gpu_strength": known_gpu_strength or defaults["known_gpu_strength"],
+        "known_fpga_risk": known_fpga_risk or defaults["known_fpga_risk"],
+        "layer2_readiness": "provisional" if provisional else "ready",
     }
+
+
+def _motif_taxonomy_defaults(category: str) -> dict[str, Any]:
+    taxonomy = {
+        "spectral_transform": {
+            "measurable_profile_fields": ["fft_size", "transpose_bytes", "all_to_all_count"],
+            "possible_target_relevance": ["gpu", "fpga_streaming", "near_memory"],
+            "known_gpu_strength": "high_when_fft_library_and_batching_are_available",
+            "known_fpga_risk": "transpose_routing_and_global_memory_pressure",
+        },
+        "operator_application": {
+            "measurable_profile_fields": ["call_count", "flop_count", "streamed_bytes", "reuse_distance"],
+            "possible_target_relevance": ["gpu", "fpga_pipeline", "asic_datapath"],
+            "known_gpu_strength": "medium_to_high_for_batched_dense_or_stencil_like_regions",
+            "known_fpga_risk": "irregular_projector_access_and_precision_pressure",
+        },
+        "linear_algebra": {
+            "measurable_profile_fields": ["matrix_shape", "flop_count", "solver_iterations", "library_calls"],
+            "possible_target_relevance": ["gpu", "cpu_blas", "fpga_for_fixed_shapes"],
+            "known_gpu_strength": "high_for_large_dense_blas_and_solver_kernels",
+            "known_fpga_risk": "shape_variability_and_solver_control_complexity",
+        },
+        "scf_state_update": {
+            "measurable_profile_fields": ["grid_points", "mixing_iterations", "reduction_bytes"],
+            "possible_target_relevance": ["cpu", "gpu", "fpga_for_streaming_updates"],
+            "known_gpu_strength": "medium_for_large_grid_updates",
+            "known_fpga_risk": "host_control_coupling_and_convergence_feedback",
+        },
+        "communication": {
+            "measurable_profile_fields": ["message_count", "bytes_moved", "collective_type", "rank_count"],
+            "possible_target_relevance": ["interconnect", "gpu_direct", "host_runtime"],
+            "known_gpu_strength": "depends_on_gpu_aware_mpi_and_data_residency",
+            "known_fpga_risk": "system_integration_and_synchronization_overhead",
+        },
+        "memory": {
+            "measurable_profile_fields": ["working_set_bytes", "bandwidth_bytes", "access_stride", "reuse_distance"],
+            "possible_target_relevance": ["gpu_hbm", "fpga_hbm", "near_memory"],
+            "known_gpu_strength": "high_when_arrays_are_resident_and_coalesced",
+            "known_fpga_risk": "capacity_limits_and_data_staging_overheads",
+        },
+        "workflow_parallelism": {
+            "measurable_profile_fields": ["run_count", "dependency_edges", "reuse_artifacts", "batch_width"],
+            "possible_target_relevance": ["scheduler", "gpu_cluster", "fpga_farm"],
+            "known_gpu_strength": "high_for_independent_batches_with_reusable_inputs",
+            "known_fpga_risk": "amortization_risk_when_individual_runs_are_small",
+        },
+        "response_solve": {
+            "measurable_profile_fields": ["q_point_count", "rhs_count", "solve_iterations", "response_tensor_size"],
+            "possible_target_relevance": ["gpu", "fpga_for_repeated_rhs", "cpu_solver"],
+            "known_gpu_strength": "medium_to_high_for_many_rhs_or_q_points",
+            "known_fpga_risk": "small_dense_kernels_and_solver_branching",
+        },
+        "transport": {
+            "measurable_profile_fields": ["kq_grid_size", "matrix_element_count", "collision_terms", "staging_bytes"],
+            "possible_target_relevance": ["gpu", "gpu_cluster", "fpga_for_streaming_collision_terms"],
+            "known_gpu_strength": "high_for_dense_kq_grids_and_matrix_traversals",
+            "known_fpga_risk": "large_memory_footprint_and_irregular_table_access",
+        },
+        "io_memory": {
+            "measurable_profile_fields": ["file_count", "checkpoint_bytes", "staging_bytes", "reuse_count"],
+            "possible_target_relevance": ["storage", "host_runtime", "memory_hierarchy"],
+            "known_gpu_strength": "low_unless_io_is_hidden_by_residency_or_overlap",
+            "known_fpga_risk": "host_io_dominance_and_low_compute_density",
+        },
+        "structure_scale": {
+            "measurable_profile_fields": ["atom_count", "cell_volume", "grid_points", "band_count"],
+            "possible_target_relevance": ["memory_capacity", "gpu_hbm", "distributed_cpu_gpu"],
+            "known_gpu_strength": "medium_when_large_arrays_fit_device_memory",
+            "known_fpga_risk": "capacity_pressure_and_low_reuse_for_large_unique_cells",
+        },
+        "post_processing": {
+            "measurable_profile_fields": ["projection_count", "grid_points", "output_bytes", "analysis_passes"],
+            "possible_target_relevance": ["cpu", "gpu", "fpga_for_streaming_analysis"],
+            "known_gpu_strength": "medium_for_large_regular_projection_or_grid_passes",
+            "known_fpga_risk": "low_reuse_and_workflow_integration_overhead",
+        },
+    }
+    return taxonomy.get(
+        category,
+        {
+            "measurable_profile_fields": ["runtime_breakdown", "memory_movement", "parallel_axes"],
+            "possible_target_relevance": ["cpu", "gpu", "fpga"],
+            "known_gpu_strength": "unknown_until_layer2_profiling",
+            "known_fpga_risk": "unknown_until_layer2_profiling",
+        },
+    )
 
 
 MOTIF_REGISTRY: dict[str, dict[str, Any]] = {
@@ -211,7 +307,8 @@ def _family(
     device_relevance: list[str],
     expected_motifs: list[str],
     first_version_required: bool,
-    external_programs: list[str] | None = None,
+    source_basis: list[str],
+    external_reference_programs: list[str] | None = None,
     notes: list[str] | None = None,
 ) -> dict[str, Any]:
     family: dict[str, Any] = {
@@ -223,10 +320,11 @@ def _family(
         "device_relevance": device_relevance,
         "expected_motifs": expected_motifs,
         "first_version_required": first_version_required,
+        "source_basis": source_basis,
         "profiling_contract": _profiling_contract(),
     }
-    if external_programs:
-        family["external_programs"] = external_programs
+    if external_reference_programs:
+        family["external_reference_programs"] = external_reference_programs
     if notes:
         family["notes"] = notes
     return family
@@ -257,6 +355,11 @@ WORKLOAD_FAMILY_REGISTRY: dict[str, dict[str, Any]] = {
             "wavefunction_memory",
         ],
         first_version_required=True,
+        source_basis=[
+            "qe_pwscf_ground_state",
+            "qe_postproc_bands_dos",
+            "ic_effective_mass_band_structure",
+        ],
     ),
     "phonon_dfpt": _family(
         family_id="phonon_dfpt",
@@ -281,13 +384,18 @@ WORKLOAD_FAMILY_REGISTRY: dict[str, dict[str, Any]] = {
             "communication",
         ],
         first_version_required=True,
+        source_basis=[
+            "qe_phonon_dfpt",
+            "qe_pwscf_ground_state_dependency",
+            "ic_dielectric_phonon_response",
+        ],
     ),
     "electron_phonon_mobility": _family(
         family_id="electron_phonon_mobility",
         family_name="Electron-phonon mobility and transport",
         priority="primary",
-        representative_programs=["epw.x", "perturbo"],
-        external_programs=["perturbo"],
+        representative_programs=["epw.x"],
+        external_reference_programs=["perturbo"],
         depends_on_families=[
             "ground_state_band_structure",
             "phonon_dfpt",
@@ -308,6 +416,12 @@ WORKLOAD_FAMILY_REGISTRY: dict[str, dict[str, Any]] = {
             "io_checkpoint",
         ],
         first_version_required=True,
+        source_basis=[
+            "epw_transport",
+            "epw_wannier_interpolation",
+            "perturbo_external_reference",
+            "ic_carrier_mobility",
+        ],
         notes=[
             "Perturbo is tracked as a reference external transport program, not as a core QE executable.",
         ],
@@ -337,6 +451,12 @@ WORKLOAD_FAMILY_REGISTRY: dict[str, dict[str, Any]] = {
             "incremental_update",
         ],
         first_version_required=True,
+        source_basis=[
+            "qe_pwscf_operating_condition_sweep",
+            "qe_phonon_dfpt_dependency",
+            "epw_transport_dependency",
+            "ic_strain_doping_field_temperature_sweep",
+        ],
     ),
     "interface_band_offset_defect": _family(
         family_id="interface_band_offset_defect",
@@ -362,6 +482,11 @@ WORKLOAD_FAMILY_REGISTRY: dict[str, dict[str, Any]] = {
             "parameter_sweep",
         ],
         first_version_required=True,
+        source_basis=[
+            "qe_pwscf_interface_supercell",
+            "qe_postproc_charge_density_projection",
+            "ic_band_offset_defect_trap_analysis",
+        ],
     ),
 }
 

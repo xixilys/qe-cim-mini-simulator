@@ -8,7 +8,10 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 from dse_v2.workloads import qe_ic
+from dse_v2.workloads.qe_ic.artifacts import QeIcWorkloadSuiteArtifactError
 from dse_v2.workloads.qe_ic.registry import (
     MOTIF_REGISTRY,
     REQUIRED_FIRST_VERSION_FAMILY_IDS,
@@ -75,10 +78,46 @@ def test_expected_motifs_are_registered():
             assert isinstance(MOTIF_REGISTRY[motif_id]["provisional"], bool)
 
 
+def test_motif_registry_declares_layer2_taxonomy_hints():
+    suite = qe_ic.build_default_qe_ic_workload_suite()
+
+    for motif_id, motif in suite["motif_registry"].items():
+        assert motif["motif_name"]
+        assert motif["category"]
+        assert motif["measurable_profile_fields"]
+        assert motif["possible_target_relevance"]
+        assert motif["known_gpu_strength"]
+        assert motif["known_fpga_risk"]
+        assert motif["layer2_readiness"] in {"ready", "provisional"}
+        if motif["provisional"]:
+            assert motif["layer2_readiness"] == "provisional"
+
+
 def test_each_family_has_device_relevance():
     suite = qe_ic.build_default_qe_ic_workload_suite()
 
     assert all(family["device_relevance"] for family in suite["workload_families"])
+
+
+def test_each_family_declares_source_basis_tags():
+    suite = qe_ic.build_default_qe_ic_workload_suite()
+
+    for family in suite["workload_families"]:
+        assert family["source_basis"]
+        assert all(isinstance(tag, str) and tag for tag in family["source_basis"])
+
+
+def test_external_reference_programs_are_not_representative_qe_programs():
+    suite = qe_ic.build_default_qe_ic_workload_suite()
+    mobility = next(
+        family
+        for family in suite["workload_families"]
+        if family["family_id"] == "electron_phonon_mobility"
+    )
+
+    assert mobility["representative_programs"] == ["epw.x"]
+    assert mobility["external_reference_programs"] == ["perturbo"]
+    assert "perturbo" not in mobility["representative_programs"]
 
 
 def test_each_family_has_profiling_contract():
@@ -157,6 +196,22 @@ def test_writer_emits_required_artifacts(tmp_path: Path):
         assert (tmp_path / artifact).exists()
 
 
+def test_writer_fail_closed_only_writes_validation_for_invalid_suite(tmp_path: Path):
+    suite = qe_ic.build_default_qe_ic_workload_suite()
+    suite["scenarios"][0]["weights"]["ground_state_band_structure"] = 0.99
+
+    result = qe_ic.write_qe_ic_workload_suite_artifacts(tmp_path, suite=suite)
+
+    assert result["status"] == "failed"
+    assert result["artifacts"] == ["qe_ic_workload_suite_validation.json"]
+    assert (tmp_path / "qe_ic_workload_suite_validation.json").exists()
+    assert not (tmp_path / "qe_ic_workload_suite.json").exists()
+    assert not (tmp_path / "qe_ic_workload_suite_manifest.json").exists()
+    assert not (tmp_path / "qe_ic_workload_suite_readme.md").exists()
+    with pytest.raises(QeIcWorkloadSuiteArtifactError):
+        qe_ic.load_qe_ic_workload_suite(tmp_path / "qe_ic_workload_suite.json")
+
+
 def test_manifest_declares_downstream_consumers(tmp_path: Path):
     qe_ic.write_qe_ic_workload_suite_artifacts(tmp_path)
     manifest = json.loads((tmp_path / "qe_ic_workload_suite_manifest.json").read_text())
@@ -192,6 +247,20 @@ def test_suite_can_be_loaded_and_revalidated(tmp_path: Path):
 
     assert loaded["suite_id"] == "qe_ic_device_suite_v1"
     assert qe_ic.validate_qe_ic_workload_suite(loaded)["status"] == "passed"
+
+
+def test_checked_in_qe_ic_artifacts_match_builder_output(tmp_path: Path):
+    checked_in = Path("artifacts/qe_ic_workload_suite")
+
+    qe_ic.write_qe_ic_workload_suite_artifacts(tmp_path)
+
+    for artifact in [
+        "qe_ic_workload_suite.json",
+        "qe_ic_workload_suite_validation.json",
+        "qe_ic_workload_suite_manifest.json",
+        "qe_ic_workload_suite_readme.md",
+    ]:
+        assert (checked_in / artifact).read_text() == (tmp_path / artifact).read_text()
 
 
 def test_cli_emits_passed_status(tmp_path: Path):
@@ -230,3 +299,20 @@ def test_claim_boundary_blocks_profiling_architecture_performance_viability_prom
         assert term in manifest_boundary
     assert "does not contain" in boundary
     assert "not profiling" in manifest_boundary
+
+
+def test_known_full_suite_failure_is_recorded_for_layer1_push():
+    path = Path("docs/architecture/qe_ic_layer1_known_failures.json")
+    payload = json.loads(path.read_text())
+
+    assert payload["schema_version"] == "dse.qe_ic.layer1_known_failures.v1"
+    assert payload["layer1_commit"] == "8709cb7"
+    assert payload["known_failures"] == [
+        {
+            "test": "dse_v2/tests/test_dft_trial_state_ledger.py::test_dft_trial_state_ledger_ties_search_evidence_step5_audit",
+            "observed": "expected state 'blocked', got 'rejected'",
+            "reason": "pre-existing DFT trial-ledger state classification drift outside QE-IC Layer-1 package, CLI, artifacts, and tests",
+            "owner": "DFT trial-ledger/reference_workloads maintainers",
+            "layer1_regression": False,
+        }
+    ]

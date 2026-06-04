@@ -47,6 +47,7 @@ REQUIRED_WORKLOAD_FAMILY_FIELDS = [
     "device_relevance",
     "expected_motifs",
     "first_version_required",
+    "source_basis",
     "profiling_contract",
 ]
 
