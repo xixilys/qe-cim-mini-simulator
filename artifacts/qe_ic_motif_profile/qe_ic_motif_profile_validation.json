@@ -1,0 +1,10 @@
+{
+  "errors": [],
+  "family_profile_count": 5,
+  "gpu_baseline_coverage_closed": true,
+  "profile_source_count": 5,
+  "schema_version": "dse.qe_ic.motif_profile_validation.v1",
+  "status": "passed",
+  "unmapped_time_ratio_max": 0.05,
+  "warnings": []
+}

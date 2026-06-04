@@ -1,0 +1,1486 @@
+{
+  "claim_boundary": "This artifact contains observed or fixture-based workload motif profiling only. It does not contain architecture candidates, target viability decisions, promotion decisions, hardware implementation results, or final performance claims.",
+  "family_target_profiles": [
+    {
+      "gpu_baseline": {
+        "available": true,
+        "gpu_utilization": 0.72,
+        "required": true,
+        "speedup_vs_cpu": 12.5
+      },
+      "mapped_events": [
+        {
+          "communication_bytes": 0,
+          "event_name": "epw_interp_dense_grid",
+          "input_case": "si_epw_mobility",
+          "mapping_confidence": "high",
+          "mapping_reason": "mapping_hint",
+          "mapping_status": "mapped",
+          "memory_movement_bytes": 8000000000,
+          "motif_id": "dense_kq_interpolation",
+          "parallel_axes": [
+            "band",
+            "k_point",
+            "q_point"
+          ],
+          "source_id": "epw_gpu_fixture_001",
+          "time_ms": 4200.0
+        },
+        {
+          "communication_bytes": 100000000,
+          "event_name": "gemm_transport_kernel",
+          "input_case": "si_epw_mobility",
+          "mapping_confidence": "medium",
+          "mapping_reason": "event_name_rule:gemm",
+          "mapping_status": "mapped",
+          "memory_movement_bytes": 3500000000,
+          "motif_id": "dense_linear_algebra",
+          "parallel_axes": [
+            "band"
+          ],
+          "source_id": "epw_gpu_fixture_001",
+          "time_ms": 2500.0
+        },
+        {
+          "communication_bytes": 250000000,
+          "event_name": "mobility_bte_collision",
+          "input_case": "si_epw_mobility",
+          "mapping_confidence": "medium",
+          "mapping_reason": "event_name_rule:bte",
+          "mapping_status": "mapped",
+          "memory_movement_bytes": 6000000000,
+          "motif_id": "bte_collision_integral",
+          "parallel_axes": [
+            "k_point",
+            "q_point"
+          ],
+          "source_id": "epw_gpu_fixture_001",
+          "time_ms": 3300.0
+        }
+      ],
+      "motif_profiles": [
+        {
+          "communication_bytes": 250000000,
+          "mapping_confidence": "medium",
+          "memory_movement_bytes": 6000000000,
+          "motif_id": "bte_collision_integral",
+          "parallel_axes": [
+            "k_point",
+            "q_point"
+          ],
+          "runtime_ratio": 0.33,
+          "source_event_count": 1,
+          "time_ms": 3300.0
+        },
+        {
+          "communication_bytes": 0,
+          "mapping_confidence": "high",
+          "memory_movement_bytes": 8000000000,
+          "motif_id": "dense_kq_interpolation",
+          "parallel_axes": [
+            "band",
+            "k_point",
+            "q_point"
+          ],
+          "runtime_ratio": 0.42,
+          "source_event_count": 1,
+          "time_ms": 4200.0
+        },
+        {
+          "communication_bytes": 100000000,
+          "mapping_confidence": "medium",
+          "memory_movement_bytes": 3500000000,
+          "motif_id": "dense_linear_algebra",
+          "parallel_axes": [
+            "band"
+          ],
+          "runtime_ratio": 0.25,
+          "source_event_count": 1,
+          "time_ms": 2500.0
+        }
+      ],
+      "profiled_cases": [
+        "si_epw_mobility"
+      ],
+      "source_ids": [
+        "epw_gpu_fixture_001"
+      ],
+      "target": "gpu_only",
+      "total_time_ms": 10000.0,
+      "unmapped_time_ms": 0.0,
+      "unmapped_time_ratio": 0.0,
+      "workload_family_id": "electron_phonon_mobility"
+    },
+    {
+      "gpu_baseline": {
+        "available": true,
+        "gpu_utilization": 0.7,
+        "required": true,
+        "speedup_vs_cpu": 8.0
+      },
+      "mapped_events": [
+        {
+          "communication_bytes": 200000000,
+          "event_name": "fft_transpose",
+          "input_case": "si_64_scf",
+          "mapping_confidence": "high",
+          "mapping_reason": "mapping_hint",
+          "mapping_status": "mapped",
+          "memory_movement_bytes": 1000000000,
+          "motif_id": "fft_transpose",
+          "parallel_axes": [
+            "band",
+            "k_point"
+          ],
+          "source_id": "pw_scf_gpu_fixture_001",
+          "time_ms": 120.0
+        },
+        {
+          "communication_bytes": 50000000,
+          "event_name": "h_psi_gpu_apply",
+          "input_case": "si_64_scf",
+          "mapping_confidence": "high",
+          "mapping_reason": "mapping_hint",
+          "mapping_status": "mapped",
+          "memory_movement_bytes": 800000000,
+          "motif_id": "hpsi",
+          "parallel_axes": [
+            "band",
+            "g_vector"
+          ],
+          "source_id": "pw_scf_gpu_fixture_001",
+          "time_ms": 100.0
+        },
+        {
+          "communication_bytes": 0,
+          "event_name": "unknown_timer",
+          "input_case": "si_64_scf",
+          "mapping_confidence": "none",
+          "mapping_reason": "no registered motif mapping",
+          "mapping_status": "unmapped",
+          "memory_movement_bytes": 10000000,
+          "motif_id": "unmapped",
+          "parallel_axes": [
+            "rank"
+          ],
+          "source_id": "pw_scf_gpu_fixture_001",
+          "time_ms": 11.578947368421053
+        }
+      ],
+      "motif_profiles": [
+        {
+          "communication_bytes": 200000000,
+          "mapping_confidence": "high",
+          "memory_movement_bytes": 1000000000,
+          "motif_id": "fft_transpose",
+          "parallel_axes": [
+            "band",
+            "k_point"
+          ],
+          "runtime_ratio": 0.5181818181818182,
+          "source_event_count": 1,
+          "time_ms": 120.0
+        },
+        {
+          "communication_bytes": 50000000,
+          "mapping_confidence": "high",
+          "memory_movement_bytes": 800000000,
+          "motif_id": "hpsi",
+          "parallel_axes": [
+            "band",
+            "g_vector"
+          ],
+          "runtime_ratio": 0.4318181818181818,
+          "source_event_count": 1,
+          "time_ms": 100.0
+        }
+      ],
+      "profiled_cases": [
+        "si_64_scf"
+      ],
+      "source_ids": [
+        "pw_scf_gpu_fixture_001"
+      ],
+      "target": "gpu_only",
+      "total_time_ms": 231.57894736842104,
+      "unmapped_time_ms": 11.578947368421053,
+      "unmapped_time_ratio": 0.05,
+      "workload_family_id": "ground_state_band_structure"
+    },
+    {
+      "gpu_baseline": {
+        "available": true,
+        "gpu_utilization": 0.61,
+        "required": true,
+        "speedup_vs_cpu": 5.4
+      },
+      "mapped_events": [
+        {
+          "communication_bytes": 50000000,
+          "event_name": "charge_density_analysis_pass",
+          "input_case": "si_hfo2_interface_defect",
+          "mapping_confidence": "high",
+          "mapping_reason": "mapping_hint",
+          "mapping_status": "mapped",
+          "memory_movement_bytes": 800000000,
+          "motif_id": "charge_density_analysis",
+          "parallel_axes": [
+            "grid"
+          ],
+          "source_id": "interface_defect_gpu_fixture_001",
+          "time_ms": 400.0
+        },
+        {
+          "communication_bytes": 450000000,
+          "event_name": "large_supercell_ground_state",
+          "input_case": "si_hfo2_interface_defect",
+          "mapping_confidence": "high",
+          "mapping_reason": "mapping_hint",
+          "mapping_status": "mapped",
+          "memory_movement_bytes": 9000000000,
+          "motif_id": "large_supercell",
+          "parallel_axes": [
+            "band",
+            "domain"
+          ],
+          "source_id": "interface_defect_gpu_fixture_001",
+          "time_ms": 2400.0
+        },
+        {
+          "communication_bytes": 100000000,
+          "event_name": "projector_localized_state_analysis",
+          "input_case": "si_hfo2_interface_defect",
+          "mapping_confidence": "high",
+          "mapping_reason": "mapping_hint",
+          "mapping_status": "mapped",
+          "memory_movement_bytes": 1600000000,
+          "motif_id": "localized_state_analysis",
+          "parallel_axes": [
+            "band",
+            "defect_state"
+          ],
+          "source_id": "interface_defect_gpu_fixture_001",
+          "time_ms": 1200.0
+        }
+      ],
+      "motif_profiles": [
+        {
+          "communication_bytes": 50000000,
+          "mapping_confidence": "high",
+          "memory_movement_bytes": 800000000,
+          "motif_id": "charge_density_analysis",
+          "parallel_axes": [
+            "grid"
+          ],
+          "runtime_ratio": 0.1,
+          "source_event_count": 1,
+          "time_ms": 400.0
+        },
+        {
+          "communication_bytes": 450000000,
+          "mapping_confidence": "high",
+          "memory_movement_bytes": 9000000000,
+          "motif_id": "large_supercell",
+          "parallel_axes": [
+            "band",
+            "domain"
+          ],
+          "runtime_ratio": 0.6,
+          "source_event_count": 1,
+          "time_ms": 2400.0
+        },
+        {
+          "communication_bytes": 100000000,
+          "mapping_confidence": "high",
+          "memory_movement_bytes": 1600000000,
+          "motif_id": "localized_state_analysis",
+          "parallel_axes": [
+            "band",
+            "defect_state"
+          ],
+          "runtime_ratio": 0.3,
+          "source_event_count": 1,
+          "time_ms": 1200.0
+        }
+      ],
+      "profiled_cases": [
+        "si_hfo2_interface_defect"
+      ],
+      "source_ids": [
+        "interface_defect_gpu_fixture_001"
+      ],
+      "target": "gpu_only",
+      "total_time_ms": 4000.0,
+      "unmapped_time_ms": 0.0,
+      "unmapped_time_ratio": 0.0,
+      "workload_family_id": "interface_band_offset_defect"
+    },
+    {
+      "gpu_baseline": {
+        "available": true,
+        "gpu_utilization": 0.66,
+        "required": true,
+        "speedup_vs_cpu": 6.5
+      },
+      "mapped_events": [
+        {
+          "communication_bytes": 500000000,
+          "event_name": "allreduce_response",
+          "input_case": "si_64_phonon",
+          "mapping_confidence": "medium",
+          "mapping_reason": "event_name_rule:allreduce",
+          "mapping_status": "mapped",
+          "memory_movement_bytes": 100000000,
+          "motif_id": "reduction_collective",
+          "parallel_axes": [
+            "rank"
+          ],
+          "source_id": "ph_dfpt_gpu_fixture_001",
+          "time_ms": 100.0
+        },
+        {
+          "communication_bytes": 100000000,
+          "event_name": "ph_rhs_build",
+          "input_case": "si_64_phonon",
+          "mapping_confidence": "high",
+          "mapping_reason": "mapping_hint",
+          "mapping_status": "mapped",
+          "memory_movement_bytes": 1200000000,
+          "motif_id": "perturbation_rhs",
+          "parallel_axes": [
+            "perturbation",
+            "q_point"
+          ],
+          "source_id": "ph_dfpt_gpu_fixture_001",
+          "time_ms": 180.0
+        },
+        {
+          "communication_bytes": 180000000,
+          "event_name": "response_tensor_accumulation",
+          "input_case": "si_64_phonon",
+          "mapping_confidence": "high",
+          "mapping_reason": "mapping_hint",
+          "mapping_status": "mapped",
+          "memory_movement_bytes": 1400000000,
+          "motif_id": "response_accumulation",
+          "parallel_axes": [
+            "band",
+            "q_point"
+          ],
+          "source_id": "ph_dfpt_gpu_fixture_001",
+          "time_ms": 220.0
+        }
+      ],
+      "motif_profiles": [
+        {
+          "communication_bytes": 100000000,
+          "mapping_confidence": "high",
+          "memory_movement_bytes": 1200000000,
+          "motif_id": "perturbation_rhs",
+          "parallel_axes": [
+            "perturbation",
+            "q_point"
+          ],
+          "runtime_ratio": 0.36,
+          "source_event_count": 1,
+          "time_ms": 180.0
+        },
+        {
+          "communication_bytes": 500000000,
+          "mapping_confidence": "medium",
+          "memory_movement_bytes": 100000000,
+          "motif_id": "reduction_collective",
+          "parallel_axes": [
+            "rank"
+          ],
+          "runtime_ratio": 0.2,
+          "source_event_count": 1,
+          "time_ms": 100.0
+        },
+        {
+          "communication_bytes": 180000000,
+          "mapping_confidence": "high",
+          "memory_movement_bytes": 1400000000,
+          "motif_id": "response_accumulation",
+          "parallel_axes": [
+            "band",
+            "q_point"
+          ],
+          "runtime_ratio": 0.44,
+          "source_event_count": 1,
+          "time_ms": 220.0
+        }
+      ],
+      "profiled_cases": [
+        "si_64_phonon"
+      ],
+      "source_ids": [
+        "ph_dfpt_gpu_fixture_001"
+      ],
+      "target": "gpu_only",
+      "total_time_ms": 500.0,
+      "unmapped_time_ms": 0.0,
+      "unmapped_time_ratio": 0.0,
+      "workload_family_id": "phonon_dfpt"
+    },
+    {
+      "gpu_baseline": {
+        "available": true,
+        "gpu_utilization": 0.68,
+        "required": true,
+        "speedup_vs_cpu": 9.2
+      },
+      "mapped_events": [
+        {
+          "communication_bytes": 80000000,
+          "event_name": "batch_scheduling_gpu_queue",
+          "input_case": "si_strain_doping_field_sweep",
+          "mapping_confidence": "high",
+          "mapping_reason": "mapping_hint",
+          "mapping_status": "mapped",
+          "memory_movement_bytes": 100000000,
+          "motif_id": "batch_scheduling",
+          "parallel_axes": [
+            "case"
+          ],
+          "source_id": "sweep_gpu_fixture_001",
+          "time_ms": 500.0
+        },
+        {
+          "communication_bytes": 120000000,
+          "event_name": "cross_run_reuse_cache",
+          "input_case": "si_strain_doping_field_sweep",
+          "mapping_confidence": "high",
+          "mapping_reason": "mapping_hint",
+          "mapping_status": "mapped",
+          "memory_movement_bytes": 2200000000,
+          "motif_id": "cross_run_reuse",
+          "parallel_axes": [
+            "artifact",
+            "case"
+          ],
+          "source_id": "sweep_gpu_fixture_001",
+          "time_ms": 900.0
+        },
+        {
+          "communication_bytes": 300000000,
+          "event_name": "workflow_parameter_sweep_scheduler",
+          "input_case": "si_strain_doping_field_sweep",
+          "mapping_confidence": "high",
+          "mapping_reason": "mapping_hint",
+          "mapping_status": "mapped",
+          "memory_movement_bytes": 500000000,
+          "motif_id": "workflow_parameter_sweep",
+          "parallel_axes": [
+            "doping",
+            "field",
+            "strain"
+          ],
+          "source_id": "sweep_gpu_fixture_001",
+          "time_ms": 1600.0
+        }
+      ],
+      "motif_profiles": [
+        {
+          "communication_bytes": 80000000,
+          "mapping_confidence": "high",
+          "memory_movement_bytes": 100000000,
+          "motif_id": "batch_scheduling",
+          "parallel_axes": [
+            "case"
+          ],
+          "runtime_ratio": 0.16666666666666666,
+          "source_event_count": 1,
+          "time_ms": 500.0
+        },
+        {
+          "communication_bytes": 120000000,
+          "mapping_confidence": "high",
+          "memory_movement_bytes": 2200000000,
+          "motif_id": "cross_run_reuse",
+          "parallel_axes": [
+            "artifact",
+            "case"
+          ],
+          "runtime_ratio": 0.3,
+          "source_event_count": 1,
+          "time_ms": 900.0
+        },
+        {
+          "communication_bytes": 300000000,
+          "mapping_confidence": "high",
+          "memory_movement_bytes": 500000000,
+          "motif_id": "workflow_parameter_sweep",
+          "parallel_axes": [
+            "doping",
+            "field",
+            "strain"
+          ],
+          "runtime_ratio": 0.5333333333333333,
+          "source_event_count": 1,
+          "time_ms": 1600.0
+        }
+      ],
+      "profiled_cases": [
+        "si_strain_doping_field_sweep"
+      ],
+      "source_ids": [
+        "sweep_gpu_fixture_001"
+      ],
+      "target": "gpu_only",
+      "total_time_ms": 3000.0,
+      "unmapped_time_ms": 0.0,
+      "unmapped_time_ratio": 0.0,
+      "workload_family_id": "strain_doping_field_sweep"
+    }
+  ],
+  "layer": "layer2_motif_profiling",
+  "profile_source_count": 5,
+  "profile_source_warnings": [],
+  "profile_sources": [
+    {
+      "events": [
+        {
+          "communication_bytes": 200000000,
+          "event_name": "fft_transpose",
+          "mapping_hint": "fft_transpose",
+          "memory_movement_bytes": 1000000000,
+          "parallel_axes": [
+            "band",
+            "k_point"
+          ],
+          "time_ms": 120.0
+        },
+        {
+          "communication_bytes": 50000000,
+          "event_name": "h_psi_gpu_apply",
+          "mapping_hint": "hpsi",
+          "memory_movement_bytes": 800000000,
+          "parallel_axes": [
+            "band",
+            "g_vector"
+          ],
+          "time_ms": 100.0
+        },
+        {
+          "communication_bytes": 0,
+          "event_name": "unknown_timer",
+          "memory_movement_bytes": 10000000,
+          "parallel_axes": [
+            "rank"
+          ],
+          "time_ms": 11.578947368421053
+        }
+      ],
+      "gpu_baseline": {
+        "available": true,
+        "gpu_utilization": 0.7,
+        "speedup_vs_cpu": 8.0
+      },
+      "input_case": "si_64_scf",
+      "profile_source_type": "manual_profile_table",
+      "program": "pw.x",
+      "raw_artifact_hash": "sha256:fixture-pw-scf-gpu-001",
+      "raw_artifact_path": "dse_v2/testdata/qe_ic_profiles/pw_scf_gpu_fixture.json",
+      "source_id": "pw_scf_gpu_fixture_001",
+      "target": "gpu_only",
+      "trusted_for_layer2": true,
+      "workload_family_id": "ground_state_band_structure"
+    },
+    {
+      "events": [
+        {
+          "communication_bytes": 100000000,
+          "event_name": "ph_rhs_build",
+          "mapping_hint": "perturbation_rhs",
+          "memory_movement_bytes": 1200000000,
+          "parallel_axes": [
+            "q_point",
+            "perturbation"
+          ],
+          "time_ms": 180.0
+        },
+        {
+          "communication_bytes": 180000000,
+          "event_name": "response_tensor_accumulation",
+          "mapping_hint": "response_accumulation",
+          "memory_movement_bytes": 1400000000,
+          "parallel_axes": [
+            "q_point",
+            "band"
+          ],
+          "time_ms": 220.0
+        },
+        {
+          "communication_bytes": 500000000,
+          "event_name": "allreduce_response",
+          "memory_movement_bytes": 100000000,
+          "parallel_axes": [
+            "rank"
+          ],
+          "time_ms": 100.0
+        }
+      ],
+      "gpu_baseline": {
+        "available": true,
+        "gpu_utilization": 0.66,
+        "speedup_vs_cpu": 6.5
+      },
+      "input_case": "si_64_phonon",
+      "profile_source_type": "manual_profile_table",
+      "program": "ph.x",
+      "raw_artifact_hash": "sha256:fixture-ph-dfpt-gpu-001",
+      "raw_artifact_path": "dse_v2/testdata/qe_ic_profiles/ph_dfpt_gpu_fixture.json",
+      "source_id": "ph_dfpt_gpu_fixture_001",
+      "target": "gpu_only",
+      "trusted_for_layer2": true,
+      "workload_family_id": "phonon_dfpt"
+    },
+    {
+      "events": [
+        {
+          "communication_bytes": 0,
+          "event_name": "epw_interp_dense_grid",
+          "mapping_hint": "dense_kq_interpolation",
+          "memory_movement_bytes": 8000000000,
+          "parallel_axes": [
+            "k_point",
+            "q_point",
+            "band"
+          ],
+          "time_ms": 4200.0
+        },
+        {
+          "communication_bytes": 250000000,
+          "event_name": "mobility_bte_collision",
+          "memory_movement_bytes": 6000000000,
+          "parallel_axes": [
+            "k_point",
+            "q_point"
+          ],
+          "time_ms": 3300.0
+        },
+        {
+          "communication_bytes": 100000000,
+          "event_name": "gemm_transport_kernel",
+          "memory_movement_bytes": 3500000000,
+          "parallel_axes": [
+            "band"
+          ],
+          "time_ms": 2500.0
+        }
+      ],
+      "gpu_baseline": {
+        "available": true,
+        "gpu_utilization": 0.72,
+        "speedup_vs_cpu": 12.5
+      },
+      "input_case": "si_epw_mobility",
+      "profile_source_type": "manual_profile_table",
+      "program": "epw.x",
+      "raw_artifact_hash": "sha256:fixture-epw-gpu-001",
+      "raw_artifact_path": "dse_v2/testdata/qe_ic_profiles/epw_gpu_fixture.json",
+      "source_id": "epw_gpu_fixture_001",
+      "target": "gpu_only",
+      "trusted_for_layer2": true,
+      "workload_family_id": "electron_phonon_mobility"
+    },
+    {
+      "events": [
+        {
+          "communication_bytes": 300000000,
+          "event_name": "workflow_parameter_sweep_scheduler",
+          "mapping_hint": "workflow_parameter_sweep",
+          "memory_movement_bytes": 500000000,
+          "parallel_axes": [
+            "strain",
+            "doping",
+            "field"
+          ],
+          "time_ms": 1600.0
+        },
+        {
+          "communication_bytes": 120000000,
+          "event_name": "cross_run_reuse_cache",
+          "mapping_hint": "cross_run_reuse",
+          "memory_movement_bytes": 2200000000,
+          "parallel_axes": [
+            "case",
+            "artifact"
+          ],
+          "time_ms": 900.0
+        },
+        {
+          "communication_bytes": 80000000,
+          "event_name": "batch_scheduling_gpu_queue",
+          "mapping_hint": "batch_scheduling",
+          "memory_movement_bytes": 100000000,
+          "parallel_axes": [
+            "case"
+          ],
+          "time_ms": 500.0
+        }
+      ],
+      "gpu_baseline": {
+        "available": true,
+        "gpu_utilization": 0.68,
+        "speedup_vs_cpu": 9.2
+      },
+      "input_case": "si_strain_doping_field_sweep",
+      "profile_source_type": "manual_profile_table",
+      "program": "pw.x+ph.x+epw.x",
+      "raw_artifact_hash": "sha256:fixture-sweep-gpu-001",
+      "raw_artifact_path": "dse_v2/testdata/qe_ic_profiles/sweep_gpu_fixture.json",
+      "source_id": "sweep_gpu_fixture_001",
+      "target": "gpu_only",
+      "trusted_for_layer2": true,
+      "workload_family_id": "strain_doping_field_sweep"
+    },
+    {
+      "events": [
+        {
+          "communication_bytes": 450000000,
+          "event_name": "large_supercell_ground_state",
+          "mapping_hint": "large_supercell",
+          "memory_movement_bytes": 9000000000,
+          "parallel_axes": [
+            "band",
+            "domain"
+          ],
+          "time_ms": 2400.0
+        },
+        {
+          "communication_bytes": 100000000,
+          "event_name": "projector_localized_state_analysis",
+          "mapping_hint": "localized_state_analysis",
+          "memory_movement_bytes": 1600000000,
+          "parallel_axes": [
+            "band",
+            "defect_state"
+          ],
+          "time_ms": 1200.0
+        },
+        {
+          "communication_bytes": 50000000,
+          "event_name": "charge_density_analysis_pass",
+          "mapping_hint": "charge_density_analysis",
+          "memory_movement_bytes": 800000000,
+          "parallel_axes": [
+            "grid"
+          ],
+          "time_ms": 400.0
+        }
+      ],
+      "gpu_baseline": {
+        "available": true,
+        "gpu_utilization": 0.61,
+        "speedup_vs_cpu": 5.4
+      },
+      "input_case": "si_hfo2_interface_defect",
+      "profile_source_type": "manual_profile_table",
+      "program": "pw.x+pp.x+projwfc.x",
+      "raw_artifact_hash": "sha256:fixture-interface-defect-gpu-001",
+      "raw_artifact_path": "dse_v2/testdata/qe_ic_profiles/interface_defect_gpu_fixture.json",
+      "source_id": "interface_defect_gpu_fixture_001",
+      "target": "gpu_only",
+      "trusted_for_layer2": true,
+      "workload_family_id": "interface_band_offset_defect"
+    }
+  ],
+  "schema_version": "dse.qe_ic.motif_profile.v1",
+  "source_layer1_suite": {
+    "motif_registry": {
+      "batch_scheduling": {
+        "category": "workflow_parallelism",
+        "description": "Scheduling many related calculations under a shared campaign.",
+        "hint_status": "heuristic_prior",
+        "known_fpga_risk": "amortization_risk_when_individual_runs_are_small",
+        "known_gpu_strength": "high_for_independent_batches_with_reusable_inputs",
+        "layer2_readiness": "ready",
+        "measurable_profile_fields": [
+          "run_count",
+          "dependency_edges",
+          "reuse_artifacts",
+          "batch_width"
+        ],
+        "motif_name": "Batch scheduling",
+        "possible_target_relevance": [
+          "scheduler",
+          "gpu_cluster",
+          "fpga_farm"
+        ],
+        "provisional": false,
+        "requires_layer2_measurement": true
+      },
+      "bte_collision_integral": {
+        "category": "transport",
+        "description": "Boltzmann transport collision-integral evaluation.",
+        "hint_status": "heuristic_prior",
+        "known_fpga_risk": "large_memory_footprint_and_irregular_table_access",
+        "known_gpu_strength": "high_for_dense_kq_grids_and_matrix_traversals",
+        "layer2_readiness": "ready",
+        "measurable_profile_fields": [
+          "kq_grid_size",
+          "matrix_element_count",
+          "collision_terms",
+          "staging_bytes"
+        ],
+        "motif_name": "BTE collision integral",
+        "possible_target_relevance": [
+          "gpu",
+          "gpu_cluster",
+          "fpga_for_streaming_collision_terms"
+        ],
+        "provisional": false,
+        "requires_layer2_measurement": true
+      },
+      "charge_density_analysis": {
+        "category": "post_processing",
+        "description": "Charge-density, orbital, and projected-density analysis.",
+        "hint_status": "heuristic_prior",
+        "known_fpga_risk": "low_reuse_and_workflow_integration_overhead",
+        "known_gpu_strength": "medium_for_large_regular_projection_or_grid_passes",
+        "layer2_readiness": "ready",
+        "measurable_profile_fields": [
+          "projection_count",
+          "grid_points",
+          "output_bytes",
+          "analysis_passes"
+        ],
+        "motif_name": "Charge-density analysis",
+        "possible_target_relevance": [
+          "cpu",
+          "gpu",
+          "fpga_for_streaming_analysis"
+        ],
+        "provisional": false,
+        "requires_layer2_measurement": true
+      },
+      "communication": {
+        "category": "communication",
+        "description": "General inter-rank data exchange beyond explicit reductions.",
+        "hint_status": "heuristic_prior",
+        "known_fpga_risk": "system_integration_and_synchronization_overhead",
+        "known_gpu_strength": "depends_on_gpu_aware_mpi_and_data_residency",
+        "layer2_readiness": "provisional",
+        "measurable_profile_fields": [
+          "message_count",
+          "bytes_moved",
+          "collective_type",
+          "rank_count"
+        ],
+        "motif_name": "Communication",
+        "possible_target_relevance": [
+          "interconnect",
+          "gpu_direct",
+          "host_runtime"
+        ],
+        "provisional": true,
+        "requires_layer2_measurement": true
+      },
+      "cross_run_reuse": {
+        "category": "workflow_parallelism",
+        "description": "Reuse of electronic, phonon, or interpolation artifacts across runs.",
+        "hint_status": "heuristic_prior",
+        "known_fpga_risk": "amortization_risk_when_individual_runs_are_small",
+        "known_gpu_strength": "high_for_independent_batches_with_reusable_inputs",
+        "layer2_readiness": "ready",
+        "measurable_profile_fields": [
+          "run_count",
+          "dependency_edges",
+          "reuse_artifacts",
+          "batch_width"
+        ],
+        "motif_name": "Cross-run reuse",
+        "possible_target_relevance": [
+          "scheduler",
+          "gpu_cluster",
+          "fpga_farm"
+        ],
+        "provisional": false,
+        "requires_layer2_measurement": true
+      },
+      "dense_kq_interpolation": {
+        "category": "transport",
+        "description": "Wannier or dense-grid k/q interpolation for transport studies.",
+        "hint_status": "heuristic_prior",
+        "known_fpga_risk": "large_memory_footprint_and_irregular_table_access",
+        "known_gpu_strength": "high_for_dense_kq_grids_and_matrix_traversals",
+        "layer2_readiness": "ready",
+        "measurable_profile_fields": [
+          "kq_grid_size",
+          "matrix_element_count",
+          "collision_terms",
+          "staging_bytes"
+        ],
+        "motif_name": "Dense k/q interpolation",
+        "possible_target_relevance": [
+          "gpu",
+          "gpu_cluster",
+          "fpga_for_streaming_collision_terms"
+        ],
+        "provisional": false,
+        "requires_layer2_measurement": true
+      },
+      "dense_linear_algebra": {
+        "category": "linear_algebra",
+        "description": "GEMM/GEMV, orthogonalization, and dense eigensolver support.",
+        "hint_status": "heuristic_prior",
+        "known_fpga_risk": "shape_variability_and_solver_control_complexity",
+        "known_gpu_strength": "high_for_large_dense_blas_and_solver_kernels",
+        "layer2_readiness": "ready",
+        "measurable_profile_fields": [
+          "matrix_shape",
+          "flop_count",
+          "solver_iterations",
+          "library_calls"
+        ],
+        "motif_name": "Dense linear algebra",
+        "possible_target_relevance": [
+          "gpu",
+          "cpu_blas",
+          "fpga_for_fixed_shapes"
+        ],
+        "provisional": false,
+        "requires_layer2_measurement": true
+      },
+      "density_update": {
+        "category": "scf_state_update",
+        "description": "Charge-density construction, update, and mixing inputs.",
+        "hint_status": "heuristic_prior",
+        "known_fpga_risk": "host_control_coupling_and_convergence_feedback",
+        "known_gpu_strength": "medium_for_large_grid_updates",
+        "layer2_readiness": "ready",
+        "measurable_profile_fields": [
+          "grid_points",
+          "mixing_iterations",
+          "reduction_bytes"
+        ],
+        "motif_name": "Density update",
+        "possible_target_relevance": [
+          "cpu",
+          "gpu",
+          "fpga_for_streaming_updates"
+        ],
+        "provisional": false,
+        "requires_layer2_measurement": true
+      },
+      "diagonalization": {
+        "category": "linear_algebra",
+        "description": "Kohn-Sham subspace diagonalization and solver orchestration.",
+        "hint_status": "heuristic_prior",
+        "known_fpga_risk": "shape_variability_and_solver_control_complexity",
+        "known_gpu_strength": "high_for_large_dense_blas_and_solver_kernels",
+        "layer2_readiness": "ready",
+        "measurable_profile_fields": [
+          "matrix_shape",
+          "flop_count",
+          "solver_iterations",
+          "library_calls"
+        ],
+        "motif_name": "Diagonalization",
+        "possible_target_relevance": [
+          "gpu",
+          "cpu_blas",
+          "fpga_for_fixed_shapes"
+        ],
+        "provisional": false,
+        "requires_layer2_measurement": true
+      },
+      "electron_phonon_matrix": {
+        "category": "transport",
+        "description": "Electron-phonon matrix-element construction and traversal.",
+        "hint_status": "heuristic_prior",
+        "known_fpga_risk": "large_memory_footprint_and_irregular_table_access",
+        "known_gpu_strength": "high_for_dense_kq_grids_and_matrix_traversals",
+        "layer2_readiness": "ready",
+        "measurable_profile_fields": [
+          "kq_grid_size",
+          "matrix_element_count",
+          "collision_terms",
+          "staging_bytes"
+        ],
+        "motif_name": "Electron-phonon matrix",
+        "possible_target_relevance": [
+          "gpu",
+          "gpu_cluster",
+          "fpga_for_streaming_collision_terms"
+        ],
+        "provisional": false,
+        "requires_layer2_measurement": true
+      },
+      "fft_transpose": {
+        "category": "spectral_transform",
+        "description": "Plane-wave FFTs and distributed transpose traffic.",
+        "hint_status": "heuristic_prior",
+        "known_fpga_risk": "transpose_routing_and_global_memory_pressure",
+        "known_gpu_strength": "high_when_fft_library_and_batching_are_available",
+        "layer2_readiness": "ready",
+        "measurable_profile_fields": [
+          "fft_size",
+          "transpose_bytes",
+          "all_to_all_count"
+        ],
+        "motif_name": "FFT and transpose",
+        "possible_target_relevance": [
+          "gpu",
+          "fpga_streaming",
+          "near_memory"
+        ],
+        "provisional": false,
+        "requires_layer2_measurement": true
+      },
+      "hpsi": {
+        "category": "operator_application",
+        "description": "Repeated H psi application in iterative electronic solves.",
+        "hint_status": "heuristic_prior",
+        "known_fpga_risk": "irregular_projector_access_and_precision_pressure",
+        "known_gpu_strength": "medium_to_high_for_batched_dense_or_stencil_like_regions",
+        "layer2_readiness": "ready",
+        "measurable_profile_fields": [
+          "call_count",
+          "flop_count",
+          "streamed_bytes",
+          "reuse_distance"
+        ],
+        "motif_name": "Hamiltonian application",
+        "possible_target_relevance": [
+          "gpu",
+          "fpga_pipeline",
+          "asic_datapath"
+        ],
+        "provisional": false,
+        "requires_layer2_measurement": true
+      },
+      "incremental_update": {
+        "category": "workflow_parallelism",
+        "description": "Reusing and incrementally updating state across neighboring sweep points.",
+        "hint_status": "heuristic_prior",
+        "known_fpga_risk": "amortization_risk_when_individual_runs_are_small",
+        "known_gpu_strength": "high_for_independent_batches_with_reusable_inputs",
+        "layer2_readiness": "provisional",
+        "measurable_profile_fields": [
+          "run_count",
+          "dependency_edges",
+          "reuse_artifacts",
+          "batch_width"
+        ],
+        "motif_name": "Incremental update",
+        "possible_target_relevance": [
+          "scheduler",
+          "gpu_cluster",
+          "fpga_farm"
+        ],
+        "provisional": true,
+        "requires_layer2_measurement": true
+      },
+      "io_checkpoint": {
+        "category": "io_memory",
+        "description": "Restart files, intermediate outputs, and checkpoint pressure.",
+        "hint_status": "heuristic_prior",
+        "known_fpga_risk": "host_io_dominance_and_low_compute_density",
+        "known_gpu_strength": "low_unless_io_is_hidden_by_residency_or_overlap",
+        "layer2_readiness": "ready",
+        "measurable_profile_fields": [
+          "file_count",
+          "checkpoint_bytes",
+          "staging_bytes",
+          "reuse_count"
+        ],
+        "motif_name": "I/O checkpoint",
+        "possible_target_relevance": [
+          "storage",
+          "host_runtime",
+          "memory_hierarchy"
+        ],
+        "provisional": false,
+        "requires_layer2_measurement": true
+      },
+      "large_data_staging": {
+        "category": "io_memory",
+        "description": "Movement of wavefunction, matrix-element, and checkpoint data.",
+        "hint_status": "heuristic_prior",
+        "known_fpga_risk": "host_io_dominance_and_low_compute_density",
+        "known_gpu_strength": "low_unless_io_is_hidden_by_residency_or_overlap",
+        "layer2_readiness": "ready",
+        "measurable_profile_fields": [
+          "file_count",
+          "checkpoint_bytes",
+          "staging_bytes",
+          "reuse_count"
+        ],
+        "motif_name": "Large data staging",
+        "possible_target_relevance": [
+          "storage",
+          "host_runtime",
+          "memory_hierarchy"
+        ],
+        "provisional": false,
+        "requires_layer2_measurement": true
+      },
+      "large_supercell": {
+        "category": "structure_scale",
+        "description": "Large real-space cell and gamma/sparse-k electronic solves.",
+        "hint_status": "heuristic_prior",
+        "known_fpga_risk": "capacity_pressure_and_low_reuse_for_large_unique_cells",
+        "known_gpu_strength": "medium_when_large_arrays_fit_device_memory",
+        "layer2_readiness": "ready",
+        "measurable_profile_fields": [
+          "atom_count",
+          "cell_volume",
+          "grid_points",
+          "band_count"
+        ],
+        "motif_name": "Large supercell",
+        "possible_target_relevance": [
+          "memory_capacity",
+          "gpu_hbm",
+          "distributed_cpu_gpu"
+        ],
+        "provisional": false,
+        "requires_layer2_measurement": true
+      },
+      "localized_state_analysis": {
+        "category": "post_processing",
+        "description": "Projection and analysis of localized defect or interface states.",
+        "hint_status": "heuristic_prior",
+        "known_fpga_risk": "low_reuse_and_workflow_integration_overhead",
+        "known_gpu_strength": "medium_for_large_regular_projection_or_grid_passes",
+        "layer2_readiness": "ready",
+        "measurable_profile_fields": [
+          "projection_count",
+          "grid_points",
+          "output_bytes",
+          "analysis_passes"
+        ],
+        "motif_name": "Localized-state analysis",
+        "possible_target_relevance": [
+          "cpu",
+          "gpu",
+          "fpga_for_streaming_analysis"
+        ],
+        "provisional": false,
+        "requires_layer2_measurement": true
+      },
+      "memory_bandwidth": {
+        "category": "memory",
+        "description": "Bandwidth-bound sweeps over dense numerical arrays.",
+        "hint_status": "heuristic_prior",
+        "known_fpga_risk": "capacity_limits_and_data_staging_overheads",
+        "known_gpu_strength": "high_when_arrays_are_resident_and_coalesced",
+        "layer2_readiness": "ready",
+        "measurable_profile_fields": [
+          "working_set_bytes",
+          "bandwidth_bytes",
+          "access_stride",
+          "reuse_distance"
+        ],
+        "motif_name": "Memory bandwidth",
+        "possible_target_relevance": [
+          "gpu_hbm",
+          "fpga_hbm",
+          "near_memory"
+        ],
+        "provisional": false,
+        "requires_layer2_measurement": true
+      },
+      "memory_capacity": {
+        "category": "memory",
+        "description": "Capacity pressure from large cells, bands, and retained arrays.",
+        "hint_status": "heuristic_prior",
+        "known_fpga_risk": "capacity_limits_and_data_staging_overheads",
+        "known_gpu_strength": "high_when_arrays_are_resident_and_coalesced",
+        "layer2_readiness": "ready",
+        "measurable_profile_fields": [
+          "working_set_bytes",
+          "bandwidth_bytes",
+          "access_stride",
+          "reuse_distance"
+        ],
+        "motif_name": "Memory capacity",
+        "possible_target_relevance": [
+          "gpu_hbm",
+          "fpga_hbm",
+          "near_memory"
+        ],
+        "provisional": false,
+        "requires_layer2_measurement": true
+      },
+      "parameter_sweep": {
+        "category": "workflow_parallelism",
+        "description": "Generic parameter sweep where the driving physical axis is family-specific.",
+        "hint_status": "heuristic_prior",
+        "known_fpga_risk": "amortization_risk_when_individual_runs_are_small",
+        "known_gpu_strength": "high_for_independent_batches_with_reusable_inputs",
+        "layer2_readiness": "provisional",
+        "measurable_profile_fields": [
+          "run_count",
+          "dependency_edges",
+          "reuse_artifacts",
+          "batch_width"
+        ],
+        "motif_name": "Parameter sweep",
+        "possible_target_relevance": [
+          "scheduler",
+          "gpu_cluster",
+          "fpga_farm"
+        ],
+        "provisional": true,
+        "requires_layer2_measurement": true
+      },
+      "perturbation_rhs": {
+        "category": "response_solve",
+        "description": "DFPT perturbation-source construction and solve RHS handling.",
+        "hint_status": "heuristic_prior",
+        "known_fpga_risk": "small_dense_kernels_and_solver_branching",
+        "known_gpu_strength": "medium_to_high_for_many_rhs_or_q_points",
+        "layer2_readiness": "ready",
+        "measurable_profile_fields": [
+          "q_point_count",
+          "rhs_count",
+          "solve_iterations",
+          "response_tensor_size"
+        ],
+        "motif_name": "Perturbation right-hand side",
+        "possible_target_relevance": [
+          "gpu",
+          "fpga_for_repeated_rhs",
+          "cpu_solver"
+        ],
+        "provisional": false,
+        "requires_layer2_measurement": true
+      },
+      "potential_alignment": {
+        "category": "post_processing",
+        "description": "Electrostatic and band-edge alignment across regions or materials.",
+        "hint_status": "heuristic_prior",
+        "known_fpga_risk": "low_reuse_and_workflow_integration_overhead",
+        "known_gpu_strength": "medium_for_large_regular_projection_or_grid_passes",
+        "layer2_readiness": "ready",
+        "measurable_profile_fields": [
+          "projection_count",
+          "grid_points",
+          "output_bytes",
+          "analysis_passes"
+        ],
+        "motif_name": "Potential alignment",
+        "possible_target_relevance": [
+          "cpu",
+          "gpu",
+          "fpga_for_streaming_analysis"
+        ],
+        "provisional": false,
+        "requires_layer2_measurement": true
+      },
+      "projector_nonlocal": {
+        "category": "operator_application",
+        "description": "Pseudopotential projector application and accumulation.",
+        "hint_status": "heuristic_prior",
+        "known_fpga_risk": "irregular_projector_access_and_precision_pressure",
+        "known_gpu_strength": "medium_to_high_for_batched_dense_or_stencil_like_regions",
+        "layer2_readiness": "ready",
+        "measurable_profile_fields": [
+          "call_count",
+          "flop_count",
+          "streamed_bytes",
+          "reuse_distance"
+        ],
+        "motif_name": "Nonlocal projector",
+        "possible_target_relevance": [
+          "gpu",
+          "fpga_pipeline",
+          "asic_datapath"
+        ],
+        "provisional": false,
+        "requires_layer2_measurement": true
+      },
+      "q_point_sweep": {
+        "category": "workflow_parallelism",
+        "description": "Independent or weakly coupled phonon q-point evaluations.",
+        "hint_status": "heuristic_prior",
+        "known_fpga_risk": "amortization_risk_when_individual_runs_are_small",
+        "known_gpu_strength": "high_for_independent_batches_with_reusable_inputs",
+        "layer2_readiness": "ready",
+        "measurable_profile_fields": [
+          "run_count",
+          "dependency_edges",
+          "reuse_artifacts",
+          "batch_width"
+        ],
+        "motif_name": "q-point sweep",
+        "possible_target_relevance": [
+          "scheduler",
+          "gpu_cluster",
+          "fpga_farm"
+        ],
+        "provisional": false,
+        "requires_layer2_measurement": true
+      },
+      "reduction_collective": {
+        "category": "communication",
+        "description": "Dot products, global sums, and collective reductions.",
+        "hint_status": "heuristic_prior",
+        "known_fpga_risk": "system_integration_and_synchronization_overhead",
+        "known_gpu_strength": "depends_on_gpu_aware_mpi_and_data_residency",
+        "layer2_readiness": "ready",
+        "measurable_profile_fields": [
+          "message_count",
+          "bytes_moved",
+          "collective_type",
+          "rank_count"
+        ],
+        "motif_name": "Reduction collective",
+        "possible_target_relevance": [
+          "interconnect",
+          "gpu_direct",
+          "host_runtime"
+        ],
+        "provisional": false,
+        "requires_layer2_measurement": true
+      },
+      "repeated_ground_state_solve": {
+        "category": "workflow_parallelism",
+        "description": "Multiple related SCF solves for structures, defects, or interfaces.",
+        "hint_status": "heuristic_prior",
+        "known_fpga_risk": "amortization_risk_when_individual_runs_are_small",
+        "known_gpu_strength": "high_for_independent_batches_with_reusable_inputs",
+        "layer2_readiness": "provisional",
+        "measurable_profile_fields": [
+          "run_count",
+          "dependency_edges",
+          "reuse_artifacts",
+          "batch_width"
+        ],
+        "motif_name": "Repeated ground-state solve",
+        "possible_target_relevance": [
+          "scheduler",
+          "gpu_cluster",
+          "fpga_farm"
+        ],
+        "provisional": true,
+        "requires_layer2_measurement": true
+      },
+      "repeated_runs": {
+        "category": "workflow_parallelism",
+        "description": "Repeated program invocations in a parameter or operating-condition sweep.",
+        "hint_status": "heuristic_prior",
+        "known_fpga_risk": "amortization_risk_when_individual_runs_are_small",
+        "known_gpu_strength": "high_for_independent_batches_with_reusable_inputs",
+        "layer2_readiness": "provisional",
+        "measurable_profile_fields": [
+          "run_count",
+          "dependency_edges",
+          "reuse_artifacts",
+          "batch_width"
+        ],
+        "motif_name": "Repeated runs",
+        "possible_target_relevance": [
+          "scheduler",
+          "gpu_cluster",
+          "fpga_farm"
+        ],
+        "provisional": true,
+        "requires_layer2_measurement": true
+      },
+      "response_accumulation": {
+        "category": "response_solve",
+        "description": "Accumulation of dielectric, phonon, and response tensors.",
+        "hint_status": "heuristic_prior",
+        "known_fpga_risk": "small_dense_kernels_and_solver_branching",
+        "known_gpu_strength": "medium_to_high_for_many_rhs_or_q_points",
+        "layer2_readiness": "ready",
+        "measurable_profile_fields": [
+          "q_point_count",
+          "rhs_count",
+          "solve_iterations",
+          "response_tensor_size"
+        ],
+        "motif_name": "Response accumulation",
+        "possible_target_relevance": [
+          "gpu",
+          "fpga_for_repeated_rhs",
+          "cpu_solver"
+        ],
+        "provisional": false,
+        "requires_layer2_measurement": true
+      },
+      "small_dense_linear_algebra": {
+        "category": "linear_algebra",
+        "description": "Small-matrix DFPT and response tensor linear algebra.",
+        "hint_status": "heuristic_prior",
+        "known_fpga_risk": "shape_variability_and_solver_control_complexity",
+        "known_gpu_strength": "high_for_large_dense_blas_and_solver_kernels",
+        "layer2_readiness": "provisional",
+        "measurable_profile_fields": [
+          "matrix_shape",
+          "flop_count",
+          "solver_iterations",
+          "library_calls"
+        ],
+        "motif_name": "Small dense linear algebra",
+        "possible_target_relevance": [
+          "gpu",
+          "cpu_blas",
+          "fpga_for_fixed_shapes"
+        ],
+        "provisional": true,
+        "requires_layer2_measurement": true
+      },
+      "wavefunction_memory": {
+        "category": "memory",
+        "description": "Large wavefunction-array footprint, layout, and reuse pressure.",
+        "hint_status": "heuristic_prior",
+        "known_fpga_risk": "capacity_limits_and_data_staging_overheads",
+        "known_gpu_strength": "high_when_arrays_are_resident_and_coalesced",
+        "layer2_readiness": "ready",
+        "measurable_profile_fields": [
+          "working_set_bytes",
+          "bandwidth_bytes",
+          "access_stride",
+          "reuse_distance"
+        ],
+        "motif_name": "Wavefunction memory",
+        "possible_target_relevance": [
+          "gpu_hbm",
+          "fpga_hbm",
+          "near_memory"
+        ],
+        "provisional": false,
+        "requires_layer2_measurement": true
+      },
+      "workflow_parameter_sweep": {
+        "category": "workflow_parallelism",
+        "description": "Scenario-level repeated workflows over physical parameters.",
+        "hint_status": "heuristic_prior",
+        "known_fpga_risk": "amortization_risk_when_individual_runs_are_small",
+        "known_gpu_strength": "high_for_independent_batches_with_reusable_inputs",
+        "layer2_readiness": "ready",
+        "measurable_profile_fields": [
+          "run_count",
+          "dependency_edges",
+          "reuse_artifacts",
+          "batch_width"
+        ],
+        "motif_name": "Workflow parameter sweep",
+        "possible_target_relevance": [
+          "scheduler",
+          "gpu_cluster",
+          "fpga_farm"
+        ],
+        "provisional": false,
+        "requires_layer2_measurement": true
+      }
+    },
+    "schema_version": "dse.qe_ic.workload_suite.v1",
+    "suite_id": "qe_ic_device_suite_v1",
+    "workload_family_ids": [
+      "ground_state_band_structure",
+      "phonon_dfpt",
+      "electron_phonon_mobility",
+      "strain_doping_field_sweep",
+      "interface_band_offset_defect"
+    ]
+  },
+  "suite_id": "qe_ic_device_suite_v1",
+  "suite_schema_version": "dse.qe_ic.workload_suite.v1"
+}

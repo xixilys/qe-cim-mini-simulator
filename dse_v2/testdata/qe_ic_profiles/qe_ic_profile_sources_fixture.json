@@ -1,0 +1,253 @@
+{
+  "schema_version": "dse.qe_ic.profile_sources.v1",
+  "profile_sources": [
+    {
+      "source_id": "pw_scf_gpu_fixture_001",
+      "workload_family_id": "ground_state_band_structure",
+      "program": "pw.x",
+      "target": "gpu_only",
+      "input_case": "si_64_scf",
+      "profile_source_type": "manual_profile_table",
+      "raw_artifact_path": "dse_v2/testdata/qe_ic_profiles/pw_scf_gpu_fixture.json",
+      "raw_artifact_hash": "sha256:fixture-pw-scf-gpu-001",
+      "trusted_for_layer2": true,
+      "events": [
+        {
+          "event_name": "fft_transpose",
+          "time_ms": 120.0,
+          "memory_movement_bytes": 1000000000,
+          "communication_bytes": 200000000,
+          "parallel_axes": [
+            "band",
+            "k_point"
+          ],
+          "mapping_hint": "fft_transpose"
+        },
+        {
+          "event_name": "h_psi_gpu_apply",
+          "time_ms": 100.0,
+          "memory_movement_bytes": 800000000,
+          "communication_bytes": 50000000,
+          "parallel_axes": [
+            "band",
+            "g_vector"
+          ],
+          "mapping_hint": "hpsi"
+        },
+        {
+          "event_name": "unknown_timer",
+          "time_ms": 11.578947368421053,
+          "memory_movement_bytes": 10000000,
+          "communication_bytes": 0,
+          "parallel_axes": [
+            "rank"
+          ]
+        }
+      ],
+      "gpu_baseline": {
+        "available": true,
+        "speedup_vs_cpu": 8.0,
+        "gpu_utilization": 0.7
+      }
+    },
+    {
+      "source_id": "ph_dfpt_gpu_fixture_001",
+      "workload_family_id": "phonon_dfpt",
+      "program": "ph.x",
+      "target": "gpu_only",
+      "input_case": "si_64_phonon",
+      "profile_source_type": "manual_profile_table",
+      "raw_artifact_path": "dse_v2/testdata/qe_ic_profiles/ph_dfpt_gpu_fixture.json",
+      "raw_artifact_hash": "sha256:fixture-ph-dfpt-gpu-001",
+      "trusted_for_layer2": true,
+      "events": [
+        {
+          "event_name": "ph_rhs_build",
+          "time_ms": 180.0,
+          "memory_movement_bytes": 1200000000,
+          "communication_bytes": 100000000,
+          "parallel_axes": [
+            "q_point",
+            "perturbation"
+          ],
+          "mapping_hint": "perturbation_rhs"
+        },
+        {
+          "event_name": "response_tensor_accumulation",
+          "time_ms": 220.0,
+          "memory_movement_bytes": 1400000000,
+          "communication_bytes": 180000000,
+          "parallel_axes": [
+            "q_point",
+            "band"
+          ],
+          "mapping_hint": "response_accumulation"
+        },
+        {
+          "event_name": "allreduce_response",
+          "time_ms": 100.0,
+          "memory_movement_bytes": 100000000,
+          "communication_bytes": 500000000,
+          "parallel_axes": [
+            "rank"
+          ]
+        }
+      ],
+      "gpu_baseline": {
+        "available": true,
+        "speedup_vs_cpu": 6.5,
+        "gpu_utilization": 0.66
+      }
+    },
+    {
+      "source_id": "epw_gpu_fixture_001",
+      "workload_family_id": "electron_phonon_mobility",
+      "program": "epw.x",
+      "target": "gpu_only",
+      "input_case": "si_epw_mobility",
+      "profile_source_type": "manual_profile_table",
+      "raw_artifact_path": "dse_v2/testdata/qe_ic_profiles/epw_gpu_fixture.json",
+      "raw_artifact_hash": "sha256:fixture-epw-gpu-001",
+      "trusted_for_layer2": true,
+      "events": [
+        {
+          "event_name": "epw_interp_dense_grid",
+          "time_ms": 4200.0,
+          "memory_movement_bytes": 8000000000,
+          "communication_bytes": 0,
+          "parallel_axes": [
+            "k_point",
+            "q_point",
+            "band"
+          ],
+          "mapping_hint": "dense_kq_interpolation"
+        },
+        {
+          "event_name": "mobility_bte_collision",
+          "time_ms": 3300.0,
+          "memory_movement_bytes": 6000000000,
+          "communication_bytes": 250000000,
+          "parallel_axes": [
+            "k_point",
+            "q_point"
+          ]
+        },
+        {
+          "event_name": "gemm_transport_kernel",
+          "time_ms": 2500.0,
+          "memory_movement_bytes": 3500000000,
+          "communication_bytes": 100000000,
+          "parallel_axes": [
+            "band"
+          ]
+        }
+      ],
+      "gpu_baseline": {
+        "available": true,
+        "speedup_vs_cpu": 12.5,
+        "gpu_utilization": 0.72
+      }
+    },
+    {
+      "source_id": "sweep_gpu_fixture_001",
+      "workload_family_id": "strain_doping_field_sweep",
+      "program": "pw.x+ph.x+epw.x",
+      "target": "gpu_only",
+      "input_case": "si_strain_doping_field_sweep",
+      "profile_source_type": "manual_profile_table",
+      "raw_artifact_path": "dse_v2/testdata/qe_ic_profiles/sweep_gpu_fixture.json",
+      "raw_artifact_hash": "sha256:fixture-sweep-gpu-001",
+      "trusted_for_layer2": true,
+      "events": [
+        {
+          "event_name": "workflow_parameter_sweep_scheduler",
+          "time_ms": 1600.0,
+          "memory_movement_bytes": 500000000,
+          "communication_bytes": 300000000,
+          "parallel_axes": [
+            "strain",
+            "doping",
+            "field"
+          ],
+          "mapping_hint": "workflow_parameter_sweep"
+        },
+        {
+          "event_name": "cross_run_reuse_cache",
+          "time_ms": 900.0,
+          "memory_movement_bytes": 2200000000,
+          "communication_bytes": 120000000,
+          "parallel_axes": [
+            "case",
+            "artifact"
+          ],
+          "mapping_hint": "cross_run_reuse"
+        },
+        {
+          "event_name": "batch_scheduling_gpu_queue",
+          "time_ms": 500.0,
+          "memory_movement_bytes": 100000000,
+          "communication_bytes": 80000000,
+          "parallel_axes": [
+            "case"
+          ],
+          "mapping_hint": "batch_scheduling"
+        }
+      ],
+      "gpu_baseline": {
+        "available": true,
+        "speedup_vs_cpu": 9.2,
+        "gpu_utilization": 0.68
+      }
+    },
+    {
+      "source_id": "interface_defect_gpu_fixture_001",
+      "workload_family_id": "interface_band_offset_defect",
+      "program": "pw.x+pp.x+projwfc.x",
+      "target": "gpu_only",
+      "input_case": "si_hfo2_interface_defect",
+      "profile_source_type": "manual_profile_table",
+      "raw_artifact_path": "dse_v2/testdata/qe_ic_profiles/interface_defect_gpu_fixture.json",
+      "raw_artifact_hash": "sha256:fixture-interface-defect-gpu-001",
+      "trusted_for_layer2": true,
+      "events": [
+        {
+          "event_name": "large_supercell_ground_state",
+          "time_ms": 2400.0,
+          "memory_movement_bytes": 9000000000,
+          "communication_bytes": 450000000,
+          "parallel_axes": [
+            "band",
+            "domain"
+          ],
+          "mapping_hint": "large_supercell"
+        },
+        {
+          "event_name": "projector_localized_state_analysis",
+          "time_ms": 1200.0,
+          "memory_movement_bytes": 1600000000,
+          "communication_bytes": 100000000,
+          "parallel_axes": [
+            "band",
+            "defect_state"
+          ],
+          "mapping_hint": "localized_state_analysis"
+        },
+        {
+          "event_name": "charge_density_analysis_pass",
+          "time_ms": 400.0,
+          "memory_movement_bytes": 800000000,
+          "communication_bytes": 50000000,
+          "parallel_axes": [
+            "grid"
+          ],
+          "mapping_hint": "charge_density_analysis"
+        }
+      ],
+      "gpu_baseline": {
+        "available": true,
+        "speedup_vs_cpu": 5.4,
+        "gpu_utilization": 0.61
+      }
+    }
+  ]
+}

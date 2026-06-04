@@ -1,0 +1,15 @@
+{
+  "artifact_role": "dse_layer2_motif_profile",
+  "claim_boundary": "This manifest registers Layer-2 motif-profile artifacts only. It is not architecture generation, target viability, promotion, or final evidence.",
+  "downstream_consumers": [
+    "layer3_target_viability_test",
+    "promotion_policy"
+  ],
+  "layer": "layer2_motif_profiling",
+  "producer": "dse_v2.profiling.qe_ic",
+  "profile_artifact": "qe_ic_motif_profile.json",
+  "readme_artifact": "qe_ic_motif_profile_readme.md",
+  "schema_version": "dse.qe_ic.motif_profile_manifest.v1",
+  "source_layer1_suite_artifact": "qe_ic_workload_suite.json",
+  "validation_artifact": "qe_ic_motif_profile_validation.json"
+}
