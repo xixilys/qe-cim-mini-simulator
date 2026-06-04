@@ -1,0 +1,15 @@
+{
+  "artifact_role": "dse_layer1_workload_suite",
+  "claim_boundary": "This manifest registers Layer-1 workload-suite artifacts only. It is not profiling, architecture generation, performance estimation, target viability, promotion decision, or validation evidence.",
+  "downstream_consumers": [
+    "layer2_motif_profiling",
+    "layer3_target_viability_test",
+    "promotion_policy"
+  ],
+  "layer": "layer1_workload_suite_definition",
+  "producer": "dse_v2.workloads.qe_ic",
+  "readme_artifact": "qe_ic_workload_suite_readme.md",
+  "schema_version": "dse.qe_ic.workload_suite_manifest.v1",
+  "suite_artifact": "qe_ic_workload_suite.json",
+  "validation_artifact": "qe_ic_workload_suite_validation.json"
+}

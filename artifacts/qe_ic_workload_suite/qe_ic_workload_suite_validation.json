@@ -1,0 +1,17 @@
+{
+  "artifact_names": [
+    "qe_ic_workload_suite.json",
+    "qe_ic_workload_suite_validation.json",
+    "qe_ic_workload_suite_manifest.json",
+    "qe_ic_workload_suite_readme.md"
+  ],
+  "errors": [],
+  "excluded_workflow_count": 5,
+  "family_count": 5,
+  "manifest_artifact": "qe_ic_workload_suite_manifest.json",
+  "motif_count": 31,
+  "scenario_count": 2,
+  "schema_version": "dse.qe_ic.workload_suite_validation.v1",
+  "status": "passed",
+  "warnings": []
+}
