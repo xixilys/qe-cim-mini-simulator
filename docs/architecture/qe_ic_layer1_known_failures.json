@@ -1,0 +1,13 @@
+{
+  "schema_version": "dse.qe_ic.layer1_known_failures.v1",
+  "layer1_commit": "8709cb7",
+  "known_failures": [
+    {
+      "test": "dse_v2/tests/test_dft_trial_state_ledger.py::test_dft_trial_state_ledger_ties_search_evidence_step5_audit",
+      "observed": "expected state 'blocked', got 'rejected'",
+      "reason": "pre-existing DFT trial-ledger state classification drift outside QE-IC Layer-1 package, CLI, artifacts, and tests",
+      "owner": "DFT trial-ledger/reference_workloads maintainers",
+      "layer1_regression": false
+    }
+  ]
+}

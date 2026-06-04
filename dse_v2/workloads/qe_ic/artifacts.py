@@ -162,10 +162,17 @@ def write_qe_ic_workload_suite_artifacts(
     suite_payload = dict(suite) if suite is not None else build_default_qe_ic_workload_suite()
     manifest = build_qe_ic_workload_suite_manifest()
     validation = validate_qe_ic_workload_suite(suite_payload, manifest=manifest)
+    _write_json(out_dir / QE_IC_WORKLOAD_SUITE_VALIDATION_ARTIFACT, validation)
+    if validation["status"] != "passed":
+        return {
+            "status": validation["status"],
+            "out_dir": str(out_dir),
+            "artifacts": [QE_IC_WORKLOAD_SUITE_VALIDATION_ARTIFACT],
+        }
+
     readme = build_qe_ic_workload_suite_readme(suite_payload)
 
     _write_json(out_dir / QE_IC_WORKLOAD_SUITE_ARTIFACT, suite_payload)
-    _write_json(out_dir / QE_IC_WORKLOAD_SUITE_VALIDATION_ARTIFACT, validation)
     _write_json(out_dir / QE_IC_WORKLOAD_SUITE_MANIFEST_ARTIFACT, manifest)
     (out_dir / QE_IC_WORKLOAD_SUITE_README_ARTIFACT).write_text(readme)
 
@@ -179,8 +186,11 @@ def write_qe_ic_workload_suite_artifacts(
 def load_qe_ic_workload_suite(path: Path) -> dict[str, Any]:
     """Load a persisted suite artifact and validate it fail-closed."""
 
-    with path.open() as handle:
-        payload = json.load(handle)
+    try:
+        with path.open() as handle:
+            payload = json.load(handle)
+    except FileNotFoundError as exc:
+        raise QeIcWorkloadSuiteArtifactError(f"{path} does not exist") from exc
     if not isinstance(payload, dict):
         raise QeIcWorkloadSuiteArtifactError(f"{path} did not contain a JSON object")
     validation = validate_qe_ic_workload_suite(payload)
@@ -189,4 +199,3 @@ def load_qe_ic_workload_suite(path: Path) -> dict[str, Any]:
             f"{path} failed QE-IC workload-suite validation: {validation['errors']}"
         )
     return payload
-

@@ -90,6 +90,7 @@ def _validate_family(
         "depends_on_families",
         "device_relevance",
         "expected_motifs",
+        "source_basis",
     ):
         value = family.get(list_field)
         if not isinstance(value, list):
@@ -113,6 +114,21 @@ def _validate_family(
             _error(errors, f"motif_registry.{motif_id}.provisional", "motif must declare provisional")
         elif not isinstance(motif.get("provisional"), bool):
             _error(errors, f"motif_registry.{motif_id}.provisional", "provisional must be boolean")
+        for field in (
+            "measurable_profile_fields",
+            "possible_target_relevance",
+        ):
+            if not isinstance(motif.get(field), list) or not motif.get(field):
+                _error(errors, f"motif_registry.{motif_id}.{field}", f"{field} must be a non-empty list")
+        for field in ("known_gpu_strength", "known_fpga_risk", "layer2_readiness"):
+            if not isinstance(motif.get(field), str) or not motif.get(field):
+                _error(errors, f"motif_registry.{motif_id}.{field}", f"{field} must be a non-empty string")
+        if motif.get("layer2_readiness") not in {"ready", "provisional"}:
+            _error(
+                errors,
+                f"motif_registry.{motif_id}.layer2_readiness",
+                "layer2_readiness must be ready or provisional",
+            )
 
     contract = _as_mapping(family.get("profiling_contract"))
     if contract.get("required_next_layer") != "motif_profiling":
@@ -147,15 +163,27 @@ def _validate_family(
             "gpu_baseline_required must be true",
         )
 
-    external_programs = family.get("external_programs", [])
-    if external_programs and not isinstance(external_programs, list):
-        _error(errors, f"{prefix}.external_programs", "external_programs must be a list")
-    if isinstance(external_programs, list) and "perturbo" in external_programs:
+    external_reference_programs = family.get("external_reference_programs", [])
+    if external_reference_programs and not isinstance(external_reference_programs, list):
+        _error(
+            errors,
+            f"{prefix}.external_reference_programs",
+            "external_reference_programs must be a list",
+        )
+    if isinstance(external_reference_programs, list):
+        overlap = sorted(set(external_reference_programs) & set(family.get("representative_programs", [])))
+        if overlap:
+            _error(
+                errors,
+                f"{prefix}.external_reference_programs",
+                f"external reference programs must not also be representative QE programs: {overlap}",
+            )
+    if isinstance(external_reference_programs, list) and "perturbo" in external_reference_programs:
         notes = family.get("notes", [])
         if not isinstance(notes, list) or not any("external" in str(note).lower() for note in notes):
             _warning(
                 warnings,
-                f"{prefix}.external_programs",
+                f"{prefix}.external_reference_programs",
                 "Perturbo should be documented as an external transport reference",
             )
 
@@ -358,4 +386,3 @@ def validate_qe_ic_workload_suite(
         "artifact_names": list(QE_IC_ARTIFACTS),
         "manifest_artifact": QE_IC_WORKLOAD_SUITE_MANIFEST_ARTIFACT,
     }
-

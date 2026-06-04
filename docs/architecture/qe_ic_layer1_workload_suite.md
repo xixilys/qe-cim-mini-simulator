@@ -57,9 +57,17 @@ The first-version registry contains:
 - `strain_doping_field_sweep`
 - `interface_band_offset_defect`
 
-`electron_phonon_mobility` lists `perturbo` under `external_programs` because
-Perturbo is a reference transport program, not a core QE executable. EPW remains
-the QE-family transport program in the first-version suite.
+`electron_phonon_mobility` lists `epw.x` under `representative_programs`.
+Perturbo is listed only under `external_reference_programs` because it is a
+reference transport program, not a core QE executable. EPW remains the
+QE-family transport program in the first-version suite.
+
+Each family also carries compact `source_basis` tags. These are stable
+provenance tags for downstream documentation and review, not long citations.
+Current tags cover QE PWscf ground-state workflows, QE PHonon/DFPT, QE
+post-processing, EPW transport/Wannier interpolation, Perturbo as an external
+transport reference, and IC-device analysis motives such as mobility, effective
+mass, band offsets, and defect traps.
 
 ## Scenario Weights
 
@@ -87,6 +95,38 @@ electron-phonon transport workflows have meaningful heterogeneous-computing
 baselines. Layer-1 only records that requirement; it does not measure or compare
 targets.
 
+The motif registry also carries Layer-2 taxonomy hints:
+
+- `measurable_profile_fields`
+- `possible_target_relevance`
+- `known_gpu_strength`
+- `known_fpga_risk`
+- `layer2_readiness`
+
+These fields keep motif profiling from becoming plain text matching. They are
+still Layer-1 hints; Layer-2 must replace them with measured or justified
+profile evidence.
+
+## Checked-In Fixture Strategy
+
+`artifacts/qe_ic_workload_suite/` is a canonical release fixture for Layer-1.
+It is intentionally committed so reviewers and downstream layers have a stable
+example artifact bundle. The regression test
+`test_checked_in_qe_ic_artifacts_match_builder_output` regenerates the artifacts
+in a temporary directory and byte-compares them against the checked-in fixture to
+prevent registry/schema drift.
+
+If the registry changes, regenerate the fixture with:
+
+```bash
+python3 dse_v2/scripts/dse/build_qe_ic_workload_suite.py \
+  --out artifacts/qe_ic_workload_suite
+```
+
+`write_qe_ic_workload_suite_artifacts()` is fail-closed for invalid suites: it
+only writes `qe_ic_workload_suite_validation.json` when validation fails. It
+does not write a canonical suite, manifest, or README for invalid input.
+
 ## Claim Boundary
 
 Layer-1 does not contain profiling results, architecture candidates,
@@ -107,3 +147,7 @@ When Python imports changed, also run:
 python3 -m compileall dse_v2
 ```
 
+The full repository suite had one known unrelated failure during the Layer-1
+push audit. It is recorded in
+`docs/architecture/qe_ic_layer1_known_failures.json` with test name, observed
+state, reason, owner, and `layer1_regression=false`.
