@@ -34,6 +34,7 @@
     "batch_scheduling": {
       "category": "workflow_parallelism",
       "description": "Scheduling many related calculations under a shared campaign.",
+      "hint_status": "heuristic_prior",
       "known_fpga_risk": "amortization_risk_when_individual_runs_are_small",
       "known_gpu_strength": "high_for_independent_batches_with_reusable_inputs",
       "layer2_readiness": "ready",
@@ -49,11 +50,13 @@
         "gpu_cluster",
         "fpga_farm"
       ],
-      "provisional": false
+      "provisional": false,
+      "requires_layer2_measurement": true
     },
     "bte_collision_integral": {
       "category": "transport",
       "description": "Boltzmann transport collision-integral evaluation.",
+      "hint_status": "heuristic_prior",
       "known_fpga_risk": "large_memory_footprint_and_irregular_table_access",
       "known_gpu_strength": "high_for_dense_kq_grids_and_matrix_traversals",
       "layer2_readiness": "ready",
@@ -69,11 +72,13 @@
         "gpu_cluster",
         "fpga_for_streaming_collision_terms"
       ],
-      "provisional": false
+      "provisional": false,
+      "requires_layer2_measurement": true
     },
     "charge_density_analysis": {
       "category": "post_processing",
       "description": "Charge-density, orbital, and projected-density analysis.",
+      "hint_status": "heuristic_prior",
       "known_fpga_risk": "low_reuse_and_workflow_integration_overhead",
       "known_gpu_strength": "medium_for_large_regular_projection_or_grid_passes",
       "layer2_readiness": "ready",
@@ -89,11 +94,13 @@
         "gpu",
         "fpga_for_streaming_analysis"
       ],
-      "provisional": false
+      "provisional": false,
+      "requires_layer2_measurement": true
     },
     "communication": {
       "category": "communication",
       "description": "General inter-rank data exchange beyond explicit reductions.",
+      "hint_status": "heuristic_prior",
       "known_fpga_risk": "system_integration_and_synchronization_overhead",
       "known_gpu_strength": "depends_on_gpu_aware_mpi_and_data_residency",
       "layer2_readiness": "provisional",
@@ -109,11 +116,13 @@
         "gpu_direct",
         "host_runtime"
       ],
-      "provisional": true
+      "provisional": true,
+      "requires_layer2_measurement": true
     },
     "cross_run_reuse": {
       "category": "workflow_parallelism",
       "description": "Reuse of electronic, phonon, or interpolation artifacts across runs.",
+      "hint_status": "heuristic_prior",
       "known_fpga_risk": "amortization_risk_when_individual_runs_are_small",
       "known_gpu_strength": "high_for_independent_batches_with_reusable_inputs",
       "layer2_readiness": "ready",
@@ -129,11 +138,13 @@
         "gpu_cluster",
         "fpga_farm"
       ],
-      "provisional": false
+      "provisional": false,
+      "requires_layer2_measurement": true
     },
     "dense_kq_interpolation": {
       "category": "transport",
       "description": "Wannier or dense-grid k/q interpolation for transport studies.",
+      "hint_status": "heuristic_prior",
       "known_fpga_risk": "large_memory_footprint_and_irregular_table_access",
       "known_gpu_strength": "high_for_dense_kq_grids_and_matrix_traversals",
       "layer2_readiness": "ready",
@@ -149,11 +160,13 @@
         "gpu_cluster",
         "fpga_for_streaming_collision_terms"
       ],
-      "provisional": false
+      "provisional": false,
+      "requires_layer2_measurement": true
     },
     "dense_linear_algebra": {
       "category": "linear_algebra",
       "description": "GEMM/GEMV, orthogonalization, and dense eigensolver support.",
+      "hint_status": "heuristic_prior",
       "known_fpga_risk": "shape_variability_and_solver_control_complexity",
       "known_gpu_strength": "high_for_large_dense_blas_and_solver_kernels",
       "layer2_readiness": "ready",
@@ -169,11 +182,13 @@
         "cpu_blas",
         "fpga_for_fixed_shapes"
       ],
-      "provisional": false
+      "provisional": false,
+      "requires_layer2_measurement": true
     },
     "density_update": {
       "category": "scf_state_update",
       "description": "Charge-density construction, update, and mixing inputs.",
+      "hint_status": "heuristic_prior",
       "known_fpga_risk": "host_control_coupling_and_convergence_feedback",
       "known_gpu_strength": "medium_for_large_grid_updates",
       "layer2_readiness": "ready",
@@ -188,11 +203,13 @@
         "gpu",
         "fpga_for_streaming_updates"
       ],
-      "provisional": false
+      "provisional": false,
+      "requires_layer2_measurement": true
     },
     "diagonalization": {
       "category": "linear_algebra",
       "description": "Kohn-Sham subspace diagonalization and solver orchestration.",
+      "hint_status": "heuristic_prior",
       "known_fpga_risk": "shape_variability_and_solver_control_complexity",
       "known_gpu_strength": "high_for_large_dense_blas_and_solver_kernels",
       "layer2_readiness": "ready",
@@ -208,11 +225,13 @@
         "cpu_blas",
         "fpga_for_fixed_shapes"
       ],
-      "provisional": false
+      "provisional": false,
+      "requires_layer2_measurement": true
     },
     "electron_phonon_matrix": {
       "category": "transport",
       "description": "Electron-phonon matrix-element construction and traversal.",
+      "hint_status": "heuristic_prior",
       "known_fpga_risk": "large_memory_footprint_and_irregular_table_access",
       "known_gpu_strength": "high_for_dense_kq_grids_and_matrix_traversals",
       "layer2_readiness": "ready",
@@ -228,11 +247,13 @@
         "gpu_cluster",
         "fpga_for_streaming_collision_terms"
       ],
-      "provisional": false
+      "provisional": false,
+      "requires_layer2_measurement": true
     },
     "fft_transpose": {
       "category": "spectral_transform",
       "description": "Plane-wave FFTs and distributed transpose traffic.",
+      "hint_status": "heuristic_prior",
       "known_fpga_risk": "transpose_routing_and_global_memory_pressure",
       "known_gpu_strength": "high_when_fft_library_and_batching_are_available",
       "layer2_readiness": "ready",
@@ -247,11 +268,13 @@
         "fpga_streaming",
         "near_memory"
       ],
-      "provisional": false
+      "provisional": false,
+      "requires_layer2_measurement": true
     },
     "hpsi": {
       "category": "operator_application",
       "description": "Repeated H psi application in iterative electronic solves.",
+      "hint_status": "heuristic_prior",
       "known_fpga_risk": "irregular_projector_access_and_precision_pressure",
       "known_gpu_strength": "medium_to_high_for_batched_dense_or_stencil_like_regions",
       "layer2_readiness": "ready",
@@ -267,11 +290,13 @@
         "fpga_pipeline",
         "asic_datapath"
       ],
-      "provisional": false
+      "provisional": false,
+      "requires_layer2_measurement": true
     },
     "incremental_update": {
       "category": "workflow_parallelism",
       "description": "Reusing and incrementally updating state across neighboring sweep points.",
+      "hint_status": "heuristic_prior",
       "known_fpga_risk": "amortization_risk_when_individual_runs_are_small",
       "known_gpu_strength": "high_for_independent_batches_with_reusable_inputs",
       "layer2_readiness": "provisional",
@@ -287,11 +312,13 @@
         "gpu_cluster",
         "fpga_farm"
       ],
-      "provisional": true
+      "provisional": true,
+      "requires_layer2_measurement": true
     },
     "io_checkpoint": {
       "category": "io_memory",
       "description": "Restart files, intermediate outputs, and checkpoint pressure.",
+      "hint_status": "heuristic_prior",
       "known_fpga_risk": "host_io_dominance_and_low_compute_density",
       "known_gpu_strength": "low_unless_io_is_hidden_by_residency_or_overlap",
       "layer2_readiness": "ready",
@@ -307,11 +334,13 @@
         "host_runtime",
         "memory_hierarchy"
       ],
-      "provisional": false
+      "provisional": false,
+      "requires_layer2_measurement": true
     },
     "large_data_staging": {
       "category": "io_memory",
       "description": "Movement of wavefunction, matrix-element, and checkpoint data.",
+      "hint_status": "heuristic_prior",
       "known_fpga_risk": "host_io_dominance_and_low_compute_density",
       "known_gpu_strength": "low_unless_io_is_hidden_by_residency_or_overlap",
       "layer2_readiness": "ready",
@@ -327,11 +356,13 @@
         "host_runtime",
         "memory_hierarchy"
       ],
-      "provisional": false
+      "provisional": false,
+      "requires_layer2_measurement": true
     },
     "large_supercell": {
       "category": "structure_scale",
       "description": "Large real-space cell and gamma/sparse-k electronic solves.",
+      "hint_status": "heuristic_prior",
       "known_fpga_risk": "capacity_pressure_and_low_reuse_for_large_unique_cells",
       "known_gpu_strength": "medium_when_large_arrays_fit_device_memory",
       "layer2_readiness": "ready",
@@ -347,11 +378,13 @@
         "gpu_hbm",
         "distributed_cpu_gpu"
       ],
-      "provisional": false
+      "provisional": false,
+      "requires_layer2_measurement": true
     },
     "localized_state_analysis": {
       "category": "post_processing",
       "description": "Projection and analysis of localized defect or interface states.",
+      "hint_status": "heuristic_prior",
       "known_fpga_risk": "low_reuse_and_workflow_integration_overhead",
       "known_gpu_strength": "medium_for_large_regular_projection_or_grid_passes",
       "layer2_readiness": "ready",
@@ -367,11 +400,13 @@
         "gpu",
         "fpga_for_streaming_analysis"
       ],
-      "provisional": false
+      "provisional": false,
+      "requires_layer2_measurement": true
     },
     "memory_bandwidth": {
       "category": "memory",
       "description": "Bandwidth-bound sweeps over dense numerical arrays.",
+      "hint_status": "heuristic_prior",
       "known_fpga_risk": "capacity_limits_and_data_staging_overheads",
       "known_gpu_strength": "high_when_arrays_are_resident_and_coalesced",
       "layer2_readiness": "ready",
@@ -387,11 +422,13 @@
         "fpga_hbm",
         "near_memory"
       ],
-      "provisional": false
+      "provisional": false,
+      "requires_layer2_measurement": true
     },
     "memory_capacity": {
       "category": "memory",
       "description": "Capacity pressure from large cells, bands, and retained arrays.",
+      "hint_status": "heuristic_prior",
       "known_fpga_risk": "capacity_limits_and_data_staging_overheads",
       "known_gpu_strength": "high_when_arrays_are_resident_and_coalesced",
       "layer2_readiness": "ready",
@@ -407,11 +444,13 @@
         "fpga_hbm",
         "near_memory"
       ],
-      "provisional": false
+      "provisional": false,
+      "requires_layer2_measurement": true
     },
     "parameter_sweep": {
       "category": "workflow_parallelism",
       "description": "Generic parameter sweep where the driving physical axis is family-specific.",
+      "hint_status": "heuristic_prior",
       "known_fpga_risk": "amortization_risk_when_individual_runs_are_small",
       "known_gpu_strength": "high_for_independent_batches_with_reusable_inputs",
       "layer2_readiness": "provisional",
@@ -427,11 +466,13 @@
         "gpu_cluster",
         "fpga_farm"
       ],
-      "provisional": true
+      "provisional": true,
+      "requires_layer2_measurement": true
     },
     "perturbation_rhs": {
       "category": "response_solve",
       "description": "DFPT perturbation-source construction and solve RHS handling.",
+      "hint_status": "heuristic_prior",
       "known_fpga_risk": "small_dense_kernels_and_solver_branching",
       "known_gpu_strength": "medium_to_high_for_many_rhs_or_q_points",
       "layer2_readiness": "ready",
@@ -447,11 +488,13 @@
         "fpga_for_repeated_rhs",
         "cpu_solver"
       ],
-      "provisional": false
+      "provisional": false,
+      "requires_layer2_measurement": true
     },
     "potential_alignment": {
       "category": "post_processing",
       "description": "Electrostatic and band-edge alignment across regions or materials.",
+      "hint_status": "heuristic_prior",
       "known_fpga_risk": "low_reuse_and_workflow_integration_overhead",
       "known_gpu_strength": "medium_for_large_regular_projection_or_grid_passes",
       "layer2_readiness": "ready",
@@ -467,11 +510,13 @@
         "gpu",
         "fpga_for_streaming_analysis"
       ],
-      "provisional": false
+      "provisional": false,
+      "requires_layer2_measurement": true
     },
     "projector_nonlocal": {
       "category": "operator_application",
       "description": "Pseudopotential projector application and accumulation.",
+      "hint_status": "heuristic_prior",
       "known_fpga_risk": "irregular_projector_access_and_precision_pressure",
       "known_gpu_strength": "medium_to_high_for_batched_dense_or_stencil_like_regions",
       "layer2_readiness": "ready",
@@ -487,11 +532,13 @@
         "fpga_pipeline",
         "asic_datapath"
       ],
-      "provisional": false
+      "provisional": false,
+      "requires_layer2_measurement": true
     },
     "q_point_sweep": {
       "category": "workflow_parallelism",
       "description": "Independent or weakly coupled phonon q-point evaluations.",
+      "hint_status": "heuristic_prior",
       "known_fpga_risk": "amortization_risk_when_individual_runs_are_small",
       "known_gpu_strength": "high_for_independent_batches_with_reusable_inputs",
       "layer2_readiness": "ready",
@@ -507,11 +554,13 @@
         "gpu_cluster",
         "fpga_farm"
       ],
-      "provisional": false
+      "provisional": false,
+      "requires_layer2_measurement": true
     },
     "reduction_collective": {
       "category": "communication",
       "description": "Dot products, global sums, and collective reductions.",
+      "hint_status": "heuristic_prior",
       "known_fpga_risk": "system_integration_and_synchronization_overhead",
       "known_gpu_strength": "depends_on_gpu_aware_mpi_and_data_residency",
       "layer2_readiness": "ready",
@@ -527,11 +576,13 @@
         "gpu_direct",
         "host_runtime"
       ],
-      "provisional": false
+      "provisional": false,
+      "requires_layer2_measurement": true
     },
     "repeated_ground_state_solve": {
       "category": "workflow_parallelism",
       "description": "Multiple related SCF solves for structures, defects, or interfaces.",
+      "hint_status": "heuristic_prior",
       "known_fpga_risk": "amortization_risk_when_individual_runs_are_small",
       "known_gpu_strength": "high_for_independent_batches_with_reusable_inputs",
       "layer2_readiness": "provisional",
@@ -547,11 +598,13 @@
         "gpu_cluster",
         "fpga_farm"
       ],
-      "provisional": true
+      "provisional": true,
+      "requires_layer2_measurement": true
     },
     "repeated_runs": {
       "category": "workflow_parallelism",
       "description": "Repeated program invocations in a parameter or operating-condition sweep.",
+      "hint_status": "heuristic_prior",
       "known_fpga_risk": "amortization_risk_when_individual_runs_are_small",
       "known_gpu_strength": "high_for_independent_batches_with_reusable_inputs",
       "layer2_readiness": "provisional",
@@ -567,11 +620,13 @@
         "gpu_cluster",
         "fpga_farm"
       ],
-      "provisional": true
+      "provisional": true,
+      "requires_layer2_measurement": true
     },
     "response_accumulation": {
       "category": "response_solve",
       "description": "Accumulation of dielectric, phonon, and response tensors.",
+      "hint_status": "heuristic_prior",
       "known_fpga_risk": "small_dense_kernels_and_solver_branching",
       "known_gpu_strength": "medium_to_high_for_many_rhs_or_q_points",
       "layer2_readiness": "ready",
@@ -587,11 +642,13 @@
         "fpga_for_repeated_rhs",
         "cpu_solver"
       ],
-      "provisional": false
+      "provisional": false,
+      "requires_layer2_measurement": true
     },
     "small_dense_linear_algebra": {
       "category": "linear_algebra",
       "description": "Small-matrix DFPT and response tensor linear algebra.",
+      "hint_status": "heuristic_prior",
       "known_fpga_risk": "shape_variability_and_solver_control_complexity",
       "known_gpu_strength": "high_for_large_dense_blas_and_solver_kernels",
       "layer2_readiness": "provisional",
@@ -607,11 +664,13 @@
         "cpu_blas",
         "fpga_for_fixed_shapes"
       ],
-      "provisional": true
+      "provisional": true,
+      "requires_layer2_measurement": true
     },
     "wavefunction_memory": {
       "category": "memory",
       "description": "Large wavefunction-array footprint, layout, and reuse pressure.",
+      "hint_status": "heuristic_prior",
       "known_fpga_risk": "capacity_limits_and_data_staging_overheads",
       "known_gpu_strength": "high_when_arrays_are_resident_and_coalesced",
       "layer2_readiness": "ready",
@@ -627,11 +686,13 @@
         "fpga_hbm",
         "near_memory"
       ],
-      "provisional": false
+      "provisional": false,
+      "requires_layer2_measurement": true
     },
     "workflow_parameter_sweep": {
       "category": "workflow_parallelism",
       "description": "Scenario-level repeated workflows over physical parameters.",
+      "hint_status": "heuristic_prior",
       "known_fpga_risk": "amortization_risk_when_individual_runs_are_small",
       "known_gpu_strength": "high_for_independent_batches_with_reusable_inputs",
       "layer2_readiness": "ready",
@@ -647,7 +708,8 @@
         "gpu_cluster",
         "fpga_farm"
       ],
-      "provisional": false
+      "provisional": false,
+      "requires_layer2_measurement": true
     }
   },
   "primary_scenario_id": "mobility_centered_ic_device",

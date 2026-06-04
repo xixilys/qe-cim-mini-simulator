@@ -89,6 +89,8 @@ def test_motif_registry_declares_layer2_taxonomy_hints():
         assert motif["known_gpu_strength"]
         assert motif["known_fpga_risk"]
         assert motif["layer2_readiness"] in {"ready", "provisional"}
+        assert motif["hint_status"] == "heuristic_prior"
+        assert motif["requires_layer2_measurement"] is True
         if motif["provisional"]:
             assert motif["layer2_readiness"] == "provisional"
 
@@ -212,6 +214,26 @@ def test_writer_fail_closed_only_writes_validation_for_invalid_suite(tmp_path: P
         qe_ic.load_qe_ic_workload_suite(tmp_path / "qe_ic_workload_suite.json")
 
 
+def test_writer_fail_closed_removes_stale_canonical_artifacts(tmp_path: Path):
+    valid_result = qe_ic.write_qe_ic_workload_suite_artifacts(tmp_path)
+    assert valid_result["status"] == "passed"
+    assert (tmp_path / "qe_ic_workload_suite.json").exists()
+    assert (tmp_path / "qe_ic_workload_suite_manifest.json").exists()
+    assert (tmp_path / "qe_ic_workload_suite_readme.md").exists()
+
+    suite = qe_ic.build_default_qe_ic_workload_suite()
+    suite["workload_families"][0]["expected_motifs"] = ["missing_motif"]
+
+    failed_result = qe_ic.write_qe_ic_workload_suite_artifacts(tmp_path, suite=suite)
+
+    assert failed_result["status"] == "failed"
+    assert failed_result["artifacts"] == ["qe_ic_workload_suite_validation.json"]
+    assert (tmp_path / "qe_ic_workload_suite_validation.json").exists()
+    assert not (tmp_path / "qe_ic_workload_suite.json").exists()
+    assert not (tmp_path / "qe_ic_workload_suite_manifest.json").exists()
+    assert not (tmp_path / "qe_ic_workload_suite_readme.md").exists()
+
+
 def test_manifest_declares_downstream_consumers(tmp_path: Path):
     qe_ic.write_qe_ic_workload_suite_artifacts(tmp_path)
     manifest = json.loads((tmp_path / "qe_ic_workload_suite_manifest.json").read_text())
@@ -306,7 +328,8 @@ def test_known_full_suite_failure_is_recorded_for_layer1_push():
     payload = json.loads(path.read_text())
 
     assert payload["schema_version"] == "dse.qe_ic.layer1_known_failures.v1"
-    assert payload["layer1_commit"] == "8709cb7"
+    assert payload["introduced_or_observed_at_commit"] == "8709cb7"
+    assert payload["last_reviewed_at_commit"] == "d2a05c9"
     assert payload["known_failures"] == [
         {
             "test": "dse_v2/tests/test_dft_trial_state_ledger.py::test_dft_trial_state_ledger_ties_search_evidence_step5_audit",

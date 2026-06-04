@@ -30,6 +30,17 @@ def _write_json(path: Path, payload: Mapping[str, Any]) -> None:
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
 
 
+def _remove_stale_canonical_artifacts(out_dir: Path) -> None:
+    for artifact_name in (
+        QE_IC_WORKLOAD_SUITE_ARTIFACT,
+        QE_IC_WORKLOAD_SUITE_MANIFEST_ARTIFACT,
+        QE_IC_WORKLOAD_SUITE_README_ARTIFACT,
+    ):
+        artifact_path = out_dir / artifact_name
+        if artifact_path.exists():
+            artifact_path.unlink()
+
+
 def build_qe_ic_workload_suite_manifest() -> dict[str, Any]:
     """Build the QE-IC Layer-1 artifact manifest."""
 
@@ -162,6 +173,7 @@ def write_qe_ic_workload_suite_artifacts(
     suite_payload = dict(suite) if suite is not None else build_default_qe_ic_workload_suite()
     manifest = build_qe_ic_workload_suite_manifest()
     validation = validate_qe_ic_workload_suite(suite_payload, manifest=manifest)
+    _remove_stale_canonical_artifacts(out_dir)
     _write_json(out_dir / QE_IC_WORKLOAD_SUITE_VALIDATION_ARTIFACT, validation)
     if validation["status"] != "passed":
         return {

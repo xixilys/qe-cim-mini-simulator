@@ -110,6 +110,7 @@ def _validate_family(
         motif = motif_registry.get(motif_id)
         if not isinstance(motif, Mapping):
             _error(errors, f"{prefix}.expected_motifs", f"unknown motif {motif_id!r}")
+            continue
         elif "provisional" not in motif:
             _error(errors, f"motif_registry.{motif_id}.provisional", "motif must declare provisional")
         elif not isinstance(motif.get("provisional"), bool):
@@ -128,6 +129,18 @@ def _validate_family(
                 errors,
                 f"motif_registry.{motif_id}.layer2_readiness",
                 "layer2_readiness must be ready or provisional",
+            )
+        if motif.get("hint_status") != "heuristic_prior":
+            _error(
+                errors,
+                f"motif_registry.{motif_id}.hint_status",
+                "hint_status must be heuristic_prior",
+            )
+        if motif.get("requires_layer2_measurement") is not True:
+            _error(
+                errors,
+                f"motif_registry.{motif_id}.requires_layer2_measurement",
+                "requires_layer2_measurement must be true",
             )
 
     contract = _as_mapping(family.get("profiling_contract"))
