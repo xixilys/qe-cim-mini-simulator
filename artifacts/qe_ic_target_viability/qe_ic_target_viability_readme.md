@@ -13,6 +13,10 @@ Baseline: 14; viable: 0; maybe: 20; reject: 8.
 - `gpu_fpga_hybrid`: records=14, baseline=0, viable=0, maybe=11, reject=3.
 - `gpu_only`: records=14, baseline=14, viable=0, maybe=0, reject=0.
 
+## Modeling Boundary
+
+The target platform values in the fixture are model parameters, not measured platform claims. Transfer and risk values are heuristic viability estimates, not measured hardware performance. Hybrid transfer estimates use a conservative GPU-FPGA movement proxy rather than a measured implementation model.
+
 ## Claim Boundary
 
 This artifact contains target viability estimates only. It does not contain architecture candidates, promotion decisions, SystemC/gem5/Vivado requests, hardware implementation results, or final performance claims.

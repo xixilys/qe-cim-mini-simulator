@@ -133,6 +133,18 @@ def validate_qe_ic_target_config(config: Mapping[str, Any]) -> dict[str, Any]:
 
     if len(target_ids) != len(set(target_ids)):
         _error(errors, "targets.target_id", "target_id values must be unique")
+    target_types = {
+        target.get("target_type")
+        for target in targets
+        if isinstance(target, Mapping) and isinstance(target.get("target_type"), str)
+    }
+    missing_target_types = sorted(TARGET_TYPES - target_types)
+    if missing_target_types:
+        _error(
+            errors,
+            "targets.target_type",
+            f"target config must include target types: {missing_target_types}",
+        )
 
     thresholds = _as_mapping(config.get("thresholds"))
     for key in TARGET_CONFIG_THRESHOLD_DEFAULTS:
@@ -143,6 +155,22 @@ def validate_qe_ic_target_config(config: Mapping[str, Any]) -> dict[str, Any]:
         value = thresholds.get(key)
         if _is_nonnegative_number(value) and value > 1.0:
             _error(errors, f"thresholds.{key}", f"{key} must be <= 1")
+    if (
+        _is_nonnegative_number(thresholds.get("viable_score"))
+        and _is_nonnegative_number(thresholds.get("maybe_score"))
+        and thresholds["viable_score"] < thresholds["maybe_score"]
+    ):
+        _error(errors, "thresholds.viable_score", "viable_score must be >= maybe_score")
+    if (
+        _is_nonnegative_number(thresholds.get("min_hybrid_gain_ratio_viable"))
+        and _is_nonnegative_number(thresholds.get("min_hybrid_gain_ratio_maybe"))
+        and thresholds["min_hybrid_gain_ratio_viable"] < thresholds["min_hybrid_gain_ratio_maybe"]
+    ):
+        _error(
+            errors,
+            "thresholds.min_hybrid_gain_ratio_viable",
+            "min_hybrid_gain_ratio_viable must be >= min_hybrid_gain_ratio_maybe",
+        )
 
     return {
         "status": "passed" if not errors else "failed",
@@ -150,4 +178,3 @@ def validate_qe_ic_target_config(config: Mapping[str, Any]) -> dict[str, Any]:
         "warnings": warnings,
         "target_count": len(targets),
     }
-

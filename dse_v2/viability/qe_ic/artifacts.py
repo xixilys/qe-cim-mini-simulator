@@ -163,6 +163,14 @@ def build_qe_ic_target_viability_readme(report: Mapping[str, Any]) -> str:
             "",
             *by_target_lines,
             "",
+            "## Modeling Boundary",
+            "",
+            "The target platform values in the fixture are model parameters, not "
+            "measured platform claims. Transfer and risk values are heuristic "
+            "viability estimates, not measured hardware performance. Hybrid "
+            "transfer estimates use a conservative GPU-FPGA movement proxy rather "
+            "than a measured implementation model.",
+            "",
             "## Claim Boundary",
             "",
             str(report.get("claim_boundary")),
@@ -230,4 +238,3 @@ def load_qe_ic_target_viability(path: Path) -> dict[str, Any]:
             f"{path} failed QE-IC target-viability validation: {validation['errors']}"
         )
     return payload
-

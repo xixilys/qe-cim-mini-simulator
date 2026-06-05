@@ -195,6 +195,79 @@ def test_validation_fails_forbidden_architecture_fields():
     assert any("must not contain" in error["message"] for error in validation["errors"])
 
 
+def test_validation_fails_inconsistent_summary():
+    report = _build_report()
+    report["summary"]["record_count"] += 1
+    report["summary"]["by_target_type"]["gpu_only"]["baseline_count"] = 0
+
+    validation = qe_ic.validate_qe_ic_target_viability(report)
+
+    assert validation["status"] == "failed"
+    assert any("summary" in error["field"] for error in validation["errors"])
+
+
+def test_validation_fails_missing_configured_target_records():
+    report = _build_report()
+    missing_target_id = report["target_config"]["targets"][1]["target_id"]
+    report["viability_records"] = [
+        record
+        for record in report["viability_records"]
+        if record["target_id"] != missing_target_id
+    ]
+
+    validation = qe_ic.validate_qe_ic_target_viability(report)
+
+    assert validation["status"] == "failed"
+    assert any(
+        "configured target has no viability records" in error["message"]
+        for error in validation["errors"]
+    )
+
+
+def test_validation_fails_source_artifact_name_drift():
+    report = _build_report()
+    report["source_layer1_suite_artifact"] = "wrong.json"
+    report["source_layer2_motif_profile_artifact"] = "wrong.json"
+
+    validation = qe_ic.validate_qe_ic_target_viability(report)
+
+    assert validation["status"] == "failed"
+    assert any("source_layer1_suite_artifact" == error["field"] for error in validation["errors"])
+    assert any("source_layer2_motif_profile_artifact" == error["field"] for error in validation["errors"])
+
+
+def test_target_config_validation_fails_bad_threshold_ordering():
+    config = _load_json(TARGET_CONFIG_PATH)
+    config["thresholds"]["viable_score"] = 0.1
+    config["thresholds"]["maybe_score"] = 0.2
+    report = _build_report()
+    report["target_config"] = config
+
+    validation = qe_ic.validate_qe_ic_target_viability(report)
+
+    assert validation["status"] == "failed"
+    assert any("viable_score must be >= maybe_score" in error["message"] for error in validation["errors"])
+
+
+def test_target_config_validation_requires_all_target_types():
+    config = _load_json(TARGET_CONFIG_PATH)
+    config["targets"] = [
+        target for target in config["targets"]
+        if target["target_type"] != "gpu_fpga_hybrid"
+    ]
+    report = _build_report()
+    report["target_config"] = config
+    report["viability_records"] = [
+        record for record in report["viability_records"]
+        if record["target_type"] != "gpu_fpga_hybrid"
+    ]
+
+    validation = qe_ic.validate_qe_ic_target_viability(report)
+
+    assert validation["status"] == "failed"
+    assert any("target config must include target types" in error["message"] for error in validation["errors"])
+
+
 def test_writer_emits_required_artifacts(tmp_path: Path):
     result = qe_ic.write_qe_ic_target_viability_artifacts(
         tmp_path,

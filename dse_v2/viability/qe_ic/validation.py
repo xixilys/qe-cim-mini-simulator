@@ -14,6 +14,8 @@ from dse_v2.viability.qe_ic.schema import (
     QE_IC_TARGET_VIABILITY_VALIDATION_SCHEMA_VERSION,
     REASON_CODE_REGISTRY,
     RISK_FIELDS,
+    SOURCE_LAYER1_SUITE_ARTIFACT,
+    SOURCE_LAYER2_MOTIF_PROFILE_ARTIFACT,
     TARGET_TYPES,
     UPPER_BOUND_FIELDS,
 )
@@ -72,6 +74,54 @@ def _target_types_by_id(report: Mapping[str, Any]) -> dict[str, str]:
         and isinstance(target.get("target_id"), str)
         and isinstance(target.get("target_type"), str)
     }
+
+
+def _expected_summary(records: list[Any]) -> dict[str, Any]:
+    summary = {
+        "record_count": 0,
+        "viable_count": 0,
+        "maybe_count": 0,
+        "reject_count": 0,
+        "baseline_count": 0,
+        "by_target_type": {},
+    }
+    for record in records:
+        if not isinstance(record, Mapping):
+            continue
+        summary["record_count"] += 1
+        decision = record.get("decision")
+        target_type = record.get("target_type")
+        if decision in {"baseline", "viable", "maybe", "reject"}:
+            summary[f"{decision}_count"] += 1
+        if isinstance(target_type, str):
+            bucket = summary["by_target_type"].setdefault(
+                target_type,
+                {
+                    "record_count": 0,
+                    "baseline_count": 0,
+                    "viable_count": 0,
+                    "maybe_count": 0,
+                    "reject_count": 0,
+                },
+            )
+            bucket["record_count"] += 1
+            if decision in {"baseline", "viable", "maybe", "reject"}:
+                bucket[f"{decision}_count"] += 1
+    return summary
+
+
+def _validate_summary(
+    summary: Mapping[str, Any],
+    *,
+    records: list[Any],
+    errors: list[dict[str, str]],
+) -> None:
+    expected = _expected_summary(records)
+    for field in ("record_count", "baseline_count", "maybe_count", "reject_count", "viable_count"):
+        if summary.get(field) != expected[field]:
+            _error(errors, f"summary.{field}", f"summary.{field} must match viability_records")
+    if summary.get("by_target_type") != expected["by_target_type"]:
+        _error(errors, "summary.by_target_type", "summary.by_target_type must exactly match records grouped by target_type")
 
 
 def _validate_claim_boundary(boundary: str, errors: list[dict[str, str]]) -> None:
@@ -167,6 +217,18 @@ def validate_qe_ic_target_viability(report: Mapping[str, Any]) -> dict[str, Any]
         _error(errors, "schema_version", "schema_version is incorrect")
     if report.get("layer") != "layer3_target_viability_test":
         _error(errors, "layer", "layer must be layer3_target_viability_test")
+    if report.get("source_layer1_suite_artifact") != SOURCE_LAYER1_SUITE_ARTIFACT:
+        _error(
+            errors,
+            "source_layer1_suite_artifact",
+            f"source_layer1_suite_artifact must be {SOURCE_LAYER1_SUITE_ARTIFACT}",
+        )
+    if report.get("source_layer2_motif_profile_artifact") != SOURCE_LAYER2_MOTIF_PROFILE_ARTIFACT:
+        _error(
+            errors,
+            "source_layer2_motif_profile_artifact",
+            f"source_layer2_motif_profile_artifact must be {SOURCE_LAYER2_MOTIF_PROFILE_ARTIFACT}",
+        )
 
     source_layer1 = _as_mapping(report.get("source_layer1_suite"))
     source_layer2 = _as_mapping(report.get("source_layer2_motif_profile"))
@@ -199,6 +261,14 @@ def validate_qe_ic_target_viability(report: Mapping[str, Any]) -> dict[str, Any]
     records = _as_list(report.get("viability_records"))
     if not records:
         _error(errors, "viability_records", "viability_records must be non-empty")
+    record_target_ids = {
+        record.get("target_id")
+        for record in records
+        if isinstance(record, Mapping) and isinstance(record.get("target_id"), str)
+    }
+    for target_id in sorted(target_ids):
+        if target_id not in record_target_ids:
+            _error(errors, f"viability_records.{target_id}", "configured target has no viability records")
     for index, record in enumerate(records):
         if not isinstance(record, Mapping):
             _error(errors, f"viability_records[{index}]", "record must be a mapping")
@@ -212,6 +282,12 @@ def validate_qe_ic_target_viability(report: Mapping[str, Any]) -> dict[str, Any]
             target_types_by_id=target_types_by_id,
             errors=errors,
         )
+
+    summary = report.get("summary")
+    if not isinstance(summary, Mapping):
+        _error(errors, "summary", "summary must be a mapping")
+    else:
+        _validate_summary(summary, records=records, errors=errors)
 
     for forbidden in (
         "architecture_candidates",
