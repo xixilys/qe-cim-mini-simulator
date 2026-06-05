@@ -1,5 +1,6 @@
 """Evidence artifact helpers for DSE validation runs."""
 
+from . import qe_ic
 from .full_flow import claim_can_be_trusted, write_full_flow_evidence
 from .step3_workflow import (
     STEP2_INPUT_ARTIFACTS,
@@ -21,6 +22,7 @@ __all__ = [
     "Step3WorkflowResult",
     "Step4AdjudicationResult",
     "claim_can_be_trusted",
+    "qe_ic",
     "run_step3_simulation_evidence_workflow",
     "run_step4_evidence_adjudication",
     "validate_step2_handoff_for_step3",

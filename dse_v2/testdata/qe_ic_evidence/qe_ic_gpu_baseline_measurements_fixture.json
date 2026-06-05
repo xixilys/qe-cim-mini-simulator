@@ -1,0 +1,68 @@
+{
+  "baseline_records": [
+    {
+      "baseline_id": "fixture_gpu_baseline_ground_state_band_structure",
+      "case_id": "silicon_band_structure_fixture",
+      "communication_seconds": 3.8,
+      "confidence_interval_95": {
+        "high": 103.0,
+        "low": 97.0
+      },
+      "evidence_status": "fixture_example",
+      "gpu_memory_bandwidth_utilization_mean": 0.68,
+      "gpu_utilization_mean": 0.74,
+      "host_device_transfer_seconds": 5.5,
+      "input_deck_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "profile_artifact_hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "program": "pw.x",
+      "runtime_seconds_mean": 100.0,
+      "runtime_seconds_runs": [
+        99.0,
+        100.0,
+        101.0
+      ],
+      "runtime_seconds_std": 1.0,
+      "target_type": "gpu_only",
+      "workload_family_id": "ground_state_band_structure"
+    },
+    {
+      "baseline_id": "fixture_gpu_baseline_interface_band_offset_defect",
+      "case_id": "interface_defect_fixture",
+      "communication_seconds": 4.2,
+      "confidence_interval_95": {
+        "high": 124.0,
+        "low": 116.0
+      },
+      "evidence_status": "fixture_example",
+      "gpu_memory_bandwidth_utilization_mean": 0.71,
+      "gpu_utilization_mean": 0.77,
+      "host_device_transfer_seconds": 7.0,
+      "input_deck_hash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "profile_artifact_hash": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "program": "pw.x",
+      "runtime_seconds_mean": 120.0,
+      "runtime_seconds_runs": [
+        118.0,
+        120.0,
+        122.0
+      ],
+      "runtime_seconds_std": 2.0,
+      "target_type": "gpu_only",
+      "workload_family_id": "interface_band_offset_defect"
+    }
+  ],
+  "claim_boundary": "GPU baseline records are only real measurement evidence when measurements_are_real is true and evidence_status is measured.",
+  "evidence_status": "fixture_example",
+  "measurement_role": "gpu_only_baseline",
+  "measurements_are_real": false,
+  "platform": {
+    "cpu_name": "fixture-host-cpu",
+    "cuda_version": "fixture-cuda",
+    "driver_version": "fixture-driver",
+    "gpu_name": "fixture-gpu",
+    "memory": "fixture-memory",
+    "precision": "fp64_mixed_fixture",
+    "qe_version": "fixture-qe"
+  },
+  "schema_version": "dse.qe_ic.gpu_baseline_measurements.v1"
+}

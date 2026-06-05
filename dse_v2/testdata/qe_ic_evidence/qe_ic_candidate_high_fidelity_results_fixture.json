@@ -1,0 +1,96 @@
+{
+  "candidate_results": [
+    {
+      "architecture_summary": {
+        "architecture_family": "fpga_streaming_pipeline",
+        "architecture_id": "fixture_fpga_fft_streaming_arch",
+        "dataflow_summary": "fixture workflow-level trace replay for FFT transpose offload candidate",
+        "fpga_role": "streaming transpose pipeline",
+        "gpu_role": "none",
+        "host_role": "SCF control and synchronization retained",
+        "memory_interface": "PCIe plus HBM fixture",
+        "synchronization_model": "batched host barrier fixture"
+      },
+      "candidate_id": "qeic_l4_fpga_candidate_ground_state_band_structure_fft_transpose_fpga_only_fpga_streaming_pipeline_3f5adc94a8",
+      "claim_boundary": "This candidate result is not a real measured result unless results_are_real is true and evidence_status is measured or high_fidelity_estimate with explicit tool provenance.",
+      "confidence_interval_95": {
+        "high": 90.0,
+        "low": 86.0
+      },
+      "evidence_artifact_hash": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "evidence_level": "trace_replay",
+      "evidence_status": "fixture_example",
+      "kernel_runtime_seconds_mean": 66.0,
+      "motif_id": "fft_transpose",
+      "resource": {
+        "bram_utilization": 0.56,
+        "dsp_utilization": 0.43,
+        "ff_utilization": 0.52,
+        "fmax_mhz": 275.0,
+        "hbm_port_utilization": 0.48,
+        "lut_utilization": 0.58,
+        "resource_feasible": true,
+        "timing_feasible": true
+      },
+      "runtime_seconds_mean": 88.0,
+      "runtime_seconds_runs": [
+        87.0,
+        88.0,
+        89.0
+      ],
+      "runtime_seconds_std": 1.0,
+      "target_type": "fpga_only",
+      "transfer_overhead_seconds": 8.0,
+      "workflow_overhead_seconds": 6.0,
+      "workflow_runtime_seconds_mean": 88.0,
+      "workload_family_id": "ground_state_band_structure"
+    },
+    {
+      "architecture_summary": {
+        "architecture_family": "hybrid_runtime_controller",
+        "architecture_id": "fixture_hybrid_localized_state_arch",
+        "dataflow_summary": "fixture L1-only handoff for hybrid localized-state sidecar",
+        "fpga_role": "runtime sidecar fixture",
+        "gpu_role": "primary compute fixture",
+        "host_role": "workflow orchestration retained",
+        "memory_interface": "PCIe fixture",
+        "synchronization_model": "host-side queue fixture"
+      },
+      "candidate_id": "qeic_l4_hybrid_candidate_interface_band_offset_defect_localized_state_analysis_gpu_fpga_hybrid_hybrid_runtime_controller_368f7bc85f",
+      "claim_boundary": "This candidate result is not a real measured result unless results_are_real is true and evidence_status is measured or high_fidelity_estimate with explicit tool provenance.",
+      "confidence_interval_95": {
+        "high": 115.0,
+        "low": 109.0
+      },
+      "evidence_artifact_hash": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "evidence_level": "l1_estimate_only",
+      "evidence_status": "fixture_example",
+      "kernel_runtime_seconds_mean": 82.0,
+      "motif_id": "localized_state_analysis",
+      "resource": {
+        "bram_utilization": 0.45,
+        "dsp_utilization": 0.39,
+        "ff_utilization": 0.41,
+        "fmax_mhz": 260.0,
+        "hbm_port_utilization": 0.31,
+        "lut_utilization": 0.44,
+        "resource_feasible": true,
+        "timing_feasible": true
+      },
+      "runtime_seconds_mean": 112.0,
+      "runtime_seconds_runs": [
+        111.0,
+        112.0,
+        113.0
+      ],
+      "runtime_seconds_std": 1.0,
+      "target_type": "gpu_fpga_hybrid",
+      "transfer_overhead_seconds": 12.0,
+      "workflow_overhead_seconds": 9.0,
+      "workflow_runtime_seconds_mean": 112.0,
+      "workload_family_id": "interface_band_offset_defect"
+    }
+  ],
+  "results_are_real": false,
+  "schema_version": "dse.qe_ic.candidate_high_fidelity_results.v1"
+}

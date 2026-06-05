@@ -1,0 +1,9 @@
+{
+  "best_candidate_id": null,
+  "errors": [],
+  "opportunity_record_count": 2,
+  "overall_verdict": "fixture_only_inconclusive",
+  "schema_version": "dse.qe_ic.real_baseline_opportunity_validation.v1",
+  "status": "passed",
+  "warnings": []
+}

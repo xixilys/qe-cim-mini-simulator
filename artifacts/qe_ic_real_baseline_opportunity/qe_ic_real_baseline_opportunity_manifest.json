@@ -1,0 +1,19 @@
+{
+  "artifact_role": "qe_ic_real_gpu_baseline_opportunity_analysis",
+  "claim_boundary": "This manifest registers QE-IC real GPU-baseline opportunity-analysis artifacts. It is not itself measured GPU, FPGA, or GPU+FPGA superiority evidence.",
+  "input_artifact_index": {
+    "candidate_high_fidelity_results": "dse_v2/testdata/qe_ic_evidence/qe_ic_candidate_high_fidelity_results_fixture.json",
+    "gpu_baseline_measurements": "dse_v2/testdata/qe_ic_evidence/qe_ic_gpu_baseline_measurements_fixture.json",
+    "layer1_workload_suite": "artifacts/qe_ic_workload_suite/qe_ic_workload_suite.json",
+    "layer2_motif_profile": "artifacts/qe_ic_motif_profile/qe_ic_motif_profile.json",
+    "layer3_target_viability": "artifacts/qe_ic_target_viability/qe_ic_target_viability.json",
+    "layer4_candidate_plan": "artifacts/qe_ic_candidate_plan/qe_ic_candidate_plan.json",
+    "layer5a_l1_cost_model": "artifacts/qe_ic_l1_cost_model/qe_ic_l1_cost_model_results.json",
+    "layer6_closed_loop_dse": "artifacts/qe_ic_closed_loop_dse/qe_ic_closed_loop_dse_results.json"
+  },
+  "producer": "dse_v2.evidence.qe_ic",
+  "readme_artifact": "qe_ic_real_baseline_opportunity_readme.md",
+  "report_artifact": "qe_ic_real_baseline_opportunity_report.json",
+  "schema_version": "dse.qe_ic.real_baseline_opportunity_manifest.v1",
+  "validation_artifact": "qe_ic_real_baseline_opportunity_validation.json"
+}

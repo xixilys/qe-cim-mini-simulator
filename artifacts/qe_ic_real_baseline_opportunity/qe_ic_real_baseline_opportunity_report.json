@@ -1,0 +1,353 @@
+{
+  "analysis_role": "claim_gated_gpu_vs_fpga_hybrid_opportunity_analysis",
+  "candidate_evidence_summary": {
+    "by_evidence_level": {
+      "l1_estimate_only": 1,
+      "trace_replay": 1
+    },
+    "by_evidence_status": {
+      "fixture_example": 2
+    },
+    "by_target_type": {
+      "fpga_only": 1,
+      "gpu_fpga_hybrid": 1
+    },
+    "candidate_result_count": 2,
+    "results_are_real": false
+  },
+  "claim_boundary": "This report only makes GPU-vs-FPGA/hybrid opportunity claims when explicit GPU baseline and candidate high-fidelity evidence pass claim gates. It does not treat L1 estimates or synthetic labels as measured performance.",
+  "gpu_baseline_summary": {
+    "baseline_record_count": 2,
+    "evidence_status": "fixture_example",
+    "measurement_role": "gpu_only_baseline",
+    "measurements_are_real": false,
+    "records_by_workload_family": {
+      "ground_state_band_structure": 1,
+      "interface_band_offset_defect": 1
+    },
+    "workload_family_count": 2
+  },
+  "input_artifact_index": {
+    "candidate_high_fidelity_results": "dse_v2/testdata/qe_ic_evidence/qe_ic_candidate_high_fidelity_results_fixture.json",
+    "gpu_baseline_measurements": "dse_v2/testdata/qe_ic_evidence/qe_ic_gpu_baseline_measurements_fixture.json",
+    "layer1_workload_suite": "artifacts/qe_ic_workload_suite/qe_ic_workload_suite.json",
+    "layer2_motif_profile": "artifacts/qe_ic_motif_profile/qe_ic_motif_profile.json",
+    "layer3_target_viability": "artifacts/qe_ic_target_viability/qe_ic_target_viability.json",
+    "layer4_candidate_plan": "artifacts/qe_ic_candidate_plan/qe_ic_candidate_plan.json",
+    "layer5a_l1_cost_model": "artifacts/qe_ic_l1_cost_model/qe_ic_l1_cost_model_results.json",
+    "layer6_closed_loop_dse": "artifacts/qe_ic_closed_loop_dse/qe_ic_closed_loop_dse_results.json"
+  },
+  "layer": "qe_ic_real_gpu_baseline_opportunity_analysis_v1",
+  "opportunity_records": [
+    {
+      "architecture_summary": {
+        "architecture_family": "fpga_streaming_pipeline",
+        "architecture_id": "fixture_fpga_fft_streaming_arch",
+        "dataflow_summary": "fixture workflow-level trace replay for FFT transpose offload candidate",
+        "fpga_role": "streaming transpose pipeline",
+        "gpu_role": "none",
+        "host_role": "SCF control and synchronization retained",
+        "memory_interface": "PCIe plus HBM fixture",
+        "synchronization_model": "batched host barrier fixture"
+      },
+      "candidate_id": "qeic_l4_fpga_candidate_ground_state_band_structure_fft_transpose_fpga_only_fpga_streaming_pipeline_3f5adc94a8",
+      "claim_allowed": false,
+      "claim_blockers": [
+        "fixture_only_evidence"
+      ],
+      "claim_strength": "none",
+      "evidence_level": "trace_replay",
+      "evidence_status": "fixture_example",
+      "failure_reasons": [
+        "fixture_only_evidence",
+        "gpu_utilization_high"
+      ],
+      "gpu_baseline_id": "fixture_gpu_baseline_ground_state_band_structure",
+      "is_real_measurement_claim": false,
+      "motif_id": "fft_transpose",
+      "overhead_summary": {
+        "kernel_runtime_seconds_mean": 66.0,
+        "transfer_overhead_ratio": 0.09090909090909091,
+        "transfer_overhead_seconds": 8.0,
+        "workflow_overhead_ratio": 0.06818181818181818,
+        "workflow_overhead_seconds": 6.0,
+        "workflow_runtime_seconds_mean": 88.0
+      },
+      "raw_claim_gate_inputs": {
+        "candidate_result": {
+          "architecture_summary": {
+            "architecture_family": "fpga_streaming_pipeline",
+            "architecture_id": "fixture_fpga_fft_streaming_arch",
+            "dataflow_summary": "fixture workflow-level trace replay for FFT transpose offload candidate",
+            "fpga_role": "streaming transpose pipeline",
+            "gpu_role": "none",
+            "host_role": "SCF control and synchronization retained",
+            "memory_interface": "PCIe plus HBM fixture",
+            "synchronization_model": "batched host barrier fixture"
+          },
+          "candidate_id": "qeic_l4_fpga_candidate_ground_state_band_structure_fft_transpose_fpga_only_fpga_streaming_pipeline_3f5adc94a8",
+          "claim_boundary": "This candidate result is not a real measured result unless results_are_real is true and evidence_status is measured or high_fidelity_estimate with explicit tool provenance.",
+          "confidence_interval_95": {
+            "high": 90.0,
+            "low": 86.0
+          },
+          "evidence_artifact_hash": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+          "evidence_level": "trace_replay",
+          "evidence_status": "fixture_example",
+          "kernel_runtime_seconds_mean": 66.0,
+          "motif_id": "fft_transpose",
+          "resource": {
+            "bram_utilization": 0.56,
+            "dsp_utilization": 0.43,
+            "ff_utilization": 0.52,
+            "fmax_mhz": 275.0,
+            "hbm_port_utilization": 0.48,
+            "lut_utilization": 0.58,
+            "resource_feasible": true,
+            "timing_feasible": true
+          },
+          "runtime_seconds_mean": 88.0,
+          "runtime_seconds_runs": [
+            87.0,
+            88.0,
+            89.0
+          ],
+          "runtime_seconds_std": 1.0,
+          "target_type": "fpga_only",
+          "transfer_overhead_seconds": 8.0,
+          "workflow_overhead_seconds": 6.0,
+          "workflow_runtime_seconds_mean": 88.0,
+          "workload_family_id": "ground_state_band_structure"
+        },
+        "gpu_baseline_record": {
+          "baseline_id": "fixture_gpu_baseline_ground_state_band_structure",
+          "case_id": "silicon_band_structure_fixture",
+          "communication_seconds": 3.8,
+          "confidence_interval_95": {
+            "high": 103.0,
+            "low": 97.0
+          },
+          "evidence_status": "fixture_example",
+          "gpu_memory_bandwidth_utilization_mean": 0.68,
+          "gpu_utilization_mean": 0.74,
+          "host_device_transfer_seconds": 5.5,
+          "input_deck_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "profile_artifact_hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "program": "pw.x",
+          "runtime_seconds_mean": 100.0,
+          "runtime_seconds_runs": [
+            99.0,
+            100.0,
+            101.0
+          ],
+          "runtime_seconds_std": 1.0,
+          "target_type": "gpu_only",
+          "workload_family_id": "ground_state_band_structure"
+        },
+        "opportunity_config": {
+          "analysis_thresholds": {
+            "gpu_dominant_utilization": 0.7,
+            "resource_pressure_high": 0.85,
+            "transfer_overhead_dominant_ratio": 0.3,
+            "workflow_overhead_high": 0.2
+          },
+          "claim_gates": {
+            "allow_kernel_only_claim": false,
+            "minimum_repeated_runs": 3,
+            "minimum_speedup_for_strong_claim": 1.1,
+            "require_confidence_interval_not_crossing_one": true,
+            "require_resource_feasible": true,
+            "require_timing_feasible": true,
+            "require_workflow_level_or_trace_replay": true
+          }
+        }
+      },
+      "resource_summary": {
+        "bram_utilization": 0.56,
+        "dsp_utilization": 0.43,
+        "ff_utilization": 0.52,
+        "fmax_mhz": 275.0,
+        "hbm_port_utilization": 0.48,
+        "lut_utilization": 0.58,
+        "resource_feasible": true,
+        "timing_feasible": true
+      },
+      "speedup_vs_gpu_conservative_ci": 1.0777777777777777,
+      "speedup_vs_gpu_mean": 1.1363636363636365,
+      "target_type": "fpga_only",
+      "verdict": "fixture_only_inconclusive",
+      "workload_family_id": "ground_state_band_structure"
+    },
+    {
+      "architecture_summary": {
+        "architecture_family": "hybrid_runtime_controller",
+        "architecture_id": "fixture_hybrid_localized_state_arch",
+        "dataflow_summary": "fixture L1-only handoff for hybrid localized-state sidecar",
+        "fpga_role": "runtime sidecar fixture",
+        "gpu_role": "primary compute fixture",
+        "host_role": "workflow orchestration retained",
+        "memory_interface": "PCIe fixture",
+        "synchronization_model": "host-side queue fixture"
+      },
+      "candidate_id": "qeic_l4_hybrid_candidate_interface_band_offset_defect_localized_state_analysis_gpu_fpga_hybrid_hybrid_runtime_controller_368f7bc85f",
+      "claim_allowed": false,
+      "claim_blockers": [
+        "fixture_only_evidence",
+        "l1_only_insufficient",
+        "kernel_only_insufficient",
+        "no_speedup_vs_gpu"
+      ],
+      "claim_strength": "none",
+      "evidence_level": "l1_estimate_only",
+      "evidence_status": "fixture_example",
+      "failure_reasons": [
+        "fixture_only_evidence",
+        "l1_only_insufficient",
+        "gpu_utilization_high",
+        "no_speedup_vs_gpu"
+      ],
+      "gpu_baseline_id": "fixture_gpu_baseline_interface_band_offset_defect",
+      "is_real_measurement_claim": false,
+      "motif_id": "localized_state_analysis",
+      "overhead_summary": {
+        "kernel_runtime_seconds_mean": 82.0,
+        "transfer_overhead_ratio": 0.10714285714285714,
+        "transfer_overhead_seconds": 12.0,
+        "workflow_overhead_ratio": 0.08035714285714286,
+        "workflow_overhead_seconds": 9.0,
+        "workflow_runtime_seconds_mean": 112.0
+      },
+      "raw_claim_gate_inputs": {
+        "candidate_result": {
+          "architecture_summary": {
+            "architecture_family": "hybrid_runtime_controller",
+            "architecture_id": "fixture_hybrid_localized_state_arch",
+            "dataflow_summary": "fixture L1-only handoff for hybrid localized-state sidecar",
+            "fpga_role": "runtime sidecar fixture",
+            "gpu_role": "primary compute fixture",
+            "host_role": "workflow orchestration retained",
+            "memory_interface": "PCIe fixture",
+            "synchronization_model": "host-side queue fixture"
+          },
+          "candidate_id": "qeic_l4_hybrid_candidate_interface_band_offset_defect_localized_state_analysis_gpu_fpga_hybrid_hybrid_runtime_controller_368f7bc85f",
+          "claim_boundary": "This candidate result is not a real measured result unless results_are_real is true and evidence_status is measured or high_fidelity_estimate with explicit tool provenance.",
+          "confidence_interval_95": {
+            "high": 115.0,
+            "low": 109.0
+          },
+          "evidence_artifact_hash": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+          "evidence_level": "l1_estimate_only",
+          "evidence_status": "fixture_example",
+          "kernel_runtime_seconds_mean": 82.0,
+          "motif_id": "localized_state_analysis",
+          "resource": {
+            "bram_utilization": 0.45,
+            "dsp_utilization": 0.39,
+            "ff_utilization": 0.41,
+            "fmax_mhz": 260.0,
+            "hbm_port_utilization": 0.31,
+            "lut_utilization": 0.44,
+            "resource_feasible": true,
+            "timing_feasible": true
+          },
+          "runtime_seconds_mean": 112.0,
+          "runtime_seconds_runs": [
+            111.0,
+            112.0,
+            113.0
+          ],
+          "runtime_seconds_std": 1.0,
+          "target_type": "gpu_fpga_hybrid",
+          "transfer_overhead_seconds": 12.0,
+          "workflow_overhead_seconds": 9.0,
+          "workflow_runtime_seconds_mean": 112.0,
+          "workload_family_id": "interface_band_offset_defect"
+        },
+        "gpu_baseline_record": {
+          "baseline_id": "fixture_gpu_baseline_interface_band_offset_defect",
+          "case_id": "interface_defect_fixture",
+          "communication_seconds": 4.2,
+          "confidence_interval_95": {
+            "high": 124.0,
+            "low": 116.0
+          },
+          "evidence_status": "fixture_example",
+          "gpu_memory_bandwidth_utilization_mean": 0.71,
+          "gpu_utilization_mean": 0.77,
+          "host_device_transfer_seconds": 7.0,
+          "input_deck_hash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "profile_artifact_hash": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "program": "pw.x",
+          "runtime_seconds_mean": 120.0,
+          "runtime_seconds_runs": [
+            118.0,
+            120.0,
+            122.0
+          ],
+          "runtime_seconds_std": 2.0,
+          "target_type": "gpu_only",
+          "workload_family_id": "interface_band_offset_defect"
+        },
+        "opportunity_config": {
+          "analysis_thresholds": {
+            "gpu_dominant_utilization": 0.7,
+            "resource_pressure_high": 0.85,
+            "transfer_overhead_dominant_ratio": 0.3,
+            "workflow_overhead_high": 0.2
+          },
+          "claim_gates": {
+            "allow_kernel_only_claim": false,
+            "minimum_repeated_runs": 3,
+            "minimum_speedup_for_strong_claim": 1.1,
+            "require_confidence_interval_not_crossing_one": true,
+            "require_resource_feasible": true,
+            "require_timing_feasible": true,
+            "require_workflow_level_or_trace_replay": true
+          }
+        }
+      },
+      "resource_summary": {
+        "bram_utilization": 0.45,
+        "dsp_utilization": 0.39,
+        "ff_utilization": 0.41,
+        "fmax_mhz": 260.0,
+        "hbm_port_utilization": 0.31,
+        "lut_utilization": 0.44,
+        "resource_feasible": true,
+        "timing_feasible": true
+      },
+      "speedup_vs_gpu_conservative_ci": 1.008695652173913,
+      "speedup_vs_gpu_mean": 1.0714285714285714,
+      "target_type": "gpu_fpga_hybrid",
+      "verdict": "fixture_only_inconclusive",
+      "workload_family_id": "interface_band_offset_defect"
+    }
+  ],
+  "producer": "dse_v2.evidence.qe_ic",
+  "schema_version": "dse.qe_ic.real_baseline_opportunity_report.v1",
+  "source_artifact_summaries": {
+    "candidate_count": 29,
+    "closed_loop_candidate_trajectory_count": 29,
+    "l1_result_count": 12,
+    "motif_profile_count": 5,
+    "target_viability_record_count": 42,
+    "workload_family_count": 5
+  },
+  "system_conclusion": {
+    "answer_to_research_question": "Current repository evidence is insufficient to conclude FPGA/hybrid is stronger or weaker than GPU under real GPU baseline.",
+    "best_candidate_id": null,
+    "best_speedup_vs_gpu": null,
+    "dominant_failure_modes": [
+      "fixture_only_evidence",
+      "gpu_utilization_high",
+      "l1_only_insufficient",
+      "no_speedup_vs_gpu"
+    ],
+    "overall_verdict": "fixture_only_inconclusive",
+    "what_evidence_is_missing": [
+      "real measured GPU baseline and real measured or high-fidelity candidate evidence",
+      "workflow-level SystemC/gem5/trace-replay/real-QE candidate runtime",
+      "workflow-level candidate runtime including host, transfer, and synchronization costs"
+    ]
+  }
+}
