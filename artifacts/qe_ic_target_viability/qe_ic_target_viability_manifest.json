@@ -1,0 +1,14 @@
+{
+  "artifact_role": "dse_layer3_target_viability",
+  "claim_boundary": "This manifest registers Layer-3 target-viability artifacts only. It is not architecture generation, promotion, implementation evidence, or final claim adjudication.",
+  "downstream_consumers": [
+    "layer4_candidate_generation",
+    "promotion_policy"
+  ],
+  "layer": "layer3_target_viability_test",
+  "producer": "dse_v2.viability.qe_ic",
+  "readme_artifact": "qe_ic_target_viability_readme.md",
+  "schema_version": "dse.qe_ic.target_viability_manifest.v1",
+  "validation_artifact": "qe_ic_target_viability_validation.json",
+  "viability_artifact": "qe_ic_target_viability.json"
+}

@@ -1,0 +1,53 @@
+{
+  "schema_version": "dse.qe_ic.target_config.v1",
+  "targets": [
+    {
+      "target_id": "gpu_only_a100_fixture",
+      "target_type": "gpu_only",
+      "gpu": {
+        "name": "A100_fixture",
+        "memory_bandwidth_gbps": 1555.0,
+        "sync_overhead_us": 10.0
+      }
+    },
+    {
+      "target_id": "fpga_only_u280_fixture",
+      "target_type": "fpga_only",
+      "fpga": {
+        "name": "U280_fixture",
+        "memory_bandwidth_gbps": 460.0,
+        "logic_budget_score": 0.65,
+        "sync_overhead_us": 25.0
+      }
+    },
+    {
+      "target_id": "gpu_fpga_hybrid_a100_u280_fixture",
+      "target_type": "gpu_fpga_hybrid",
+      "gpu": {
+        "name": "A100_fixture",
+        "memory_bandwidth_gbps": 1555.0,
+        "sync_overhead_us": 10.0
+      },
+      "fpga": {
+        "name": "U280_fixture",
+        "memory_bandwidth_gbps": 460.0,
+        "logic_budget_score": 0.65,
+        "sync_overhead_us": 25.0
+      },
+      "interconnect": {
+        "type": "pcie_fixture",
+        "bandwidth_gbps": 32.0,
+        "latency_us": 20.0
+      }
+    }
+  ],
+  "thresholds": {
+    "viable_score": 0.65,
+    "maybe_score": 0.35,
+    "min_hybrid_gain_ratio_viable": 0.10,
+    "min_hybrid_gain_ratio_maybe": 0.03,
+    "max_unmapped_time_ratio": 0.15,
+    "strong_gpu_utilization": 0.70,
+    "high_runtime_ratio": 0.25
+  }
+}

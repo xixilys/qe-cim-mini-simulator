@@ -1,0 +1,8 @@
+{
+  "errors": [],
+  "record_count": 42,
+  "schema_version": "dse.qe_ic.target_viability_validation.v1",
+  "status": "passed",
+  "target_count": 3,
+  "warnings": []
+}
