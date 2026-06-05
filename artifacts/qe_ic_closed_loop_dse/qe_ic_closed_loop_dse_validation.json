@@ -1,0 +1,9 @@
+{
+  "candidate_trajectory_count": 29,
+  "errors": [],
+  "layer_count": 6,
+  "schema_version": "dse.qe_ic.closed_loop_dse_validation.v1",
+  "status": "passed",
+  "stop_decision": "stop",
+  "warnings": []
+}

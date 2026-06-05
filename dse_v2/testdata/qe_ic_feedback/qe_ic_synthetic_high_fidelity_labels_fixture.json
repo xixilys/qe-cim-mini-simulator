@@ -1,0 +1,165 @@
+{
+  "schema_version": "dse.qe_ic.synthetic_high_fidelity_labels.v1",
+  "label_set_id": "qe_ic_synthetic_high_fidelity_labels_fixture",
+  "source": "deterministic_fixture_for_layer6_policy_replay",
+  "labels_are_real_hardware_evidence": false,
+  "labels": [
+    {
+      "candidate_id": "qeic_l4_fpga_candidate_ground_state_band_structure_hpsi_fpga_only_fpga_projector_pipeline_99b5fa1356",
+      "label": "useful",
+      "label_confidence": 0.92,
+      "synthetic_rank": 1,
+      "expected_improvement": 0.18,
+      "round_observed": 1,
+      "reason_codes": [
+        "synthetic_compute_gain_survives_transfer",
+        "resource_pressure_acceptable"
+      ]
+    },
+    {
+      "candidate_id": "qeic_l4_fpga_candidate_ground_state_band_structure_hpsi_fpga_only_fpga_streaming_pipeline_193dd83af0",
+      "label": "useful",
+      "label_confidence": 0.9,
+      "synthetic_rank": 2,
+      "expected_improvement": 0.16,
+      "round_observed": 1,
+      "reason_codes": [
+        "synthetic_streaming_gain",
+        "low_transfer_penalty"
+      ]
+    },
+    {
+      "candidate_id": "qeic_l4_fpga_candidate_ground_state_band_structure_fft_transpose_fpga_only_fpga_streaming_pipeline_3f5adc94a8",
+      "label": "useful",
+      "label_confidence": 0.88,
+      "synthetic_rank": 3,
+      "expected_improvement": 0.14,
+      "round_observed": 1,
+      "reason_codes": [
+        "synthetic_fft_streaming_gain"
+      ]
+    },
+    {
+      "candidate_id": "qeic_l4_fpga_candidate_ground_state_band_structure_fft_transpose_fpga_only_fpga_fft_transpose_engine_9bfbea2b1f",
+      "label": "false_promotion",
+      "label_confidence": 0.82,
+      "synthetic_rank": 11,
+      "expected_improvement": -0.04,
+      "round_observed": 1,
+      "reason_codes": [
+        "synthetic_layout_overhead_exceeds_gain"
+      ]
+    },
+    {
+      "candidate_id": "qeic_l4_hybrid_candidate_strain_doping_field_sweep_workflow_parameter_sweep_gpu_fpga_hybrid_hybrid_runtime_controller_0801d64eff",
+      "label": "useful",
+      "label_confidence": 0.78,
+      "synthetic_rank": 4,
+      "expected_improvement": 0.09,
+      "round_observed": 1,
+      "reason_codes": [
+        "synthetic_cross_round_reuse"
+      ]
+    },
+    {
+      "candidate_id": "qeic_l4_hybrid_candidate_interface_band_offset_defect_localized_state_analysis_gpu_fpga_hybrid_hybrid_runtime_controller_368f7bc85f",
+      "label": "false_promotion",
+      "label_confidence": 0.8,
+      "synthetic_rank": 12,
+      "expected_improvement": -0.03,
+      "round_observed": 1,
+      "reason_codes": [
+        "synthetic_runtime_control_overhead"
+      ]
+    },
+    {
+      "candidate_id": "qeic_l4_fpga_candidate_interface_band_offset_defect_localized_state_analysis_fpga_only_fpga_memory_reuse_engine_c48c96d718",
+      "label": "useful",
+      "label_confidence": 0.79,
+      "synthetic_rank": 5,
+      "expected_improvement": 0.08,
+      "round_observed": 1,
+      "reason_codes": [
+        "synthetic_memory_reuse_gain"
+      ]
+    },
+    {
+      "candidate_id": "qeic_l4_fpga_candidate_phonon_dfpt_reduction_collective_fpga_only_fpga_reduction_tree_c504222f30",
+      "label": "resource_invalid",
+      "label_confidence": 0.84,
+      "synthetic_rank": 14,
+      "expected_improvement": -0.08,
+      "round_observed": 1,
+      "reason_codes": [
+        "synthetic_resource_budget_exceeded"
+      ]
+    },
+    {
+      "candidate_id": "qeic_l4_fpga_candidate_phonon_dfpt_reduction_collective_fpga_only_fpga_streaming_pipeline_3f825dc067",
+      "label": "false_promotion",
+      "label_confidence": 0.76,
+      "synthetic_rank": 10,
+      "expected_improvement": -0.02,
+      "round_observed": 1,
+      "reason_codes": [
+        "synthetic_reduction_serial_fraction"
+      ]
+    },
+    {
+      "candidate_id": "qeic_l4_hybrid_candidate_strain_doping_field_sweep_cross_run_reuse_gpu_fpga_hybrid_hybrid_runtime_controller_a240db1d6e",
+      "label": "overhead_invalid",
+      "label_confidence": 0.83,
+      "synthetic_rank": 13,
+      "expected_improvement": -0.06,
+      "round_observed": 1,
+      "reason_codes": [
+        "synthetic_host_device_overhead"
+      ]
+    },
+    {
+      "candidate_id": "qeic_l4_hybrid_candidate_phonon_dfpt_response_accumulation_gpu_fpga_hybrid_hybrid_runtime_controller_d2845d998a",
+      "label": "overhead_invalid",
+      "label_confidence": 0.86,
+      "synthetic_rank": 15,
+      "expected_improvement": -0.09,
+      "round_observed": 1,
+      "reason_codes": [
+        "synthetic_accumulation_sync_cost"
+      ]
+    },
+    {
+      "candidate_id": "qeic_l4_hybrid_candidate_phonon_dfpt_perturbation_rhs_gpu_fpga_hybrid_hybrid_runtime_controller_ccbcde09eb",
+      "label": "inconclusive",
+      "label_confidence": 0.55,
+      "synthetic_rank": 8,
+      "expected_improvement": 0.01,
+      "round_observed": 1,
+      "reason_codes": [
+        "synthetic_profile_uncertainty"
+      ]
+    },
+    {
+      "candidate_id": "qeic_l4_hybrid_candidate_phonon_dfpt_reduction_collective_gpu_fpga_hybrid_hybrid_dma_overlap_sidecar_9a9fa929fc",
+      "label": "false_rejection",
+      "label_confidence": 0.81,
+      "synthetic_rank": 6,
+      "expected_improvement": 0.07,
+      "round_observed": 1,
+      "reason_codes": [
+        "synthetic_dma_overlap_was_under_ranked"
+      ]
+    },
+    {
+      "candidate_id": "qeic_l4_hybrid_candidate_ground_state_band_structure_fft_transpose_gpu_fpga_hybrid_hybrid_transpose_sidecar_7fec06843a",
+      "label": "false_rejection",
+      "label_confidence": 0.77,
+      "synthetic_rank": 7,
+      "expected_improvement": 0.05,
+      "round_observed": 1,
+      "reason_codes": [
+        "synthetic_hybrid_transpose_under_ranked"
+      ]
+    }
+  ],
+  "claim_boundary": "This fixture contains synthetic high-fidelity replay labels only. It is not measured SystemC/gem5/Vivado/DC/QE execution evidence and does not prove hardware performance."
+}

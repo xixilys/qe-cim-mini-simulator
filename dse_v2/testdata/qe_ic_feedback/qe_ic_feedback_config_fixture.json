@@ -1,0 +1,42 @@
+{
+  "schema_version": "dse.qe_ic.feedback_config.v1",
+  "config_id": "qe_ic_feedback_fixture_config",
+  "policy_version": "qe_ic_layer6_heuristic_policy_v1",
+  "top_k": 5,
+  "label_policy": {
+    "labels_are_synthetic_replay_only": true,
+    "allowed_labels": [
+      "useful",
+      "false_promotion",
+      "false_rejection",
+      "resource_invalid",
+      "overhead_invalid",
+      "inconclusive"
+    ]
+  },
+  "initial_risk_thresholds": {
+    "promotion_overall_l1_risk_max": 0.45,
+    "resource_risk_max": 0.75,
+    "transfer_risk_max": 0.35,
+    "minimum_expected_improvement": 0.02
+  },
+  "calibration_policy": {
+    "false_promotion_tighten_step": 0.05,
+    "useful_relax_step": 0.02,
+    "template_adjustment_step": 0.1,
+    "motif_adjustment_step": 0.08,
+    "target_type_adjustment_step": 0.06
+  },
+  "stopping_conditions": {
+    "decision_basis": "synthetic_replay_stop_decision",
+    "current_round": 1,
+    "max_rounds": 3,
+    "synthetic_label_budget": 20,
+    "no_new_useful_candidate_rounds": 0,
+    "no_new_useful_candidate_rounds_limit": 2,
+    "false_promotion_rate_target": 0.25,
+    "expected_improvement_threshold": 0.02,
+    "top_k_useful_target": 5
+  },
+  "claim_boundary": "Layer-6 feedback config controls synthetic replay calibration only. It does not request SystemC/gem5/Vivado/DC/QE execution, measured hardware performance, or final performance claims."
+}

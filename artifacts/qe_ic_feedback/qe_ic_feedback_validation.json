@@ -1,0 +1,10 @@
+{
+  "candidate_feedback_record_count": 29,
+  "errors": [],
+  "false_promotion_rate": 0.5,
+  "promotion_precision": 0.4166666666666667,
+  "schema_version": "dse.qe_ic.feedback_validation.v1",
+  "status": "passed",
+  "warnings": [],
+  "wasted_budget_ratio": 0.5833333333333334
+}

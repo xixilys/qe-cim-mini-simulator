@@ -1,0 +1,16 @@
+{
+  "artifact_role": "dse_layer6_feedback_calibration",
+  "calibration_artifact": "qe_ic_feedback_calibration.json",
+  "claim_boundary": "This manifest registers QE-IC Layer-6 synthetic feedback calibration artifacts only. It is not measured execution evidence or final claim adjudication.",
+  "layer": "layer6_feedback_calibration",
+  "producer": "dse_v2.feedback.qe_ic",
+  "readme_artifact": "qe_ic_feedback_readme.md",
+  "schema_version": "dse.qe_ic.feedback_manifest.v1",
+  "source_artifacts": [
+    "qe_ic_candidate_plan.json",
+    "qe_ic_l1_cost_model_results.json",
+    "qe_ic_synthetic_high_fidelity_labels_fixture.json",
+    "qe_ic_feedback_config_fixture.json"
+  ],
+  "validation_artifact": "qe_ic_feedback_validation.json"
+}

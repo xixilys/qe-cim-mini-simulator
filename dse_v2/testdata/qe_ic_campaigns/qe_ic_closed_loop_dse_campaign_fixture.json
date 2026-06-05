@@ -1,0 +1,23 @@
+{
+  "schema_version": "dse.qe_ic.closed_loop_dse_campaign_config.v1",
+  "campaign_id": "qe_ic_closed_loop_dse_fixture_campaign",
+  "artifact_mode": "artifact_replay",
+  "regenerate_missing": false,
+  "allow_real_execution": false,
+  "artifact_paths": {
+    "layer1_workload_suite": "artifacts/qe_ic_workload_suite/qe_ic_workload_suite.json",
+    "layer2_motif_profile": "artifacts/qe_ic_motif_profile/qe_ic_motif_profile.json",
+    "layer3_target_viability": "artifacts/qe_ic_target_viability/qe_ic_target_viability.json",
+    "layer4_candidate_plan": "artifacts/qe_ic_candidate_plan/qe_ic_candidate_plan.json",
+    "layer5a_l1_cost_model": "artifacts/qe_ic_l1_cost_model/qe_ic_l1_cost_model_results.json",
+    "layer6_synthetic_labels": "dse_v2/testdata/qe_ic_feedback/qe_ic_synthetic_high_fidelity_labels_fixture.json",
+    "layer6_feedback_config": "dse_v2/testdata/qe_ic_feedback/qe_ic_feedback_config_fixture.json"
+  },
+  "regeneration_inputs": {
+    "layer2_profile_sources": "dse_v2/testdata/qe_ic_profiles/qe_ic_profile_sources_fixture.json",
+    "layer3_target_config": "dse_v2/testdata/qe_ic_targets/qe_ic_target_config_fixture.json",
+    "layer4_campaign_config": "dse_v2/testdata/qe_ic_campaigns/qe_ic_layer4_campaign_fixture.json",
+    "layer5a_l1_model_config": "dse_v2/testdata/qe_ic_l1_cost_model/qe_ic_l1_cost_model_config_fixture.json"
+  },
+  "claim_boundary": "QE-IC closed-loop campaign config controls artifact replay and synthetic feedback calibration only. It does not enable SystemC/gem5/Vivado/DC/QE execution, measured hardware performance, hardware-proven candidates, or final GPU/FPGA/hybrid superiority claims."
+}

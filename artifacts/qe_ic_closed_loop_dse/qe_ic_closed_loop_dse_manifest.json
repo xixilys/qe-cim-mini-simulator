@@ -1,0 +1,25 @@
+{
+  "artifact_index": {
+    "layer1_workload_suite": "artifacts/qe_ic_workload_suite/qe_ic_workload_suite.json",
+    "layer2_motif_profile": "artifacts/qe_ic_motif_profile/qe_ic_motif_profile.json",
+    "layer3_target_viability": "artifacts/qe_ic_target_viability/qe_ic_target_viability.json",
+    "layer4_candidate_plan": "artifacts/qe_ic_candidate_plan/qe_ic_candidate_plan.json",
+    "layer5a_l1_cost_model": "artifacts/qe_ic_l1_cost_model/qe_ic_l1_cost_model_results.json",
+    "layer6_feedback_calibration": "artifacts/qe_ic_feedback/qe_ic_feedback_calibration.json"
+  },
+  "artifact_role": "dse_system_qe_ic_closed_loop_dse",
+  "claim_boundary": "This manifest registers QE-IC closed-loop synthetic replay campaign artifacts only. It is not measured execution evidence or final claim adjudication.",
+  "layers": [
+    "layer1_workload_suite",
+    "layer2_motif_profile",
+    "layer3_target_viability",
+    "layer4_candidate_plan",
+    "layer5a_l1_cost_model",
+    "layer6_feedback_calibration"
+  ],
+  "producer": "dse_v2.campaigns.qe_ic",
+  "readme_artifact": "qe_ic_closed_loop_dse_readme.md",
+  "results_artifact": "qe_ic_closed_loop_dse_results.json",
+  "schema_version": "dse.qe_ic.closed_loop_dse_manifest.v1",
+  "validation_artifact": "qe_ic_closed_loop_dse_validation.json"
+}
