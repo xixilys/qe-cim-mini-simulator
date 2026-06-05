@@ -1,0 +1,36 @@
+{
+  "calibration": {
+    "calibration_source": "not_measured_hardware",
+    "calibration_status": "fixture_prior",
+    "requires_future_high_fidelity_calibration": true
+  },
+  "claim_boundary": "This config controls deterministic L1 analytical estimates only. It does not permit external execution or final performance claims.",
+  "config_id": "qe_ic_l1_cost_model_fixture_config",
+  "estimate_components": {
+    "communication": true,
+    "memory": true,
+    "resource": true,
+    "risk": true,
+    "runtime": true
+  },
+  "model_policy": {
+    "allow_dc": false,
+    "allow_external_execution": false,
+    "allow_gem5": false,
+    "allow_real_qe": false,
+    "allow_systemc": false,
+    "allow_vivado": false
+  },
+  "model_role": "deterministic_analytical_l1_cost_model",
+  "next_fidelity_policy": {
+    "allow_suggestions": true,
+    "supported_suggestions": [
+      "hold_for_more_profile",
+      "promote_to_systemc_request",
+      "promote_to_gem5_systemc_request",
+      "promote_to_vivado_resource_request",
+      "reject_before_high_fidelity"
+    ]
+  },
+  "schema_version": "dse.qe_ic.l1_cost_model_config.v1"
+}

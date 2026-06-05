@@ -1,0 +1,16 @@
+{
+  "artifact_role": "dse_layer5a_l1_cost_model_results",
+  "claim_boundary": "This manifest registers Layer-5A analytical estimate artifacts only. It is not high-fidelity execution evidence or final claim adjudication.",
+  "downstream_consumers": [
+    "layer5b_systemc_request_builder",
+    "layer5c_gem5_systemc_request_builder",
+    "layer5d_vivado_request_builder",
+    "layer6_feedback_update"
+  ],
+  "layer": "layer5a_l1_cost_model_evaluation",
+  "producer": "dse_v2.evaluation.qe_ic.l1_cost_model",
+  "readme_artifact": "qe_ic_l1_cost_model_readme.md",
+  "results_artifact": "qe_ic_l1_cost_model_results.json",
+  "schema_version": "dse.qe_ic.l1_cost_model_manifest.v1",
+  "validation_artifact": "qe_ic_l1_cost_model_validation.json"
+}
