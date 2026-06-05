@@ -481,7 +481,7 @@
     "layer3_target_viability": "artifacts/qe_ic_target_viability/qe_ic_target_viability.json",
     "layer4_candidate_plan": "artifacts/qe_ic_candidate_plan/qe_ic_candidate_plan.json",
     "layer5a_l1_cost_model": "artifacts/qe_ic_l1_cost_model/qe_ic_l1_cost_model_results.json",
-    "layer6_feedback_calibration": "artifacts/qe_ic_feedback/qe_ic_feedback_calibration.json"
+    "layer6_feedback_calibration": "embedded_feedback_summary"
   },
   "campaign_config": {
     "allow_real_execution": false,
@@ -11657,7 +11657,7 @@
       "warning_count": 0
     },
     {
-      "artifact": "artifacts/qe_ic_feedback/qe_ic_feedback_calibration.json",
+      "artifact": "embedded_feedback_summary",
       "error_count": 0,
       "layer": "layer6_feedback_calibration",
       "source": "synthetic_replay",

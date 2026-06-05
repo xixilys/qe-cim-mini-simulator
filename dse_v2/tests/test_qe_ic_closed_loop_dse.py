@@ -85,6 +85,12 @@ def test_artifact_index_contains_all_required_layers():
     }
 
 
+def test_artifact_index_marks_layer6_feedback_as_embedded_summary():
+    result = _run_campaign()
+
+    assert result["artifact_index"]["layer6_feedback_calibration"] == "embedded_feedback_summary"
+
+
 def test_system_summary_matches_underlying_artifacts():
     result = _run_campaign()
     source = result["source_artifacts"]

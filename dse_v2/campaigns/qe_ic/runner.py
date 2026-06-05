@@ -294,7 +294,7 @@ def run_qe_ic_closed_loop_dse_campaign(config: Mapping[str, Any]) -> dict[str, A
         "layer3_target_viability": str(viability_path),
         "layer4_candidate_plan": str(candidate_path),
         "layer5a_l1_cost_model": str(l1_path),
-        "layer6_feedback_calibration": "artifacts/qe_ic_feedback/qe_ic_feedback_calibration.json",
+        "layer6_feedback_calibration": "embedded_feedback_summary",
     }
     layer_status = [
         _status_row("layer1_workload_suite", suite_path, validations["layer1_workload_suite"], "artifact_replay"),
@@ -302,7 +302,7 @@ def run_qe_ic_closed_loop_dse_campaign(config: Mapping[str, Any]) -> dict[str, A
         _status_row("layer3_target_viability", viability_path, validations["layer3_target_viability"], "artifact_replay"),
         _status_row("layer4_candidate_plan", candidate_path, validations["layer4_candidate_plan"], "artifact_replay"),
         _status_row("layer5a_l1_cost_model", l1_path, validations["layer5a_l1_cost_model"], "artifact_replay"),
-        _status_row("layer6_feedback_calibration", Path(artifact_index["layer6_feedback_calibration"]), feedback_validation, "synthetic_replay"),
+        _status_row("layer6_feedback_calibration", Path("embedded_feedback_summary"), feedback_validation, "synthetic_replay"),
     ]
     source_artifacts = {
         "layer1_workload_suite": copy.deepcopy(suite),
