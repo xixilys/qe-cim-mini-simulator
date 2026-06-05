@@ -18,10 +18,12 @@ from dse_v2.profiling.qe_ic.schema import (
     QE_IC_MOTIF_PROFILE_MANIFEST_SCHEMA_VERSION,
     QE_IC_MOTIF_PROFILE_README_ARTIFACT,
     QE_IC_MOTIF_PROFILE_VALIDATION_ARTIFACT,
+    QE_IC_MOTIF_PROFILE_VALIDATION_SCHEMA_VERSION,
     SOURCE_LAYER1_SUITE_ARTIFACT,
 )
 from dse_v2.profiling.qe_ic.source_registry import extract_profile_sources
 from dse_v2.profiling.qe_ic.validation import validate_qe_ic_motif_profile
+from dse_v2.workloads.qe_ic import validate_qe_ic_workload_suite
 
 
 class QeIcMotifProfileArtifactError(ValueError):
@@ -52,6 +54,56 @@ def _load_json_object(path: Path) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise QeIcMotifProfileArtifactError(f"{path} did not contain a JSON object")
     return payload
+
+
+def _failed_validation(
+    *,
+    errors: list[dict[str, str]],
+    warnings: list[dict[str, str]] | None = None,
+    family_profile_count: int = 0,
+    profile_source_count: int = 0,
+) -> dict[str, Any]:
+    return {
+        "schema_version": QE_IC_MOTIF_PROFILE_VALIDATION_SCHEMA_VERSION,
+        "status": "failed",
+        "errors": errors,
+        "warnings": warnings or [],
+        "family_profile_count": family_profile_count,
+        "profile_source_count": profile_source_count,
+        "unmapped_time_ratio_max": 0.0,
+        "gpu_baseline_coverage_closed": False,
+    }
+
+
+def _validate_layer1_suite_for_layer2(suite: Mapping[str, Any]) -> dict[str, Any] | None:
+    layer1_validation = validate_qe_ic_workload_suite(suite)
+    if layer1_validation.get("status") == "passed":
+        return None
+
+    errors = [
+        {
+            "field": f"layer1_suite.{error.get('field', '$')}",
+            "message": f"invalid Layer-1 suite: {error.get('message', '')}",
+        }
+        for error in layer1_validation.get("errors", [])
+        if isinstance(error, Mapping)
+    ]
+    if not errors:
+        errors = [
+            {
+                "field": "layer1_suite",
+                "message": "invalid Layer-1 suite",
+            }
+        ]
+    warnings = [
+        {
+            "field": f"layer1_suite.{warning.get('field', '$')}",
+            "message": str(warning.get("message", "")),
+        }
+        for warning in layer1_validation.get("warnings", [])
+        if isinstance(warning, Mapping)
+    ]
+    return _failed_validation(errors=errors, warnings=warnings)
 
 
 def build_qe_ic_motif_profile_manifest() -> dict[str, Any]:
@@ -141,6 +193,16 @@ def write_qe_ic_motif_profile_artifacts(
 
     out_dir.mkdir(parents=True, exist_ok=True)
     suite = _load_json_object(suite_path)
+    layer1_failure = _validate_layer1_suite_for_layer2(suite)
+    if layer1_failure is not None:
+        _remove_stale_canonical_artifacts(out_dir)
+        _write_json(out_dir / QE_IC_MOTIF_PROFILE_VALIDATION_ARTIFACT, layer1_failure)
+        return {
+            "status": "failed",
+            "out_dir": str(out_dir),
+            "artifacts": [QE_IC_MOTIF_PROFILE_VALIDATION_ARTIFACT],
+        }
+
     profile_sources_payload = _load_json_object(profile_sources_path)
     profile_sources = extract_profile_sources(profile_sources_payload)
     profile = build_qe_ic_motif_profile(suite, profile_sources)

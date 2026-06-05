@@ -41,6 +41,14 @@ def _is_nonnegative_number(value: Any) -> bool:
     )
 
 
+def _is_sha256_reference(value: Any) -> bool:
+    return (
+        isinstance(value, str)
+        and value.startswith("sha256:")
+        and bool(value.removeprefix("sha256:"))
+    )
+
+
 def _family_ids_from_layer1(profile: Mapping[str, Any]) -> list[str]:
     return [
         family_id
@@ -105,6 +113,12 @@ def _validate_profile_source(
     for field in ("program", "target", "input_case", "raw_artifact_path", "raw_artifact_hash"):
         if not isinstance(source.get(field), str) or not source.get(field):
             _error(errors, f"{prefix}.{field}", f"{field} must be a non-empty string")
+    if source.get("raw_artifact_hash") and not _is_sha256_reference(source.get("raw_artifact_hash")):
+        _error(
+            errors,
+            f"{prefix}.raw_artifact_hash",
+            "raw_artifact_hash must use sha256:<value> format",
+        )
 
     source_type = source.get("profile_source_type")
     if source_type not in SUPPORTED_PROFILE_SOURCE_TYPES:
@@ -178,9 +192,7 @@ def _validate_family_target_profile(
             _error(errors, f"{prefix}.unmapped_time_ratio", "unmapped_time_ratio must be <= 0.15")
 
     baseline = _as_mapping(group.get("gpu_baseline"))
-    if baseline.get("required") is True:
-        if group.get("target") != "gpu_only":
-            _error(errors, f"{prefix}.target", "gpu_baseline_required family must include target=gpu_only")
+    if baseline.get("required") is True and group.get("target") == "gpu_only":
         if baseline.get("available") is not True:
             _error(errors, f"{prefix}.gpu_baseline.available", "required GPU baseline must be available")
     if baseline.get("available") is True:
@@ -324,8 +336,6 @@ def validate_qe_ic_motif_profile(profile: Mapping[str, Any]) -> dict[str, Any]:
         if baseline.get("required") is True:
             if group.get("target") == "gpu_only" and baseline.get("available") is True:
                 covered_gpu_families.add(str(group.get("workload_family_id")))
-            else:
-                gpu_baseline_coverage_closed = False
 
     for family_id in family_ids:
         if family_id not in covered_gpu_families:

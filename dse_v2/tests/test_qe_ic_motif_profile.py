@@ -220,6 +220,31 @@ def test_validation_fails_missing_gpu_baseline():
     assert validation["gpu_baseline_coverage_closed"] is False
 
 
+def test_validation_allows_non_gpu_targets_when_gpu_baseline_coverage_exists():
+    suite = build_default_qe_ic_workload_suite()
+    fixture = _load_fixture()
+    sources = copy.deepcopy(fixture["profile_sources"])
+    cpu_source = copy.deepcopy(sources[0])
+    cpu_source["source_id"] = "pw_scf_cpu_reference_fixture_001"
+    cpu_source["target"] = "cpu_only"
+    cpu_source["gpu_baseline"] = {
+        "available": False,
+        "speedup_vs_cpu": None,
+        "gpu_utilization": None,
+    }
+    sources.append(cpu_source)
+    profile = qe_ic.build_qe_ic_motif_profile(suite, sources)
+
+    validation = qe_ic.validate_qe_ic_motif_profile(profile)
+
+    assert validation["status"] == "passed"
+    assert ("ground_state_band_structure", "cpu_only") in {
+        (group["workload_family_id"], group["target"])
+        for group in profile["family_target_profiles"]
+    }
+    assert validation["gpu_baseline_coverage_closed"] is True
+
+
 def test_validation_fails_unknown_motif():
     profile = _build_profile()
     profile["family_target_profiles"][0]["motif_profiles"][0]["motif_id"] = "missing_motif"
@@ -244,6 +269,20 @@ def test_validation_fails_unknown_mapped_event_motif():
     assert validation["status"] == "failed"
     assert any(
         "mapped event references unknown motif" in error["message"]
+        for error in validation["errors"]
+    )
+
+
+def test_validation_fails_bad_raw_artifact_hash_format():
+    profile = _build_profile()
+    profile["profile_sources"][0]["raw_artifact_hash"] = "fixture"
+
+    validation = qe_ic.validate_qe_ic_motif_profile(profile)
+
+    assert validation["status"] == "failed"
+    assert any(
+        error["field"].endswith("raw_artifact_hash")
+        and "sha256:<value>" in error["message"]
         for error in validation["errors"]
     )
 
@@ -293,6 +332,29 @@ def test_writer_fail_closed_only_writes_validation_for_invalid_profile(tmp_path:
         qe_ic.load_qe_ic_motif_profile(tmp_path / "qe_ic_motif_profile.json")
 
 
+def test_writer_fail_closed_for_invalid_layer1_suite(tmp_path: Path):
+    suite_path = tmp_path / "suite.json"
+    sources_path = tmp_path / "sources.json"
+    suite = build_default_qe_ic_workload_suite()
+    suite.pop("downstream_contract")
+    suite_path.write_text(json.dumps(suite))
+    sources_path.write_text(json.dumps(_load_fixture()))
+
+    result = qe_ic.write_qe_ic_motif_profile_artifacts(
+        tmp_path,
+        suite_path,
+        sources_path,
+    )
+
+    assert result["status"] == "failed"
+    assert result["artifacts"] == ["qe_ic_motif_profile_validation.json"]
+    validation = json.loads((tmp_path / "qe_ic_motif_profile_validation.json").read_text())
+    assert any(error["field"].startswith("layer1_suite.") for error in validation["errors"])
+    assert not (tmp_path / "qe_ic_motif_profile.json").exists()
+    assert not (tmp_path / "qe_ic_motif_profile_manifest.json").exists()
+    assert not (tmp_path / "qe_ic_motif_profile_readme.md").exists()
+
+
 def test_manifest_declares_layer3_downstream(tmp_path: Path):
     suite_path = Path("artifacts/qe_ic_workload_suite/qe_ic_workload_suite.json")
     qe_ic.write_qe_ic_motif_profile_artifacts(tmp_path, suite_path, FIXTURE_PATH)
@@ -333,6 +395,21 @@ def test_cli_emits_passed_status(tmp_path: Path):
     assert result["status"] == "passed"
     assert result["out_dir"] == str(tmp_path)
     assert "qe_ic_motif_profile.json" in result["artifacts"]
+
+
+def test_checked_in_qe_ic_motif_profile_artifacts_match_builder_output(tmp_path: Path):
+    checked_in = Path("artifacts/qe_ic_motif_profile")
+    suite_path = Path("artifacts/qe_ic_workload_suite/qe_ic_workload_suite.json")
+
+    qe_ic.write_qe_ic_motif_profile_artifacts(tmp_path, suite_path, FIXTURE_PATH)
+
+    for artifact in [
+        "qe_ic_motif_profile.json",
+        "qe_ic_motif_profile_validation.json",
+        "qe_ic_motif_profile_manifest.json",
+        "qe_ic_motif_profile_readme.md",
+    ]:
+        assert (checked_in / artifact).read_text() == (tmp_path / artifact).read_text()
 
 
 def test_core_logic_not_in_cli():
