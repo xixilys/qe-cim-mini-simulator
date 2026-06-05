@@ -1265,6 +1265,7 @@
         "estimated_net_gain_ratio": 0.0,
         "risk_score": 0.0,
         "runtime_ratio": 0.0,
+        "selection_stage": "baseline",
         "source_decision": "baseline",
         "source_viability_score": 0.0
       },
@@ -1288,6 +1289,7 @@
         "estimated_net_gain_ratio": 0.0,
         "risk_score": 0.0,
         "runtime_ratio": 0.0,
+        "selection_stage": "baseline",
         "source_decision": "baseline",
         "source_viability_score": 0.0
       },
@@ -1311,6 +1313,7 @@
         "estimated_net_gain_ratio": 0.0,
         "risk_score": 0.0,
         "runtime_ratio": 0.0,
+        "selection_stage": "baseline",
         "source_decision": "baseline",
         "source_viability_score": 0.0
       },
@@ -1334,6 +1337,7 @@
         "estimated_net_gain_ratio": 0.0,
         "risk_score": 0.0,
         "runtime_ratio": 0.0,
+        "selection_stage": "baseline",
         "source_decision": "baseline",
         "source_viability_score": 0.0
       },
@@ -1357,6 +1361,7 @@
         "estimated_net_gain_ratio": 0.0,
         "risk_score": 0.0,
         "runtime_ratio": 0.0,
+        "selection_stage": "baseline",
         "source_decision": "baseline",
         "source_viability_score": 0.0
       },
@@ -1380,6 +1385,7 @@
         "estimated_net_gain_ratio": 0.0,
         "risk_score": 0.0,
         "runtime_ratio": 0.0,
+        "selection_stage": "baseline",
         "source_decision": "baseline",
         "source_viability_score": 0.0
       },
@@ -1403,6 +1409,7 @@
         "estimated_net_gain_ratio": 0.0,
         "risk_score": 0.0,
         "runtime_ratio": 0.0,
+        "selection_stage": "baseline",
         "source_decision": "baseline",
         "source_viability_score": 0.0
       },
@@ -1426,6 +1433,7 @@
         "estimated_net_gain_ratio": 0.0,
         "risk_score": 0.0,
         "runtime_ratio": 0.0,
+        "selection_stage": "baseline",
         "source_decision": "baseline",
         "source_viability_score": 0.0
       },
@@ -1449,6 +1457,7 @@
         "estimated_net_gain_ratio": 0.0,
         "risk_score": 0.0,
         "runtime_ratio": 0.0,
+        "selection_stage": "baseline",
         "source_decision": "baseline",
         "source_viability_score": 0.0
       },
@@ -1472,6 +1481,7 @@
         "estimated_net_gain_ratio": 0.0,
         "risk_score": 0.0,
         "runtime_ratio": 0.0,
+        "selection_stage": "baseline",
         "source_decision": "baseline",
         "source_viability_score": 0.0
       },
@@ -1495,6 +1505,7 @@
         "estimated_net_gain_ratio": 0.0,
         "risk_score": 0.0,
         "runtime_ratio": 0.0,
+        "selection_stage": "baseline",
         "source_decision": "baseline",
         "source_viability_score": 0.0
       },
@@ -1518,6 +1529,7 @@
         "estimated_net_gain_ratio": 0.0,
         "risk_score": 0.0,
         "runtime_ratio": 0.0,
+        "selection_stage": "baseline",
         "source_decision": "baseline",
         "source_viability_score": 0.0
       },
@@ -1541,6 +1553,7 @@
         "estimated_net_gain_ratio": 0.0,
         "risk_score": 0.0,
         "runtime_ratio": 0.0,
+        "selection_stage": "baseline",
         "source_decision": "baseline",
         "source_viability_score": 0.0
       },
@@ -1564,6 +1577,7 @@
         "estimated_net_gain_ratio": 0.0,
         "risk_score": 0.0,
         "runtime_ratio": 0.0,
+        "selection_stage": "baseline",
         "source_decision": "baseline",
         "source_viability_score": 0.0
       },
@@ -1587,6 +1601,7 @@
         "estimated_net_gain_ratio": 0.12192761857707511,
         "risk_score": 0.2856603260869566,
         "runtime_ratio": 0.4318181818181818,
+        "selection_stage": "target_diversity",
         "source_decision": "maybe",
         "source_viability_score": 0.5239717391304347
       },
@@ -1620,6 +1635,7 @@
         "estimated_net_gain_ratio": 0.12192761857707511,
         "risk_score": 0.2856603260869566,
         "runtime_ratio": 0.4318181818181818,
+        "selection_stage": "score_fill",
         "source_decision": "maybe",
         "source_viability_score": 0.5239717391304347
       },
@@ -1653,6 +1669,7 @@
         "estimated_net_gain_ratio": 0.17186833003952573,
         "risk_score": 0.36895606884057974,
         "runtime_ratio": 0.5181818181818182,
+        "selection_stage": "motif_diversity",
         "source_decision": "maybe",
         "source_viability_score": 0.4523351449275362
       },
@@ -1686,6 +1703,7 @@
         "estimated_net_gain_ratio": 0.17186833003952573,
         "risk_score": 0.36895606884057974,
         "runtime_ratio": 0.5181818181818182,
+        "selection_stage": "score_fill",
         "source_decision": "maybe",
         "source_viability_score": 0.4523351449275362
       },
@@ -1719,6 +1737,7 @@
         "estimated_net_gain_ratio": 0.044985000000000004,
         "risk_score": 0.12891328125,
         "runtime_ratio": 0.5333333333333333,
+        "selection_stage": "target_diversity",
         "source_decision": "maybe",
         "source_viability_score": 0.49276656250000006
       },
@@ -1752,6 +1771,7 @@
         "estimated_net_gain_ratio": 0.0407075,
         "risk_score": 0.14545208333333334,
         "runtime_ratio": 0.3,
+        "selection_stage": "motif_diversity",
         "source_decision": "maybe",
         "source_viability_score": 0.5159762499999999
       },
@@ -1785,6 +1805,7 @@
         "estimated_net_gain_ratio": 0.0441241847826087,
         "risk_score": 0.20260484601449277,
         "runtime_ratio": 0.3,
+        "selection_stage": "score_fill",
         "source_decision": "maybe",
         "source_viability_score": 0.41916449275362316
       },
@@ -1818,6 +1839,7 @@
         "estimated_net_gain_ratio": 0.04951521739130436,
         "risk_score": 0.23123097826086955,
         "runtime_ratio": 0.2,
+        "selection_stage": "motif_diversity",
         "source_decision": "maybe",
         "source_viability_score": 0.41204565217391304
       },
@@ -1851,6 +1873,7 @@
         "estimated_net_gain_ratio": 0.04951521739130436,
         "risk_score": 0.23123097826086955,
         "runtime_ratio": 0.2,
+        "selection_stage": "score_fill",
         "source_decision": "maybe",
         "source_viability_score": 0.41204565217391304
       },
@@ -1884,6 +1907,7 @@
         "estimated_net_gain_ratio": 0.0058183333333333325,
         "risk_score": 0.1451513888888889,
         "runtime_ratio": 0.3,
+        "selection_stage": "motif_diversity",
         "source_decision": "maybe",
         "source_viability_score": 0.37536416666666667
       },
@@ -1917,6 +1941,7 @@
         "estimated_net_gain_ratio": -0.019639999999999998,
         "risk_score": 0.2186590909090909,
         "runtime_ratio": 0.44,
+        "selection_stage": "motif_diversity",
         "source_decision": "maybe",
         "source_viability_score": 0.36010909090909093
       },
@@ -1950,6 +1975,7 @@
         "estimated_net_gain_ratio": -0.016540000000000003,
         "risk_score": 0.2189861111111111,
         "runtime_ratio": 0.36,
+        "selection_stage": "motif_diversity",
         "source_decision": "maybe",
         "source_viability_score": 0.3597166666666667
       },
@@ -1983,6 +2009,7 @@
         "estimated_net_gain_ratio": 0.032409999999999994,
         "risk_score": 0.2251125,
         "runtime_ratio": 0.2,
+        "selection_stage": "hold",
         "source_decision": "maybe",
         "source_viability_score": 0.40214
       },
@@ -2014,6 +2041,7 @@
         "estimated_net_gain_ratio": 0.032409999999999994,
         "risk_score": 0.2251125,
         "runtime_ratio": 0.2,
+        "selection_stage": "hold",
         "source_decision": "maybe",
         "source_viability_score": 0.40214
       },
@@ -2045,6 +2073,7 @@
         "estimated_net_gain_ratio": -0.006671590909090909,
         "risk_score": 0.37509375,
         "runtime_ratio": 0.5181818181818182,
+        "selection_stage": "hold",
         "source_decision": "maybe",
         "source_viability_score": 0.3986374999999999
       },

@@ -77,6 +77,10 @@ def _source_records(plan: Mapping[str, Any]) -> Mapping[str, Any]:
     return _as_mapping(_as_mapping(plan.get("source_indexes")).get("viability_records_by_id"))
 
 
+def _template_registry(plan: Mapping[str, Any]) -> Mapping[str, Any]:
+    return _as_mapping(_as_mapping(plan.get("candidate_template_registry")).get("templates"))
+
+
 def _validate_claim_boundary(boundary: str, *, field: str, errors: list[dict[str, str]]) -> None:
     lowered = boundary.lower()
     if not boundary:
@@ -143,6 +147,7 @@ def _validate_candidate(
     motif_ids: set[str],
     source_record_ids: set[str],
     source_records: Mapping[str, Any],
+    templates: Mapping[str, Any],
     errors: list[dict[str, str]],
 ) -> None:
     prefix = f"candidates[{index}]"
@@ -174,9 +179,46 @@ def _validate_candidate(
     if source_id not in source_record_ids:
         _error(errors, f"{prefix}.source_viability_record_id", "candidate references unknown source viability record")
     source_record = _as_mapping(source_records.get(source_id))
+    if source_record:
+        expected_fields = {
+            "workload_family_id": source_record.get("workload_family_id"),
+            "motif_id": source_record.get("motif_id"),
+            "target_type": source_record.get("target_type"),
+        }
+        for field, expected in expected_fields.items():
+            if candidate.get(field) != expected:
+                _error(
+                    errors,
+                    f"{prefix}.{field}",
+                    f"{field} must match source viability record",
+                )
     source_decision = candidate.get("source_viability_decision")
     if source_decision not in SOURCE_VIABILITY_DECISIONS:
         _error(errors, f"{prefix}.source_viability_decision", "source_viability_decision is unsupported")
+    elif source_record and source_decision != source_record.get("decision"):
+        _error(
+            errors,
+            f"{prefix}.source_viability_decision",
+            "source_viability_decision must match source viability record",
+        )
+    template = _as_mapping(templates.get(str(candidate.get("template_id", ""))))
+    if not template:
+        _error(errors, f"{prefix}.template_id", "candidate references unknown template")
+    else:
+        expected_template_fields = {
+            "candidate_type": template.get("candidate_type"),
+            "target_type": template.get("target_type"),
+        }
+        for field, expected in expected_template_fields.items():
+            if candidate.get(field) != expected:
+                _error(errors, f"{prefix}.{field}", f"{field} must match candidate template")
+        template_family = _as_mapping(candidate.get("candidate_parameters")).get("template_family")
+        if template_family != template.get("template_family"):
+            _error(
+                errors,
+                f"{prefix}.candidate_parameters.template_family",
+                "template_family must match candidate template",
+            )
     if candidate.get("candidate_type") == "baseline":
         if candidate.get("target_type") != "gpu_only":
             _error(errors, f"{prefix}.target_type", "baseline candidates must target gpu_only")
@@ -233,6 +275,7 @@ def _validate_promotion_decision(
         "risk_score",
         "runtime_ratio",
         "diversity_group",
+        "selection_stage",
     ):
         if field not in evidence:
             _error(errors, f"{prefix}.evidence_summary.{field}", "required evidence summary field is missing")
@@ -267,6 +310,7 @@ def _validate_request(
 def _validate_budget_and_summary(
     plan: Mapping[str, Any],
     *,
+    candidates: list[Any],
     decisions: list[Any],
     requests: list[Any],
     errors: list[dict[str, str]],
@@ -303,6 +347,8 @@ def _validate_budget_and_summary(
     budget_used = _as_mapping(summary.get("budget_used"))
     if budget_used.get("max_l1_cost_model_requests") != promote_count:
         _error(errors, "summary.budget_used.max_l1_cost_model_requests", "budget_used must equal promoted request count")
+    if _as_mapping(summary.get("by_target_type")) != _expected_by_target_type(candidates, decisions):
+        _error(errors, "summary.by_target_type", "summary.by_target_type must exactly match candidates grouped by target_type")
 
 
 def _validate_diversity(plan: Mapping[str, Any], errors: list[dict[str, str]]) -> None:
@@ -322,6 +368,154 @@ def _validate_diversity(plan: Mapping[str, Any], errors: list[dict[str, str]]) -
     if promotion.get("require_diversity_across_motif") is True and promote_count > 1:
         if _as_int(diversity.get("promoted_motif_count")) <= 1:
             _error(errors, "summary.diversity.promoted_motif_count", "motif diversity is required but not represented")
+    expected = _expected_diversity(plan)
+    for field in (
+        "promoted_target_types",
+        "promoted_motifs",
+        "promoted_target_type_count",
+        "promoted_motif_count",
+    ):
+        if diversity.get(field) != expected.get(field):
+            _error(errors, f"summary.diversity.{field}", "diversity summary must exactly match promoted candidates")
+
+
+def _expected_by_target_type(candidates: list[Any], decisions: list[Any]) -> dict[str, dict[str, int]]:
+    by_target_type: dict[str, dict[str, int]] = {}
+    decision_by_candidate = {
+        decision.get("candidate_id"): decision.get("decision")
+        for decision in decisions
+        if isinstance(decision, Mapping)
+    }
+    for candidate in candidates:
+        if not isinstance(candidate, Mapping):
+            continue
+        target_type = str(candidate.get("target_type"))
+        bucket = by_target_type.setdefault(
+            target_type,
+            {
+                "candidate_count": 0,
+                "baseline_count": 0,
+                "promote_count": 0,
+                "hold_count": 0,
+                "reject_count": 0,
+            },
+        )
+        bucket["candidate_count"] += 1
+        decision = decision_by_candidate.get(candidate.get("candidate_id"))
+        if decision in {"baseline", "promote", "hold", "reject"}:
+            bucket[f"{decision}_count"] += 1
+    return by_target_type
+
+
+def _expected_diversity(plan: Mapping[str, Any]) -> dict[str, Any]:
+    candidates = _as_list(plan.get("candidates"))
+    decisions = _as_list(plan.get("promotion_decisions"))
+    promoted_ids = {
+        decision.get("candidate_id")
+        for decision in decisions
+        if isinstance(decision, Mapping) and decision.get("decision") == "promote"
+    }
+    promoted_candidates = [
+        candidate
+        for candidate in candidates
+        if isinstance(candidate, Mapping) and candidate.get("candidate_id") in promoted_ids
+    ]
+    target_types = sorted({str(candidate.get("target_type")) for candidate in promoted_candidates})
+    motifs = sorted({str(candidate.get("motif_id")) for candidate in promoted_candidates})
+    return {
+        "promoted_target_types": target_types,
+        "promoted_motifs": motifs,
+        "promoted_target_type_count": len(target_types),
+        "promoted_motif_count": len(motifs),
+    }
+
+
+def _validate_decision_coverage(
+    *,
+    candidate_ids: list[str],
+    decisions: list[Any],
+    errors: list[dict[str, str]],
+) -> None:
+    counts = Counter(
+        decision.get("candidate_id")
+        for decision in decisions
+        if isinstance(decision, Mapping)
+    )
+    candidate_id_set = set(candidate_ids)
+    decision_candidate_set = {
+        candidate_id
+        for candidate_id in counts
+        if isinstance(candidate_id, str)
+    }
+    if decision_candidate_set != candidate_id_set:
+        missing = sorted(candidate_id_set - decision_candidate_set)
+        extra = sorted(decision_candidate_set - candidate_id_set)
+        _error(
+            errors,
+            "promotion_decisions.candidate_id",
+            f"each candidate must have exactly one promotion decision; missing={missing}, extra={extra}",
+        )
+    duplicates = sorted(
+        candidate_id
+        for candidate_id, count in counts.items()
+        if isinstance(candidate_id, str) and count != 1
+    )
+    if duplicates:
+        _error(
+            errors,
+            "promotion_decisions.candidate_id",
+            f"each candidate must have exactly one promotion decision; duplicates={duplicates}",
+        )
+
+
+def _validate_request_coverage(
+    *,
+    candidates: list[Any],
+    decisions: list[Any],
+    requests: list[Any],
+    errors: list[dict[str, str]],
+) -> None:
+    candidate_by_id = {
+        candidate.get("candidate_id"): candidate
+        for candidate in candidates
+        if isinstance(candidate, Mapping)
+    }
+    promoted_non_baseline_ids = {
+        decision.get("candidate_id")
+        for decision in decisions
+        if isinstance(decision, Mapping)
+        and decision.get("decision") == "promote"
+        and _as_mapping(candidate_by_id.get(decision.get("candidate_id"))).get("candidate_type") != "baseline"
+    }
+    request_counts = Counter(
+        request.get("candidate_id")
+        for request in requests
+        if isinstance(request, Mapping)
+    )
+    request_ids = {
+        candidate_id
+        for candidate_id in request_counts
+        if isinstance(candidate_id, str)
+    }
+    if request_ids != promoted_non_baseline_ids:
+        missing = sorted(promoted_non_baseline_ids - request_ids)
+        extra = sorted(request_ids - promoted_non_baseline_ids)
+        _error(
+            errors,
+            "evaluation_requests.candidate_id",
+            f"each promoted non-baseline candidate must have exactly one evaluation request; missing={missing}, extra={extra}",
+        )
+    duplicates = sorted(
+        candidate_id
+        for candidate_id, count in request_counts.items()
+        if isinstance(candidate_id, str) and count != 1
+    )
+    if duplicates:
+        _error(
+            errors,
+            "evaluation_requests.candidate_id",
+            f"each promoted non-baseline candidate must have exactly one evaluation request; duplicates={duplicates}",
+        )
 
 
 def validate_qe_ic_candidate_plan(plan: Mapping[str, Any]) -> dict[str, Any]:
@@ -351,6 +545,7 @@ def validate_qe_ic_candidate_plan(plan: Mapping[str, Any]) -> dict[str, Any]:
     motif_ids = _source_motif_ids(plan)
     source_record_ids = _source_record_ids(plan)
     source_records = _source_records(plan)
+    templates = _template_registry(plan)
     if not family_ids:
         _error(errors, "source_indexes.workload_family_ids", "source Layer-1 family references are missing")
     if not motif_ids:
@@ -376,6 +571,7 @@ def validate_qe_ic_candidate_plan(plan: Mapping[str, Any]) -> dict[str, Any]:
             motif_ids=motif_ids,
             source_record_ids=source_record_ids,
             source_records=source_records,
+            templates=templates,
             errors=errors,
         )
     if len(candidate_ids) != len(set(candidate_ids)):
@@ -400,6 +596,7 @@ def validate_qe_ic_candidate_plan(plan: Mapping[str, Any]) -> dict[str, Any]:
         )
     if len(decision_ids) != len(set(decision_ids)):
         _error(errors, "promotion_decisions.promotion_decision_id", "promotion decision IDs must be unique")
+    _validate_decision_coverage(candidate_ids=candidate_ids, decisions=decisions, errors=errors)
 
     promoted_ids = {
         str(decision.get("candidate_id"))
@@ -412,8 +609,14 @@ def validate_qe_ic_candidate_plan(plan: Mapping[str, Any]) -> dict[str, Any]:
             _error(errors, f"evaluation_requests[{index}]", "evaluation request must be a mapping")
             continue
         _validate_request(request, index=index, promoted_ids=promoted_ids, errors=errors)
+    _validate_request_coverage(
+        candidates=candidates,
+        decisions=decisions,
+        requests=requests,
+        errors=errors,
+    )
 
-    _validate_budget_and_summary(plan, decisions=decisions, requests=requests, errors=errors)
+    _validate_budget_and_summary(plan, candidates=candidates, decisions=decisions, requests=requests, errors=errors)
     _validate_diversity(plan, errors)
 
     if plan.get("producer") not in (None, PRODUCER):

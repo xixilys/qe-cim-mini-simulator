@@ -146,6 +146,7 @@ def _decision_payload(
     reason_codes: Sequence[str],
     next_fidelity: str,
     budget_account: str,
+    selection_stage: str,
 ) -> dict[str, Any]:
     return {
         "promotion_decision_id": f"promotion_{candidate.get('candidate_id')}",
@@ -164,6 +165,7 @@ def _decision_payload(
             "risk_score": features.get("risk_score"),
             "runtime_ratio": features.get("runtime_ratio"),
             "diversity_group": features.get("diversity_group"),
+            "selection_stage": selection_stage,
         },
     }
 
@@ -212,50 +214,50 @@ def _select_with_diversity(
     budget: int,
     require_target_diversity: bool,
     require_motif_diversity: bool,
-) -> set[str]:
+) -> dict[str, str]:
     selected: list[dict[str, Any]] = []
-    selected_ids: set[str] = set()
+    selected_stages: dict[str, str] = {}
     used_targets: set[str] = set()
     used_motifs: set[str] = set()
 
-    def add(row: dict[str, Any]) -> bool:
+    def add(row: dict[str, Any], *, stage: str) -> bool:
         if len(selected) >= budget:
             return False
         candidate_id = str(row["candidate"].get("candidate_id"))
-        if candidate_id in selected_ids:
+        if candidate_id in selected_stages:
             return False
         selected.append(row)
-        selected_ids.add(candidate_id)
+        selected_stages[candidate_id] = stage
         used_targets.add(str(row["candidate"].get("target_type")))
         used_motifs.add(str(row["candidate"].get("motif_id")))
         return True
 
     if budget <= 0:
-        return selected_ids
+        return selected_stages
 
     if require_target_diversity and budget > 1:
         for target_type in sorted({str(row["candidate"].get("target_type")) for row in rows}):
             target_rows = [row for row in rows if str(row["candidate"].get("target_type")) == target_type]
             for row in target_rows:
-                if add(row):
+                if add(row, stage="target_diversity"):
                     break
             if len(selected) >= budget:
-                return selected_ids
+                return selected_stages
 
     if require_motif_diversity and budget > 1:
         for row in rows:
             motif_id = str(row["candidate"].get("motif_id"))
             if motif_id in used_motifs:
                 continue
-            add(row)
+            add(row, stage="motif_diversity")
             if len(selected) >= budget:
-                return selected_ids
+                return selected_stages
 
     for row in rows:
-        add(row)
+        add(row, stage="score_fill")
         if len(selected) >= budget:
             break
-    return selected_ids
+    return selected_stages
 
 
 def _request_id(candidate_id: str) -> str:
@@ -317,12 +319,13 @@ def promote_qe_ic_candidates(
     require_motif_diversity = promotion.get("require_diversity_across_motif") is True
 
     ranked = _ranked_candidates(candidates, source_records, risk_tolerance=risk_tolerance)
-    selected_ids = _select_with_diversity(
+    selected_stages = _select_with_diversity(
         ranked,
         budget=max_requests,
         require_target_diversity=require_target_diversity,
         require_motif_diversity=require_motif_diversity,
     )
+    selected_ids = set(selected_stages)
     row_by_id = {
         str(row["candidate"].get("candidate_id")): row
         for row in ranked
@@ -350,6 +353,7 @@ def promote_qe_ic_candidates(
                     reason_codes=["baseline_reference", "source_decision_baseline", "not_next_fidelity_candidate"],
                     next_fidelity="none",
                     budget_account="none",
+                    selection_stage="baseline",
                 )
             )
             continue
@@ -381,6 +385,7 @@ def promote_qe_ic_candidates(
                 reason_codes.add("duplicate_target_type_deprioritized")
 
         priority = 0 if decision != "promote" else sorted(selected_ids).index(candidate_id) + 1
+        selection_stage = selected_stages.get(candidate_id, decision)
         decisions.append(
             _decision_payload(
                 candidate=candidate,
@@ -391,6 +396,7 @@ def promote_qe_ic_candidates(
                 reason_codes=sorted(reason_codes),
                 next_fidelity=next_fidelity,
                 budget_account=budget_account,
+                selection_stage=selection_stage,
             )
         )
 
@@ -474,4 +480,3 @@ def evaluate_qe_ic_promotion_replay(
         "wasted_budget_ratio": (false_count / promoted_count) if promoted_count else 0.0,
         "promotion_precision": (len(useful_promotions) / promoted_count) if promoted_count else 0.0,
     }
-

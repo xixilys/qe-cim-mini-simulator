@@ -64,6 +64,30 @@ def _decision_by_candidate(plan: dict) -> dict[str, dict]:
     }
 
 
+def _candidate_by_id(plan: dict) -> dict[str, dict]:
+    return {
+        candidate["candidate_id"]: candidate
+        for candidate in plan["candidates"]
+    }
+
+
+def _first_candidate_id_for_decision(plan: dict, decision_name: str) -> str:
+    return next(
+        decision["candidate_id"]
+        for decision in plan["promotion_decisions"]
+        if decision["decision"] == decision_name
+    )
+
+
+def _drop_evaluation_request_for_candidate(plan: dict, candidate_id: str) -> None:
+    plan["evaluation_requests"] = [
+        request
+        for request in plan["evaluation_requests"]
+        if request["candidate_id"] != candidate_id
+    ]
+    plan["summary"]["evaluation_request_count"] = len(plan["evaluation_requests"])
+
+
 def test_public_api_exports_expected_functions():
     assert qe_ic.build_qe_ic_candidate_plan
     assert qe_ic.validate_qe_ic_candidate_plan
@@ -360,6 +384,141 @@ def test_validation_fails_unknown_candidate_reference():
     assert any("unknown candidate" in error["message"] for error in validation["errors"])
 
 
+def test_validation_fails_candidate_without_promotion_decision():
+    plan = _build_plan()
+    hold_candidate_id = _first_candidate_id_for_decision(plan, "hold")
+    plan["promotion_decisions"] = [
+        decision
+        for decision in plan["promotion_decisions"]
+        if decision["candidate_id"] != hold_candidate_id
+    ]
+    plan["summary"]["hold_count"] -= 1
+
+    validation = qe_ic.validate_qe_ic_candidate_plan(plan)
+
+    assert validation["status"] == "failed"
+    assert any(
+        "exactly one promotion decision" in error["message"]
+        for error in validation["errors"]
+    )
+
+
+def test_validation_fails_duplicate_decision_for_same_candidate():
+    plan = _build_plan()
+    duplicate = copy.deepcopy(
+        next(decision for decision in plan["promotion_decisions"] if decision["decision"] == "hold")
+    )
+    duplicate["promotion_decision_id"] = duplicate["promotion_decision_id"] + "_duplicate"
+    plan["promotion_decisions"].append(duplicate)
+    plan["summary"]["hold_count"] += 1
+
+    validation = qe_ic.validate_qe_ic_candidate_plan(plan)
+
+    assert validation["status"] == "failed"
+    assert any(
+        "exactly one promotion decision" in error["message"]
+        for error in validation["errors"]
+    )
+
+
+def test_validation_fails_promoted_candidate_without_evaluation_request():
+    plan = _build_plan()
+    promoted_candidate_id = _first_candidate_id_for_decision(plan, "promote")
+    _drop_evaluation_request_for_candidate(plan, promoted_candidate_id)
+
+    validation = qe_ic.validate_qe_ic_candidate_plan(plan)
+
+    assert validation["status"] == "failed"
+    assert any(
+        "must have exactly one evaluation request" in error["message"]
+        for error in validation["errors"]
+    )
+
+
+def test_validation_fails_request_for_hold_candidate():
+    plan = _build_plan()
+    hold_candidate_id = _first_candidate_id_for_decision(plan, "hold")
+    request = copy.deepcopy(plan["evaluation_requests"][0])
+    request["request_id"] = request["request_id"] + "_hold"
+    request["candidate_id"] = hold_candidate_id
+    plan["evaluation_requests"].append(request)
+    plan["summary"]["evaluation_request_count"] = len(plan["evaluation_requests"])
+
+    validation = qe_ic.validate_qe_ic_candidate_plan(plan)
+
+    assert validation["status"] == "failed"
+    assert any(
+        "non-promoted candidate" in error["message"]
+        for error in validation["errors"]
+    )
+
+
+def test_validation_fails_candidate_source_record_mismatch():
+    plan = _build_plan()
+    candidate = next(candidate for candidate in _accelerator_candidates(plan))
+    source_record = plan["source_indexes"]["viability_records_by_id"][candidate["source_viability_record_id"]]
+    alternate_motif = next(
+        motif_id
+        for motif_id in plan["source_indexes"]["motif_ids"]
+        if motif_id != source_record["motif_id"]
+    )
+    candidate["motif_id"] = alternate_motif
+
+    validation = qe_ic.validate_qe_ic_candidate_plan(plan)
+
+    assert validation["status"] == "failed"
+    assert any(
+        "must match source viability record" in error["message"]
+        for error in validation["errors"]
+    )
+
+
+def test_validation_fails_unknown_template_id():
+    plan = _build_plan()
+    candidate = next(candidate for candidate in _accelerator_candidates(plan))
+    candidate["template_id"] = "fake_template"
+
+    validation = qe_ic.validate_qe_ic_candidate_plan(plan)
+
+    assert validation["status"] == "failed"
+    assert any("unknown template" in error["message"] for error in validation["errors"])
+
+
+def test_validation_fails_template_candidate_type_mismatch():
+    plan = _build_plan()
+    candidate = next(candidate for candidate in _accelerator_candidates(plan))
+    candidate["candidate_type"] = "baseline"
+
+    validation = qe_ic.validate_qe_ic_candidate_plan(plan)
+
+    assert validation["status"] == "failed"
+    assert any(
+        "must match candidate template" in error["message"]
+        for error in validation["errors"]
+    )
+
+
+def test_validation_fails_inconsistent_by_target_type_summary():
+    plan = _build_plan()
+    plan["summary"]["by_target_type"]["fpga_only"]["promote_count"] += 1
+
+    validation = qe_ic.validate_qe_ic_candidate_plan(plan)
+
+    assert validation["status"] == "failed"
+    assert any("summary.by_target_type" in error["field"] for error in validation["errors"])
+
+
+def test_validation_fails_inconsistent_diversity_summary():
+    plan = _build_plan()
+    plan["summary"]["diversity"]["promoted_motifs"] = []
+    plan["summary"]["diversity"]["promoted_motif_count"] = 0
+
+    validation = qe_ic.validate_qe_ic_candidate_plan(plan)
+
+    assert validation["status"] == "failed"
+    assert any("summary.diversity" in error["field"] for error in validation["errors"])
+
+
 def test_validation_fails_forbidden_execution_results():
     plan = _build_plan()
     plan["systemc_results"] = []
@@ -562,3 +721,130 @@ def test_replay_policy_reports_promotion_precision_metric():
 
     assert replay["promotion_precision"] == pytest.approx(0.5)
     assert replay["promoted_count"] == 2
+
+
+def test_replay_policy_runs_policy_before_synthetic_replay_labels():
+    suite, motif_profile, target_viability, campaign = _inputs()
+    campaign["promotion"]["budget"]["max_l1_cost_model_requests"] = 1
+    campaign["promotion"]["require_diversity_across_target_type"] = False
+    campaign["promotion"]["require_diversity_across_motif"] = False
+    campaign["candidate_generation"]["max_candidates_per_motif"] = 1
+    target_viability = copy.deepcopy(target_viability)
+    source = next(
+        record
+        for record in target_viability["viability_records"]
+        if record["target_type"] == "fpga_only" and record["decision"] == "maybe"
+    )
+    gpu_source = next(
+        record
+        for record in target_viability["viability_records"]
+        if record["target_type"] == "gpu_only" and record["decision"] == "baseline"
+    )
+    hybrid_source = next(
+        record
+        for record in target_viability["viability_records"]
+        if record["target_type"] == "gpu_fpga_hybrid"
+    )
+    low_risk = copy.deepcopy(source)
+    low_risk.update(
+        workload_family_id="ground_state_band_structure",
+        motif_id="fft_transpose",
+        target_id="fpga_only_policy_low_risk_fixture",
+    )
+    low_risk["viability_score"] = 0.50
+    low_risk["upper_bound"]["estimated_net_gain_ratio"] = 0.080
+    low_risk["upper_bound"]["runtime_ratio"] = 0.30
+    low_risk["risk"]["overall_risk_score"] = 0.10
+    high_risk = copy.deepcopy(source)
+    high_risk.update(
+        workload_family_id="phonon_dfpt",
+        motif_id="reduction_collective",
+        target_id="fpga_only_policy_high_risk_fixture",
+    )
+    high_risk["viability_score"] = 0.52
+    high_risk["upper_bound"]["estimated_net_gain_ratio"] = 0.081
+    high_risk["upper_bound"]["runtime_ratio"] = 0.30
+    high_risk["risk"]["overall_risk_score"] = 0.90
+    gpu_record = copy.deepcopy(gpu_source)
+    gpu_record["target_id"] = "gpu_only_policy_synthetic_fixture"
+    hybrid_record = copy.deepcopy(hybrid_source)
+    hybrid_record["target_id"] = "gpu_fpga_hybrid_policy_synthetic_fixture"
+    hybrid_record["decision"] = "reject"
+    target_viability["viability_records"] = [gpu_record, low_risk, high_risk, hybrid_record]
+    target_viability["target_config"]["targets"] = [
+        {
+            "target_id": "gpu_only_policy_synthetic_fixture",
+            "target_type": "gpu_only",
+            "gpu": {"name": "gpu", "memory_bandwidth_gbps": 1.0, "sync_overhead_us": 1.0},
+        },
+        {
+            "target_id": "fpga_only_policy_low_risk_fixture",
+            "target_type": "fpga_only",
+            "fpga": {"name": "low", "memory_bandwidth_gbps": 1.0, "sync_overhead_us": 1.0, "logic_budget_score": 0.5},
+        },
+        {
+            "target_id": "fpga_only_policy_high_risk_fixture",
+            "target_type": "fpga_only",
+            "fpga": {"name": "high", "memory_bandwidth_gbps": 1.0, "sync_overhead_us": 1.0, "logic_budget_score": 0.5},
+        },
+        {
+            "target_id": "gpu_fpga_hybrid_policy_synthetic_fixture",
+            "target_type": "gpu_fpga_hybrid",
+            "gpu": {"name": "gpu", "memory_bandwidth_gbps": 1.0, "sync_overhead_us": 1.0},
+            "fpga": {"name": "fpga", "memory_bandwidth_gbps": 1.0, "sync_overhead_us": 1.0, "logic_budget_score": 0.5},
+            "interconnect": {"type": "pcie", "bandwidth_gbps": 1.0, "latency_us": 1.0},
+        },
+    ]
+    target_viability["summary"] = {
+        "record_count": 4,
+        "baseline_count": 1,
+        "maybe_count": 2,
+        "reject_count": 1,
+        "viable_count": 0,
+        "by_target_type": {
+            "gpu_only": {
+                "record_count": 1,
+                "baseline_count": 1,
+                "maybe_count": 0,
+                "reject_count": 0,
+                "viable_count": 0,
+            },
+            "fpga_only": {
+                "record_count": 2,
+                "baseline_count": 0,
+                "maybe_count": 2,
+                "reject_count": 0,
+                "viable_count": 0,
+            },
+            "gpu_fpga_hybrid": {
+                "record_count": 1,
+                "baseline_count": 0,
+                "maybe_count": 0,
+                "reject_count": 1,
+                "viable_count": 0,
+            },
+        },
+    }
+    plan = qe_ic.build_qe_ic_candidate_plan(suite, motif_profile, target_viability, campaign)
+    useful_candidate = next(
+        candidate
+        for candidate in plan["candidates"]
+        if candidate["motif_id"] == "fft_transpose" and candidate["candidate_type"] == "fpga_candidate"
+    )
+    false_candidate = next(
+        candidate
+        for candidate in plan["candidates"]
+        if candidate["motif_id"] == "reduction_collective" and candidate["candidate_type"] == "fpga_candidate"
+    )
+    replay = qe_ic.evaluate_qe_ic_promotion_replay(
+        plan["promotion_decisions"],
+        [
+            {"candidate_id": useful_candidate["candidate_id"], "high_fidelity_label": "useful"},
+            {"candidate_id": false_candidate["candidate_id"], "high_fidelity_label": "false_promotion"},
+        ],
+    )
+
+    assert _decision_by_candidate(plan)[useful_candidate["candidate_id"]]["decision"] == "promote"
+    assert _decision_by_candidate(plan)[false_candidate["candidate_id"]]["decision"] == "hold"
+    assert replay["promotion_precision"] == pytest.approx(1.0)
+    assert replay["avoided_false_promotion_count"] == 1
