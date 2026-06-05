@@ -10,7 +10,7 @@ from typing import Any
 
 from dse_v2.evidence.qe_ic.candidate_result import candidate_results_by_id
 from dse_v2.evidence.qe_ic.claim_gate import evaluate_qe_ic_claim_gate
-from dse_v2.evidence.qe_ic.gpu_baseline import baseline_records_by_family
+from dse_v2.evidence.qe_ic.gpu_baseline import baseline_match_key, baseline_records_by_match_key
 from dse_v2.evidence.qe_ic.schema import (
     ANALYSIS_ROLE,
     CLAIM_BOUNDARY,
@@ -38,6 +38,24 @@ def _candidate_index(plan: Mapping[str, Any]) -> dict[str, Mapping[str, Any]]:
     }
 
 
+def _tracked_candidate_ids(
+    *,
+    l1_results: Mapping[str, Any],
+    closed_loop_results: Mapping[str, Any],
+) -> set[str]:
+    l1_ids = {
+        str(row.get("candidate_id"))
+        for row in _as_list(l1_results.get("results"))
+        if isinstance(row, Mapping) and isinstance(row.get("candidate_id"), str)
+    }
+    closed_loop_ids = {
+        str(row.get("candidate_id"))
+        for row in _as_list(closed_loop_results.get("candidate_trajectory"))
+        if isinstance(row, Mapping) and isinstance(row.get("candidate_id"), str)
+    }
+    return l1_ids & closed_loop_ids
+
+
 def _candidate_records_for_analysis(
     candidate_plan: Mapping[str, Any],
     candidate_high_fidelity_results: Mapping[str, Any],
@@ -48,8 +66,6 @@ def _candidate_records_for_analysis(
     for candidate_id in sorted(result_by_id):
         result = result_by_id[candidate_id]
         candidate = _as_mapping(candidates.get(candidate_id))
-        if not candidate and result.get("target_type") in TARGET_TYPES:
-            candidate = result
         if result.get("target_type") in TARGET_TYPES:
             pairs.append((candidate, result))
     return pairs
@@ -98,13 +114,20 @@ def _opportunity_record(
     baseline_payload_real: bool,
     candidate_payload_real: bool,
     opportunity_config: Mapping[str, Any],
+    tracked_candidate_ids: set[str],
 ) -> dict[str, Any]:
+    preexisting_blockers: list[str] = []
+    if not candidate:
+        preexisting_blockers.append("unknown_candidate_not_claimable")
+    elif str(candidate_result.get("candidate_id")) not in tracked_candidate_ids:
+        preexisting_blockers.append("candidate_not_tracked_by_l1_or_layer6")
     gate = evaluate_qe_ic_claim_gate(
         baseline=baseline,
         baseline_payload_real=baseline_payload_real,
         candidate_result=candidate_result,
         candidate_payload_real=candidate_payload_real,
         opportunity_config=opportunity_config,
+        preexisting_blockers=preexisting_blockers,
     )
     resource = _as_mapping(candidate_result.get("resource"))
     workflow_runtime = candidate_result.get("workflow_runtime_seconds_mean")
@@ -246,17 +269,22 @@ def analyze_qe_ic_real_baseline_opportunity(
 ) -> dict[str, Any]:
     """Build a claim-gated GPU-vs-FPGA/hybrid opportunity report."""
 
-    baseline_by_family = baseline_records_by_family(gpu_baseline_measurements)
+    baseline_by_key = baseline_records_by_match_key(gpu_baseline_measurements)
     baseline_real = gpu_baseline_measurements.get("measurements_are_real") is True
     candidate_real = candidate_high_fidelity_results.get("results_are_real") is True
+    tracked_candidate_ids = _tracked_candidate_ids(
+        l1_results=l1_results,
+        closed_loop_results=closed_loop_results,
+    )
     records = [
         _opportunity_record(
             candidate=candidate,
             candidate_result=candidate_result,
-            baseline=baseline_by_family.get(str(candidate_result.get("workload_family_id"))),
+            baseline=baseline_by_key.get(baseline_match_key(candidate_result)),
             baseline_payload_real=baseline_real,
             candidate_payload_real=candidate_real,
             opportunity_config=opportunity_config,
+            tracked_candidate_ids=tracked_candidate_ids,
         )
         for candidate, candidate_result in _candidate_records_for_analysis(
             candidate_plan,

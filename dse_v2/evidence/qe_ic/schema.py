@@ -48,6 +48,14 @@ CANDIDATE_RESULT_CLAIM_BOUNDARY = (
     "explicit tool provenance."
 )
 
+REQUIRED_HIGH_FIDELITY_PROVENANCE_FIELDS = (
+    "tool",
+    "version",
+    "run_id",
+    "config_hash",
+    "output_artifact_hash",
+)
+
 CLAIM_BOUNDARY = (
     "This report only makes GPU-vs-FPGA/hybrid opportunity claims when explicit "
     "GPU baseline and candidate high-fidelity evidence pass claim gates. It does "

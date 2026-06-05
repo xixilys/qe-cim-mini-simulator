@@ -13,6 +13,7 @@ A GPU-only baseline record must include:
 - Program and workload family.
 - Stable case identifier and input deck hash.
 - QE, CUDA, driver, CPU, GPU, memory, and precision metadata.
+- Per-record precision matching the candidate result precision.
 - At least the configured minimum repeated runtime runs.
 - Mean runtime, standard deviation, and 95 percent confidence interval.
 - GPU utilization and GPU memory-bandwidth utilization.
@@ -32,8 +33,10 @@ claim.
 Candidate records must include workflow runtime, kernel runtime, transfer
 overhead, workflow overhead, confidence intervals, repeated runs, architecture
 summary, resource feasibility, timing feasibility, utilization summaries, and
-an evidence artifact hash. High-fidelity estimates must include explicit tool
-provenance.
+an evidence artifact hash. They must also include `case_id`, `program`,
+`input_deck_hash`, and `precision`, matching the GPU baseline for the same
+comparison. High-fidelity estimates must include explicit tool provenance:
+`tool`, `version`, `run_id`, `config_hash`, and `output_artifact_hash`.
 
 ## Workflow Accounting
 

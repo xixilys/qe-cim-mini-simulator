@@ -12,6 +12,7 @@ from dse_v2.evidence.qe_ic.schema import (
     CANDIDATE_EVIDENCE_STATUSES,
     CANDIDATE_RESULT_CLAIM_BOUNDARY,
     QE_IC_CANDIDATE_HIGH_FIDELITY_RESULTS_SCHEMA_VERSION,
+    REQUIRED_HIGH_FIDELITY_PROVENANCE_FIELDS,
     TARGET_TYPES,
 )
 
@@ -88,7 +89,14 @@ def validate_qe_ic_candidate_high_fidelity_results(payload: Mapping[str, Any]) -
         elif candidate_id in ids:
             _error(errors, f"{prefix}.candidate_id", "candidate_id must be unique")
         ids.add(str(candidate_id))
-        for field in ("workload_family_id", "motif_id"):
+        for field in (
+            "workload_family_id",
+            "motif_id",
+            "case_id",
+            "program",
+            "input_deck_hash",
+            "precision",
+        ):
             if not isinstance(record.get(field), str) or not record.get(field):
                 _error(errors, f"{prefix}.{field}", f"{field} must be a non-empty string")
         if record.get("target_type") not in TARGET_TYPES:
@@ -169,6 +177,11 @@ def validate_qe_ic_candidate_high_fidelity_results(payload: Mapping[str, Any]) -
             and not isinstance(record.get("tool_provenance"), Mapping)
         ):
             _error(errors, f"{prefix}.tool_provenance", "high_fidelity_estimate claims require tool provenance")
+        if payload.get("results_are_real") is True and record.get("evidence_status") == "high_fidelity_estimate":
+            provenance = _as_mapping(record.get("tool_provenance"))
+            for field in REQUIRED_HIGH_FIDELITY_PROVENANCE_FIELDS:
+                if not isinstance(provenance.get(field), str) or not provenance.get(field):
+                    _error(errors, f"{prefix}.tool_provenance.{field}", f"{field} must be a non-empty string")
         if payload.get("results_are_real") is True and record.get("evidence_status") == "fixture_example":
             _error(errors, f"{prefix}.evidence_status", "real candidate payloads must not contain fixture_example records")
 

@@ -111,6 +111,7 @@ def validate_qe_ic_gpu_baseline_measurements(payload: Mapping[str, Any]) -> dict
             "case_id",
             "program",
             "input_deck_hash",
+            "precision",
             "profile_artifact_hash",
         ):
             if not isinstance(record.get(field), str) or not record.get(field):
@@ -155,11 +156,34 @@ def validate_qe_ic_gpu_baseline_measurements(payload: Mapping[str, Any]) -> dict
     }
 
 
-def baseline_records_by_family(payload: Mapping[str, Any]) -> dict[str, Mapping[str, Any]]:
-    """Return the first valid-looking baseline record per workload family."""
+BASELINE_MATCH_FIELDS = (
+    "workload_family_id",
+    "case_id",
+    "program",
+    "input_deck_hash",
+    "precision",
+)
 
-    records: dict[str, Mapping[str, Any]] = {}
+
+def baseline_match_key(record: Mapping[str, Any]) -> tuple[str, str, str, str, str] | None:
+    """Return the exact GPU-baseline comparison key for a record-like object."""
+
+    values: list[str] = []
+    for field in BASELINE_MATCH_FIELDS:
+        value = record.get(field)
+        if not isinstance(value, str) or not value:
+            return None
+        values.append(value)
+    return tuple(values)  # type: ignore[return-value]
+
+
+def baseline_records_by_match_key(payload: Mapping[str, Any]) -> dict[tuple[str, str, str, str, str], Mapping[str, Any]]:
+    """Return baseline records keyed by exact workload/case/program/hash/precision."""
+
+    keyed: dict[tuple[str, str, str, str, str], Mapping[str, Any]] = {}
     for record in _as_list(payload.get("baseline_records")):
-        if isinstance(record, Mapping) and isinstance(record.get("workload_family_id"), str):
-            records.setdefault(str(record["workload_family_id"]), record)
-    return records
+        if isinstance(record, Mapping):
+            key = baseline_match_key(record)
+            if key is not None:
+                keyed.setdefault(key, record)
+    return keyed

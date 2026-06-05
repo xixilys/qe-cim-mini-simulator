@@ -41,7 +41,7 @@
   "opportunity_records": [
     {
       "architecture_summary": {
-        "architecture_family": "fpga_streaming_pipeline",
+        "architecture_family": "fpga_pipeline",
         "architecture_id": "fixture_fpga_fft_streaming_arch",
         "dataflow_summary": "fixture workflow-level trace replay for FFT transpose offload candidate",
         "fpga_role": "streaming transpose pipeline",
@@ -76,7 +76,7 @@
       "raw_claim_gate_inputs": {
         "candidate_result": {
           "architecture_summary": {
-            "architecture_family": "fpga_streaming_pipeline",
+            "architecture_family": "fpga_pipeline",
             "architecture_id": "fixture_fpga_fft_streaming_arch",
             "dataflow_summary": "fixture workflow-level trace replay for FFT transpose offload candidate",
             "fpga_role": "streaming transpose pipeline",
@@ -86,6 +86,7 @@
             "synchronization_model": "batched host barrier fixture"
           },
           "candidate_id": "qeic_l4_fpga_candidate_ground_state_band_structure_fft_transpose_fpga_only_fpga_streaming_pipeline_3f5adc94a8",
+          "case_id": "silicon_band_structure_fixture",
           "claim_boundary": "This candidate result is not a real measured result unless results_are_real is true and evidence_status is measured or high_fidelity_estimate with explicit tool provenance.",
           "confidence_interval_95": {
             "high": 90.0,
@@ -94,8 +95,11 @@
           "evidence_artifact_hash": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
           "evidence_level": "trace_replay",
           "evidence_status": "fixture_example",
+          "input_deck_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           "kernel_runtime_seconds_mean": 66.0,
           "motif_id": "fft_transpose",
+          "precision": "fp64_mixed_fixture",
+          "program": "pw.x",
           "resource": {
             "bram_utilization": 0.56,
             "dsp_utilization": 0.43,
@@ -132,6 +136,7 @@
           "gpu_utilization_mean": 0.74,
           "host_device_transfer_seconds": 5.5,
           "input_deck_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "precision": "fp64_mixed_fixture",
           "profile_artifact_hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
           "program": "pw.x",
           "runtime_seconds_mean": 100.0,
@@ -180,7 +185,7 @@
     },
     {
       "architecture_summary": {
-        "architecture_family": "hybrid_runtime_controller",
+        "architecture_family": "hybrid_runtime",
         "architecture_id": "fixture_hybrid_localized_state_arch",
         "dataflow_summary": "fixture L1-only handoff for hybrid localized-state sidecar",
         "fpga_role": "runtime sidecar fixture",
@@ -220,7 +225,7 @@
       "raw_claim_gate_inputs": {
         "candidate_result": {
           "architecture_summary": {
-            "architecture_family": "hybrid_runtime_controller",
+            "architecture_family": "hybrid_runtime",
             "architecture_id": "fixture_hybrid_localized_state_arch",
             "dataflow_summary": "fixture L1-only handoff for hybrid localized-state sidecar",
             "fpga_role": "runtime sidecar fixture",
@@ -230,6 +235,7 @@
             "synchronization_model": "host-side queue fixture"
           },
           "candidate_id": "qeic_l4_hybrid_candidate_interface_band_offset_defect_localized_state_analysis_gpu_fpga_hybrid_hybrid_runtime_controller_368f7bc85f",
+          "case_id": "interface_defect_fixture",
           "claim_boundary": "This candidate result is not a real measured result unless results_are_real is true and evidence_status is measured or high_fidelity_estimate with explicit tool provenance.",
           "confidence_interval_95": {
             "high": 115.0,
@@ -238,8 +244,11 @@
           "evidence_artifact_hash": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
           "evidence_level": "l1_estimate_only",
           "evidence_status": "fixture_example",
+          "input_deck_hash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
           "kernel_runtime_seconds_mean": 82.0,
           "motif_id": "localized_state_analysis",
+          "precision": "fp64_mixed_fixture",
+          "program": "pw.x",
           "resource": {
             "bram_utilization": 0.45,
             "dsp_utilization": 0.39,
@@ -276,6 +285,7 @@
           "gpu_utilization_mean": 0.77,
           "host_device_transfer_seconds": 7.0,
           "input_deck_hash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "precision": "fp64_mixed_fixture",
           "profile_artifact_hash": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
           "program": "pw.x",
           "runtime_seconds_mean": 120.0,

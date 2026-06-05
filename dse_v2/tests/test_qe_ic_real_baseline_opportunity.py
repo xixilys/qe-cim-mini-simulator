@@ -64,6 +64,24 @@ def _run_analysis(
 
 
 def _first_candidate(candidate_plan: dict, target_type: str) -> dict:
+    inputs = _input_artifacts()
+    tracked = {
+        row["candidate_id"]
+        for row in inputs["l1_results"]["results"]
+    } & {
+        row["candidate_id"]
+        for row in inputs["closed_loop_results"]["candidate_trajectory"]
+    }
+    tracked_candidate = next(
+        (
+            candidate
+            for candidate in candidate_plan["candidates"]
+            if candidate["target_type"] == target_type and candidate["candidate_id"] in tracked
+        ),
+        None,
+    )
+    if tracked_candidate is not None:
+        return tracked_candidate
     return next(
         candidate
         for candidate in candidate_plan["candidates"]
@@ -71,7 +89,16 @@ def _first_candidate(candidate_plan: dict, target_type: str) -> dict:
     )
 
 
-def _measured_baseline(*, family_id: str, runtime_mean: float = 100.0, gpu_util: float = 0.62) -> dict:
+def _measured_baseline(
+    *,
+    family_id: str,
+    runtime_mean: float = 100.0,
+    gpu_util: float = 0.62,
+    case_id: str = "controlled_case",
+    program: str = "pw.x",
+    input_deck_hash: str = "sha256:" + "1" * 64,
+    precision: str = "fp64_mixed",
+) -> dict:
     return {
         "schema_version": "dse.qe_ic.gpu_baseline_measurements.v1",
         "measurement_role": "gpu_only_baseline",
@@ -84,15 +111,16 @@ def _measured_baseline(*, family_id: str, runtime_mean: float = 100.0, gpu_util:
             "qe_version": "7.5-controlled",
             "cuda_version": "12.4-controlled",
             "driver_version": "controlled",
-            "precision": "fp64_mixed",
+            "precision": precision,
         },
         "baseline_records": [
             {
                 "baseline_id": "controlled_gpu_baseline",
                 "workload_family_id": family_id,
-                "case_id": "controlled_case",
-                "program": "pw.x",
-                "input_deck_hash": "sha256:" + "1" * 64,
+                "case_id": case_id,
+                "program": program,
+                "input_deck_hash": input_deck_hash,
+                "precision": precision,
                 "target_type": "gpu_only",
                 "runtime_seconds_runs": [99.0, 100.0, 101.0],
                 "runtime_seconds_mean": runtime_mean,
@@ -135,6 +163,11 @@ def _measured_candidate_result(
     kernel_only: bool = False,
     transfer_seconds: float = 6.0,
     workflow_overhead_seconds: float = 5.0,
+    case_id: str = "controlled_case",
+    program: str = "pw.x",
+    input_deck_hash: str = "sha256:" + "1" * 64,
+    precision: str = "fp64_mixed",
+    tool_provenance: dict | None = None,
 ) -> dict:
     workflow_runtime = None if kernel_only else workflow_mean
     return {
@@ -142,13 +175,15 @@ def _measured_candidate_result(
         "workload_family_id": candidate["workload_family_id"],
         "motif_id": candidate["motif_id"],
         "target_type": target_type or candidate["target_type"],
+        "case_id": case_id,
+        "program": program,
+        "input_deck_hash": input_deck_hash,
+        "precision": precision,
         "evidence_level": evidence_level,
         "evidence_status": evidence_status,
         "architecture_summary": {
             "architecture_id": f"arch_{candidate['candidate_id'][:16]}",
-            "architecture_family": "hybrid_dma_overlap_sidecar"
-            if (target_type or candidate["target_type"]) == "gpu_fpga_hybrid"
-            else "fpga_streaming_pipeline",
+            "architecture_family": candidate["candidate_parameters"]["template_family"],
             "gpu_role": "primary_compute" if (target_type or candidate["target_type"]) == "gpu_fpga_hybrid" else "none",
             "fpga_role": "workflow_trace_replay_sidecar",
             "host_role": "scf_control_retained",
@@ -175,10 +210,12 @@ def _measured_candidate_result(
             "fmax_mhz": 280.0,
         },
         "evidence_artifact_hash": "sha256:" + "3" * 64,
-        "tool_provenance": {
+        "tool_provenance": tool_provenance or {
             "tool": "controlled_trace_replay",
             "version": "test-fixture",
             "run_id": "controlled_trace_run",
+            "config_hash": "sha256:" + "4" * 64,
+            "output_artifact_hash": "sha256:" + "5" * 64,
         },
         "claim_boundary": (
             "This candidate result is not a real measured result unless "
@@ -194,6 +231,31 @@ def _controlled_pass_inputs(target_type: str = "gpu_fpga_hybrid") -> tuple[dict,
     baseline = _measured_baseline(family_id=candidate["workload_family_id"])
     result = _measured_candidate_result(candidate)
     return baseline, _candidate_results_artifact(result), candidate
+
+
+def _write_json(path: Path, payload: dict) -> None:
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+
+
+def _report_with_temp_external_evidence(
+    tmp_path: Path,
+    *,
+    gpu_baseline_measurements: dict,
+    candidate_high_fidelity_results: dict,
+) -> dict:
+    config = _load_json(CONFIG_PATH)
+    baseline_path = tmp_path / "gpu_baseline.json"
+    candidate_path = tmp_path / "candidate_results.json"
+    _write_json(baseline_path, gpu_baseline_measurements)
+    _write_json(candidate_path, candidate_high_fidelity_results)
+    config["input_artifacts"]["gpu_baseline_measurements"] = str(baseline_path)
+    config["input_artifacts"]["candidate_high_fidelity_results"] = str(candidate_path)
+    report = _run_analysis(
+        gpu_baseline_measurements=gpu_baseline_measurements,
+        candidate_high_fidelity_results=candidate_high_fidelity_results,
+        opportunity_config=config,
+    )
+    return report
 
 
 def test_public_api_exports_expected_functions():
@@ -259,7 +321,11 @@ def test_fixture_transfer_overhead_still_inconclusive():
         {
             **fixture_baseline["baseline_records"][0],
             "workload_family_id": candidate["workload_family_id"],
+            "case_id": "controlled_case",
             "evidence_status": "fixture_example",
+            "input_deck_hash": "sha256:" + "1" * 64,
+            "precision": "fp64_mixed",
+            "program": "pw.x",
         }
     ]
     fixture_result = _measured_candidate_result(
@@ -318,6 +384,72 @@ def test_missing_gpu_baseline_blocks_claim():
     assert row["claim_allowed"] is False
     assert row["verdict"] == "evidence_missing"
     assert "gpu_baseline_missing" in row["claim_blockers"]
+
+
+def test_claim_gate_fails_when_baseline_case_id_mismatch():
+    inputs = _input_artifacts()
+    candidate = _first_candidate(inputs["candidate_plan"], "gpu_fpga_hybrid")
+    baseline = _measured_baseline(family_id=candidate["workload_family_id"], case_id="different_case")
+    result = _measured_candidate_result(candidate, case_id="controlled_case")
+
+    report = _run_analysis(
+        gpu_baseline_measurements=baseline,
+        candidate_high_fidelity_results=_candidate_results_artifact(result),
+    )
+
+    row = report["opportunity_records"][0]
+    assert row["gpu_baseline_id"] is None
+    assert row["claim_allowed"] is False
+    assert "gpu_baseline_missing" in row["claim_blockers"]
+
+
+def test_claim_gate_fails_when_input_deck_hash_mismatch():
+    inputs = _input_artifacts()
+    candidate = _first_candidate(inputs["candidate_plan"], "gpu_fpga_hybrid")
+    baseline = _measured_baseline(
+        family_id=candidate["workload_family_id"],
+        input_deck_hash="sha256:" + "9" * 64,
+    )
+    result = _measured_candidate_result(candidate, input_deck_hash="sha256:" + "1" * 64)
+
+    report = _run_analysis(
+        gpu_baseline_measurements=baseline,
+        candidate_high_fidelity_results=_candidate_results_artifact(result),
+    )
+
+    row = report["opportunity_records"][0]
+    assert row["gpu_baseline_id"] is None
+    assert row["claim_allowed"] is False
+    assert "gpu_baseline_missing" in row["claim_blockers"]
+
+
+def test_claim_gate_uses_exact_baseline_not_first_family_record():
+    inputs = _input_artifacts()
+    candidate = _first_candidate(inputs["candidate_plan"], "gpu_fpga_hybrid")
+    wrong = _measured_baseline(
+        family_id=candidate["workload_family_id"],
+        runtime_mean=1000.0,
+        case_id="wrong_case",
+    )["baseline_records"][0]
+    right = _measured_baseline(
+        family_id=candidate["workload_family_id"],
+        runtime_mean=100.0,
+        case_id="controlled_case",
+    )["baseline_records"][0]
+    wrong["baseline_id"] = "wrong_first_family_baseline"
+    right["baseline_id"] = "right_exact_baseline"
+    baseline = _measured_baseline(family_id=candidate["workload_family_id"])
+    baseline["baseline_records"] = [wrong, right]
+    result = _measured_candidate_result(candidate, workflow_mean=80.0, case_id="controlled_case")
+
+    report = _run_analysis(
+        gpu_baseline_measurements=baseline,
+        candidate_high_fidelity_results=_candidate_results_artifact(result),
+    )
+
+    row = report["opportunity_records"][0]
+    assert row["gpu_baseline_id"] == "right_exact_baseline"
+    assert row["speedup_vs_gpu_mean"] == pytest.approx(1.25)
 
 
 def test_speedup_vs_gpu_is_computed_correctly():
@@ -537,6 +669,280 @@ def test_validation_fails_superiority_claim_outside_system_conclusion():
 
     assert validation["status"] == "failed"
     assert any("superiority claim outside system_conclusion" in error["message"] for error in validation["errors"])
+
+
+def test_validation_fails_raw_candidate_result_not_in_referenced_artifact(tmp_path: Path):
+    baseline, candidates, _candidate = _controlled_pass_inputs()
+    report = _report_with_temp_external_evidence(
+        tmp_path,
+        gpu_baseline_measurements=baseline,
+        candidate_high_fidelity_results=candidates,
+    )
+    report["opportunity_records"][0]["raw_claim_gate_inputs"]["candidate_result"]["runtime_seconds_mean"] = 77.0
+
+    validation = opportunity.validate_qe_ic_real_baseline_opportunity_report(report)
+
+    assert validation["status"] == "failed"
+    assert any("raw_claim_gate_inputs.candidate_result" in error["field"] for error in validation["errors"])
+
+
+def test_validation_fails_raw_gpu_baseline_not_in_referenced_artifact(tmp_path: Path):
+    baseline, candidates, _candidate = _controlled_pass_inputs()
+    report = _report_with_temp_external_evidence(
+        tmp_path,
+        gpu_baseline_measurements=baseline,
+        candidate_high_fidelity_results=candidates,
+    )
+    report["opportunity_records"][0]["raw_claim_gate_inputs"]["gpu_baseline_record"]["runtime_seconds_mean"] = 999.0
+
+    validation = opportunity.validate_qe_ic_real_baseline_opportunity_report(report)
+
+    assert validation["status"] == "failed"
+    assert any("raw_claim_gate_inputs.gpu_baseline_record" in error["field"] for error in validation["errors"])
+
+
+def test_validation_fails_raw_gpu_baseline_null_when_referenced_artifact_has_match(tmp_path: Path):
+    baseline, candidates, _candidate = _controlled_pass_inputs()
+    report = _report_with_temp_external_evidence(
+        tmp_path,
+        gpu_baseline_measurements=baseline,
+        candidate_high_fidelity_results=candidates,
+    )
+    report["opportunity_records"][0]["raw_claim_gate_inputs"]["gpu_baseline_record"] = None
+
+    validation = opportunity.validate_qe_ic_real_baseline_opportunity_report(report)
+
+    assert validation["status"] == "failed"
+    assert any("raw_claim_gate_inputs.gpu_baseline_record" in error["field"] for error in validation["errors"])
+
+
+def test_validation_fails_raw_claim_gate_inputs_tampered_to_measured(tmp_path: Path):
+    fixture_report = _run_analysis()
+    measured_baseline, measured_candidates, _candidate = _controlled_pass_inputs()
+    config = _load_json(CONFIG_PATH)
+    fixture_baseline_path = tmp_path / "fixture_baseline.json"
+    fixture_candidate_path = tmp_path / "fixture_candidates.json"
+    _write_json(fixture_baseline_path, _load_json(GPU_BASELINE_PATH))
+    _write_json(fixture_candidate_path, _load_json(CANDIDATE_RESULTS_PATH))
+    config["input_artifacts"]["gpu_baseline_measurements"] = str(fixture_baseline_path)
+    config["input_artifacts"]["candidate_high_fidelity_results"] = str(fixture_candidate_path)
+    fixture_report["input_artifact_index"] = config["input_artifacts"]
+    row = fixture_report["opportunity_records"][0]
+    row["raw_claim_gate_inputs"]["gpu_baseline_record"] = measured_baseline["baseline_records"][0]
+    row["raw_claim_gate_inputs"]["candidate_result"] = measured_candidates["candidate_results"][0]
+    row["claim_allowed"] = True
+    row["claim_strength"] = "strong"
+    row["claim_blockers"] = []
+    row["failure_reasons"] = ["speedup_claim_gate_passed"]
+    row["verdict"] = "hybrid_opportunity_found"
+
+    validation = opportunity.validate_qe_ic_real_baseline_opportunity_report(fixture_report)
+
+    assert validation["status"] == "failed"
+    assert any("referenced artifact" in error["message"] for error in validation["errors"])
+
+
+def test_validation_fails_opportunity_record_identity_mismatches_raw_candidate(tmp_path: Path):
+    baseline, candidates, _candidate = _controlled_pass_inputs()
+    report = _report_with_temp_external_evidence(
+        tmp_path,
+        gpu_baseline_measurements=baseline,
+        candidate_high_fidelity_results=candidates,
+    )
+    row = report["opportunity_records"][0]
+    row["candidate_id"] = "misattributed_candidate"
+    report["system_conclusion"]["best_candidate_id"] = "misattributed_candidate"
+
+    validation = opportunity.validate_qe_ic_real_baseline_opportunity_report(report)
+
+    assert validation["status"] == "failed"
+    assert any("candidate_id" in error["field"] for error in validation["errors"])
+
+
+def test_validation_fails_candidate_result_not_in_layer4_candidate_plan():
+    inputs = _input_artifacts()
+    candidate = copy.deepcopy(_first_candidate(inputs["candidate_plan"], "gpu_fpga_hybrid"))
+    result = _measured_candidate_result(candidate)
+    result["candidate_id"] = "not_in_layer4_candidate_plan"
+    candidates = _candidate_results_artifact(result)
+
+    validation = opportunity.validate_qe_ic_opportunity_input_artifacts(
+        workload_suite=inputs["workload_suite"],
+        motif_profile=inputs["motif_profile"],
+        target_viability=inputs["target_viability"],
+        candidate_plan=inputs["candidate_plan"],
+        l1_results=inputs["l1_results"],
+        closed_loop_results=inputs["closed_loop_results"],
+        gpu_baseline_measurements=_measured_baseline(family_id=candidate["workload_family_id"]),
+        candidate_high_fidelity_results=candidates,
+    )
+
+    assert validation["status"] == "failed"
+    assert any("Layer-4" in error["message"] or "layer4" in error["field"] for error in validation["errors"])
+
+
+def test_validation_fails_candidate_result_not_in_closed_loop_trajectory():
+    inputs = _input_artifacts()
+    candidate = _first_candidate(inputs["candidate_plan"], "gpu_fpga_hybrid")
+    result = _measured_candidate_result(candidate)
+    closed_loop = copy.deepcopy(inputs["closed_loop_results"])
+    closed_loop["candidate_trajectory"] = [
+        row
+        for row in closed_loop["candidate_trajectory"]
+        if row["candidate_id"] != candidate["candidate_id"]
+    ]
+
+    validation = opportunity.validate_qe_ic_opportunity_input_artifacts(
+        workload_suite=inputs["workload_suite"],
+        motif_profile=inputs["motif_profile"],
+        target_viability=inputs["target_viability"],
+        candidate_plan=inputs["candidate_plan"],
+        l1_results=inputs["l1_results"],
+        closed_loop_results=closed_loop,
+        gpu_baseline_measurements=_measured_baseline(family_id=candidate["workload_family_id"]),
+        candidate_high_fidelity_results=_candidate_results_artifact(result),
+    )
+
+    assert validation["status"] == "failed"
+    assert any("Layer-6" in error["message"] or "closed_loop" in error["field"] for error in validation["errors"])
+
+
+def test_unknown_candidate_result_cannot_make_opportunity_claim():
+    inputs = _input_artifacts()
+    candidate = copy.deepcopy(_first_candidate(inputs["candidate_plan"], "gpu_fpga_hybrid"))
+    result = _measured_candidate_result(candidate)
+    result["candidate_id"] = "not_in_layer4_candidate_plan"
+
+    report = _run_analysis(
+        gpu_baseline_measurements=_measured_baseline(family_id=candidate["workload_family_id"]),
+        candidate_high_fidelity_results=_candidate_results_artifact(result),
+    )
+
+    row = report["opportunity_records"][0]
+    assert row["claim_allowed"] is False
+    assert row["verdict"] == "evidence_missing"
+    assert "unknown_candidate_not_claimable" in row["claim_blockers"]
+
+
+def test_validation_fails_candidate_result_workload_mismatch():
+    inputs = _input_artifacts()
+    candidate = _first_candidate(inputs["candidate_plan"], "gpu_fpga_hybrid")
+    result = _measured_candidate_result(candidate)
+    result["workload_family_id"] = "different_workload"
+    validation = opportunity.validate_qe_ic_opportunity_input_artifacts(
+        workload_suite=inputs["workload_suite"],
+        motif_profile=inputs["motif_profile"],
+        target_viability=inputs["target_viability"],
+        candidate_plan=inputs["candidate_plan"],
+        l1_results=inputs["l1_results"],
+        closed_loop_results=inputs["closed_loop_results"],
+        gpu_baseline_measurements=_measured_baseline(family_id=candidate["workload_family_id"]),
+        candidate_high_fidelity_results=_candidate_results_artifact(result),
+    )
+
+    assert validation["status"] == "failed"
+    assert any("workload_family_id" in error["field"] for error in validation["errors"])
+
+
+def test_validation_fails_candidate_result_motif_mismatch():
+    inputs = _input_artifacts()
+    candidate = _first_candidate(inputs["candidate_plan"], "gpu_fpga_hybrid")
+    result = _measured_candidate_result(candidate)
+    result["motif_id"] = "different_motif"
+    validation = opportunity.validate_qe_ic_opportunity_input_artifacts(
+        workload_suite=inputs["workload_suite"],
+        motif_profile=inputs["motif_profile"],
+        target_viability=inputs["target_viability"],
+        candidate_plan=inputs["candidate_plan"],
+        l1_results=inputs["l1_results"],
+        closed_loop_results=inputs["closed_loop_results"],
+        gpu_baseline_measurements=_measured_baseline(family_id=candidate["workload_family_id"]),
+        candidate_high_fidelity_results=_candidate_results_artifact(result),
+    )
+
+    assert validation["status"] == "failed"
+    assert any("motif_id" in error["field"] for error in validation["errors"])
+
+
+def test_validation_fails_candidate_result_target_type_mismatch():
+    inputs = _input_artifacts()
+    candidate = _first_candidate(inputs["candidate_plan"], "gpu_fpga_hybrid")
+    result = _measured_candidate_result(candidate, target_type="fpga_only")
+    validation = opportunity.validate_qe_ic_opportunity_input_artifacts(
+        workload_suite=inputs["workload_suite"],
+        motif_profile=inputs["motif_profile"],
+        target_viability=inputs["target_viability"],
+        candidate_plan=inputs["candidate_plan"],
+        l1_results=inputs["l1_results"],
+        closed_loop_results=inputs["closed_loop_results"],
+        gpu_baseline_measurements=_measured_baseline(family_id=candidate["workload_family_id"]),
+        candidate_high_fidelity_results=_candidate_results_artifact(result),
+    )
+
+    assert validation["status"] == "failed"
+    assert any("target_type" in error["field"] for error in validation["errors"])
+
+
+def test_validation_fails_candidate_result_architecture_family_mismatch():
+    inputs = _input_artifacts()
+    candidate = _first_candidate(inputs["candidate_plan"], "gpu_fpga_hybrid")
+    result = _measured_candidate_result(candidate)
+    result["architecture_summary"]["architecture_family"] = "fpga_streaming_pipeline"
+    validation = opportunity.validate_qe_ic_opportunity_input_artifacts(
+        workload_suite=inputs["workload_suite"],
+        motif_profile=inputs["motif_profile"],
+        target_viability=inputs["target_viability"],
+        candidate_plan=inputs["candidate_plan"],
+        l1_results=inputs["l1_results"],
+        closed_loop_results=inputs["closed_loop_results"],
+        gpu_baseline_measurements=_measured_baseline(family_id=candidate["workload_family_id"]),
+        candidate_high_fidelity_results=_candidate_results_artifact(result),
+    )
+
+    assert validation["status"] == "failed"
+    assert any("architecture_family" in error["field"] for error in validation["errors"])
+
+
+def test_high_fidelity_estimate_requires_strict_tool_provenance():
+    inputs = _input_artifacts()
+    candidate = _first_candidate(inputs["candidate_plan"], "gpu_fpga_hybrid")
+    result = _measured_candidate_result(
+        candidate,
+        tool_provenance={
+            "tool": "controlled_trace_replay",
+            "version": "test-fixture",
+            "run_id": "controlled_trace_run",
+        },
+    )
+
+    validation = opportunity.validate_qe_ic_candidate_high_fidelity_results(_candidate_results_artifact(result))
+
+    assert validation["status"] == "failed"
+    assert any("config_hash" in error["field"] or "output_artifact_hash" in error["field"] for error in validation["errors"])
+
+
+def test_claim_gate_blocks_high_fidelity_estimate_with_partial_tool_provenance():
+    inputs = _input_artifacts()
+    candidate = _first_candidate(inputs["candidate_plan"], "gpu_fpga_hybrid")
+    baseline = _measured_baseline(family_id=candidate["workload_family_id"])
+    result = _measured_candidate_result(
+        candidate,
+        tool_provenance={
+            "tool": "controlled_trace_replay",
+            "version": "test-fixture",
+            "run_id": "controlled_trace_run",
+        },
+    )
+
+    report = _run_analysis(
+        gpu_baseline_measurements=baseline,
+        candidate_high_fidelity_results=_candidate_results_artifact(result),
+    )
+
+    row = report["opportunity_records"][0]
+    assert row["claim_allowed"] is False
+    assert row["verdict"] != "hybrid_opportunity_found"
+    assert "high_fidelity_provenance_missing" in row["claim_blockers"]
 
 
 def test_writer_emits_required_artifacts(tmp_path: Path):

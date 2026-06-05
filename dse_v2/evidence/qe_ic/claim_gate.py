@@ -8,6 +8,7 @@ from typing import Any
 
 from dse_v2.evidence.qe_ic.schema import (
     OPPORTUNITY_FOUND_VERDICTS,
+    REQUIRED_HIGH_FIDELITY_PROVENANCE_FIELDS,
     TARGET_TYPES,
     WORKFLOW_LEVEL_EVIDENCE_LEVELS,
 )
@@ -57,6 +58,14 @@ def conservative_ci_speedup(
     return baseline_low / candidate_high
 
 
+def _has_required_high_fidelity_provenance(candidate_result: Mapping[str, Any]) -> bool:
+    provenance = _as_mapping(candidate_result.get("tool_provenance"))
+    return all(
+        isinstance(provenance.get(field), str) and provenance.get(field)
+        for field in REQUIRED_HIGH_FIDELITY_PROVENANCE_FIELDS
+    )
+
+
 def evaluate_qe_ic_claim_gate(
     *,
     baseline: Mapping[str, Any] | None,
@@ -64,11 +73,13 @@ def evaluate_qe_ic_claim_gate(
     candidate_result: Mapping[str, Any],
     candidate_payload_real: bool,
     opportunity_config: Mapping[str, Any],
+    preexisting_blockers: list[str] | None = None,
 ) -> dict[str, Any]:
     """Evaluate opportunity claim gates and return recomputable gate state."""
 
-    blockers: list[str] = []
+    blockers: list[str] = list(preexisting_blockers or [])
     failure_reasons: list[str] = []
+    failure_reasons.extend(blockers)
     claim_gates = _as_mapping(opportunity_config.get("claim_gates"))
     thresholds = _as_mapping(opportunity_config.get("analysis_thresholds"))
     minimum_speedup = float(claim_gates.get("minimum_speedup_for_strong_claim", 1.10))
@@ -100,7 +111,7 @@ def evaluate_qe_ic_claim_gate(
         blockers.append("kernel_only_insufficient")
     if (
         candidate_result.get("evidence_status") == "high_fidelity_estimate"
-        and not isinstance(candidate_result.get("tool_provenance"), Mapping)
+        and not _has_required_high_fidelity_provenance(candidate_result)
     ):
         blockers.append("high_fidelity_provenance_missing")
         failure_reasons.append("high_fidelity_provenance_missing")
@@ -163,6 +174,8 @@ def evaluate_qe_ic_claim_gate(
         failure_reasons.append("speedup_claim_gate_passed")
 
     if "gpu_baseline_missing" in blockers:
+        verdict = "evidence_missing"
+    elif "unknown_candidate_not_claimable" in blockers or "candidate_not_tracked_by_l1_or_layer6" in blockers:
         verdict = "evidence_missing"
     elif "fixture_only_evidence" in blockers:
         verdict = "fixture_only_inconclusive"

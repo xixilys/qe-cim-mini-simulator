@@ -27,11 +27,17 @@ The opportunity config references:
 
 The first six inputs establish DSE provenance and workload/candidate identity.
 The last two inputs are the only performance evidence used for claim gating.
+The embedded raw claim-gate inputs in a report are not authoritative by
+themselves; validation reloads the referenced GPU baseline and candidate
+evidence artifacts and requires the embedded raw records to match those
+artifacts exactly.
 
 ## Report Semantics
 
-Each opportunity record matches a candidate result to a GPU baseline by
-`workload_family_id`. The report computes:
+Each opportunity record matches a candidate result to a GPU baseline by exact
+case identity, not by workload family alone. The required comparison key is
+`workload_family_id`, `case_id`, `program`, `input_deck_hash`, and `precision`.
+The report computes:
 
 ```text
 speedup_vs_gpu_mean =

@@ -13,6 +13,8 @@ A candidate can be marked `fpga_opportunity_found` or
 `hybrid_opportunity_found` only when all configured gates pass:
 
 - Matching GPU-only baseline exists.
+- The GPU baseline matches the candidate case by `workload_family_id`,
+  `case_id`, `program`, `input_deck_hash`, and `precision`.
 - GPU baseline payload has `measurements_are_real=true`.
 - Baseline record has `evidence_status=measured`.
 - Candidate payload has `results_are_real=true`.
@@ -25,7 +27,11 @@ A candidate can be marked `fpga_opportunity_found` or
 - Conservative CI speedup is above 1.0 when required.
 - Resource feasibility is true when required.
 - Timing feasibility is true when required.
-- High-fidelity estimates include explicit tool provenance.
+- High-fidelity estimates include explicit tool provenance fields: `tool`,
+  `version`, `run_id`, `config_hash`, and `output_artifact_hash`.
+- Candidate result identity and target fields match the Layer-4 candidate plan.
+- Embedded raw claim-gate inputs match the externally referenced evidence
+  artifacts exactly.
 
 ## Failure Reasons
 
@@ -52,6 +58,9 @@ whether the claim is allowed.
 
 Validation recomputes speedups, conservative CI speedup, blockers, failure
 reasons, verdict, claim strength, and the system conclusion from raw claim-gate
-inputs embedded in the report. Validation fails if a strong claim is made from
-fixture evidence, L1-only evidence, missing baseline evidence, inconsistent
-speedup fields, or an opportunity verdict with `claim_allowed=false`.
+inputs embedded in the report, then checks those raw inputs against the
+referenced artifacts. Validation fails if a strong claim is made from fixture
+evidence, L1-only evidence, missing baseline evidence, inconsistent speedup
+fields, raw evidence not present in referenced artifacts, candidate evidence not
+tied to a Layer-4 candidate, or an opportunity verdict with
+`claim_allowed=false`.
