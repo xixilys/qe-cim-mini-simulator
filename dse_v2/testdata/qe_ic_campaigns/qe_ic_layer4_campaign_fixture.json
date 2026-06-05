@@ -1,0 +1,51 @@
+{
+  "allowed_candidate_template_families": [
+    "baseline_reference",
+    "fpga_fft",
+    "fpga_memory",
+    "fpga_pipeline",
+    "fpga_projector",
+    "fpga_reduction",
+    "hybrid_dma",
+    "hybrid_memory",
+    "hybrid_runtime",
+    "hybrid_sidecar"
+  ],
+  "allowed_target_types": [
+    "gpu_only",
+    "fpga_only",
+    "gpu_fpga_hybrid"
+  ],
+  "campaign_id": "qe_ic_layer4_fixture_campaign",
+  "candidate_generation": {
+    "generate_from_decisions": [
+      "maybe",
+      "viable"
+    ],
+    "ignore_reject_records": true,
+    "include_baseline_gpu": true,
+    "max_candidates_per_motif": 3,
+    "max_candidates_per_target_type": 20
+  },
+  "claim_boundary": "Layer-4 campaign config controls candidate generation and promotion planning only. It does not request execution or claim final performance.",
+  "promotion": {
+    "budget": {
+      "max_gem5_requests": 0,
+      "max_l1_cost_model_requests": 12,
+      "max_real_qe_requests": 0,
+      "max_systemc_requests": 0,
+      "max_vivado_requests": 0
+    },
+    "entry_fidelity": "L0_target_viability",
+    "next_fidelity": "L1_cost_model",
+    "objective": "risk_aware_budgeted_promotion",
+    "require_diversity_across_motif": true,
+    "require_diversity_across_target_type": true
+  },
+  "replay_validation": {
+    "fixture_role": "synthetic_policy_behavior_check",
+    "labels_are_real_performance_evidence": false
+  },
+  "risk_tolerance": 0.65,
+  "schema_version": "dse.qe_ic.layer4_campaign.v1"
+}

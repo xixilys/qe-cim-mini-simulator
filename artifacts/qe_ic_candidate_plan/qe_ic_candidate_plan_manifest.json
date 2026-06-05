@@ -1,0 +1,17 @@
+{
+  "artifact_role": "dse_layer4_candidate_plan",
+  "candidate_plan_artifact": "qe_ic_candidate_plan.json",
+  "claim_boundary": "This manifest registers Layer-4 candidate and promotion artifacts only. It is not execution evidence or final claim adjudication.",
+  "downstream_consumers": [
+    "layer5_evaluation_runner",
+    "systemc_request_builder",
+    "gem5_request_builder",
+    "vivado_request_builder",
+    "qe_validation_runner"
+  ],
+  "layer": "layer4_candidate_generation_and_promotion",
+  "producer": "dse_v2.candidates.qe_ic",
+  "readme_artifact": "qe_ic_candidate_plan_readme.md",
+  "schema_version": "dse.qe_ic.candidate_plan_manifest.v1",
+  "validation_artifact": "qe_ic_candidate_plan_validation.json"
+}

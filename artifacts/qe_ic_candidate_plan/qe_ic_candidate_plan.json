@@ -1,0 +1,3960 @@
+{
+  "campaign_config": {
+    "allowed_candidate_template_families": [
+      "baseline_reference",
+      "fpga_fft",
+      "fpga_memory",
+      "fpga_pipeline",
+      "fpga_projector",
+      "fpga_reduction",
+      "hybrid_dma",
+      "hybrid_memory",
+      "hybrid_runtime",
+      "hybrid_sidecar"
+    ],
+    "allowed_target_types": [
+      "gpu_only",
+      "fpga_only",
+      "gpu_fpga_hybrid"
+    ],
+    "campaign_id": "qe_ic_layer4_fixture_campaign",
+    "candidate_generation": {
+      "generate_from_decisions": [
+        "maybe",
+        "viable"
+      ],
+      "ignore_reject_records": true,
+      "include_baseline_gpu": true,
+      "max_candidates_per_motif": 3,
+      "max_candidates_per_target_type": 20
+    },
+    "claim_boundary": "Layer-4 campaign config controls candidate generation and promotion planning only. It does not request execution or claim final performance.",
+    "promotion": {
+      "budget": {
+        "max_gem5_requests": 0,
+        "max_l1_cost_model_requests": 12,
+        "max_real_qe_requests": 0,
+        "max_systemc_requests": 0,
+        "max_vivado_requests": 0
+      },
+      "entry_fidelity": "L0_target_viability",
+      "next_fidelity": "L1_cost_model",
+      "objective": "risk_aware_budgeted_promotion",
+      "require_diversity_across_motif": true,
+      "require_diversity_across_target_type": true
+    },
+    "replay_validation": {
+      "fixture_role": "synthetic_policy_behavior_check",
+      "labels_are_real_performance_evidence": false
+    },
+    "risk_tolerance": 0.65,
+    "schema_version": "dse.qe_ic.layer4_campaign.v1"
+  },
+  "candidate_template_registry": {
+    "registry_id": "qe_ic_candidate_template_registry_v1",
+    "schema_version": "dse.qe_ic.candidate_template_registry.v1",
+    "selection_policy": "Templates are selected by target_type, candidate_type, allowed template family, motif_id override, and motif category fallback.",
+    "templates": {
+      "fpga_fft_transpose_engine": {
+        "candidate_type": "fpga_candidate",
+        "default_parameters": {
+          "data_mover": "streaming_transpose",
+          "host_role": "scf_control_retained",
+          "tile_schedule": "motif_runtime_weighted"
+        },
+        "motif_categories": [
+          "spectral_transform"
+        ],
+        "motif_ids": [
+          "fft_transpose"
+        ],
+        "priority": 5,
+        "target_type": "fpga_only",
+        "template_family": "fpga_fft",
+        "template_id": "fpga_fft_transpose_engine"
+      },
+      "fpga_memory_reuse_engine": {
+        "candidate_type": "fpga_candidate",
+        "default_parameters": {
+          "host_role": "control_and_io_retained",
+          "memory_binding": "local_bram_uram_when_available",
+          "reuse_strategy": "scratchpad_tile_reuse"
+        },
+        "motif_categories": [
+          "memory",
+          "io_memory",
+          "post_processing"
+        ],
+        "motif_ids": [],
+        "priority": 20,
+        "target_type": "fpga_only",
+        "template_family": "fpga_memory",
+        "template_id": "fpga_memory_reuse_engine"
+      },
+      "fpga_projector_pipeline": {
+        "candidate_type": "fpga_candidate",
+        "default_parameters": {
+          "host_role": "diagonalization_and_mixing_retained",
+          "pipeline_style": "operator_stream",
+          "precision_policy": "golden_correctness_required_before_claims"
+        },
+        "motif_categories": [
+          "operator_application"
+        ],
+        "motif_ids": [
+          "projector_nonlocal",
+          "hpsi"
+        ],
+        "priority": 5,
+        "target_type": "fpga_only",
+        "template_family": "fpga_projector",
+        "template_id": "fpga_projector_pipeline"
+      },
+      "fpga_reduction_tree": {
+        "candidate_type": "fpga_candidate",
+        "default_parameters": {
+          "accumulation": "deterministic_ordering_required",
+          "host_role": "collective_orchestration_retained",
+          "reduction_topology": "tree"
+        },
+        "motif_categories": [
+          "communication"
+        ],
+        "motif_ids": [
+          "reduction_collective"
+        ],
+        "priority": 5,
+        "target_type": "fpga_only",
+        "template_family": "fpga_reduction",
+        "template_id": "fpga_reduction_tree"
+      },
+      "fpga_streaming_pipeline": {
+        "candidate_type": "fpga_candidate",
+        "default_parameters": {
+          "buffering": "line_or_tile",
+          "host_role": "control_and_io_retained",
+          "pipeline_style": "streaming_dataflow"
+        },
+        "motif_categories": [
+          "spectral_transform",
+          "operator_application",
+          "communication"
+        ],
+        "motif_ids": [],
+        "priority": 10,
+        "target_type": "fpga_only",
+        "template_family": "fpga_pipeline",
+        "template_id": "fpga_streaming_pipeline"
+      },
+      "gpu_baseline_reference": {
+        "candidate_type": "baseline",
+        "default_parameters": {
+          "execution_role": "reference_only",
+          "next_fidelity_intent": "baseline_context"
+        },
+        "motif_categories": [
+          "*"
+        ],
+        "motif_ids": [],
+        "priority": 0,
+        "target_type": "gpu_only",
+        "template_family": "baseline_reference",
+        "template_id": "gpu_baseline_reference"
+      },
+      "hybrid_dma_overlap_sidecar": {
+        "candidate_type": "hybrid_candidate",
+        "default_parameters": {
+          "host_role": "runtime_scheduling_retained",
+          "overlap_intent": "hide_transfer_for_repeated_motif",
+          "partition": "gpu_primary_fpga_dma_overlap"
+        },
+        "motif_categories": [
+          "memory",
+          "io_memory",
+          "communication"
+        ],
+        "motif_ids": [],
+        "priority": 15,
+        "target_type": "gpu_fpga_hybrid",
+        "template_family": "hybrid_dma",
+        "template_id": "hybrid_dma_overlap_sidecar"
+      },
+      "hybrid_memory_staging_sidecar": {
+        "candidate_type": "hybrid_candidate",
+        "default_parameters": {
+          "host_role": "control_and_io_retained",
+          "partition": "gpu_compute_fpga_memory_staging",
+          "staging_scope": "motif_local_reuse_and_transfer_batching"
+        },
+        "motif_categories": [
+          "memory",
+          "io_memory"
+        ],
+        "motif_ids": [],
+        "priority": 10,
+        "target_type": "gpu_fpga_hybrid",
+        "template_family": "hybrid_memory",
+        "template_id": "hybrid_memory_staging_sidecar"
+      },
+      "hybrid_reduction_sidecar": {
+        "candidate_type": "hybrid_candidate",
+        "default_parameters": {
+          "host_role": "mpi_orchestration_retained",
+          "overlap_intent": "collective_staging_candidate",
+          "partition": "gpu_compute_fpga_reduction_sidecar"
+        },
+        "motif_categories": [
+          "communication"
+        ],
+        "motif_ids": [
+          "reduction_collective"
+        ],
+        "priority": 5,
+        "target_type": "gpu_fpga_hybrid",
+        "template_family": "hybrid_sidecar",
+        "template_id": "hybrid_reduction_sidecar"
+      },
+      "hybrid_runtime_controller": {
+        "candidate_type": "hybrid_candidate",
+        "default_parameters": {
+          "control_scope": "offload_queue_and_dependency_tracking",
+          "host_role": "scf_control_retained",
+          "partition": "gpu_primary_fpga_runtime_controller"
+        },
+        "motif_categories": [
+          "workflow_parallelism",
+          "response_solve",
+          "post_processing"
+        ],
+        "motif_ids": [],
+        "priority": 25,
+        "target_type": "gpu_fpga_hybrid",
+        "template_family": "hybrid_runtime",
+        "template_id": "hybrid_runtime_controller"
+      },
+      "hybrid_transpose_sidecar": {
+        "candidate_type": "hybrid_candidate",
+        "default_parameters": {
+          "host_role": "control_and_io_retained",
+          "overlap_intent": "pcie_overlap_candidate",
+          "partition": "gpu_compute_fpga_transpose_sidecar"
+        },
+        "motif_categories": [
+          "spectral_transform"
+        ],
+        "motif_ids": [
+          "fft_transpose"
+        ],
+        "priority": 5,
+        "target_type": "gpu_fpga_hybrid",
+        "template_family": "hybrid_sidecar",
+        "template_id": "hybrid_transpose_sidecar"
+      }
+    }
+  },
+  "candidates": [
+    {
+      "candidate_id": "qeic_l4_baseline_electron_phonon_mobility_bte_collision_integral_gpu_only_gpu_baseline_reference_5983c97cfc",
+      "candidate_parameters": {
+        "estimated_net_gain_ratio": 0.0,
+        "execution_role": "reference_only",
+        "generation_boundary": "candidate_spec_only_no_execution",
+        "motif_category": "transport",
+        "next_fidelity_intent": "baseline_context",
+        "profile_quality_risk": 0.35,
+        "risk_score": 0.275,
+        "runtime_ratio": 0.33,
+        "source_profile_target": "gpu_only",
+        "source_target_id": "gpu_only_a100_fixture",
+        "template_family": "baseline_reference"
+      },
+      "candidate_type": "baseline",
+      "motif_id": "bte_collision_integral",
+      "source_viability_decision": "baseline",
+      "source_viability_record_id": "l3vr_electron_phonon_mobility_bte_collision_integral_gpu_only_a100_fixture_gpu_only_4e8e6f438d",
+      "target_type": "gpu_only",
+      "template_id": "gpu_baseline_reference",
+      "traceability": {
+        "layer1_suite_id": "qe_ic_device_suite_v1",
+        "layer2_profile_artifact": "qe_ic_motif_profile.json",
+        "layer3_viability_artifact": "qe_ic_target_viability.json"
+      },
+      "workload_family_id": "electron_phonon_mobility"
+    },
+    {
+      "candidate_id": "qeic_l4_baseline_electron_phonon_mobility_dense_kq_interpolation_gpu_only_gpu_baseline_reference_cb40610bde",
+      "candidate_parameters": {
+        "estimated_net_gain_ratio": 0.0,
+        "execution_role": "reference_only",
+        "generation_boundary": "candidate_spec_only_no_execution",
+        "motif_category": "transport",
+        "next_fidelity_intent": "baseline_context",
+        "profile_quality_risk": 0.1,
+        "risk_score": 0.2125,
+        "runtime_ratio": 0.42,
+        "source_profile_target": "gpu_only",
+        "source_target_id": "gpu_only_a100_fixture",
+        "template_family": "baseline_reference"
+      },
+      "candidate_type": "baseline",
+      "motif_id": "dense_kq_interpolation",
+      "source_viability_decision": "baseline",
+      "source_viability_record_id": "l3vr_electron_phonon_mobility_dense_kq_interpolation_gpu_only_a100_fixture_gpu_only_78efe7f89e",
+      "target_type": "gpu_only",
+      "template_id": "gpu_baseline_reference",
+      "traceability": {
+        "layer1_suite_id": "qe_ic_device_suite_v1",
+        "layer2_profile_artifact": "qe_ic_motif_profile.json",
+        "layer3_viability_artifact": "qe_ic_target_viability.json"
+      },
+      "workload_family_id": "electron_phonon_mobility"
+    },
+    {
+      "candidate_id": "qeic_l4_baseline_electron_phonon_mobility_dense_linear_algebra_gpu_only_gpu_baseline_reference_26fe8e02a3",
+      "candidate_parameters": {
+        "estimated_net_gain_ratio": 0.0,
+        "execution_role": "reference_only",
+        "generation_boundary": "candidate_spec_only_no_execution",
+        "motif_category": "linear_algebra",
+        "next_fidelity_intent": "baseline_context",
+        "profile_quality_risk": 0.35,
+        "risk_score": 0.275,
+        "runtime_ratio": 0.25,
+        "source_profile_target": "gpu_only",
+        "source_target_id": "gpu_only_a100_fixture",
+        "template_family": "baseline_reference"
+      },
+      "candidate_type": "baseline",
+      "motif_id": "dense_linear_algebra",
+      "source_viability_decision": "baseline",
+      "source_viability_record_id": "l3vr_electron_phonon_mobility_dense_linear_algebra_gpu_only_a100_fixture_gpu_only_6d28b658af",
+      "target_type": "gpu_only",
+      "template_id": "gpu_baseline_reference",
+      "traceability": {
+        "layer1_suite_id": "qe_ic_device_suite_v1",
+        "layer2_profile_artifact": "qe_ic_motif_profile.json",
+        "layer3_viability_artifact": "qe_ic_target_viability.json"
+      },
+      "workload_family_id": "electron_phonon_mobility"
+    },
+    {
+      "candidate_id": "qeic_l4_fpga_candidate_ground_state_band_structure_fft_transpose_fpga_only_fpga_fft_transpose_engine_9bfbea2b1f",
+      "candidate_parameters": {
+        "data_mover": "streaming_transpose",
+        "estimated_net_gain_ratio": 0.17186833003952573,
+        "generation_boundary": "candidate_spec_only_no_execution",
+        "host_role": "scf_control_retained",
+        "motif_category": "spectral_transform",
+        "profile_quality_risk": 0.1,
+        "risk_score": 0.36895606884057974,
+        "runtime_ratio": 0.5181818181818182,
+        "source_profile_target": "gpu_only",
+        "source_target_id": "fpga_only_u280_fixture",
+        "template_family": "fpga_fft",
+        "tile_schedule": "motif_runtime_weighted"
+      },
+      "candidate_type": "fpga_candidate",
+      "motif_id": "fft_transpose",
+      "source_viability_decision": "maybe",
+      "source_viability_record_id": "l3vr_ground_state_band_structure_fft_transpose_fpga_only_u280_fixture_fpga_only_d9fe8afec3",
+      "target_type": "fpga_only",
+      "template_id": "fpga_fft_transpose_engine",
+      "traceability": {
+        "layer1_suite_id": "qe_ic_device_suite_v1",
+        "layer2_profile_artifact": "qe_ic_motif_profile.json",
+        "layer3_viability_artifact": "qe_ic_target_viability.json"
+      },
+      "workload_family_id": "ground_state_band_structure"
+    },
+    {
+      "candidate_id": "qeic_l4_fpga_candidate_ground_state_band_structure_fft_transpose_fpga_only_fpga_streaming_pipeline_3f5adc94a8",
+      "candidate_parameters": {
+        "buffering": "line_or_tile",
+        "estimated_net_gain_ratio": 0.17186833003952573,
+        "generation_boundary": "candidate_spec_only_no_execution",
+        "host_role": "control_and_io_retained",
+        "motif_category": "spectral_transform",
+        "pipeline_style": "streaming_dataflow",
+        "profile_quality_risk": 0.1,
+        "risk_score": 0.36895606884057974,
+        "runtime_ratio": 0.5181818181818182,
+        "source_profile_target": "gpu_only",
+        "source_target_id": "fpga_only_u280_fixture",
+        "template_family": "fpga_pipeline"
+      },
+      "candidate_type": "fpga_candidate",
+      "motif_id": "fft_transpose",
+      "source_viability_decision": "maybe",
+      "source_viability_record_id": "l3vr_ground_state_band_structure_fft_transpose_fpga_only_u280_fixture_fpga_only_d9fe8afec3",
+      "target_type": "fpga_only",
+      "template_id": "fpga_streaming_pipeline",
+      "traceability": {
+        "layer1_suite_id": "qe_ic_device_suite_v1",
+        "layer2_profile_artifact": "qe_ic_motif_profile.json",
+        "layer3_viability_artifact": "qe_ic_target_viability.json"
+      },
+      "workload_family_id": "ground_state_band_structure"
+    },
+    {
+      "candidate_id": "qeic_l4_hybrid_candidate_ground_state_band_structure_fft_transpose_gpu_fpga_hybrid_hybrid_transpose_sidecar_7fec06843a",
+      "candidate_parameters": {
+        "estimated_net_gain_ratio": -0.006671590909090909,
+        "generation_boundary": "candidate_spec_only_no_execution",
+        "host_role": "control_and_io_retained",
+        "motif_category": "spectral_transform",
+        "overlap_intent": "pcie_overlap_candidate",
+        "partition": "gpu_compute_fpga_transpose_sidecar",
+        "profile_quality_risk": 0.1,
+        "risk_score": 0.37509375,
+        "runtime_ratio": 0.5181818181818182,
+        "source_profile_target": "gpu_only",
+        "source_target_id": "gpu_fpga_hybrid_a100_u280_fixture",
+        "template_family": "hybrid_sidecar"
+      },
+      "candidate_type": "hybrid_candidate",
+      "motif_id": "fft_transpose",
+      "source_viability_decision": "maybe",
+      "source_viability_record_id": "l3vr_ground_state_band_structure_fft_transpose_gpu_fpga_hybrid_a100_u280_fixture_gpu_fpga_hybrid_50bd56c46e",
+      "target_type": "gpu_fpga_hybrid",
+      "template_id": "hybrid_transpose_sidecar",
+      "traceability": {
+        "layer1_suite_id": "qe_ic_device_suite_v1",
+        "layer2_profile_artifact": "qe_ic_motif_profile.json",
+        "layer3_viability_artifact": "qe_ic_target_viability.json"
+      },
+      "workload_family_id": "ground_state_band_structure"
+    },
+    {
+      "candidate_id": "qeic_l4_baseline_ground_state_band_structure_fft_transpose_gpu_only_gpu_baseline_reference_0faf3f3959",
+      "candidate_parameters": {
+        "estimated_net_gain_ratio": 0.0,
+        "execution_role": "reference_only",
+        "generation_boundary": "candidate_spec_only_no_execution",
+        "motif_category": "spectral_transform",
+        "next_fidelity_intent": "baseline_context",
+        "profile_quality_risk": 0.1,
+        "risk_score": 0.2125,
+        "runtime_ratio": 0.5181818181818182,
+        "source_profile_target": "gpu_only",
+        "source_target_id": "gpu_only_a100_fixture",
+        "template_family": "baseline_reference"
+      },
+      "candidate_type": "baseline",
+      "motif_id": "fft_transpose",
+      "source_viability_decision": "baseline",
+      "source_viability_record_id": "l3vr_ground_state_band_structure_fft_transpose_gpu_only_a100_fixture_gpu_only_4a5c5886a3",
+      "target_type": "gpu_only",
+      "template_id": "gpu_baseline_reference",
+      "traceability": {
+        "layer1_suite_id": "qe_ic_device_suite_v1",
+        "layer2_profile_artifact": "qe_ic_motif_profile.json",
+        "layer3_viability_artifact": "qe_ic_target_viability.json"
+      },
+      "workload_family_id": "ground_state_band_structure"
+    },
+    {
+      "candidate_id": "qeic_l4_fpga_candidate_ground_state_band_structure_hpsi_fpga_only_fpga_projector_pipeline_99b5fa1356",
+      "candidate_parameters": {
+        "estimated_net_gain_ratio": 0.12192761857707511,
+        "generation_boundary": "candidate_spec_only_no_execution",
+        "host_role": "diagonalization_and_mixing_retained",
+        "motif_category": "operator_application",
+        "pipeline_style": "operator_stream",
+        "precision_policy": "golden_correctness_required_before_claims",
+        "profile_quality_risk": 0.1,
+        "risk_score": 0.2856603260869566,
+        "runtime_ratio": 0.4318181818181818,
+        "source_profile_target": "gpu_only",
+        "source_target_id": "fpga_only_u280_fixture",
+        "template_family": "fpga_projector"
+      },
+      "candidate_type": "fpga_candidate",
+      "motif_id": "hpsi",
+      "source_viability_decision": "maybe",
+      "source_viability_record_id": "l3vr_ground_state_band_structure_hpsi_fpga_only_u280_fixture_fpga_only_f8ba87334f",
+      "target_type": "fpga_only",
+      "template_id": "fpga_projector_pipeline",
+      "traceability": {
+        "layer1_suite_id": "qe_ic_device_suite_v1",
+        "layer2_profile_artifact": "qe_ic_motif_profile.json",
+        "layer3_viability_artifact": "qe_ic_target_viability.json"
+      },
+      "workload_family_id": "ground_state_band_structure"
+    },
+    {
+      "candidate_id": "qeic_l4_fpga_candidate_ground_state_band_structure_hpsi_fpga_only_fpga_streaming_pipeline_193dd83af0",
+      "candidate_parameters": {
+        "buffering": "line_or_tile",
+        "estimated_net_gain_ratio": 0.12192761857707511,
+        "generation_boundary": "candidate_spec_only_no_execution",
+        "host_role": "control_and_io_retained",
+        "motif_category": "operator_application",
+        "pipeline_style": "streaming_dataflow",
+        "profile_quality_risk": 0.1,
+        "risk_score": 0.2856603260869566,
+        "runtime_ratio": 0.4318181818181818,
+        "source_profile_target": "gpu_only",
+        "source_target_id": "fpga_only_u280_fixture",
+        "template_family": "fpga_pipeline"
+      },
+      "candidate_type": "fpga_candidate",
+      "motif_id": "hpsi",
+      "source_viability_decision": "maybe",
+      "source_viability_record_id": "l3vr_ground_state_band_structure_hpsi_fpga_only_u280_fixture_fpga_only_f8ba87334f",
+      "target_type": "fpga_only",
+      "template_id": "fpga_streaming_pipeline",
+      "traceability": {
+        "layer1_suite_id": "qe_ic_device_suite_v1",
+        "layer2_profile_artifact": "qe_ic_motif_profile.json",
+        "layer3_viability_artifact": "qe_ic_target_viability.json"
+      },
+      "workload_family_id": "ground_state_band_structure"
+    },
+    {
+      "candidate_id": "qeic_l4_baseline_ground_state_band_structure_hpsi_gpu_only_gpu_baseline_reference_6bb0bca986",
+      "candidate_parameters": {
+        "estimated_net_gain_ratio": 0.0,
+        "execution_role": "reference_only",
+        "generation_boundary": "candidate_spec_only_no_execution",
+        "motif_category": "operator_application",
+        "next_fidelity_intent": "baseline_context",
+        "profile_quality_risk": 0.1,
+        "risk_score": 0.11249999999999999,
+        "runtime_ratio": 0.4318181818181818,
+        "source_profile_target": "gpu_only",
+        "source_target_id": "gpu_only_a100_fixture",
+        "template_family": "baseline_reference"
+      },
+      "candidate_type": "baseline",
+      "motif_id": "hpsi",
+      "source_viability_decision": "baseline",
+      "source_viability_record_id": "l3vr_ground_state_band_structure_hpsi_gpu_only_a100_fixture_gpu_only_d07dd8a72d",
+      "target_type": "gpu_only",
+      "template_id": "gpu_baseline_reference",
+      "traceability": {
+        "layer1_suite_id": "qe_ic_device_suite_v1",
+        "layer2_profile_artifact": "qe_ic_motif_profile.json",
+        "layer3_viability_artifact": "qe_ic_target_viability.json"
+      },
+      "workload_family_id": "ground_state_band_structure"
+    },
+    {
+      "candidate_id": "qeic_l4_baseline_interface_band_offset_defect_charge_density_analysis_gpu_only_gpu_baseline_reference_633ce22eaa",
+      "candidate_parameters": {
+        "estimated_net_gain_ratio": 0.0,
+        "execution_role": "reference_only",
+        "generation_boundary": "candidate_spec_only_no_execution",
+        "motif_category": "post_processing",
+        "next_fidelity_intent": "baseline_context",
+        "profile_quality_risk": 0.1,
+        "risk_score": 0.05,
+        "runtime_ratio": 0.1,
+        "source_profile_target": "gpu_only",
+        "source_target_id": "gpu_only_a100_fixture",
+        "template_family": "baseline_reference"
+      },
+      "candidate_type": "baseline",
+      "motif_id": "charge_density_analysis",
+      "source_viability_decision": "baseline",
+      "source_viability_record_id": "l3vr_interface_band_offset_defect_charge_density_analysis_gpu_only_a100_fixture_gpu_only_6e6f50758c",
+      "target_type": "gpu_only",
+      "template_id": "gpu_baseline_reference",
+      "traceability": {
+        "layer1_suite_id": "qe_ic_device_suite_v1",
+        "layer2_profile_artifact": "qe_ic_motif_profile.json",
+        "layer3_viability_artifact": "qe_ic_target_viability.json"
+      },
+      "workload_family_id": "interface_band_offset_defect"
+    },
+    {
+      "candidate_id": "qeic_l4_baseline_interface_band_offset_defect_large_supercell_gpu_only_gpu_baseline_reference_e707267bee",
+      "candidate_parameters": {
+        "estimated_net_gain_ratio": 0.0,
+        "execution_role": "reference_only",
+        "generation_boundary": "candidate_spec_only_no_execution",
+        "motif_category": "structure_scale",
+        "next_fidelity_intent": "baseline_context",
+        "profile_quality_risk": 0.1,
+        "risk_score": 0.05,
+        "runtime_ratio": 0.6,
+        "source_profile_target": "gpu_only",
+        "source_target_id": "gpu_only_a100_fixture",
+        "template_family": "baseline_reference"
+      },
+      "candidate_type": "baseline",
+      "motif_id": "large_supercell",
+      "source_viability_decision": "baseline",
+      "source_viability_record_id": "l3vr_interface_band_offset_defect_large_supercell_gpu_only_a100_fixture_gpu_only_d5f517c86c",
+      "target_type": "gpu_only",
+      "template_id": "gpu_baseline_reference",
+      "traceability": {
+        "layer1_suite_id": "qe_ic_device_suite_v1",
+        "layer2_profile_artifact": "qe_ic_motif_profile.json",
+        "layer3_viability_artifact": "qe_ic_target_viability.json"
+      },
+      "workload_family_id": "interface_band_offset_defect"
+    },
+    {
+      "candidate_id": "qeic_l4_fpga_candidate_interface_band_offset_defect_localized_state_analysis_fpga_only_fpga_memory_reuse_engine_c48c96d718",
+      "candidate_parameters": {
+        "estimated_net_gain_ratio": 0.0441241847826087,
+        "generation_boundary": "candidate_spec_only_no_execution",
+        "host_role": "control_and_io_retained",
+        "memory_binding": "local_bram_uram_when_available",
+        "motif_category": "post_processing",
+        "profile_quality_risk": 0.1,
+        "reuse_strategy": "scratchpad_tile_reuse",
+        "risk_score": 0.20260484601449277,
+        "runtime_ratio": 0.3,
+        "source_profile_target": "gpu_only",
+        "source_target_id": "fpga_only_u280_fixture",
+        "template_family": "fpga_memory"
+      },
+      "candidate_type": "fpga_candidate",
+      "motif_id": "localized_state_analysis",
+      "source_viability_decision": "maybe",
+      "source_viability_record_id": "l3vr_interface_band_offset_defect_localized_state_analysis_fpga_only_u280_fixture_fpga_only_b6320f2c96",
+      "target_type": "fpga_only",
+      "template_id": "fpga_memory_reuse_engine",
+      "traceability": {
+        "layer1_suite_id": "qe_ic_device_suite_v1",
+        "layer2_profile_artifact": "qe_ic_motif_profile.json",
+        "layer3_viability_artifact": "qe_ic_target_viability.json"
+      },
+      "workload_family_id": "interface_band_offset_defect"
+    },
+    {
+      "candidate_id": "qeic_l4_hybrid_candidate_interface_band_offset_defect_localized_state_analysis_gpu_fpga_hybrid_hybrid_runtime_controller_368f7bc85f",
+      "candidate_parameters": {
+        "control_scope": "offload_queue_and_dependency_tracking",
+        "estimated_net_gain_ratio": 0.0407075,
+        "generation_boundary": "candidate_spec_only_no_execution",
+        "host_role": "scf_control_retained",
+        "motif_category": "post_processing",
+        "partition": "gpu_primary_fpga_runtime_controller",
+        "profile_quality_risk": 0.1,
+        "risk_score": 0.14545208333333334,
+        "runtime_ratio": 0.3,
+        "source_profile_target": "gpu_only",
+        "source_target_id": "gpu_fpga_hybrid_a100_u280_fixture",
+        "template_family": "hybrid_runtime"
+      },
+      "candidate_type": "hybrid_candidate",
+      "motif_id": "localized_state_analysis",
+      "source_viability_decision": "maybe",
+      "source_viability_record_id": "l3vr_interface_band_offset_defect_localized_state_analysis_gpu_fpga_hybrid_a100_u280_fixture_gpu_fpga_hybrid_4ac26f1651",
+      "target_type": "gpu_fpga_hybrid",
+      "template_id": "hybrid_runtime_controller",
+      "traceability": {
+        "layer1_suite_id": "qe_ic_device_suite_v1",
+        "layer2_profile_artifact": "qe_ic_motif_profile.json",
+        "layer3_viability_artifact": "qe_ic_target_viability.json"
+      },
+      "workload_family_id": "interface_band_offset_defect"
+    },
+    {
+      "candidate_id": "qeic_l4_baseline_interface_band_offset_defect_localized_state_analysis_gpu_only_gpu_baseline_reference_3096b3bdcb",
+      "candidate_parameters": {
+        "estimated_net_gain_ratio": 0.0,
+        "execution_role": "reference_only",
+        "generation_boundary": "candidate_spec_only_no_execution",
+        "motif_category": "post_processing",
+        "next_fidelity_intent": "baseline_context",
+        "profile_quality_risk": 0.1,
+        "risk_score": 0.05,
+        "runtime_ratio": 0.3,
+        "source_profile_target": "gpu_only",
+        "source_target_id": "gpu_only_a100_fixture",
+        "template_family": "baseline_reference"
+      },
+      "candidate_type": "baseline",
+      "motif_id": "localized_state_analysis",
+      "source_viability_decision": "baseline",
+      "source_viability_record_id": "l3vr_interface_band_offset_defect_localized_state_analysis_gpu_only_a100_fixture_gpu_only_5173fd0369",
+      "target_type": "gpu_only",
+      "template_id": "gpu_baseline_reference",
+      "traceability": {
+        "layer1_suite_id": "qe_ic_device_suite_v1",
+        "layer2_profile_artifact": "qe_ic_motif_profile.json",
+        "layer3_viability_artifact": "qe_ic_target_viability.json"
+      },
+      "workload_family_id": "interface_band_offset_defect"
+    },
+    {
+      "candidate_id": "qeic_l4_hybrid_candidate_phonon_dfpt_perturbation_rhs_gpu_fpga_hybrid_hybrid_runtime_controller_ccbcde09eb",
+      "candidate_parameters": {
+        "control_scope": "offload_queue_and_dependency_tracking",
+        "estimated_net_gain_ratio": -0.016540000000000003,
+        "generation_boundary": "candidate_spec_only_no_execution",
+        "host_role": "scf_control_retained",
+        "motif_category": "response_solve",
+        "partition": "gpu_primary_fpga_runtime_controller",
+        "profile_quality_risk": 0.1,
+        "risk_score": 0.2189861111111111,
+        "runtime_ratio": 0.36,
+        "source_profile_target": "gpu_only",
+        "source_target_id": "gpu_fpga_hybrid_a100_u280_fixture",
+        "template_family": "hybrid_runtime"
+      },
+      "candidate_type": "hybrid_candidate",
+      "motif_id": "perturbation_rhs",
+      "source_viability_decision": "maybe",
+      "source_viability_record_id": "l3vr_phonon_dfpt_perturbation_rhs_gpu_fpga_hybrid_a100_u280_fixture_gpu_fpga_hybrid_bacc0152e2",
+      "target_type": "gpu_fpga_hybrid",
+      "template_id": "hybrid_runtime_controller",
+      "traceability": {
+        "layer1_suite_id": "qe_ic_device_suite_v1",
+        "layer2_profile_artifact": "qe_ic_motif_profile.json",
+        "layer3_viability_artifact": "qe_ic_target_viability.json"
+      },
+      "workload_family_id": "phonon_dfpt"
+    },
+    {
+      "candidate_id": "qeic_l4_baseline_phonon_dfpt_perturbation_rhs_gpu_only_gpu_baseline_reference_2fc4bdef49",
+      "candidate_parameters": {
+        "estimated_net_gain_ratio": 0.0,
+        "execution_role": "reference_only",
+        "generation_boundary": "candidate_spec_only_no_execution",
+        "motif_category": "response_solve",
+        "next_fidelity_intent": "baseline_context",
+        "profile_quality_risk": 0.1,
+        "risk_score": 0.05,
+        "runtime_ratio": 0.36,
+        "source_profile_target": "gpu_only",
+        "source_target_id": "gpu_only_a100_fixture",
+        "template_family": "baseline_reference"
+      },
+      "candidate_type": "baseline",
+      "motif_id": "perturbation_rhs",
+      "source_viability_decision": "baseline",
+      "source_viability_record_id": "l3vr_phonon_dfpt_perturbation_rhs_gpu_only_a100_fixture_gpu_only_236a76faf7",
+      "target_type": "gpu_only",
+      "template_id": "gpu_baseline_reference",
+      "traceability": {
+        "layer1_suite_id": "qe_ic_device_suite_v1",
+        "layer2_profile_artifact": "qe_ic_motif_profile.json",
+        "layer3_viability_artifact": "qe_ic_target_viability.json"
+      },
+      "workload_family_id": "phonon_dfpt"
+    },
+    {
+      "candidate_id": "qeic_l4_fpga_candidate_phonon_dfpt_reduction_collective_fpga_only_fpga_reduction_tree_c504222f30",
+      "candidate_parameters": {
+        "accumulation": "deterministic_ordering_required",
+        "estimated_net_gain_ratio": 0.04951521739130436,
+        "generation_boundary": "candidate_spec_only_no_execution",
+        "host_role": "collective_orchestration_retained",
+        "motif_category": "communication",
+        "profile_quality_risk": 0.35,
+        "reduction_topology": "tree",
+        "risk_score": 0.23123097826086955,
+        "runtime_ratio": 0.2,
+        "source_profile_target": "gpu_only",
+        "source_target_id": "fpga_only_u280_fixture",
+        "template_family": "fpga_reduction"
+      },
+      "candidate_type": "fpga_candidate",
+      "motif_id": "reduction_collective",
+      "source_viability_decision": "maybe",
+      "source_viability_record_id": "l3vr_phonon_dfpt_reduction_collective_fpga_only_u280_fixture_fpga_only_94ca4edbae",
+      "target_type": "fpga_only",
+      "template_id": "fpga_reduction_tree",
+      "traceability": {
+        "layer1_suite_id": "qe_ic_device_suite_v1",
+        "layer2_profile_artifact": "qe_ic_motif_profile.json",
+        "layer3_viability_artifact": "qe_ic_target_viability.json"
+      },
+      "workload_family_id": "phonon_dfpt"
+    },
+    {
+      "candidate_id": "qeic_l4_fpga_candidate_phonon_dfpt_reduction_collective_fpga_only_fpga_streaming_pipeline_3f825dc067",
+      "candidate_parameters": {
+        "buffering": "line_or_tile",
+        "estimated_net_gain_ratio": 0.04951521739130436,
+        "generation_boundary": "candidate_spec_only_no_execution",
+        "host_role": "control_and_io_retained",
+        "motif_category": "communication",
+        "pipeline_style": "streaming_dataflow",
+        "profile_quality_risk": 0.35,
+        "risk_score": 0.23123097826086955,
+        "runtime_ratio": 0.2,
+        "source_profile_target": "gpu_only",
+        "source_target_id": "fpga_only_u280_fixture",
+        "template_family": "fpga_pipeline"
+      },
+      "candidate_type": "fpga_candidate",
+      "motif_id": "reduction_collective",
+      "source_viability_decision": "maybe",
+      "source_viability_record_id": "l3vr_phonon_dfpt_reduction_collective_fpga_only_u280_fixture_fpga_only_94ca4edbae",
+      "target_type": "fpga_only",
+      "template_id": "fpga_streaming_pipeline",
+      "traceability": {
+        "layer1_suite_id": "qe_ic_device_suite_v1",
+        "layer2_profile_artifact": "qe_ic_motif_profile.json",
+        "layer3_viability_artifact": "qe_ic_target_viability.json"
+      },
+      "workload_family_id": "phonon_dfpt"
+    },
+    {
+      "candidate_id": "qeic_l4_hybrid_candidate_phonon_dfpt_reduction_collective_gpu_fpga_hybrid_hybrid_reduction_sidecar_423b828955",
+      "candidate_parameters": {
+        "estimated_net_gain_ratio": 0.032409999999999994,
+        "generation_boundary": "candidate_spec_only_no_execution",
+        "host_role": "mpi_orchestration_retained",
+        "motif_category": "communication",
+        "overlap_intent": "collective_staging_candidate",
+        "partition": "gpu_compute_fpga_reduction_sidecar",
+        "profile_quality_risk": 0.35,
+        "risk_score": 0.2251125,
+        "runtime_ratio": 0.2,
+        "source_profile_target": "gpu_only",
+        "source_target_id": "gpu_fpga_hybrid_a100_u280_fixture",
+        "template_family": "hybrid_sidecar"
+      },
+      "candidate_type": "hybrid_candidate",
+      "motif_id": "reduction_collective",
+      "source_viability_decision": "maybe",
+      "source_viability_record_id": "l3vr_phonon_dfpt_reduction_collective_gpu_fpga_hybrid_a100_u280_fixture_gpu_fpga_hybrid_11a921b4ec",
+      "target_type": "gpu_fpga_hybrid",
+      "template_id": "hybrid_reduction_sidecar",
+      "traceability": {
+        "layer1_suite_id": "qe_ic_device_suite_v1",
+        "layer2_profile_artifact": "qe_ic_motif_profile.json",
+        "layer3_viability_artifact": "qe_ic_target_viability.json"
+      },
+      "workload_family_id": "phonon_dfpt"
+    },
+    {
+      "candidate_id": "qeic_l4_hybrid_candidate_phonon_dfpt_reduction_collective_gpu_fpga_hybrid_hybrid_dma_overlap_sidecar_9a9fa929fc",
+      "candidate_parameters": {
+        "estimated_net_gain_ratio": 0.032409999999999994,
+        "generation_boundary": "candidate_spec_only_no_execution",
+        "host_role": "runtime_scheduling_retained",
+        "motif_category": "communication",
+        "overlap_intent": "hide_transfer_for_repeated_motif",
+        "partition": "gpu_primary_fpga_dma_overlap",
+        "profile_quality_risk": 0.35,
+        "risk_score": 0.2251125,
+        "runtime_ratio": 0.2,
+        "source_profile_target": "gpu_only",
+        "source_target_id": "gpu_fpga_hybrid_a100_u280_fixture",
+        "template_family": "hybrid_dma"
+      },
+      "candidate_type": "hybrid_candidate",
+      "motif_id": "reduction_collective",
+      "source_viability_decision": "maybe",
+      "source_viability_record_id": "l3vr_phonon_dfpt_reduction_collective_gpu_fpga_hybrid_a100_u280_fixture_gpu_fpga_hybrid_11a921b4ec",
+      "target_type": "gpu_fpga_hybrid",
+      "template_id": "hybrid_dma_overlap_sidecar",
+      "traceability": {
+        "layer1_suite_id": "qe_ic_device_suite_v1",
+        "layer2_profile_artifact": "qe_ic_motif_profile.json",
+        "layer3_viability_artifact": "qe_ic_target_viability.json"
+      },
+      "workload_family_id": "phonon_dfpt"
+    },
+    {
+      "candidate_id": "qeic_l4_baseline_phonon_dfpt_reduction_collective_gpu_only_gpu_baseline_reference_8e3619eb17",
+      "candidate_parameters": {
+        "estimated_net_gain_ratio": 0.0,
+        "execution_role": "reference_only",
+        "generation_boundary": "candidate_spec_only_no_execution",
+        "motif_category": "communication",
+        "next_fidelity_intent": "baseline_context",
+        "profile_quality_risk": 0.35,
+        "risk_score": 0.11249999999999999,
+        "runtime_ratio": 0.2,
+        "source_profile_target": "gpu_only",
+        "source_target_id": "gpu_only_a100_fixture",
+        "template_family": "baseline_reference"
+      },
+      "candidate_type": "baseline",
+      "motif_id": "reduction_collective",
+      "source_viability_decision": "baseline",
+      "source_viability_record_id": "l3vr_phonon_dfpt_reduction_collective_gpu_only_a100_fixture_gpu_only_9ee31cf72a",
+      "target_type": "gpu_only",
+      "template_id": "gpu_baseline_reference",
+      "traceability": {
+        "layer1_suite_id": "qe_ic_device_suite_v1",
+        "layer2_profile_artifact": "qe_ic_motif_profile.json",
+        "layer3_viability_artifact": "qe_ic_target_viability.json"
+      },
+      "workload_family_id": "phonon_dfpt"
+    },
+    {
+      "candidate_id": "qeic_l4_hybrid_candidate_phonon_dfpt_response_accumulation_gpu_fpga_hybrid_hybrid_runtime_controller_d2845d998a",
+      "candidate_parameters": {
+        "control_scope": "offload_queue_and_dependency_tracking",
+        "estimated_net_gain_ratio": -0.019639999999999998,
+        "generation_boundary": "candidate_spec_only_no_execution",
+        "host_role": "scf_control_retained",
+        "motif_category": "response_solve",
+        "partition": "gpu_primary_fpga_runtime_controller",
+        "profile_quality_risk": 0.1,
+        "risk_score": 0.2186590909090909,
+        "runtime_ratio": 0.44,
+        "source_profile_target": "gpu_only",
+        "source_target_id": "gpu_fpga_hybrid_a100_u280_fixture",
+        "template_family": "hybrid_runtime"
+      },
+      "candidate_type": "hybrid_candidate",
+      "motif_id": "response_accumulation",
+      "source_viability_decision": "maybe",
+      "source_viability_record_id": "l3vr_phonon_dfpt_response_accumulation_gpu_fpga_hybrid_a100_u280_fixture_gpu_fpga_hybrid_cd08e6b0fd",
+      "target_type": "gpu_fpga_hybrid",
+      "template_id": "hybrid_runtime_controller",
+      "traceability": {
+        "layer1_suite_id": "qe_ic_device_suite_v1",
+        "layer2_profile_artifact": "qe_ic_motif_profile.json",
+        "layer3_viability_artifact": "qe_ic_target_viability.json"
+      },
+      "workload_family_id": "phonon_dfpt"
+    },
+    {
+      "candidate_id": "qeic_l4_baseline_phonon_dfpt_response_accumulation_gpu_only_gpu_baseline_reference_55835bd9bd",
+      "candidate_parameters": {
+        "estimated_net_gain_ratio": 0.0,
+        "execution_role": "reference_only",
+        "generation_boundary": "candidate_spec_only_no_execution",
+        "motif_category": "response_solve",
+        "next_fidelity_intent": "baseline_context",
+        "profile_quality_risk": 0.1,
+        "risk_score": 0.05,
+        "runtime_ratio": 0.44,
+        "source_profile_target": "gpu_only",
+        "source_target_id": "gpu_only_a100_fixture",
+        "template_family": "baseline_reference"
+      },
+      "candidate_type": "baseline",
+      "motif_id": "response_accumulation",
+      "source_viability_decision": "baseline",
+      "source_viability_record_id": "l3vr_phonon_dfpt_response_accumulation_gpu_only_a100_fixture_gpu_only_6ea99651f0",
+      "target_type": "gpu_only",
+      "template_id": "gpu_baseline_reference",
+      "traceability": {
+        "layer1_suite_id": "qe_ic_device_suite_v1",
+        "layer2_profile_artifact": "qe_ic_motif_profile.json",
+        "layer3_viability_artifact": "qe_ic_target_viability.json"
+      },
+      "workload_family_id": "phonon_dfpt"
+    },
+    {
+      "candidate_id": "qeic_l4_baseline_strain_doping_field_sweep_batch_scheduling_gpu_only_gpu_baseline_reference_93a9536f9b",
+      "candidate_parameters": {
+        "estimated_net_gain_ratio": 0.0,
+        "execution_role": "reference_only",
+        "generation_boundary": "candidate_spec_only_no_execution",
+        "motif_category": "workflow_parallelism",
+        "next_fidelity_intent": "baseline_context",
+        "profile_quality_risk": 0.1,
+        "risk_score": 0.05,
+        "runtime_ratio": 0.16666666666666666,
+        "source_profile_target": "gpu_only",
+        "source_target_id": "gpu_only_a100_fixture",
+        "template_family": "baseline_reference"
+      },
+      "candidate_type": "baseline",
+      "motif_id": "batch_scheduling",
+      "source_viability_decision": "baseline",
+      "source_viability_record_id": "l3vr_strain_doping_field_sweep_batch_scheduling_gpu_only_a100_fixture_gpu_only_5c4b5be2ae",
+      "target_type": "gpu_only",
+      "template_id": "gpu_baseline_reference",
+      "traceability": {
+        "layer1_suite_id": "qe_ic_device_suite_v1",
+        "layer2_profile_artifact": "qe_ic_motif_profile.json",
+        "layer3_viability_artifact": "qe_ic_target_viability.json"
+      },
+      "workload_family_id": "strain_doping_field_sweep"
+    },
+    {
+      "candidate_id": "qeic_l4_hybrid_candidate_strain_doping_field_sweep_cross_run_reuse_gpu_fpga_hybrid_hybrid_runtime_controller_a240db1d6e",
+      "candidate_parameters": {
+        "control_scope": "offload_queue_and_dependency_tracking",
+        "estimated_net_gain_ratio": 0.0058183333333333325,
+        "generation_boundary": "candidate_spec_only_no_execution",
+        "host_role": "scf_control_retained",
+        "motif_category": "workflow_parallelism",
+        "partition": "gpu_primary_fpga_runtime_controller",
+        "profile_quality_risk": 0.1,
+        "risk_score": 0.1451513888888889,
+        "runtime_ratio": 0.3,
+        "source_profile_target": "gpu_only",
+        "source_target_id": "gpu_fpga_hybrid_a100_u280_fixture",
+        "template_family": "hybrid_runtime"
+      },
+      "candidate_type": "hybrid_candidate",
+      "motif_id": "cross_run_reuse",
+      "source_viability_decision": "maybe",
+      "source_viability_record_id": "l3vr_strain_doping_field_sweep_cross_run_reuse_gpu_fpga_hybrid_a100_u280_fixture_gpu_fpga_hybrid_54c6db69de",
+      "target_type": "gpu_fpga_hybrid",
+      "template_id": "hybrid_runtime_controller",
+      "traceability": {
+        "layer1_suite_id": "qe_ic_device_suite_v1",
+        "layer2_profile_artifact": "qe_ic_motif_profile.json",
+        "layer3_viability_artifact": "qe_ic_target_viability.json"
+      },
+      "workload_family_id": "strain_doping_field_sweep"
+    },
+    {
+      "candidate_id": "qeic_l4_baseline_strain_doping_field_sweep_cross_run_reuse_gpu_only_gpu_baseline_reference_0fc9084d69",
+      "candidate_parameters": {
+        "estimated_net_gain_ratio": 0.0,
+        "execution_role": "reference_only",
+        "generation_boundary": "candidate_spec_only_no_execution",
+        "motif_category": "workflow_parallelism",
+        "next_fidelity_intent": "baseline_context",
+        "profile_quality_risk": 0.1,
+        "risk_score": 0.05,
+        "runtime_ratio": 0.3,
+        "source_profile_target": "gpu_only",
+        "source_target_id": "gpu_only_a100_fixture",
+        "template_family": "baseline_reference"
+      },
+      "candidate_type": "baseline",
+      "motif_id": "cross_run_reuse",
+      "source_viability_decision": "baseline",
+      "source_viability_record_id": "l3vr_strain_doping_field_sweep_cross_run_reuse_gpu_only_a100_fixture_gpu_only_2d23ca42b4",
+      "target_type": "gpu_only",
+      "template_id": "gpu_baseline_reference",
+      "traceability": {
+        "layer1_suite_id": "qe_ic_device_suite_v1",
+        "layer2_profile_artifact": "qe_ic_motif_profile.json",
+        "layer3_viability_artifact": "qe_ic_target_viability.json"
+      },
+      "workload_family_id": "strain_doping_field_sweep"
+    },
+    {
+      "candidate_id": "qeic_l4_hybrid_candidate_strain_doping_field_sweep_workflow_parameter_sweep_gpu_fpga_hybrid_hybrid_runtime_controller_0801d64eff",
+      "candidate_parameters": {
+        "control_scope": "offload_queue_and_dependency_tracking",
+        "estimated_net_gain_ratio": 0.044985000000000004,
+        "generation_boundary": "candidate_spec_only_no_execution",
+        "host_role": "scf_control_retained",
+        "motif_category": "workflow_parallelism",
+        "partition": "gpu_primary_fpga_runtime_controller",
+        "profile_quality_risk": 0.1,
+        "risk_score": 0.12891328125,
+        "runtime_ratio": 0.5333333333333333,
+        "source_profile_target": "gpu_only",
+        "source_target_id": "gpu_fpga_hybrid_a100_u280_fixture",
+        "template_family": "hybrid_runtime"
+      },
+      "candidate_type": "hybrid_candidate",
+      "motif_id": "workflow_parameter_sweep",
+      "source_viability_decision": "maybe",
+      "source_viability_record_id": "l3vr_strain_doping_field_sweep_workflow_parameter_sweep_gpu_fpga_hybrid_a100_u280_fixture_gpu_fpga_hybrid_19090cd446",
+      "target_type": "gpu_fpga_hybrid",
+      "template_id": "hybrid_runtime_controller",
+      "traceability": {
+        "layer1_suite_id": "qe_ic_device_suite_v1",
+        "layer2_profile_artifact": "qe_ic_motif_profile.json",
+        "layer3_viability_artifact": "qe_ic_target_viability.json"
+      },
+      "workload_family_id": "strain_doping_field_sweep"
+    },
+    {
+      "candidate_id": "qeic_l4_baseline_strain_doping_field_sweep_workflow_parameter_sweep_gpu_only_gpu_baseline_reference_5226608f45",
+      "candidate_parameters": {
+        "estimated_net_gain_ratio": 0.0,
+        "execution_role": "reference_only",
+        "generation_boundary": "candidate_spec_only_no_execution",
+        "motif_category": "workflow_parallelism",
+        "next_fidelity_intent": "baseline_context",
+        "profile_quality_risk": 0.1,
+        "risk_score": 0.05,
+        "runtime_ratio": 0.5333333333333333,
+        "source_profile_target": "gpu_only",
+        "source_target_id": "gpu_only_a100_fixture",
+        "template_family": "baseline_reference"
+      },
+      "candidate_type": "baseline",
+      "motif_id": "workflow_parameter_sweep",
+      "source_viability_decision": "baseline",
+      "source_viability_record_id": "l3vr_strain_doping_field_sweep_workflow_parameter_sweep_gpu_only_a100_fixture_gpu_only_98d2ff4104",
+      "target_type": "gpu_only",
+      "template_id": "gpu_baseline_reference",
+      "traceability": {
+        "layer1_suite_id": "qe_ic_device_suite_v1",
+        "layer2_profile_artifact": "qe_ic_motif_profile.json",
+        "layer3_viability_artifact": "qe_ic_target_viability.json"
+      },
+      "workload_family_id": "strain_doping_field_sweep"
+    }
+  ],
+  "claim_boundary": "This artifact contains candidate specifications and promotion plans only. It does not contain executed SystemC/gem5/Vivado/QE results, hardware implementation results, or final performance claims.",
+  "evaluation_requests": [
+    {
+      "candidate_id": "qeic_l4_fpga_candidate_ground_state_band_structure_hpsi_fpga_only_fpga_projector_pipeline_99b5fa1356",
+      "claim_boundary": "This is a planned evaluation request only; no execution result is included.",
+      "request_id": "qeic_l4_l1_cost_model_request_0e2674213c",
+      "requested_fidelity": "L1_cost_model",
+      "required_inputs": [
+        "qe_ic_candidate_plan.json",
+        "qe_ic_workload_suite.json",
+        "qe_ic_motif_profile.json",
+        "qe_ic_target_viability.json",
+        "qe_ic_layer4_campaign_fixture.json"
+      ],
+      "status": "planned_not_executed"
+    },
+    {
+      "candidate_id": "qeic_l4_hybrid_candidate_interface_band_offset_defect_localized_state_analysis_gpu_fpga_hybrid_hybrid_runtime_controller_368f7bc85f",
+      "claim_boundary": "This is a planned evaluation request only; no execution result is included.",
+      "request_id": "qeic_l4_l1_cost_model_request_2139c01b4e",
+      "requested_fidelity": "L1_cost_model",
+      "required_inputs": [
+        "qe_ic_candidate_plan.json",
+        "qe_ic_workload_suite.json",
+        "qe_ic_motif_profile.json",
+        "qe_ic_target_viability.json",
+        "qe_ic_layer4_campaign_fixture.json"
+      ],
+      "status": "planned_not_executed"
+    },
+    {
+      "candidate_id": "qeic_l4_fpga_candidate_ground_state_band_structure_hpsi_fpga_only_fpga_streaming_pipeline_193dd83af0",
+      "claim_boundary": "This is a planned evaluation request only; no execution result is included.",
+      "request_id": "qeic_l4_l1_cost_model_request_27a053135e",
+      "requested_fidelity": "L1_cost_model",
+      "required_inputs": [
+        "qe_ic_candidate_plan.json",
+        "qe_ic_workload_suite.json",
+        "qe_ic_motif_profile.json",
+        "qe_ic_target_viability.json",
+        "qe_ic_layer4_campaign_fixture.json"
+      ],
+      "status": "planned_not_executed"
+    },
+    {
+      "candidate_id": "qeic_l4_fpga_candidate_ground_state_band_structure_fft_transpose_fpga_only_fpga_streaming_pipeline_3f5adc94a8",
+      "claim_boundary": "This is a planned evaluation request only; no execution result is included.",
+      "request_id": "qeic_l4_l1_cost_model_request_3347c1c22f",
+      "requested_fidelity": "L1_cost_model",
+      "required_inputs": [
+        "qe_ic_candidate_plan.json",
+        "qe_ic_workload_suite.json",
+        "qe_ic_motif_profile.json",
+        "qe_ic_target_viability.json",
+        "qe_ic_layer4_campaign_fixture.json"
+      ],
+      "status": "planned_not_executed"
+    },
+    {
+      "candidate_id": "qeic_l4_fpga_candidate_ground_state_band_structure_fft_transpose_fpga_only_fpga_fft_transpose_engine_9bfbea2b1f",
+      "claim_boundary": "This is a planned evaluation request only; no execution result is included.",
+      "request_id": "qeic_l4_l1_cost_model_request_5de8a01be9",
+      "requested_fidelity": "L1_cost_model",
+      "required_inputs": [
+        "qe_ic_candidate_plan.json",
+        "qe_ic_workload_suite.json",
+        "qe_ic_motif_profile.json",
+        "qe_ic_target_viability.json",
+        "qe_ic_layer4_campaign_fixture.json"
+      ],
+      "status": "planned_not_executed"
+    },
+    {
+      "candidate_id": "qeic_l4_hybrid_candidate_phonon_dfpt_response_accumulation_gpu_fpga_hybrid_hybrid_runtime_controller_d2845d998a",
+      "claim_boundary": "This is a planned evaluation request only; no execution result is included.",
+      "request_id": "qeic_l4_l1_cost_model_request_6f980f86eb",
+      "requested_fidelity": "L1_cost_model",
+      "required_inputs": [
+        "qe_ic_candidate_plan.json",
+        "qe_ic_workload_suite.json",
+        "qe_ic_motif_profile.json",
+        "qe_ic_target_viability.json",
+        "qe_ic_layer4_campaign_fixture.json"
+      ],
+      "status": "planned_not_executed"
+    },
+    {
+      "candidate_id": "qeic_l4_hybrid_candidate_phonon_dfpt_perturbation_rhs_gpu_fpga_hybrid_hybrid_runtime_controller_ccbcde09eb",
+      "claim_boundary": "This is a planned evaluation request only; no execution result is included.",
+      "request_id": "qeic_l4_l1_cost_model_request_acc0f35147",
+      "requested_fidelity": "L1_cost_model",
+      "required_inputs": [
+        "qe_ic_candidate_plan.json",
+        "qe_ic_workload_suite.json",
+        "qe_ic_motif_profile.json",
+        "qe_ic_target_viability.json",
+        "qe_ic_layer4_campaign_fixture.json"
+      ],
+      "status": "planned_not_executed"
+    },
+    {
+      "candidate_id": "qeic_l4_hybrid_candidate_strain_doping_field_sweep_cross_run_reuse_gpu_fpga_hybrid_hybrid_runtime_controller_a240db1d6e",
+      "claim_boundary": "This is a planned evaluation request only; no execution result is included.",
+      "request_id": "qeic_l4_l1_cost_model_request_ba04fa3801",
+      "requested_fidelity": "L1_cost_model",
+      "required_inputs": [
+        "qe_ic_candidate_plan.json",
+        "qe_ic_workload_suite.json",
+        "qe_ic_motif_profile.json",
+        "qe_ic_target_viability.json",
+        "qe_ic_layer4_campaign_fixture.json"
+      ],
+      "status": "planned_not_executed"
+    },
+    {
+      "candidate_id": "qeic_l4_fpga_candidate_phonon_dfpt_reduction_collective_fpga_only_fpga_reduction_tree_c504222f30",
+      "claim_boundary": "This is a planned evaluation request only; no execution result is included.",
+      "request_id": "qeic_l4_l1_cost_model_request_c0384045fe",
+      "requested_fidelity": "L1_cost_model",
+      "required_inputs": [
+        "qe_ic_candidate_plan.json",
+        "qe_ic_workload_suite.json",
+        "qe_ic_motif_profile.json",
+        "qe_ic_target_viability.json",
+        "qe_ic_layer4_campaign_fixture.json"
+      ],
+      "status": "planned_not_executed"
+    },
+    {
+      "candidate_id": "qeic_l4_fpga_candidate_phonon_dfpt_reduction_collective_fpga_only_fpga_streaming_pipeline_3f825dc067",
+      "claim_boundary": "This is a planned evaluation request only; no execution result is included.",
+      "request_id": "qeic_l4_l1_cost_model_request_ef27c90986",
+      "requested_fidelity": "L1_cost_model",
+      "required_inputs": [
+        "qe_ic_candidate_plan.json",
+        "qe_ic_workload_suite.json",
+        "qe_ic_motif_profile.json",
+        "qe_ic_target_viability.json",
+        "qe_ic_layer4_campaign_fixture.json"
+      ],
+      "status": "planned_not_executed"
+    },
+    {
+      "candidate_id": "qeic_l4_hybrid_candidate_strain_doping_field_sweep_workflow_parameter_sweep_gpu_fpga_hybrid_hybrid_runtime_controller_0801d64eff",
+      "claim_boundary": "This is a planned evaluation request only; no execution result is included.",
+      "request_id": "qeic_l4_l1_cost_model_request_f8f2af2a71",
+      "requested_fidelity": "L1_cost_model",
+      "required_inputs": [
+        "qe_ic_candidate_plan.json",
+        "qe_ic_workload_suite.json",
+        "qe_ic_motif_profile.json",
+        "qe_ic_target_viability.json",
+        "qe_ic_layer4_campaign_fixture.json"
+      ],
+      "status": "planned_not_executed"
+    },
+    {
+      "candidate_id": "qeic_l4_fpga_candidate_interface_band_offset_defect_localized_state_analysis_fpga_only_fpga_memory_reuse_engine_c48c96d718",
+      "claim_boundary": "This is a planned evaluation request only; no execution result is included.",
+      "request_id": "qeic_l4_l1_cost_model_request_fadb3a343b",
+      "requested_fidelity": "L1_cost_model",
+      "required_inputs": [
+        "qe_ic_candidate_plan.json",
+        "qe_ic_workload_suite.json",
+        "qe_ic_motif_profile.json",
+        "qe_ic_target_viability.json",
+        "qe_ic_layer4_campaign_fixture.json"
+      ],
+      "status": "planned_not_executed"
+    }
+  ],
+  "layer": "layer4_candidate_generation_and_promotion",
+  "producer": "dse_v2.candidates.qe_ic",
+  "promotion_decisions": [
+    {
+      "budget_account": "none",
+      "candidate_id": "qeic_l4_baseline_electron_phonon_mobility_bte_collision_integral_gpu_only_gpu_baseline_reference_5983c97cfc",
+      "current_fidelity": "L0_target_viability",
+      "decision": "baseline",
+      "evidence_summary": {
+        "diversity_group": "gpu_only:bte_collision_integral",
+        "estimated_net_gain_ratio": 0.0,
+        "risk_score": 0.0,
+        "runtime_ratio": 0.0,
+        "source_decision": "baseline",
+        "source_viability_score": 0.0
+      },
+      "next_fidelity": "none",
+      "promotion_decision_id": "promotion_qeic_l4_baseline_electron_phonon_mobility_bte_collision_integral_gpu_only_gpu_baseline_reference_5983c97cfc",
+      "promotion_priority": 0,
+      "promotion_score": 0.0,
+      "reason_codes": [
+        "baseline_reference",
+        "not_next_fidelity_candidate",
+        "source_decision_baseline"
+      ]
+    },
+    {
+      "budget_account": "none",
+      "candidate_id": "qeic_l4_baseline_electron_phonon_mobility_dense_kq_interpolation_gpu_only_gpu_baseline_reference_cb40610bde",
+      "current_fidelity": "L0_target_viability",
+      "decision": "baseline",
+      "evidence_summary": {
+        "diversity_group": "gpu_only:dense_kq_interpolation",
+        "estimated_net_gain_ratio": 0.0,
+        "risk_score": 0.0,
+        "runtime_ratio": 0.0,
+        "source_decision": "baseline",
+        "source_viability_score": 0.0
+      },
+      "next_fidelity": "none",
+      "promotion_decision_id": "promotion_qeic_l4_baseline_electron_phonon_mobility_dense_kq_interpolation_gpu_only_gpu_baseline_reference_cb40610bde",
+      "promotion_priority": 0,
+      "promotion_score": 0.0,
+      "reason_codes": [
+        "baseline_reference",
+        "not_next_fidelity_candidate",
+        "source_decision_baseline"
+      ]
+    },
+    {
+      "budget_account": "none",
+      "candidate_id": "qeic_l4_baseline_electron_phonon_mobility_dense_linear_algebra_gpu_only_gpu_baseline_reference_26fe8e02a3",
+      "current_fidelity": "L0_target_viability",
+      "decision": "baseline",
+      "evidence_summary": {
+        "diversity_group": "gpu_only:dense_linear_algebra",
+        "estimated_net_gain_ratio": 0.0,
+        "risk_score": 0.0,
+        "runtime_ratio": 0.0,
+        "source_decision": "baseline",
+        "source_viability_score": 0.0
+      },
+      "next_fidelity": "none",
+      "promotion_decision_id": "promotion_qeic_l4_baseline_electron_phonon_mobility_dense_linear_algebra_gpu_only_gpu_baseline_reference_26fe8e02a3",
+      "promotion_priority": 0,
+      "promotion_score": 0.0,
+      "reason_codes": [
+        "baseline_reference",
+        "not_next_fidelity_candidate",
+        "source_decision_baseline"
+      ]
+    },
+    {
+      "budget_account": "none",
+      "candidate_id": "qeic_l4_baseline_ground_state_band_structure_fft_transpose_gpu_only_gpu_baseline_reference_0faf3f3959",
+      "current_fidelity": "L0_target_viability",
+      "decision": "baseline",
+      "evidence_summary": {
+        "diversity_group": "gpu_only:fft_transpose",
+        "estimated_net_gain_ratio": 0.0,
+        "risk_score": 0.0,
+        "runtime_ratio": 0.0,
+        "source_decision": "baseline",
+        "source_viability_score": 0.0
+      },
+      "next_fidelity": "none",
+      "promotion_decision_id": "promotion_qeic_l4_baseline_ground_state_band_structure_fft_transpose_gpu_only_gpu_baseline_reference_0faf3f3959",
+      "promotion_priority": 0,
+      "promotion_score": 0.0,
+      "reason_codes": [
+        "baseline_reference",
+        "not_next_fidelity_candidate",
+        "source_decision_baseline"
+      ]
+    },
+    {
+      "budget_account": "none",
+      "candidate_id": "qeic_l4_baseline_ground_state_band_structure_hpsi_gpu_only_gpu_baseline_reference_6bb0bca986",
+      "current_fidelity": "L0_target_viability",
+      "decision": "baseline",
+      "evidence_summary": {
+        "diversity_group": "gpu_only:hpsi",
+        "estimated_net_gain_ratio": 0.0,
+        "risk_score": 0.0,
+        "runtime_ratio": 0.0,
+        "source_decision": "baseline",
+        "source_viability_score": 0.0
+      },
+      "next_fidelity": "none",
+      "promotion_decision_id": "promotion_qeic_l4_baseline_ground_state_band_structure_hpsi_gpu_only_gpu_baseline_reference_6bb0bca986",
+      "promotion_priority": 0,
+      "promotion_score": 0.0,
+      "reason_codes": [
+        "baseline_reference",
+        "not_next_fidelity_candidate",
+        "source_decision_baseline"
+      ]
+    },
+    {
+      "budget_account": "none",
+      "candidate_id": "qeic_l4_baseline_interface_band_offset_defect_charge_density_analysis_gpu_only_gpu_baseline_reference_633ce22eaa",
+      "current_fidelity": "L0_target_viability",
+      "decision": "baseline",
+      "evidence_summary": {
+        "diversity_group": "gpu_only:charge_density_analysis",
+        "estimated_net_gain_ratio": 0.0,
+        "risk_score": 0.0,
+        "runtime_ratio": 0.0,
+        "source_decision": "baseline",
+        "source_viability_score": 0.0
+      },
+      "next_fidelity": "none",
+      "promotion_decision_id": "promotion_qeic_l4_baseline_interface_band_offset_defect_charge_density_analysis_gpu_only_gpu_baseline_reference_633ce22eaa",
+      "promotion_priority": 0,
+      "promotion_score": 0.0,
+      "reason_codes": [
+        "baseline_reference",
+        "not_next_fidelity_candidate",
+        "source_decision_baseline"
+      ]
+    },
+    {
+      "budget_account": "none",
+      "candidate_id": "qeic_l4_baseline_interface_band_offset_defect_large_supercell_gpu_only_gpu_baseline_reference_e707267bee",
+      "current_fidelity": "L0_target_viability",
+      "decision": "baseline",
+      "evidence_summary": {
+        "diversity_group": "gpu_only:large_supercell",
+        "estimated_net_gain_ratio": 0.0,
+        "risk_score": 0.0,
+        "runtime_ratio": 0.0,
+        "source_decision": "baseline",
+        "source_viability_score": 0.0
+      },
+      "next_fidelity": "none",
+      "promotion_decision_id": "promotion_qeic_l4_baseline_interface_band_offset_defect_large_supercell_gpu_only_gpu_baseline_reference_e707267bee",
+      "promotion_priority": 0,
+      "promotion_score": 0.0,
+      "reason_codes": [
+        "baseline_reference",
+        "not_next_fidelity_candidate",
+        "source_decision_baseline"
+      ]
+    },
+    {
+      "budget_account": "none",
+      "candidate_id": "qeic_l4_baseline_interface_band_offset_defect_localized_state_analysis_gpu_only_gpu_baseline_reference_3096b3bdcb",
+      "current_fidelity": "L0_target_viability",
+      "decision": "baseline",
+      "evidence_summary": {
+        "diversity_group": "gpu_only:localized_state_analysis",
+        "estimated_net_gain_ratio": 0.0,
+        "risk_score": 0.0,
+        "runtime_ratio": 0.0,
+        "source_decision": "baseline",
+        "source_viability_score": 0.0
+      },
+      "next_fidelity": "none",
+      "promotion_decision_id": "promotion_qeic_l4_baseline_interface_band_offset_defect_localized_state_analysis_gpu_only_gpu_baseline_reference_3096b3bdcb",
+      "promotion_priority": 0,
+      "promotion_score": 0.0,
+      "reason_codes": [
+        "baseline_reference",
+        "not_next_fidelity_candidate",
+        "source_decision_baseline"
+      ]
+    },
+    {
+      "budget_account": "none",
+      "candidate_id": "qeic_l4_baseline_phonon_dfpt_perturbation_rhs_gpu_only_gpu_baseline_reference_2fc4bdef49",
+      "current_fidelity": "L0_target_viability",
+      "decision": "baseline",
+      "evidence_summary": {
+        "diversity_group": "gpu_only:perturbation_rhs",
+        "estimated_net_gain_ratio": 0.0,
+        "risk_score": 0.0,
+        "runtime_ratio": 0.0,
+        "source_decision": "baseline",
+        "source_viability_score": 0.0
+      },
+      "next_fidelity": "none",
+      "promotion_decision_id": "promotion_qeic_l4_baseline_phonon_dfpt_perturbation_rhs_gpu_only_gpu_baseline_reference_2fc4bdef49",
+      "promotion_priority": 0,
+      "promotion_score": 0.0,
+      "reason_codes": [
+        "baseline_reference",
+        "not_next_fidelity_candidate",
+        "source_decision_baseline"
+      ]
+    },
+    {
+      "budget_account": "none",
+      "candidate_id": "qeic_l4_baseline_phonon_dfpt_reduction_collective_gpu_only_gpu_baseline_reference_8e3619eb17",
+      "current_fidelity": "L0_target_viability",
+      "decision": "baseline",
+      "evidence_summary": {
+        "diversity_group": "gpu_only:reduction_collective",
+        "estimated_net_gain_ratio": 0.0,
+        "risk_score": 0.0,
+        "runtime_ratio": 0.0,
+        "source_decision": "baseline",
+        "source_viability_score": 0.0
+      },
+      "next_fidelity": "none",
+      "promotion_decision_id": "promotion_qeic_l4_baseline_phonon_dfpt_reduction_collective_gpu_only_gpu_baseline_reference_8e3619eb17",
+      "promotion_priority": 0,
+      "promotion_score": 0.0,
+      "reason_codes": [
+        "baseline_reference",
+        "not_next_fidelity_candidate",
+        "source_decision_baseline"
+      ]
+    },
+    {
+      "budget_account": "none",
+      "candidate_id": "qeic_l4_baseline_phonon_dfpt_response_accumulation_gpu_only_gpu_baseline_reference_55835bd9bd",
+      "current_fidelity": "L0_target_viability",
+      "decision": "baseline",
+      "evidence_summary": {
+        "diversity_group": "gpu_only:response_accumulation",
+        "estimated_net_gain_ratio": 0.0,
+        "risk_score": 0.0,
+        "runtime_ratio": 0.0,
+        "source_decision": "baseline",
+        "source_viability_score": 0.0
+      },
+      "next_fidelity": "none",
+      "promotion_decision_id": "promotion_qeic_l4_baseline_phonon_dfpt_response_accumulation_gpu_only_gpu_baseline_reference_55835bd9bd",
+      "promotion_priority": 0,
+      "promotion_score": 0.0,
+      "reason_codes": [
+        "baseline_reference",
+        "not_next_fidelity_candidate",
+        "source_decision_baseline"
+      ]
+    },
+    {
+      "budget_account": "none",
+      "candidate_id": "qeic_l4_baseline_strain_doping_field_sweep_batch_scheduling_gpu_only_gpu_baseline_reference_93a9536f9b",
+      "current_fidelity": "L0_target_viability",
+      "decision": "baseline",
+      "evidence_summary": {
+        "diversity_group": "gpu_only:batch_scheduling",
+        "estimated_net_gain_ratio": 0.0,
+        "risk_score": 0.0,
+        "runtime_ratio": 0.0,
+        "source_decision": "baseline",
+        "source_viability_score": 0.0
+      },
+      "next_fidelity": "none",
+      "promotion_decision_id": "promotion_qeic_l4_baseline_strain_doping_field_sweep_batch_scheduling_gpu_only_gpu_baseline_reference_93a9536f9b",
+      "promotion_priority": 0,
+      "promotion_score": 0.0,
+      "reason_codes": [
+        "baseline_reference",
+        "not_next_fidelity_candidate",
+        "source_decision_baseline"
+      ]
+    },
+    {
+      "budget_account": "none",
+      "candidate_id": "qeic_l4_baseline_strain_doping_field_sweep_cross_run_reuse_gpu_only_gpu_baseline_reference_0fc9084d69",
+      "current_fidelity": "L0_target_viability",
+      "decision": "baseline",
+      "evidence_summary": {
+        "diversity_group": "gpu_only:cross_run_reuse",
+        "estimated_net_gain_ratio": 0.0,
+        "risk_score": 0.0,
+        "runtime_ratio": 0.0,
+        "source_decision": "baseline",
+        "source_viability_score": 0.0
+      },
+      "next_fidelity": "none",
+      "promotion_decision_id": "promotion_qeic_l4_baseline_strain_doping_field_sweep_cross_run_reuse_gpu_only_gpu_baseline_reference_0fc9084d69",
+      "promotion_priority": 0,
+      "promotion_score": 0.0,
+      "reason_codes": [
+        "baseline_reference",
+        "not_next_fidelity_candidate",
+        "source_decision_baseline"
+      ]
+    },
+    {
+      "budget_account": "none",
+      "candidate_id": "qeic_l4_baseline_strain_doping_field_sweep_workflow_parameter_sweep_gpu_only_gpu_baseline_reference_5226608f45",
+      "current_fidelity": "L0_target_viability",
+      "decision": "baseline",
+      "evidence_summary": {
+        "diversity_group": "gpu_only:workflow_parameter_sweep",
+        "estimated_net_gain_ratio": 0.0,
+        "risk_score": 0.0,
+        "runtime_ratio": 0.0,
+        "source_decision": "baseline",
+        "source_viability_score": 0.0
+      },
+      "next_fidelity": "none",
+      "promotion_decision_id": "promotion_qeic_l4_baseline_strain_doping_field_sweep_workflow_parameter_sweep_gpu_only_gpu_baseline_reference_5226608f45",
+      "promotion_priority": 0,
+      "promotion_score": 0.0,
+      "reason_codes": [
+        "baseline_reference",
+        "not_next_fidelity_candidate",
+        "source_decision_baseline"
+      ]
+    },
+    {
+      "budget_account": "max_l1_cost_model_requests",
+      "candidate_id": "qeic_l4_fpga_candidate_ground_state_band_structure_hpsi_fpga_only_fpga_projector_pipeline_99b5fa1356",
+      "current_fidelity": "L0_target_viability",
+      "decision": "promote",
+      "evidence_summary": {
+        "diversity_group": "fpga_only:hpsi",
+        "estimated_net_gain_ratio": 0.12192761857707511,
+        "risk_score": 0.2856603260869566,
+        "runtime_ratio": 0.4318181818181818,
+        "source_decision": "maybe",
+        "source_viability_score": 0.5239717391304347
+      },
+      "next_fidelity": "L1_cost_model",
+      "promotion_decision_id": "promotion_qeic_l4_fpga_candidate_ground_state_band_structure_hpsi_fpga_only_fpga_projector_pipeline_99b5fa1356",
+      "promotion_priority": 1,
+      "promotion_score": 0.738452,
+      "reason_codes": [
+        "budget_available",
+        "candidate_generated_from_viability",
+        "diversity_represented",
+        "high_runtime_ratio",
+        "moderate_viability_score",
+        "motif_diversity_selected",
+        "planned_l1_cost_model_request",
+        "positive_gain_estimate",
+        "profile_quality_high",
+        "risk_within_tolerance",
+        "score_above_promotion_threshold",
+        "source_decision_maybe",
+        "target_diversity_selected"
+      ]
+    },
+    {
+      "budget_account": "max_l1_cost_model_requests",
+      "candidate_id": "qeic_l4_fpga_candidate_ground_state_band_structure_hpsi_fpga_only_fpga_streaming_pipeline_193dd83af0",
+      "current_fidelity": "L0_target_viability",
+      "decision": "promote",
+      "evidence_summary": {
+        "diversity_group": "fpga_only:hpsi",
+        "estimated_net_gain_ratio": 0.12192761857707511,
+        "risk_score": 0.2856603260869566,
+        "runtime_ratio": 0.4318181818181818,
+        "source_decision": "maybe",
+        "source_viability_score": 0.5239717391304347
+      },
+      "next_fidelity": "L1_cost_model",
+      "promotion_decision_id": "promotion_qeic_l4_fpga_candidate_ground_state_band_structure_hpsi_fpga_only_fpga_streaming_pipeline_193dd83af0",
+      "promotion_priority": 2,
+      "promotion_score": 0.738452,
+      "reason_codes": [
+        "budget_available",
+        "candidate_generated_from_viability",
+        "diversity_represented",
+        "high_runtime_ratio",
+        "moderate_viability_score",
+        "motif_diversity_selected",
+        "planned_l1_cost_model_request",
+        "positive_gain_estimate",
+        "profile_quality_high",
+        "risk_within_tolerance",
+        "score_above_promotion_threshold",
+        "source_decision_maybe",
+        "target_diversity_selected"
+      ]
+    },
+    {
+      "budget_account": "max_l1_cost_model_requests",
+      "candidate_id": "qeic_l4_fpga_candidate_ground_state_band_structure_fft_transpose_fpga_only_fpga_fft_transpose_engine_9bfbea2b1f",
+      "current_fidelity": "L0_target_viability",
+      "decision": "promote",
+      "evidence_summary": {
+        "diversity_group": "fpga_only:fft_transpose",
+        "estimated_net_gain_ratio": 0.17186833003952573,
+        "risk_score": 0.36895606884057974,
+        "runtime_ratio": 0.5181818181818182,
+        "source_decision": "maybe",
+        "source_viability_score": 0.4523351449275362
+      },
+      "next_fidelity": "L1_cost_model",
+      "promotion_decision_id": "promotion_qeic_l4_fpga_candidate_ground_state_band_structure_fft_transpose_fpga_only_fpga_fft_transpose_engine_9bfbea2b1f",
+      "promotion_priority": 3,
+      "promotion_score": 0.689107,
+      "reason_codes": [
+        "budget_available",
+        "candidate_generated_from_viability",
+        "diversity_represented",
+        "high_runtime_ratio",
+        "moderate_viability_score",
+        "motif_diversity_selected",
+        "planned_l1_cost_model_request",
+        "positive_gain_estimate",
+        "profile_quality_high",
+        "risk_within_tolerance",
+        "score_above_promotion_threshold",
+        "source_decision_maybe",
+        "target_diversity_selected"
+      ]
+    },
+    {
+      "budget_account": "max_l1_cost_model_requests",
+      "candidate_id": "qeic_l4_fpga_candidate_ground_state_band_structure_fft_transpose_fpga_only_fpga_streaming_pipeline_3f5adc94a8",
+      "current_fidelity": "L0_target_viability",
+      "decision": "promote",
+      "evidence_summary": {
+        "diversity_group": "fpga_only:fft_transpose",
+        "estimated_net_gain_ratio": 0.17186833003952573,
+        "risk_score": 0.36895606884057974,
+        "runtime_ratio": 0.5181818181818182,
+        "source_decision": "maybe",
+        "source_viability_score": 0.4523351449275362
+      },
+      "next_fidelity": "L1_cost_model",
+      "promotion_decision_id": "promotion_qeic_l4_fpga_candidate_ground_state_band_structure_fft_transpose_fpga_only_fpga_streaming_pipeline_3f5adc94a8",
+      "promotion_priority": 4,
+      "promotion_score": 0.689107,
+      "reason_codes": [
+        "budget_available",
+        "candidate_generated_from_viability",
+        "diversity_represented",
+        "high_runtime_ratio",
+        "moderate_viability_score",
+        "motif_diversity_selected",
+        "planned_l1_cost_model_request",
+        "positive_gain_estimate",
+        "profile_quality_high",
+        "risk_within_tolerance",
+        "score_above_promotion_threshold",
+        "source_decision_maybe",
+        "target_diversity_selected"
+      ]
+    },
+    {
+      "budget_account": "max_l1_cost_model_requests",
+      "candidate_id": "qeic_l4_hybrid_candidate_strain_doping_field_sweep_workflow_parameter_sweep_gpu_fpga_hybrid_hybrid_runtime_controller_0801d64eff",
+      "current_fidelity": "L0_target_viability",
+      "decision": "promote",
+      "evidence_summary": {
+        "diversity_group": "gpu_fpga_hybrid:workflow_parameter_sweep",
+        "estimated_net_gain_ratio": 0.044985000000000004,
+        "risk_score": 0.12891328125,
+        "runtime_ratio": 0.5333333333333333,
+        "source_decision": "maybe",
+        "source_viability_score": 0.49276656250000006
+      },
+      "next_fidelity": "L1_cost_model",
+      "promotion_decision_id": "promotion_qeic_l4_hybrid_candidate_strain_doping_field_sweep_workflow_parameter_sweep_gpu_fpga_hybrid_hybrid_runtime_controller_0801d64eff",
+      "promotion_priority": 5,
+      "promotion_score": 0.599832,
+      "reason_codes": [
+        "budget_available",
+        "candidate_generated_from_viability",
+        "diversity_represented",
+        "high_runtime_ratio",
+        "moderate_viability_score",
+        "motif_diversity_selected",
+        "planned_l1_cost_model_request",
+        "positive_gain_estimate",
+        "profile_quality_high",
+        "risk_within_tolerance",
+        "score_above_promotion_threshold",
+        "source_decision_maybe",
+        "target_diversity_selected"
+      ]
+    },
+    {
+      "budget_account": "max_l1_cost_model_requests",
+      "candidate_id": "qeic_l4_hybrid_candidate_interface_band_offset_defect_localized_state_analysis_gpu_fpga_hybrid_hybrid_runtime_controller_368f7bc85f",
+      "current_fidelity": "L0_target_viability",
+      "decision": "promote",
+      "evidence_summary": {
+        "diversity_group": "gpu_fpga_hybrid:localized_state_analysis",
+        "estimated_net_gain_ratio": 0.0407075,
+        "risk_score": 0.14545208333333334,
+        "runtime_ratio": 0.3,
+        "source_decision": "maybe",
+        "source_viability_score": 0.5159762499999999
+      },
+      "next_fidelity": "L1_cost_model",
+      "promotion_decision_id": "promotion_qeic_l4_hybrid_candidate_interface_band_offset_defect_localized_state_analysis_gpu_fpga_hybrid_hybrid_runtime_controller_368f7bc85f",
+      "promotion_priority": 6,
+      "promotion_score": 0.567066,
+      "reason_codes": [
+        "budget_available",
+        "candidate_generated_from_viability",
+        "diversity_represented",
+        "high_runtime_ratio",
+        "moderate_viability_score",
+        "motif_diversity_selected",
+        "planned_l1_cost_model_request",
+        "positive_gain_estimate",
+        "profile_quality_high",
+        "risk_within_tolerance",
+        "score_above_promotion_threshold",
+        "source_decision_maybe",
+        "target_diversity_selected"
+      ]
+    },
+    {
+      "budget_account": "max_l1_cost_model_requests",
+      "candidate_id": "qeic_l4_fpga_candidate_interface_band_offset_defect_localized_state_analysis_fpga_only_fpga_memory_reuse_engine_c48c96d718",
+      "current_fidelity": "L0_target_viability",
+      "decision": "promote",
+      "evidence_summary": {
+        "diversity_group": "fpga_only:localized_state_analysis",
+        "estimated_net_gain_ratio": 0.0441241847826087,
+        "risk_score": 0.20260484601449277,
+        "runtime_ratio": 0.3,
+        "source_decision": "maybe",
+        "source_viability_score": 0.41916449275362316
+      },
+      "next_fidelity": "L1_cost_model",
+      "promotion_decision_id": "promotion_qeic_l4_fpga_candidate_interface_band_offset_defect_localized_state_analysis_fpga_only_fpga_memory_reuse_engine_c48c96d718",
+      "promotion_priority": 7,
+      "promotion_score": 0.524977,
+      "reason_codes": [
+        "budget_available",
+        "candidate_generated_from_viability",
+        "diversity_represented",
+        "high_runtime_ratio",
+        "moderate_viability_score",
+        "motif_diversity_selected",
+        "planned_l1_cost_model_request",
+        "positive_gain_estimate",
+        "profile_quality_high",
+        "risk_within_tolerance",
+        "score_above_promotion_threshold",
+        "source_decision_maybe",
+        "target_diversity_selected"
+      ]
+    },
+    {
+      "budget_account": "max_l1_cost_model_requests",
+      "candidate_id": "qeic_l4_fpga_candidate_phonon_dfpt_reduction_collective_fpga_only_fpga_reduction_tree_c504222f30",
+      "current_fidelity": "L0_target_viability",
+      "decision": "promote",
+      "evidence_summary": {
+        "diversity_group": "fpga_only:reduction_collective",
+        "estimated_net_gain_ratio": 0.04951521739130436,
+        "risk_score": 0.23123097826086955,
+        "runtime_ratio": 0.2,
+        "source_decision": "maybe",
+        "source_viability_score": 0.41204565217391304
+      },
+      "next_fidelity": "L1_cost_model",
+      "promotion_decision_id": "promotion_qeic_l4_fpga_candidate_phonon_dfpt_reduction_collective_fpga_only_fpga_reduction_tree_c504222f30",
+      "promotion_priority": 8,
+      "promotion_score": 0.440119,
+      "reason_codes": [
+        "budget_available",
+        "candidate_generated_from_viability",
+        "diversity_represented",
+        "low_runtime_ratio",
+        "moderate_viability_score",
+        "motif_diversity_selected",
+        "planned_l1_cost_model_request",
+        "positive_gain_estimate",
+        "profile_quality_medium",
+        "risk_within_tolerance",
+        "score_above_promotion_threshold",
+        "source_decision_maybe",
+        "target_diversity_selected"
+      ]
+    },
+    {
+      "budget_account": "max_l1_cost_model_requests",
+      "candidate_id": "qeic_l4_fpga_candidate_phonon_dfpt_reduction_collective_fpga_only_fpga_streaming_pipeline_3f825dc067",
+      "current_fidelity": "L0_target_viability",
+      "decision": "promote",
+      "evidence_summary": {
+        "diversity_group": "fpga_only:reduction_collective",
+        "estimated_net_gain_ratio": 0.04951521739130436,
+        "risk_score": 0.23123097826086955,
+        "runtime_ratio": 0.2,
+        "source_decision": "maybe",
+        "source_viability_score": 0.41204565217391304
+      },
+      "next_fidelity": "L1_cost_model",
+      "promotion_decision_id": "promotion_qeic_l4_fpga_candidate_phonon_dfpt_reduction_collective_fpga_only_fpga_streaming_pipeline_3f825dc067",
+      "promotion_priority": 9,
+      "promotion_score": 0.440119,
+      "reason_codes": [
+        "budget_available",
+        "candidate_generated_from_viability",
+        "diversity_represented",
+        "low_runtime_ratio",
+        "moderate_viability_score",
+        "motif_diversity_selected",
+        "planned_l1_cost_model_request",
+        "positive_gain_estimate",
+        "profile_quality_medium",
+        "risk_within_tolerance",
+        "score_above_promotion_threshold",
+        "source_decision_maybe",
+        "target_diversity_selected"
+      ]
+    },
+    {
+      "budget_account": "max_l1_cost_model_requests",
+      "candidate_id": "qeic_l4_hybrid_candidate_strain_doping_field_sweep_cross_run_reuse_gpu_fpga_hybrid_hybrid_runtime_controller_a240db1d6e",
+      "current_fidelity": "L0_target_viability",
+      "decision": "promote",
+      "evidence_summary": {
+        "diversity_group": "gpu_fpga_hybrid:cross_run_reuse",
+        "estimated_net_gain_ratio": 0.0058183333333333325,
+        "risk_score": 0.1451513888888889,
+        "runtime_ratio": 0.3,
+        "source_decision": "maybe",
+        "source_viability_score": 0.37536416666666667
+      },
+      "next_fidelity": "L1_cost_model",
+      "promotion_decision_id": "promotion_qeic_l4_hybrid_candidate_strain_doping_field_sweep_cross_run_reuse_gpu_fpga_hybrid_hybrid_runtime_controller_a240db1d6e",
+      "promotion_priority": 10,
+      "promotion_score": 0.43794,
+      "reason_codes": [
+        "budget_available",
+        "candidate_generated_from_viability",
+        "diversity_represented",
+        "high_runtime_ratio",
+        "moderate_viability_score",
+        "motif_diversity_selected",
+        "planned_l1_cost_model_request",
+        "positive_gain_estimate",
+        "profile_quality_high",
+        "risk_within_tolerance",
+        "score_above_promotion_threshold",
+        "source_decision_maybe",
+        "target_diversity_selected"
+      ]
+    },
+    {
+      "budget_account": "max_l1_cost_model_requests",
+      "candidate_id": "qeic_l4_hybrid_candidate_phonon_dfpt_response_accumulation_gpu_fpga_hybrid_hybrid_runtime_controller_d2845d998a",
+      "current_fidelity": "L0_target_viability",
+      "decision": "promote",
+      "evidence_summary": {
+        "diversity_group": "gpu_fpga_hybrid:response_accumulation",
+        "estimated_net_gain_ratio": -0.019639999999999998,
+        "risk_score": 0.2186590909090909,
+        "runtime_ratio": 0.44,
+        "source_decision": "maybe",
+        "source_viability_score": 0.36010909090909093
+      },
+      "next_fidelity": "L1_cost_model",
+      "promotion_decision_id": "promotion_qeic_l4_hybrid_candidate_phonon_dfpt_response_accumulation_gpu_fpga_hybrid_hybrid_runtime_controller_d2845d998a",
+      "promotion_priority": 11,
+      "promotion_score": 0.422839,
+      "reason_codes": [
+        "budget_available",
+        "candidate_generated_from_viability",
+        "diversity_represented",
+        "high_runtime_ratio",
+        "moderate_viability_score",
+        "motif_diversity_selected",
+        "planned_l1_cost_model_request",
+        "profile_quality_high",
+        "risk_within_tolerance",
+        "score_above_promotion_threshold",
+        "source_decision_maybe",
+        "target_diversity_selected",
+        "weak_gain_estimate"
+      ]
+    },
+    {
+      "budget_account": "max_l1_cost_model_requests",
+      "candidate_id": "qeic_l4_hybrid_candidate_phonon_dfpt_perturbation_rhs_gpu_fpga_hybrid_hybrid_runtime_controller_ccbcde09eb",
+      "current_fidelity": "L0_target_viability",
+      "decision": "promote",
+      "evidence_summary": {
+        "diversity_group": "gpu_fpga_hybrid:perturbation_rhs",
+        "estimated_net_gain_ratio": -0.016540000000000003,
+        "risk_score": 0.2189861111111111,
+        "runtime_ratio": 0.36,
+        "source_decision": "maybe",
+        "source_viability_score": 0.3597166666666667
+      },
+      "next_fidelity": "L1_cost_model",
+      "promotion_decision_id": "promotion_qeic_l4_hybrid_candidate_phonon_dfpt_perturbation_rhs_gpu_fpga_hybrid_hybrid_runtime_controller_ccbcde09eb",
+      "promotion_priority": 12,
+      "promotion_score": 0.422608,
+      "reason_codes": [
+        "budget_available",
+        "candidate_generated_from_viability",
+        "diversity_represented",
+        "high_runtime_ratio",
+        "moderate_viability_score",
+        "motif_diversity_selected",
+        "planned_l1_cost_model_request",
+        "profile_quality_high",
+        "risk_within_tolerance",
+        "score_above_promotion_threshold",
+        "source_decision_maybe",
+        "target_diversity_selected",
+        "weak_gain_estimate"
+      ]
+    },
+    {
+      "budget_account": "max_l1_cost_model_requests",
+      "candidate_id": "qeic_l4_hybrid_candidate_phonon_dfpt_reduction_collective_gpu_fpga_hybrid_hybrid_dma_overlap_sidecar_9a9fa929fc",
+      "current_fidelity": "L0_target_viability",
+      "decision": "hold",
+      "evidence_summary": {
+        "diversity_group": "gpu_fpga_hybrid:reduction_collective",
+        "estimated_net_gain_ratio": 0.032409999999999994,
+        "risk_score": 0.2251125,
+        "runtime_ratio": 0.2,
+        "source_decision": "maybe",
+        "source_viability_score": 0.40214
+      },
+      "next_fidelity": "none",
+      "promotion_decision_id": "promotion_qeic_l4_hybrid_candidate_phonon_dfpt_reduction_collective_gpu_fpga_hybrid_hybrid_dma_overlap_sidecar_9a9fa929fc",
+      "promotion_priority": 0,
+      "promotion_score": 0.398674,
+      "reason_codes": [
+        "budget_exhausted",
+        "candidate_generated_from_viability",
+        "duplicate_motif_deprioritized",
+        "duplicate_target_type_deprioritized",
+        "low_runtime_ratio",
+        "moderate_viability_score",
+        "positive_gain_estimate",
+        "profile_quality_medium",
+        "risk_within_tolerance",
+        "score_above_promotion_threshold",
+        "source_decision_maybe"
+      ]
+    },
+    {
+      "budget_account": "max_l1_cost_model_requests",
+      "candidate_id": "qeic_l4_hybrid_candidate_phonon_dfpt_reduction_collective_gpu_fpga_hybrid_hybrid_reduction_sidecar_423b828955",
+      "current_fidelity": "L0_target_viability",
+      "decision": "hold",
+      "evidence_summary": {
+        "diversity_group": "gpu_fpga_hybrid:reduction_collective",
+        "estimated_net_gain_ratio": 0.032409999999999994,
+        "risk_score": 0.2251125,
+        "runtime_ratio": 0.2,
+        "source_decision": "maybe",
+        "source_viability_score": 0.40214
+      },
+      "next_fidelity": "none",
+      "promotion_decision_id": "promotion_qeic_l4_hybrid_candidate_phonon_dfpt_reduction_collective_gpu_fpga_hybrid_hybrid_reduction_sidecar_423b828955",
+      "promotion_priority": 0,
+      "promotion_score": 0.398674,
+      "reason_codes": [
+        "budget_exhausted",
+        "candidate_generated_from_viability",
+        "duplicate_motif_deprioritized",
+        "duplicate_target_type_deprioritized",
+        "low_runtime_ratio",
+        "moderate_viability_score",
+        "positive_gain_estimate",
+        "profile_quality_medium",
+        "risk_within_tolerance",
+        "score_above_promotion_threshold",
+        "source_decision_maybe"
+      ]
+    },
+    {
+      "budget_account": "max_l1_cost_model_requests",
+      "candidate_id": "qeic_l4_hybrid_candidate_ground_state_band_structure_fft_transpose_gpu_fpga_hybrid_hybrid_transpose_sidecar_7fec06843a",
+      "current_fidelity": "L0_target_viability",
+      "decision": "hold",
+      "evidence_summary": {
+        "diversity_group": "gpu_fpga_hybrid:fft_transpose",
+        "estimated_net_gain_ratio": -0.006671590909090909,
+        "risk_score": 0.37509375,
+        "runtime_ratio": 0.5181818181818182,
+        "source_decision": "maybe",
+        "source_viability_score": 0.3986374999999999
+      },
+      "next_fidelity": "none",
+      "promotion_decision_id": "promotion_qeic_l4_hybrid_candidate_ground_state_band_structure_fft_transpose_gpu_fpga_hybrid_hybrid_transpose_sidecar_7fec06843a",
+      "promotion_priority": 0,
+      "promotion_score": 0.389009,
+      "reason_codes": [
+        "budget_exhausted",
+        "candidate_generated_from_viability",
+        "duplicate_motif_deprioritized",
+        "duplicate_target_type_deprioritized",
+        "high_runtime_ratio",
+        "moderate_viability_score",
+        "profile_quality_high",
+        "risk_within_tolerance",
+        "score_above_promotion_threshold",
+        "source_decision_maybe",
+        "weak_gain_estimate"
+      ]
+    }
+  ],
+  "schema_version": "dse.qe_ic.candidate_plan.v1",
+  "source_indexes": {
+    "motif_ids": [
+      "batch_scheduling",
+      "bte_collision_integral",
+      "charge_density_analysis",
+      "communication",
+      "cross_run_reuse",
+      "dense_kq_interpolation",
+      "dense_linear_algebra",
+      "density_update",
+      "diagonalization",
+      "electron_phonon_matrix",
+      "fft_transpose",
+      "hpsi",
+      "incremental_update",
+      "io_checkpoint",
+      "large_data_staging",
+      "large_supercell",
+      "localized_state_analysis",
+      "memory_bandwidth",
+      "memory_capacity",
+      "parameter_sweep",
+      "perturbation_rhs",
+      "potential_alignment",
+      "projector_nonlocal",
+      "q_point_sweep",
+      "reduction_collective",
+      "repeated_ground_state_solve",
+      "repeated_runs",
+      "response_accumulation",
+      "small_dense_linear_algebra",
+      "wavefunction_memory",
+      "workflow_parameter_sweep"
+    ],
+    "viability_records_by_id": {
+      "l3vr_electron_phonon_mobility_bte_collision_integral_fpga_only_u280_fixture_fpga_only_299525b9bb": {
+        "decision": "maybe",
+        "evidence_inputs": {
+          "communication_bytes": 250000000.0,
+          "gpu_utilization": 0.72,
+          "mapping_confidence": "medium",
+          "memory_movement_bytes": 6000000000.0,
+          "runtime_ratio": 0.33,
+          "time_ms": 3300.0,
+          "unmapped_time_ratio": 0.0
+        },
+        "motif_id": "bte_collision_integral",
+        "reason_codes": [
+          "dense_gpu_dominant",
+          "fpga_resource_risk",
+          "gpu_baseline_present",
+          "gpu_baseline_strong",
+          "high_runtime_motif"
+        ],
+        "risk": {
+          "fpga_resource_risk": 1.0,
+          "gpu_dominance_risk": 0.75,
+          "overall_risk_score": 0.5259900362318841,
+          "profile_quality_risk": 0.35,
+          "transfer_overhead_risk": 0.0039601449275362315
+        },
+        "source_profile_target": "gpu_only",
+        "source_viability_record_id": "l3vr_electron_phonon_mobility_bte_collision_integral_fpga_only_u280_fixture_fpga_only_299525b9bb",
+        "target_id": "fpga_only_u280_fixture",
+        "target_type": "fpga_only",
+        "upper_bound": {
+          "estimated_net_gain_ms": 382.93152173913046,
+          "estimated_net_gain_ratio": 0.03829315217391305,
+          "estimated_removable_time_ms": 396.0,
+          "estimated_sync_time_ms": 0.025,
+          "estimated_transfer_time_ms": 13.043478260869565,
+          "family_total_time_ms": 10000.0,
+          "motif_time_ms": 3300.0,
+          "runtime_ratio": 0.33
+        },
+        "viability_score": 0.07929427536231883,
+        "workload_family_id": "electron_phonon_mobility"
+      },
+      "l3vr_electron_phonon_mobility_bte_collision_integral_gpu_fpga_hybrid_a100_u280_fixture_gpu_fpga_hybrid_32febcf070": {
+        "decision": "maybe",
+        "evidence_inputs": {
+          "communication_bytes": 250000000.0,
+          "gpu_utilization": 0.72,
+          "mapping_confidence": "medium",
+          "memory_movement_bytes": 6000000000.0,
+          "runtime_ratio": 0.33,
+          "time_ms": 3300.0,
+          "unmapped_time_ratio": 0.0
+        },
+        "motif_id": "bte_collision_integral",
+        "reason_codes": [
+          "dense_gpu_dominant",
+          "gpu_baseline_present",
+          "gpu_baseline_strong",
+          "high_runtime_motif",
+          "hybrid_upper_bound_too_low"
+        ],
+        "risk": {
+          "fpga_resource_risk": 0.5625,
+          "gpu_dominance_risk": 0.75,
+          "overall_risk_score": 0.43042481060606064,
+          "profile_quality_risk": 0.35,
+          "transfer_overhead_risk": 0.05919924242424242
+        },
+        "source_profile_target": "gpu_only",
+        "source_viability_record_id": "l3vr_electron_phonon_mobility_bte_collision_integral_gpu_fpga_hybrid_a100_u280_fixture_gpu_fpga_hybrid_32febcf070",
+        "target_id": "gpu_fpga_hybrid_a100_u280_fixture",
+        "target_type": "gpu_fpga_hybrid",
+        "upper_bound": {
+          "estimated_net_gain_ms": 200.6425,
+          "estimated_net_gain_ratio": 0.020064250000000002,
+          "estimated_removable_time_ms": 396.0,
+          "estimated_sync_time_ms": 0.045,
+          "estimated_transfer_time_ms": 195.3125,
+          "family_total_time_ms": 10000.0,
+          "motif_time_ms": 3300.0,
+          "runtime_ratio": 0.33
+        },
+        "viability_score": 0.3699008522727273,
+        "workload_family_id": "electron_phonon_mobility"
+      },
+      "l3vr_electron_phonon_mobility_bte_collision_integral_gpu_only_a100_fixture_gpu_only_4e8e6f438d": {
+        "decision": "baseline",
+        "evidence_inputs": {
+          "communication_bytes": 250000000.0,
+          "gpu_utilization": 0.72,
+          "mapping_confidence": "medium",
+          "memory_movement_bytes": 6000000000.0,
+          "runtime_ratio": 0.33,
+          "time_ms": 3300.0,
+          "unmapped_time_ratio": 0.0
+        },
+        "motif_id": "bte_collision_integral",
+        "reason_codes": [
+          "dense_gpu_dominant",
+          "gpu_baseline_present",
+          "gpu_baseline_strong",
+          "high_runtime_motif"
+        ],
+        "risk": {
+          "fpga_resource_risk": 0.0,
+          "gpu_dominance_risk": 0.75,
+          "overall_risk_score": 0.275,
+          "profile_quality_risk": 0.35,
+          "transfer_overhead_risk": 0.0
+        },
+        "source_profile_target": "gpu_only",
+        "source_viability_record_id": "l3vr_electron_phonon_mobility_bte_collision_integral_gpu_only_a100_fixture_gpu_only_4e8e6f438d",
+        "target_id": "gpu_only_a100_fixture",
+        "target_type": "gpu_only",
+        "upper_bound": {
+          "estimated_net_gain_ms": 0.0,
+          "estimated_net_gain_ratio": 0.0,
+          "estimated_removable_time_ms": 0.0,
+          "estimated_sync_time_ms": 0.0,
+          "estimated_transfer_time_ms": 0.0,
+          "family_total_time_ms": 10000.0,
+          "motif_time_ms": 3300.0,
+          "runtime_ratio": 0.33
+        },
+        "viability_score": 0.7865,
+        "workload_family_id": "electron_phonon_mobility"
+      },
+      "l3vr_electron_phonon_mobility_dense_kq_interpolation_fpga_only_u280_fixture_fpga_only_fc86d6d8da": {
+        "decision": "maybe",
+        "evidence_inputs": {
+          "communication_bytes": 0.0,
+          "gpu_utilization": 0.72,
+          "mapping_confidence": "high",
+          "memory_movement_bytes": 8000000000.0,
+          "runtime_ratio": 0.42,
+          "time_ms": 4200.0,
+          "unmapped_time_ratio": 0.0
+        },
+        "motif_id": "dense_kq_interpolation",
+        "reason_codes": [
+          "dense_gpu_dominant",
+          "fpga_resource_risk",
+          "gpu_baseline_present",
+          "gpu_baseline_strong",
+          "high_runtime_motif"
+        ],
+        "risk": {
+          "fpga_resource_risk": 1.0,
+          "gpu_dominance_risk": 0.75,
+          "overall_risk_score": 0.4635366847826087,
+          "profile_quality_risk": 0.1,
+          "transfer_overhead_risk": 0.004146739130434782
+        },
+        "source_profile_target": "gpu_only",
+        "source_viability_record_id": "l3vr_electron_phonon_mobility_dense_kq_interpolation_fpga_only_u280_fixture_fpga_only_fc86d6d8da",
+        "target_id": "fpga_only_u280_fixture",
+        "target_type": "fpga_only",
+        "upper_bound": {
+          "estimated_net_gain_ms": 486.58369565217396,
+          "estimated_net_gain_ratio": 0.048658369565217394,
+          "estimated_removable_time_ms": 504.0,
+          "estimated_sync_time_ms": 0.025,
+          "estimated_transfer_time_ms": 17.391304347826086,
+          "family_total_time_ms": 10000.0,
+          "motif_time_ms": 4200.0,
+          "runtime_ratio": 0.42
+        },
+        "viability_score": 0.1499873913043478,
+        "workload_family_id": "electron_phonon_mobility"
+      },
+      "l3vr_electron_phonon_mobility_dense_kq_interpolation_gpu_fpga_hybrid_a100_u280_fixture_gpu_fpga_hybrid_f7697f4d83": {
+        "decision": "maybe",
+        "evidence_inputs": {
+          "communication_bytes": 0.0,
+          "gpu_utilization": 0.72,
+          "mapping_confidence": "high",
+          "memory_movement_bytes": 8000000000.0,
+          "runtime_ratio": 0.42,
+          "time_ms": 4200.0,
+          "unmapped_time_ratio": 0.0
+        },
+        "motif_id": "dense_kq_interpolation",
+        "reason_codes": [
+          "dense_gpu_dominant",
+          "gpu_baseline_present",
+          "gpu_baseline_strong",
+          "high_runtime_motif",
+          "hybrid_upper_bound_too_low"
+        ],
+        "risk": {
+          "fpga_resource_risk": 0.5625,
+          "gpu_dominance_risk": 0.75,
+          "overall_risk_score": 0.368008630952381,
+          "profile_quality_risk": 0.1,
+          "transfer_overhead_risk": 0.05953452380952381
+        },
+        "source_profile_target": "gpu_only",
+        "source_viability_record_id": "l3vr_electron_phonon_mobility_dense_kq_interpolation_gpu_fpga_hybrid_a100_u280_fixture_gpu_fpga_hybrid_f7697f4d83",
+        "target_id": "gpu_fpga_hybrid_a100_u280_fixture",
+        "target_type": "gpu_fpga_hybrid",
+        "upper_bound": {
+          "estimated_net_gain_ms": 253.955,
+          "estimated_net_gain_ratio": 0.0253955,
+          "estimated_removable_time_ms": 504.0,
+          "estimated_sync_time_ms": 0.045,
+          "estimated_transfer_time_ms": 250.0,
+          "family_total_time_ms": 10000.0,
+          "motif_time_ms": 4200.0,
+          "runtime_ratio": 0.42
+        },
+        "viability_score": 0.43312839285714283,
+        "workload_family_id": "electron_phonon_mobility"
+      },
+      "l3vr_electron_phonon_mobility_dense_kq_interpolation_gpu_only_a100_fixture_gpu_only_78efe7f89e": {
+        "decision": "baseline",
+        "evidence_inputs": {
+          "communication_bytes": 0.0,
+          "gpu_utilization": 0.72,
+          "mapping_confidence": "high",
+          "memory_movement_bytes": 8000000000.0,
+          "runtime_ratio": 0.42,
+          "time_ms": 4200.0,
+          "unmapped_time_ratio": 0.0
+        },
+        "motif_id": "dense_kq_interpolation",
+        "reason_codes": [
+          "dense_gpu_dominant",
+          "gpu_baseline_present",
+          "gpu_baseline_strong",
+          "high_runtime_motif"
+        ],
+        "risk": {
+          "fpga_resource_risk": 0.0,
+          "gpu_dominance_risk": 0.75,
+          "overall_risk_score": 0.2125,
+          "profile_quality_risk": 0.1,
+          "transfer_overhead_risk": 0.0
+        },
+        "source_profile_target": "gpu_only",
+        "source_viability_record_id": "l3vr_electron_phonon_mobility_dense_kq_interpolation_gpu_only_a100_fixture_gpu_only_78efe7f89e",
+        "target_id": "gpu_only_a100_fixture",
+        "target_type": "gpu_only",
+        "upper_bound": {
+          "estimated_net_gain_ms": 0.0,
+          "estimated_net_gain_ratio": 0.0,
+          "estimated_removable_time_ms": 0.0,
+          "estimated_sync_time_ms": 0.0,
+          "estimated_transfer_time_ms": 0.0,
+          "family_total_time_ms": 10000.0,
+          "motif_time_ms": 4200.0,
+          "runtime_ratio": 0.42
+        },
+        "viability_score": 0.849,
+        "workload_family_id": "electron_phonon_mobility"
+      },
+      "l3vr_electron_phonon_mobility_dense_linear_algebra_fpga_only_u280_fixture_fpga_only_927f7a63a7": {
+        "decision": "reject",
+        "evidence_inputs": {
+          "communication_bytes": 100000000.0,
+          "gpu_utilization": 0.72,
+          "mapping_confidence": "medium",
+          "memory_movement_bytes": 3500000000.0,
+          "runtime_ratio": 0.25,
+          "time_ms": 2500.0,
+          "unmapped_time_ratio": 0.0
+        },
+        "motif_id": "dense_linear_algebra",
+        "reason_codes": [
+          "dense_gpu_dominant",
+          "fpga_resource_risk",
+          "fpga_upper_bound_too_low",
+          "gpu_baseline_present",
+          "gpu_baseline_strong",
+          "high_runtime_motif"
+        ],
+        "risk": {
+          "fpga_resource_risk": 0.945,
+          "gpu_dominance_risk": 0.75,
+          "overall_risk_score": 0.5120133695652174,
+          "profile_quality_risk": 0.35,
+          "transfer_overhead_risk": 0.003053478260869565
+        },
+        "source_profile_target": "gpu_only",
+        "source_viability_record_id": "l3vr_electron_phonon_mobility_dense_linear_algebra_fpga_only_u280_fixture_fpga_only_927f7a63a7",
+        "target_id": "fpga_only_u280_fixture",
+        "target_type": "fpga_only",
+        "upper_bound": {
+          "estimated_net_gain_ms": 242.3663043478261,
+          "estimated_net_gain_ratio": 0.024236630434782608,
+          "estimated_removable_time_ms": 250.0,
+          "estimated_sync_time_ms": 0.025,
+          "estimated_transfer_time_ms": 7.608695652173913,
+          "family_total_time_ms": 10000.0,
+          "motif_time_ms": 2500.0,
+          "runtime_ratio": 0.25
+        },
+        "viability_score": 0.032362565217391295,
+        "workload_family_id": "electron_phonon_mobility"
+      },
+      "l3vr_electron_phonon_mobility_dense_linear_algebra_gpu_fpga_hybrid_a100_u280_fixture_gpu_fpga_hybrid_e50bc4f2f2": {
+        "decision": "reject",
+        "evidence_inputs": {
+          "communication_bytes": 100000000.0,
+          "gpu_utilization": 0.72,
+          "mapping_confidence": "medium",
+          "memory_movement_bytes": 3500000000.0,
+          "runtime_ratio": 0.25,
+          "time_ms": 2500.0,
+          "unmapped_time_ratio": 0.0
+        },
+        "motif_id": "dense_linear_algebra",
+        "reason_codes": [
+          "dense_gpu_dominant",
+          "gpu_baseline_present",
+          "gpu_baseline_strong",
+          "high_runtime_motif",
+          "hybrid_upper_bound_too_low"
+        ],
+        "risk": {
+          "fpga_resource_risk": 0.5249999999999999,
+          "gpu_dominance_risk": 0.75,
+          "overall_risk_score": 0.41750449999999995,
+          "profile_quality_risk": 0.35,
+          "transfer_overhead_risk": 0.045018
+        },
+        "source_profile_target": "gpu_only",
+        "source_viability_record_id": "l3vr_electron_phonon_mobility_dense_linear_algebra_gpu_fpga_hybrid_a100_u280_fixture_gpu_fpga_hybrid_e50bc4f2f2",
+        "target_id": "gpu_fpga_hybrid_a100_u280_fixture",
+        "target_type": "gpu_fpga_hybrid",
+        "upper_bound": {
+          "estimated_net_gain_ms": 12.455,
+          "estimated_net_gain_ratio": 0.0012455,
+          "estimated_removable_time_ms": 125.0,
+          "estimated_sync_time_ms": 0.045,
+          "estimated_transfer_time_ms": 112.5,
+          "family_total_time_ms": 10000.0,
+          "motif_time_ms": 2500.0,
+          "runtime_ratio": 0.25
+        },
+        "viability_score": 0.30210835,
+        "workload_family_id": "electron_phonon_mobility"
+      },
+      "l3vr_electron_phonon_mobility_dense_linear_algebra_gpu_only_a100_fixture_gpu_only_6d28b658af": {
+        "decision": "baseline",
+        "evidence_inputs": {
+          "communication_bytes": 100000000.0,
+          "gpu_utilization": 0.72,
+          "mapping_confidence": "medium",
+          "memory_movement_bytes": 3500000000.0,
+          "runtime_ratio": 0.25,
+          "time_ms": 2500.0,
+          "unmapped_time_ratio": 0.0
+        },
+        "motif_id": "dense_linear_algebra",
+        "reason_codes": [
+          "dense_gpu_dominant",
+          "gpu_baseline_present",
+          "gpu_baseline_strong",
+          "high_runtime_motif"
+        ],
+        "risk": {
+          "fpga_resource_risk": 0.0,
+          "gpu_dominance_risk": 0.75,
+          "overall_risk_score": 0.275,
+          "profile_quality_risk": 0.35,
+          "transfer_overhead_risk": 0.0
+        },
+        "source_profile_target": "gpu_only",
+        "source_viability_record_id": "l3vr_electron_phonon_mobility_dense_linear_algebra_gpu_only_a100_fixture_gpu_only_6d28b658af",
+        "target_id": "gpu_only_a100_fixture",
+        "target_type": "gpu_only",
+        "upper_bound": {
+          "estimated_net_gain_ms": 0.0,
+          "estimated_net_gain_ratio": 0.0,
+          "estimated_removable_time_ms": 0.0,
+          "estimated_sync_time_ms": 0.0,
+          "estimated_transfer_time_ms": 0.0,
+          "family_total_time_ms": 10000.0,
+          "motif_time_ms": 2500.0,
+          "runtime_ratio": 0.25
+        },
+        "viability_score": 0.7865,
+        "workload_family_id": "electron_phonon_mobility"
+      },
+      "l3vr_ground_state_band_structure_fft_transpose_fpga_only_u280_fixture_fpga_only_d9fe8afec3": {
+        "decision": "maybe",
+        "evidence_inputs": {
+          "communication_bytes": 200000000.0,
+          "gpu_utilization": 0.7,
+          "mapping_confidence": "high",
+          "memory_movement_bytes": 1000000000.0,
+          "runtime_ratio": 0.5181818181818182,
+          "time_ms": 120.0,
+          "unmapped_time_ratio": 0.05
+        },
+        "motif_id": "fft_transpose",
+        "reason_codes": [
+          "dense_gpu_dominant",
+          "fpga_resource_risk",
+          "gpu_baseline_present",
+          "gpu_baseline_strong",
+          "high_runtime_motif",
+          "streaming_friendly"
+        ],
+        "risk": {
+          "fpga_resource_risk": 0.6075,
+          "gpu_dominance_risk": 0.75,
+          "overall_risk_score": 0.36895606884057974,
+          "profile_quality_risk": 0.1,
+          "transfer_overhead_risk": 0.01832427536231884
+        },
+        "source_profile_target": "gpu_only",
+        "source_viability_record_id": "l3vr_ground_state_band_structure_fft_transpose_fpga_only_u280_fixture_fpga_only_d9fe8afec3",
+        "target_id": "fpga_only_u280_fixture",
+        "target_type": "fpga_only",
+        "upper_bound": {
+          "estimated_net_gain_ms": 39.80108695652174,
+          "estimated_net_gain_ratio": 0.17186833003952573,
+          "estimated_removable_time_ms": 42.0,
+          "estimated_sync_time_ms": 0.025,
+          "estimated_transfer_time_ms": 2.1739130434782608,
+          "family_total_time_ms": 231.57894736842104,
+          "motif_time_ms": 120.0,
+          "runtime_ratio": 0.5181818181818182
+        },
+        "viability_score": 0.4523351449275362,
+        "workload_family_id": "ground_state_band_structure"
+      },
+      "l3vr_ground_state_band_structure_fft_transpose_gpu_fpga_hybrid_a100_u280_fixture_gpu_fpga_hybrid_50bd56c46e": {
+        "decision": "maybe",
+        "evidence_inputs": {
+          "communication_bytes": 200000000.0,
+          "gpu_utilization": 0.7,
+          "mapping_confidence": "high",
+          "memory_movement_bytes": 1000000000.0,
+          "runtime_ratio": 0.5181818181818182,
+          "time_ms": 120.0,
+          "unmapped_time_ratio": 0.05
+        },
+        "motif_id": "fft_transpose",
+        "reason_codes": [
+          "dense_gpu_dominant",
+          "gpu_baseline_present",
+          "gpu_baseline_strong",
+          "high_runtime_motif",
+          "hybrid_upper_bound_too_low",
+          "streaming_friendly"
+        ],
+        "risk": {
+          "fpga_resource_risk": 0.3375,
+          "gpu_dominance_risk": 0.75,
+          "overall_risk_score": 0.37509375,
+          "profile_quality_risk": 0.1,
+          "transfer_overhead_risk": 0.312875
+        },
+        "source_profile_target": "gpu_only",
+        "source_viability_record_id": "l3vr_ground_state_band_structure_fft_transpose_gpu_fpga_hybrid_a100_u280_fixture_gpu_fpga_hybrid_50bd56c46e",
+        "target_id": "gpu_fpga_hybrid_a100_u280_fixture",
+        "target_type": "gpu_fpga_hybrid",
+        "upper_bound": {
+          "estimated_net_gain_ms": -1.545,
+          "estimated_net_gain_ratio": -0.006671590909090909,
+          "estimated_removable_time_ms": 36.0,
+          "estimated_sync_time_ms": 0.045,
+          "estimated_transfer_time_ms": 37.5,
+          "family_total_time_ms": 231.57894736842104,
+          "motif_time_ms": 120.0,
+          "runtime_ratio": 0.5181818181818182
+        },
+        "viability_score": 0.3986374999999999,
+        "workload_family_id": "ground_state_band_structure"
+      },
+      "l3vr_ground_state_band_structure_fft_transpose_gpu_only_a100_fixture_gpu_only_4a5c5886a3": {
+        "decision": "baseline",
+        "evidence_inputs": {
+          "communication_bytes": 200000000.0,
+          "gpu_utilization": 0.7,
+          "mapping_confidence": "high",
+          "memory_movement_bytes": 1000000000.0,
+          "runtime_ratio": 0.5181818181818182,
+          "time_ms": 120.0,
+          "unmapped_time_ratio": 0.05
+        },
+        "motif_id": "fft_transpose",
+        "reason_codes": [
+          "dense_gpu_dominant",
+          "gpu_baseline_present",
+          "gpu_baseline_strong",
+          "high_runtime_motif",
+          "streaming_friendly"
+        ],
+        "risk": {
+          "fpga_resource_risk": 0.0,
+          "gpu_dominance_risk": 0.75,
+          "overall_risk_score": 0.2125,
+          "profile_quality_risk": 0.1,
+          "transfer_overhead_risk": 0.0
+        },
+        "source_profile_target": "gpu_only",
+        "source_viability_record_id": "l3vr_ground_state_band_structure_fft_transpose_gpu_only_a100_fixture_gpu_only_4a5c5886a3",
+        "target_id": "gpu_only_a100_fixture",
+        "target_type": "gpu_only",
+        "upper_bound": {
+          "estimated_net_gain_ms": 0.0,
+          "estimated_net_gain_ratio": 0.0,
+          "estimated_removable_time_ms": 0.0,
+          "estimated_sync_time_ms": 0.0,
+          "estimated_transfer_time_ms": 0.0,
+          "family_total_time_ms": 231.57894736842104,
+          "motif_time_ms": 120.0,
+          "runtime_ratio": 0.5181818181818182
+        },
+        "viability_score": 0.84,
+        "workload_family_id": "ground_state_band_structure"
+      },
+      "l3vr_ground_state_band_structure_hpsi_fpga_only_u280_fixture_fpga_only_f8ba87334f": {
+        "decision": "maybe",
+        "evidence_inputs": {
+          "communication_bytes": 50000000.0,
+          "gpu_utilization": 0.7,
+          "mapping_confidence": "high",
+          "memory_movement_bytes": 800000000.0,
+          "runtime_ratio": 0.4318181818181818,
+          "time_ms": 100.0,
+          "unmapped_time_ratio": 0.05
+        },
+        "motif_id": "hpsi",
+        "reason_codes": [
+          "fpga_resource_risk",
+          "gpu_baseline_present",
+          "gpu_baseline_strong",
+          "high_runtime_motif",
+          "streaming_friendly"
+        ],
+        "risk": {
+          "fpga_resource_risk": 0.675,
+          "gpu_dominance_risk": 0.35,
+          "overall_risk_score": 0.2856603260869566,
+          "profile_quality_risk": 0.1,
+          "transfer_overhead_risk": 0.017641304347826087
+        },
+        "source_profile_target": "gpu_only",
+        "source_viability_record_id": "l3vr_ground_state_band_structure_hpsi_fpga_only_u280_fixture_fpga_only_f8ba87334f",
+        "target_id": "fpga_only_u280_fixture",
+        "target_type": "fpga_only",
+        "upper_bound": {
+          "estimated_net_gain_ms": 28.235869565217392,
+          "estimated_net_gain_ratio": 0.12192761857707511,
+          "estimated_removable_time_ms": 30.0,
+          "estimated_sync_time_ms": 0.025,
+          "estimated_transfer_time_ms": 1.7391304347826089,
+          "family_total_time_ms": 231.57894736842104,
+          "motif_time_ms": 100.0,
+          "runtime_ratio": 0.4318181818181818
+        },
+        "viability_score": 0.5239717391304347,
+        "workload_family_id": "ground_state_band_structure"
+      },
+      "l3vr_ground_state_band_structure_hpsi_gpu_fpga_hybrid_a100_u280_fixture_gpu_fpga_hybrid_775038a8ec": {
+        "decision": "maybe",
+        "evidence_inputs": {
+          "communication_bytes": 50000000.0,
+          "gpu_utilization": 0.7,
+          "mapping_confidence": "high",
+          "memory_movement_bytes": 800000000.0,
+          "runtime_ratio": 0.4318181818181818,
+          "time_ms": 100.0,
+          "unmapped_time_ratio": 0.05
+        },
+        "motif_id": "hpsi",
+        "reason_codes": [
+          "gpu_baseline_present",
+          "gpu_baseline_strong",
+          "high_runtime_motif",
+          "hybrid_upper_bound_too_low",
+          "streaming_friendly"
+        ],
+        "risk": {
+          "fpga_resource_risk": 0.375,
+          "gpu_dominance_risk": 0.35,
+          "overall_risk_score": 0.27276875,
+          "profile_quality_risk": 0.1,
+          "transfer_overhead_risk": 0.266075
+        },
+        "source_profile_target": "gpu_only",
+        "source_viability_record_id": "l3vr_ground_state_band_structure_hpsi_gpu_fpga_hybrid_a100_u280_fixture_gpu_fpga_hybrid_775038a8ec",
+        "target_id": "gpu_fpga_hybrid_a100_u280_fixture",
+        "target_type": "gpu_fpga_hybrid",
+        "upper_bound": {
+          "estimated_net_gain_ms": -1.6075,
+          "estimated_net_gain_ratio": -0.006941477272727273,
+          "estimated_removable_time_ms": 25.0,
+          "estimated_sync_time_ms": 0.045,
+          "estimated_transfer_time_ms": 26.5625,
+          "family_total_time_ms": 231.57894736842104,
+          "motif_time_ms": 100.0,
+          "runtime_ratio": 0.4318181818181818
+        },
+        "viability_score": 0.40017749999999996,
+        "workload_family_id": "ground_state_band_structure"
+      },
+      "l3vr_ground_state_band_structure_hpsi_gpu_only_a100_fixture_gpu_only_d07dd8a72d": {
+        "decision": "baseline",
+        "evidence_inputs": {
+          "communication_bytes": 50000000.0,
+          "gpu_utilization": 0.7,
+          "mapping_confidence": "high",
+          "memory_movement_bytes": 800000000.0,
+          "runtime_ratio": 0.4318181818181818,
+          "time_ms": 100.0,
+          "unmapped_time_ratio": 0.05
+        },
+        "motif_id": "hpsi",
+        "reason_codes": [
+          "gpu_baseline_present",
+          "gpu_baseline_strong",
+          "high_runtime_motif",
+          "streaming_friendly"
+        ],
+        "risk": {
+          "fpga_resource_risk": 0.0,
+          "gpu_dominance_risk": 0.35,
+          "overall_risk_score": 0.11249999999999999,
+          "profile_quality_risk": 0.1,
+          "transfer_overhead_risk": 0.0
+        },
+        "source_profile_target": "gpu_only",
+        "source_viability_record_id": "l3vr_ground_state_band_structure_hpsi_gpu_only_a100_fixture_gpu_only_d07dd8a72d",
+        "target_id": "gpu_only_a100_fixture",
+        "target_type": "gpu_only",
+        "upper_bound": {
+          "estimated_net_gain_ms": 0.0,
+          "estimated_net_gain_ratio": 0.0,
+          "estimated_removable_time_ms": 0.0,
+          "estimated_sync_time_ms": 0.0,
+          "estimated_transfer_time_ms": 0.0,
+          "family_total_time_ms": 231.57894736842104,
+          "motif_time_ms": 100.0,
+          "runtime_ratio": 0.4318181818181818
+        },
+        "viability_score": 0.84,
+        "workload_family_id": "ground_state_band_structure"
+      },
+      "l3vr_interface_band_offset_defect_charge_density_analysis_fpga_only_u280_fixture_fpga_only_274ebefa30": {
+        "decision": "reject",
+        "evidence_inputs": {
+          "communication_bytes": 50000000.0,
+          "gpu_utilization": 0.61,
+          "mapping_confidence": "high",
+          "memory_movement_bytes": 800000000.0,
+          "runtime_ratio": 0.1,
+          "time_ms": 400.0,
+          "unmapped_time_ratio": 0.0
+        },
+        "motif_id": "charge_density_analysis",
+        "reason_codes": [
+          "fpga_resource_risk",
+          "fpga_upper_bound_too_low",
+          "gpu_baseline_present",
+          "gpu_utilization_low",
+          "low_runtime_motif"
+        ],
+        "risk": {
+          "fpga_resource_risk": 0.6075,
+          "gpu_dominance_risk": 0.1,
+          "overall_risk_score": 0.20297758152173914,
+          "profile_quality_risk": 0.1,
+          "transfer_overhead_risk": 0.004410326086956522
+        },
+        "source_profile_target": "gpu_only",
+        "source_viability_record_id": "l3vr_interface_band_offset_defect_charge_density_analysis_fpga_only_u280_fixture_fpga_only_274ebefa30",
+        "target_id": "fpga_only_u280_fixture",
+        "target_type": "fpga_only",
+        "upper_bound": {
+          "estimated_net_gain_ms": 58.23586956521739,
+          "estimated_net_gain_ratio": 0.014558967391304347,
+          "estimated_removable_time_ms": 60.0,
+          "estimated_sync_time_ms": 0.025,
+          "estimated_transfer_time_ms": 1.7391304347826089,
+          "family_total_time_ms": 4000.0,
+          "motif_time_ms": 400.0,
+          "runtime_ratio": 0.1
+        },
+        "viability_score": 0.17973586956521737,
+        "workload_family_id": "interface_band_offset_defect"
+      },
+      "l3vr_interface_band_offset_defect_charge_density_analysis_gpu_fpga_hybrid_a100_u280_fixture_gpu_fpga_hybrid_77d8617bec": {
+        "decision": "reject",
+        "evidence_inputs": {
+          "communication_bytes": 50000000.0,
+          "gpu_utilization": 0.61,
+          "mapping_confidence": "high",
+          "memory_movement_bytes": 800000000.0,
+          "runtime_ratio": 0.1,
+          "time_ms": 400.0,
+          "unmapped_time_ratio": 0.0
+        },
+        "motif_id": "charge_density_analysis",
+        "reason_codes": [
+          "gpu_baseline_present",
+          "gpu_utilization_low",
+          "hybrid_upper_bound_too_low",
+          "low_runtime_motif"
+        ],
+        "risk": {
+          "fpga_resource_risk": 0.3375,
+          "gpu_dominance_risk": 0.1,
+          "overall_risk_score": 0.15100468749999998,
+          "profile_quality_risk": 0.1,
+          "transfer_overhead_risk": 0.06651875
+        },
+        "source_profile_target": "gpu_only",
+        "source_viability_record_id": "l3vr_interface_band_offset_defect_charge_density_analysis_gpu_fpga_hybrid_a100_u280_fixture_gpu_fpga_hybrid_77d8617bec",
+        "target_id": "gpu_fpga_hybrid_a100_u280_fixture",
+        "target_type": "gpu_fpga_hybrid",
+        "upper_bound": {
+          "estimated_net_gain_ms": 45.3925,
+          "estimated_net_gain_ratio": 0.011348124999999999,
+          "estimated_removable_time_ms": 72.0,
+          "estimated_sync_time_ms": 0.045,
+          "estimated_transfer_time_ms": 26.5625,
+          "family_total_time_ms": 4000.0,
+          "motif_time_ms": 400.0,
+          "runtime_ratio": 0.1
+        },
+        "viability_score": 0.2859146875,
+        "workload_family_id": "interface_band_offset_defect"
+      },
+      "l3vr_interface_band_offset_defect_charge_density_analysis_gpu_only_a100_fixture_gpu_only_6e6f50758c": {
+        "decision": "baseline",
+        "evidence_inputs": {
+          "communication_bytes": 50000000.0,
+          "gpu_utilization": 0.61,
+          "mapping_confidence": "high",
+          "memory_movement_bytes": 800000000.0,
+          "runtime_ratio": 0.1,
+          "time_ms": 400.0,
+          "unmapped_time_ratio": 0.0
+        },
+        "motif_id": "charge_density_analysis",
+        "reason_codes": [
+          "gpu_baseline_present",
+          "gpu_utilization_low",
+          "low_runtime_motif"
+        ],
+        "risk": {
+          "fpga_resource_risk": 0.0,
+          "gpu_dominance_risk": 0.1,
+          "overall_risk_score": 0.05,
+          "profile_quality_risk": 0.1,
+          "transfer_overhead_risk": 0.0
+        },
+        "source_profile_target": "gpu_only",
+        "source_viability_record_id": "l3vr_interface_band_offset_defect_charge_density_analysis_gpu_only_a100_fixture_gpu_only_6e6f50758c",
+        "target_id": "gpu_only_a100_fixture",
+        "target_type": "gpu_only",
+        "upper_bound": {
+          "estimated_net_gain_ms": 0.0,
+          "estimated_net_gain_ratio": 0.0,
+          "estimated_removable_time_ms": 0.0,
+          "estimated_sync_time_ms": 0.0,
+          "estimated_transfer_time_ms": 0.0,
+          "family_total_time_ms": 4000.0,
+          "motif_time_ms": 400.0,
+          "runtime_ratio": 0.1
+        },
+        "viability_score": 0.6195,
+        "workload_family_id": "interface_band_offset_defect"
+      },
+      "l3vr_interface_band_offset_defect_large_supercell_fpga_only_u280_fixture_fpga_only_6a9e9780e8": {
+        "decision": "reject",
+        "evidence_inputs": {
+          "communication_bytes": 450000000.0,
+          "gpu_utilization": 0.61,
+          "mapping_confidence": "high",
+          "memory_movement_bytes": 9000000000.0,
+          "runtime_ratio": 0.6,
+          "time_ms": 2400.0,
+          "unmapped_time_ratio": 0.0
+        },
+        "motif_id": "large_supercell",
+        "reason_codes": [
+          "fpga_resource_risk",
+          "fpga_upper_bound_too_low",
+          "gpu_baseline_present",
+          "gpu_utilization_low",
+          "high_runtime_motif"
+        ],
+        "risk": {
+          "fpga_resource_risk": 0.945,
+          "gpu_dominance_risk": 0.1,
+          "overall_risk_score": 0.28829064764492757,
+          "profile_quality_risk": 0.1,
+          "transfer_overhead_risk": 0.008162590579710144
+        },
+        "source_profile_target": "gpu_only",
+        "source_viability_record_id": "l3vr_interface_band_offset_defect_large_supercell_fpga_only_u280_fixture_fpga_only_6a9e9780e8",
+        "target_id": "fpga_only_u280_fixture",
+        "target_type": "fpga_only",
+        "upper_bound": {
+          "estimated_net_gain_ms": 100.40978260869565,
+          "estimated_net_gain_ratio": 0.025102445652173913,
+          "estimated_removable_time_ms": 120.0,
+          "estimated_sync_time_ms": 0.025,
+          "estimated_transfer_time_ms": 19.565217391304348,
+          "family_total_time_ms": 4000.0,
+          "motif_time_ms": 2400.0,
+          "runtime_ratio": 0.6
+        },
+        "viability_score": 0.2675723731884058,
+        "workload_family_id": "interface_band_offset_defect"
+      },
+      "l3vr_interface_band_offset_defect_large_supercell_gpu_fpga_hybrid_a100_u280_fixture_gpu_fpga_hybrid_a9d36fc25f": {
+        "decision": "maybe",
+        "evidence_inputs": {
+          "communication_bytes": 450000000.0,
+          "gpu_utilization": 0.61,
+          "mapping_confidence": "high",
+          "memory_movement_bytes": 9000000000.0,
+          "runtime_ratio": 0.6,
+          "time_ms": 2400.0,
+          "unmapped_time_ratio": 0.0
+        },
+        "motif_id": "large_supercell",
+        "reason_codes": [
+          "gpu_baseline_present",
+          "gpu_utilization_low",
+          "high_runtime_motif",
+          "hybrid_upper_bound_too_low"
+        ],
+        "risk": {
+          "fpga_resource_risk": 0.5249999999999999,
+          "gpu_dominance_risk": 0.1,
+          "overall_risk_score": 0.21201640624999998,
+          "profile_quality_risk": 0.1,
+          "transfer_overhead_risk": 0.12306562500000001
+        },
+        "source_profile_target": "gpu_only",
+        "source_viability_record_id": "l3vr_interface_band_offset_defect_large_supercell_gpu_fpga_hybrid_a100_u280_fixture_gpu_fpga_hybrid_a9d36fc25f",
+        "target_id": "gpu_fpga_hybrid_a100_u280_fixture",
+        "target_type": "gpu_fpga_hybrid",
+        "upper_bound": {
+          "estimated_net_gain_ms": -175.3575,
+          "estimated_net_gain_ratio": -0.043839375,
+          "estimated_removable_time_ms": 120.0,
+          "estimated_sync_time_ms": 0.045,
+          "estimated_transfer_time_ms": 295.3125,
+          "family_total_time_ms": 4000.0,
+          "motif_time_ms": 2400.0,
+          "runtime_ratio": 0.6
+        },
+        "viability_score": 0.3530803125,
+        "workload_family_id": "interface_band_offset_defect"
+      },
+      "l3vr_interface_band_offset_defect_large_supercell_gpu_only_a100_fixture_gpu_only_d5f517c86c": {
+        "decision": "baseline",
+        "evidence_inputs": {
+          "communication_bytes": 450000000.0,
+          "gpu_utilization": 0.61,
+          "mapping_confidence": "high",
+          "memory_movement_bytes": 9000000000.0,
+          "runtime_ratio": 0.6,
+          "time_ms": 2400.0,
+          "unmapped_time_ratio": 0.0
+        },
+        "motif_id": "large_supercell",
+        "reason_codes": [
+          "gpu_baseline_present",
+          "gpu_utilization_low",
+          "high_runtime_motif"
+        ],
+        "risk": {
+          "fpga_resource_risk": 0.0,
+          "gpu_dominance_risk": 0.1,
+          "overall_risk_score": 0.05,
+          "profile_quality_risk": 0.1,
+          "transfer_overhead_risk": 0.0
+        },
+        "source_profile_target": "gpu_only",
+        "source_viability_record_id": "l3vr_interface_band_offset_defect_large_supercell_gpu_only_a100_fixture_gpu_only_d5f517c86c",
+        "target_id": "gpu_only_a100_fixture",
+        "target_type": "gpu_only",
+        "upper_bound": {
+          "estimated_net_gain_ms": 0.0,
+          "estimated_net_gain_ratio": 0.0,
+          "estimated_removable_time_ms": 0.0,
+          "estimated_sync_time_ms": 0.0,
+          "estimated_transfer_time_ms": 0.0,
+          "family_total_time_ms": 4000.0,
+          "motif_time_ms": 2400.0,
+          "runtime_ratio": 0.6
+        },
+        "viability_score": 0.7995,
+        "workload_family_id": "interface_band_offset_defect"
+      },
+      "l3vr_interface_band_offset_defect_localized_state_analysis_fpga_only_u280_fixture_fpga_only_b6320f2c96": {
+        "decision": "maybe",
+        "evidence_inputs": {
+          "communication_bytes": 100000000.0,
+          "gpu_utilization": 0.61,
+          "mapping_confidence": "high",
+          "memory_movement_bytes": 1600000000.0,
+          "runtime_ratio": 0.3,
+          "time_ms": 1200.0,
+          "unmapped_time_ratio": 0.0
+        },
+        "motif_id": "localized_state_analysis",
+        "reason_codes": [
+          "fpga_resource_risk",
+          "gpu_baseline_present",
+          "gpu_utilization_low",
+          "high_runtime_motif"
+        ],
+        "risk": {
+          "fpga_resource_risk": 0.6075,
+          "gpu_dominance_risk": 0.1,
+          "overall_risk_score": 0.20260484601449277,
+          "profile_quality_risk": 0.1,
+          "transfer_overhead_risk": 0.002919384057971015
+        },
+        "source_profile_target": "gpu_only",
+        "source_viability_record_id": "l3vr_interface_band_offset_defect_localized_state_analysis_fpga_only_u280_fixture_fpga_only_b6320f2c96",
+        "target_id": "fpga_only_u280_fixture",
+        "target_type": "fpga_only",
+        "upper_bound": {
+          "estimated_net_gain_ms": 176.49673913043478,
+          "estimated_net_gain_ratio": 0.0441241847826087,
+          "estimated_removable_time_ms": 180.0,
+          "estimated_sync_time_ms": 0.025,
+          "estimated_transfer_time_ms": 3.4782608695652177,
+          "family_total_time_ms": 4000.0,
+          "motif_time_ms": 1200.0,
+          "runtime_ratio": 0.3
+        },
+        "viability_score": 0.41916449275362316,
+        "workload_family_id": "interface_band_offset_defect"
+      },
+      "l3vr_interface_band_offset_defect_localized_state_analysis_gpu_fpga_hybrid_a100_u280_fixture_gpu_fpga_hybrid_4ac26f1651": {
+        "decision": "maybe",
+        "evidence_inputs": {
+          "communication_bytes": 100000000.0,
+          "gpu_utilization": 0.61,
+          "mapping_confidence": "high",
+          "memory_movement_bytes": 1600000000.0,
+          "runtime_ratio": 0.3,
+          "time_ms": 1200.0,
+          "unmapped_time_ratio": 0.0
+        },
+        "motif_id": "localized_state_analysis",
+        "reason_codes": [
+          "gpu_baseline_present",
+          "gpu_utilization_low",
+          "high_runtime_motif",
+          "hybrid_overlap_possible"
+        ],
+        "risk": {
+          "fpga_resource_risk": 0.3375,
+          "gpu_dominance_risk": 0.1,
+          "overall_risk_score": 0.14545208333333334,
+          "profile_quality_risk": 0.1,
+          "transfer_overhead_risk": 0.04430833333333333
+        },
+        "source_profile_target": "gpu_only",
+        "source_viability_record_id": "l3vr_interface_band_offset_defect_localized_state_analysis_gpu_fpga_hybrid_a100_u280_fixture_gpu_fpga_hybrid_4ac26f1651",
+        "target_id": "gpu_fpga_hybrid_a100_u280_fixture",
+        "target_type": "gpu_fpga_hybrid",
+        "upper_bound": {
+          "estimated_net_gain_ms": 162.83,
+          "estimated_net_gain_ratio": 0.0407075,
+          "estimated_removable_time_ms": 216.0,
+          "estimated_sync_time_ms": 0.045,
+          "estimated_transfer_time_ms": 53.125,
+          "family_total_time_ms": 4000.0,
+          "motif_time_ms": 1200.0,
+          "runtime_ratio": 0.3
+        },
+        "viability_score": 0.5159762499999999,
+        "workload_family_id": "interface_band_offset_defect"
+      },
+      "l3vr_interface_band_offset_defect_localized_state_analysis_gpu_only_a100_fixture_gpu_only_5173fd0369": {
+        "decision": "baseline",
+        "evidence_inputs": {
+          "communication_bytes": 100000000.0,
+          "gpu_utilization": 0.61,
+          "mapping_confidence": "high",
+          "memory_movement_bytes": 1600000000.0,
+          "runtime_ratio": 0.3,
+          "time_ms": 1200.0,
+          "unmapped_time_ratio": 0.0
+        },
+        "motif_id": "localized_state_analysis",
+        "reason_codes": [
+          "gpu_baseline_present",
+          "gpu_utilization_low",
+          "high_runtime_motif"
+        ],
+        "risk": {
+          "fpga_resource_risk": 0.0,
+          "gpu_dominance_risk": 0.1,
+          "overall_risk_score": 0.05,
+          "profile_quality_risk": 0.1,
+          "transfer_overhead_risk": 0.0
+        },
+        "source_profile_target": "gpu_only",
+        "source_viability_record_id": "l3vr_interface_band_offset_defect_localized_state_analysis_gpu_only_a100_fixture_gpu_only_5173fd0369",
+        "target_id": "gpu_only_a100_fixture",
+        "target_type": "gpu_only",
+        "upper_bound": {
+          "estimated_net_gain_ms": 0.0,
+          "estimated_net_gain_ratio": 0.0,
+          "estimated_removable_time_ms": 0.0,
+          "estimated_sync_time_ms": 0.0,
+          "estimated_transfer_time_ms": 0.0,
+          "family_total_time_ms": 4000.0,
+          "motif_time_ms": 1200.0,
+          "runtime_ratio": 0.3
+        },
+        "viability_score": 0.7995,
+        "workload_family_id": "interface_band_offset_defect"
+      },
+      "l3vr_phonon_dfpt_perturbation_rhs_fpga_only_u280_fixture_fpga_only_09f9b2908c": {
+        "decision": "maybe",
+        "evidence_inputs": {
+          "communication_bytes": 100000000.0,
+          "gpu_utilization": 0.66,
+          "mapping_confidence": "high",
+          "memory_movement_bytes": 1200000000.0,
+          "runtime_ratio": 0.36,
+          "time_ms": 180.0,
+          "unmapped_time_ratio": 0.0
+        },
+        "motif_id": "perturbation_rhs",
+        "reason_codes": [
+          "fpga_resource_risk",
+          "gpu_baseline_present",
+          "gpu_utilization_low",
+          "high_runtime_motif"
+        ],
+        "risk": {
+          "fpga_resource_risk": 0.81,
+          "gpu_dominance_risk": 0.1,
+          "overall_risk_score": 0.25615791062801935,
+          "profile_quality_risk": 0.1,
+          "transfer_overhead_risk": 0.014631642512077294
+        },
+        "source_profile_target": "gpu_only",
+        "source_viability_record_id": "l3vr_phonon_dfpt_perturbation_rhs_fpga_only_u280_fixture_fpga_only_09f9b2908c",
+        "target_id": "fpga_only_u280_fixture",
+        "target_type": "fpga_only",
+        "upper_bound": {
+          "estimated_net_gain_ms": 24.366304347826087,
+          "estimated_net_gain_ratio": 0.04873260869565217,
+          "estimated_removable_time_ms": 27.0,
+          "estimated_sync_time_ms": 0.025,
+          "estimated_transfer_time_ms": 2.608695652173913,
+          "family_total_time_ms": 500.0,
+          "motif_time_ms": 180.0,
+          "runtime_ratio": 0.36
+        },
+        "viability_score": 0.39053888888888877,
+        "workload_family_id": "phonon_dfpt"
+      },
+      "l3vr_phonon_dfpt_perturbation_rhs_gpu_fpga_hybrid_a100_u280_fixture_gpu_fpga_hybrid_bacc0152e2": {
+        "decision": "maybe",
+        "evidence_inputs": {
+          "communication_bytes": 100000000.0,
+          "gpu_utilization": 0.66,
+          "mapping_confidence": "high",
+          "memory_movement_bytes": 1200000000.0,
+          "runtime_ratio": 0.36,
+          "time_ms": 180.0,
+          "unmapped_time_ratio": 0.0
+        },
+        "motif_id": "perturbation_rhs",
+        "reason_codes": [
+          "gpu_baseline_present",
+          "gpu_utilization_low",
+          "high_runtime_motif",
+          "hybrid_upper_bound_too_low"
+        ],
+        "risk": {
+          "fpga_resource_risk": 0.44999999999999996,
+          "gpu_dominance_risk": 0.1,
+          "overall_risk_score": 0.2189861111111111,
+          "profile_quality_risk": 0.1,
+          "transfer_overhead_risk": 0.22594444444444445
+        },
+        "source_profile_target": "gpu_only",
+        "source_viability_record_id": "l3vr_phonon_dfpt_perturbation_rhs_gpu_fpga_hybrid_a100_u280_fixture_gpu_fpga_hybrid_bacc0152e2",
+        "target_id": "gpu_fpga_hybrid_a100_u280_fixture",
+        "target_type": "gpu_fpga_hybrid",
+        "upper_bound": {
+          "estimated_net_gain_ms": -8.270000000000001,
+          "estimated_net_gain_ratio": -0.016540000000000003,
+          "estimated_removable_time_ms": 32.4,
+          "estimated_sync_time_ms": 0.045,
+          "estimated_transfer_time_ms": 40.625,
+          "family_total_time_ms": 500.0,
+          "motif_time_ms": 180.0,
+          "runtime_ratio": 0.36
+        },
+        "viability_score": 0.3597166666666667,
+        "workload_family_id": "phonon_dfpt"
+      },
+      "l3vr_phonon_dfpt_perturbation_rhs_gpu_only_a100_fixture_gpu_only_236a76faf7": {
+        "decision": "baseline",
+        "evidence_inputs": {
+          "communication_bytes": 100000000.0,
+          "gpu_utilization": 0.66,
+          "mapping_confidence": "high",
+          "memory_movement_bytes": 1200000000.0,
+          "runtime_ratio": 0.36,
+          "time_ms": 180.0,
+          "unmapped_time_ratio": 0.0
+        },
+        "motif_id": "perturbation_rhs",
+        "reason_codes": [
+          "gpu_baseline_present",
+          "gpu_utilization_low",
+          "high_runtime_motif"
+        ],
+        "risk": {
+          "fpga_resource_risk": 0.0,
+          "gpu_dominance_risk": 0.1,
+          "overall_risk_score": 0.05,
+          "profile_quality_risk": 0.1,
+          "transfer_overhead_risk": 0.0
+        },
+        "source_profile_target": "gpu_only",
+        "source_viability_record_id": "l3vr_phonon_dfpt_perturbation_rhs_gpu_only_a100_fixture_gpu_only_236a76faf7",
+        "target_id": "gpu_only_a100_fixture",
+        "target_type": "gpu_only",
+        "upper_bound": {
+          "estimated_net_gain_ms": 0.0,
+          "estimated_net_gain_ratio": 0.0,
+          "estimated_removable_time_ms": 0.0,
+          "estimated_sync_time_ms": 0.0,
+          "estimated_transfer_time_ms": 0.0,
+          "family_total_time_ms": 500.0,
+          "motif_time_ms": 180.0,
+          "runtime_ratio": 0.36
+        },
+        "viability_score": 0.822,
+        "workload_family_id": "phonon_dfpt"
+      },
+      "l3vr_phonon_dfpt_reduction_collective_fpga_only_u280_fixture_fpga_only_94ca4edbae": {
+        "decision": "maybe",
+        "evidence_inputs": {
+          "communication_bytes": 500000000.0,
+          "gpu_utilization": 0.66,
+          "mapping_confidence": "medium",
+          "memory_movement_bytes": 100000000.0,
+          "runtime_ratio": 0.2,
+          "time_ms": 100.0,
+          "unmapped_time_ratio": 0.0
+        },
+        "motif_id": "reduction_collective",
+        "reason_codes": [
+          "communication_bound",
+          "gpu_baseline_present",
+          "gpu_utilization_low",
+          "low_runtime_motif",
+          "streaming_friendly"
+        ],
+        "risk": {
+          "fpga_resource_risk": 0.4725,
+          "gpu_dominance_risk": 0.1,
+          "overall_risk_score": 0.23123097826086955,
+          "profile_quality_risk": 0.35,
+          "transfer_overhead_risk": 0.002423913043478261
+        },
+        "source_profile_target": "gpu_only",
+        "source_viability_record_id": "l3vr_phonon_dfpt_reduction_collective_fpga_only_u280_fixture_fpga_only_94ca4edbae",
+        "target_id": "fpga_only_u280_fixture",
+        "target_type": "fpga_only",
+        "upper_bound": {
+          "estimated_net_gain_ms": 24.757608695652177,
+          "estimated_net_gain_ratio": 0.04951521739130436,
+          "estimated_removable_time_ms": 25.0,
+          "estimated_sync_time_ms": 0.025,
+          "estimated_transfer_time_ms": 0.2173913043478261,
+          "family_total_time_ms": 500.0,
+          "motif_time_ms": 100.0,
+          "runtime_ratio": 0.2
+        },
+        "viability_score": 0.41204565217391304,
+        "workload_family_id": "phonon_dfpt"
+      },
+      "l3vr_phonon_dfpt_reduction_collective_gpu_fpga_hybrid_a100_u280_fixture_gpu_fpga_hybrid_11a921b4ec": {
+        "decision": "maybe",
+        "evidence_inputs": {
+          "communication_bytes": 500000000.0,
+          "gpu_utilization": 0.66,
+          "mapping_confidence": "medium",
+          "memory_movement_bytes": 100000000.0,
+          "runtime_ratio": 0.2,
+          "time_ms": 100.0,
+          "unmapped_time_ratio": 0.0
+        },
+        "motif_id": "reduction_collective",
+        "reason_codes": [
+          "communication_bound",
+          "gpu_baseline_present",
+          "gpu_utilization_low",
+          "hybrid_overlap_possible",
+          "low_runtime_motif",
+          "streaming_friendly"
+        ],
+        "risk": {
+          "fpga_resource_risk": 0.26249999999999996,
+          "gpu_dominance_risk": 0.1,
+          "overall_risk_score": 0.2251125,
+          "profile_quality_risk": 0.35,
+          "transfer_overhead_risk": 0.18795
+        },
+        "source_profile_target": "gpu_only",
+        "source_viability_record_id": "l3vr_phonon_dfpt_reduction_collective_gpu_fpga_hybrid_a100_u280_fixture_gpu_fpga_hybrid_11a921b4ec",
+        "target_id": "gpu_fpga_hybrid_a100_u280_fixture",
+        "target_type": "gpu_fpga_hybrid",
+        "upper_bound": {
+          "estimated_net_gain_ms": 16.205,
+          "estimated_net_gain_ratio": 0.032409999999999994,
+          "estimated_removable_time_ms": 35.0,
+          "estimated_sync_time_ms": 0.045,
+          "estimated_transfer_time_ms": 18.75,
+          "family_total_time_ms": 500.0,
+          "motif_time_ms": 100.0,
+          "runtime_ratio": 0.2
+        },
+        "viability_score": 0.40214,
+        "workload_family_id": "phonon_dfpt"
+      },
+      "l3vr_phonon_dfpt_reduction_collective_gpu_only_a100_fixture_gpu_only_9ee31cf72a": {
+        "decision": "baseline",
+        "evidence_inputs": {
+          "communication_bytes": 500000000.0,
+          "gpu_utilization": 0.66,
+          "mapping_confidence": "medium",
+          "memory_movement_bytes": 100000000.0,
+          "runtime_ratio": 0.2,
+          "time_ms": 100.0,
+          "unmapped_time_ratio": 0.0
+        },
+        "motif_id": "reduction_collective",
+        "reason_codes": [
+          "communication_bound",
+          "gpu_baseline_present",
+          "gpu_utilization_low",
+          "low_runtime_motif",
+          "streaming_friendly"
+        ],
+        "risk": {
+          "fpga_resource_risk": 0.0,
+          "gpu_dominance_risk": 0.1,
+          "overall_risk_score": 0.11249999999999999,
+          "profile_quality_risk": 0.35,
+          "transfer_overhead_risk": 0.0
+        },
+        "source_profile_target": "gpu_only",
+        "source_viability_record_id": "l3vr_phonon_dfpt_reduction_collective_gpu_only_a100_fixture_gpu_only_9ee31cf72a",
+        "target_id": "gpu_only_a100_fixture",
+        "target_type": "gpu_only",
+        "upper_bound": {
+          "estimated_net_gain_ms": 0.0,
+          "estimated_net_gain_ratio": 0.0,
+          "estimated_removable_time_ms": 0.0,
+          "estimated_sync_time_ms": 0.0,
+          "estimated_transfer_time_ms": 0.0,
+          "family_total_time_ms": 500.0,
+          "motif_time_ms": 100.0,
+          "runtime_ratio": 0.2
+        },
+        "viability_score": 0.6995,
+        "workload_family_id": "phonon_dfpt"
+      },
+      "l3vr_phonon_dfpt_response_accumulation_fpga_only_u280_fixture_fpga_only_a744d89586": {
+        "decision": "maybe",
+        "evidence_inputs": {
+          "communication_bytes": 180000000.0,
+          "gpu_utilization": 0.66,
+          "mapping_confidence": "high",
+          "memory_movement_bytes": 1400000000.0,
+          "runtime_ratio": 0.44,
+          "time_ms": 220.0,
+          "unmapped_time_ratio": 0.0
+        },
+        "motif_id": "response_accumulation",
+        "reason_codes": [
+          "fpga_resource_risk",
+          "gpu_baseline_present",
+          "gpu_utilization_low",
+          "high_runtime_motif"
+        ],
+        "risk": {
+          "fpga_resource_risk": 0.81,
+          "gpu_dominance_risk": 0.1,
+          "overall_risk_score": 0.2559869071146245,
+          "profile_quality_risk": 0.1,
+          "transfer_overhead_risk": 0.013947628458498023
+        },
+        "source_profile_target": "gpu_only",
+        "source_viability_record_id": "l3vr_phonon_dfpt_response_accumulation_fpga_only_u280_fixture_fpga_only_a744d89586",
+        "target_id": "fpga_only_u280_fixture",
+        "target_type": "fpga_only",
+        "upper_bound": {
+          "estimated_net_gain_ms": 29.931521739130435,
+          "estimated_net_gain_ratio": 0.05986304347826087,
+          "estimated_removable_time_ms": 33.0,
+          "estimated_sync_time_ms": 0.025,
+          "estimated_transfer_time_ms": 3.043478260869565,
+          "family_total_time_ms": 500.0,
+          "motif_time_ms": 220.0,
+          "runtime_ratio": 0.44
+        },
+        "viability_score": 0.41293656126482203,
+        "workload_family_id": "phonon_dfpt"
+      },
+      "l3vr_phonon_dfpt_response_accumulation_gpu_fpga_hybrid_a100_u280_fixture_gpu_fpga_hybrid_cd08e6b0fd": {
+        "decision": "maybe",
+        "evidence_inputs": {
+          "communication_bytes": 180000000.0,
+          "gpu_utilization": 0.66,
+          "mapping_confidence": "high",
+          "memory_movement_bytes": 1400000000.0,
+          "runtime_ratio": 0.44,
+          "time_ms": 220.0,
+          "unmapped_time_ratio": 0.0
+        },
+        "motif_id": "response_accumulation",
+        "reason_codes": [
+          "gpu_baseline_present",
+          "gpu_utilization_low",
+          "high_runtime_motif",
+          "hybrid_upper_bound_too_low"
+        ],
+        "risk": {
+          "fpga_resource_risk": 0.44999999999999996,
+          "gpu_dominance_risk": 0.1,
+          "overall_risk_score": 0.2186590909090909,
+          "profile_quality_risk": 0.1,
+          "transfer_overhead_risk": 0.22463636363636363
+        },
+        "source_profile_target": "gpu_only",
+        "source_viability_record_id": "l3vr_phonon_dfpt_response_accumulation_gpu_fpga_hybrid_a100_u280_fixture_gpu_fpga_hybrid_cd08e6b0fd",
+        "target_id": "gpu_fpga_hybrid_a100_u280_fixture",
+        "target_type": "gpu_fpga_hybrid",
+        "upper_bound": {
+          "estimated_net_gain_ms": -9.819999999999999,
+          "estimated_net_gain_ratio": -0.019639999999999998,
+          "estimated_removable_time_ms": 39.6,
+          "estimated_sync_time_ms": 0.045,
+          "estimated_transfer_time_ms": 49.375,
+          "family_total_time_ms": 500.0,
+          "motif_time_ms": 220.0,
+          "runtime_ratio": 0.44
+        },
+        "viability_score": 0.36010909090909093,
+        "workload_family_id": "phonon_dfpt"
+      },
+      "l3vr_phonon_dfpt_response_accumulation_gpu_only_a100_fixture_gpu_only_6ea99651f0": {
+        "decision": "baseline",
+        "evidence_inputs": {
+          "communication_bytes": 180000000.0,
+          "gpu_utilization": 0.66,
+          "mapping_confidence": "high",
+          "memory_movement_bytes": 1400000000.0,
+          "runtime_ratio": 0.44,
+          "time_ms": 220.0,
+          "unmapped_time_ratio": 0.0
+        },
+        "motif_id": "response_accumulation",
+        "reason_codes": [
+          "gpu_baseline_present",
+          "gpu_utilization_low",
+          "high_runtime_motif"
+        ],
+        "risk": {
+          "fpga_resource_risk": 0.0,
+          "gpu_dominance_risk": 0.1,
+          "overall_risk_score": 0.05,
+          "profile_quality_risk": 0.1,
+          "transfer_overhead_risk": 0.0
+        },
+        "source_profile_target": "gpu_only",
+        "source_viability_record_id": "l3vr_phonon_dfpt_response_accumulation_gpu_only_a100_fixture_gpu_only_6ea99651f0",
+        "target_id": "gpu_only_a100_fixture",
+        "target_type": "gpu_only",
+        "upper_bound": {
+          "estimated_net_gain_ms": 0.0,
+          "estimated_net_gain_ratio": 0.0,
+          "estimated_removable_time_ms": 0.0,
+          "estimated_sync_time_ms": 0.0,
+          "estimated_transfer_time_ms": 0.0,
+          "family_total_time_ms": 500.0,
+          "motif_time_ms": 220.0,
+          "runtime_ratio": 0.44
+        },
+        "viability_score": 0.822,
+        "workload_family_id": "phonon_dfpt"
+      },
+      "l3vr_strain_doping_field_sweep_batch_scheduling_fpga_only_u280_fixture_fpga_only_1cb6dd0e17": {
+        "decision": "reject",
+        "evidence_inputs": {
+          "communication_bytes": 80000000.0,
+          "gpu_utilization": 0.68,
+          "mapping_confidence": "high",
+          "memory_movement_bytes": 100000000.0,
+          "runtime_ratio": 0.16666666666666666,
+          "time_ms": 500.0,
+          "unmapped_time_ratio": 0.0
+        },
+        "motif_id": "batch_scheduling",
+        "reason_codes": [
+          "fpga_upper_bound_too_low",
+          "gpu_baseline_present",
+          "gpu_utilization_low",
+          "low_runtime_motif"
+        ],
+        "risk": {
+          "fpga_resource_risk": 0.54,
+          "gpu_dominance_risk": 0.1,
+          "overall_risk_score": 0.18512119565217391,
+          "profile_quality_risk": 0.1,
+          "transfer_overhead_risk": 0.0004847826086956522
+        },
+        "source_profile_target": "gpu_only",
+        "source_viability_record_id": "l3vr_strain_doping_field_sweep_batch_scheduling_fpga_only_u280_fixture_fpga_only_1cb6dd0e17",
+        "target_id": "fpga_only_u280_fixture",
+        "target_type": "fpga_only",
+        "upper_bound": {
+          "estimated_net_gain_ms": 24.757608695652177,
+          "estimated_net_gain_ratio": 0.008252536231884058,
+          "estimated_removable_time_ms": 25.0,
+          "estimated_sync_time_ms": 0.025,
+          "estimated_transfer_time_ms": 0.2173913043478261,
+          "family_total_time_ms": 3000.0,
+          "motif_time_ms": 500.0,
+          "runtime_ratio": 0.16666666666666666
+        },
+        "viability_score": 0.2174081159420289,
+        "workload_family_id": "strain_doping_field_sweep"
+      },
+      "l3vr_strain_doping_field_sweep_batch_scheduling_gpu_fpga_hybrid_a100_u280_fixture_gpu_fpga_hybrid_2cc17d66d0": {
+        "decision": "reject",
+        "evidence_inputs": {
+          "communication_bytes": 80000000.0,
+          "gpu_utilization": 0.68,
+          "mapping_confidence": "high",
+          "memory_movement_bytes": 100000000.0,
+          "runtime_ratio": 0.16666666666666666,
+          "time_ms": 500.0,
+          "unmapped_time_ratio": 0.0
+        },
+        "motif_id": "batch_scheduling",
+        "reason_codes": [
+          "gpu_baseline_present",
+          "gpu_utilization_low",
+          "hybrid_upper_bound_too_low",
+          "low_runtime_motif"
+        ],
+        "risk": {
+          "fpga_resource_risk": 0.30000000000000004,
+          "gpu_dominance_risk": 0.1,
+          "overall_risk_score": 0.127835,
+          "profile_quality_risk": 0.1,
+          "transfer_overhead_risk": 0.01134
+        },
+        "source_profile_target": "gpu_only",
+        "source_viability_record_id": "l3vr_strain_doping_field_sweep_batch_scheduling_gpu_fpga_hybrid_a100_u280_fixture_gpu_fpga_hybrid_2cc17d66d0",
+        "target_id": "gpu_fpga_hybrid_a100_u280_fixture",
+        "target_type": "gpu_fpga_hybrid",
+        "upper_bound": {
+          "estimated_net_gain_ms": 44.33,
+          "estimated_net_gain_ratio": 0.014776666666666665,
+          "estimated_removable_time_ms": 50.0,
+          "estimated_sync_time_ms": 0.045,
+          "estimated_transfer_time_ms": 5.625,
+          "family_total_time_ms": 3000.0,
+          "motif_time_ms": 500.0,
+          "runtime_ratio": 0.16666666666666666
+        },
+        "viability_score": 0.3352063333333333,
+        "workload_family_id": "strain_doping_field_sweep"
+      },
+      "l3vr_strain_doping_field_sweep_batch_scheduling_gpu_only_a100_fixture_gpu_only_5c4b5be2ae": {
+        "decision": "baseline",
+        "evidence_inputs": {
+          "communication_bytes": 80000000.0,
+          "gpu_utilization": 0.68,
+          "mapping_confidence": "high",
+          "memory_movement_bytes": 100000000.0,
+          "runtime_ratio": 0.16666666666666666,
+          "time_ms": 500.0,
+          "unmapped_time_ratio": 0.0
+        },
+        "motif_id": "batch_scheduling",
+        "reason_codes": [
+          "gpu_baseline_present",
+          "gpu_utilization_low",
+          "low_runtime_motif"
+        ],
+        "risk": {
+          "fpga_resource_risk": 0.0,
+          "gpu_dominance_risk": 0.1,
+          "overall_risk_score": 0.05,
+          "profile_quality_risk": 0.1,
+          "transfer_overhead_risk": 0.0
+        },
+        "source_profile_target": "gpu_only",
+        "source_viability_record_id": "l3vr_strain_doping_field_sweep_batch_scheduling_gpu_only_a100_fixture_gpu_only_5c4b5be2ae",
+        "target_id": "gpu_only_a100_fixture",
+        "target_type": "gpu_only",
+        "upper_bound": {
+          "estimated_net_gain_ms": 0.0,
+          "estimated_net_gain_ratio": 0.0,
+          "estimated_removable_time_ms": 0.0,
+          "estimated_sync_time_ms": 0.0,
+          "estimated_transfer_time_ms": 0.0,
+          "family_total_time_ms": 3000.0,
+          "motif_time_ms": 500.0,
+          "runtime_ratio": 0.16666666666666666
+        },
+        "viability_score": 0.731,
+        "workload_family_id": "strain_doping_field_sweep"
+      },
+      "l3vr_strain_doping_field_sweep_cross_run_reuse_fpga_only_u280_fixture_fpga_only_36d3b011d1": {
+        "decision": "reject",
+        "evidence_inputs": {
+          "communication_bytes": 120000000.0,
+          "gpu_utilization": 0.68,
+          "mapping_confidence": "high",
+          "memory_movement_bytes": 2200000000.0,
+          "runtime_ratio": 0.3,
+          "time_ms": 900.0,
+          "unmapped_time_ratio": 0.0
+        },
+        "motif_id": "cross_run_reuse",
+        "reason_codes": [
+          "fpga_upper_bound_too_low",
+          "gpu_baseline_present",
+          "gpu_utilization_low",
+          "high_runtime_motif"
+        ],
+        "risk": {
+          "fpga_resource_risk": 0.54,
+          "gpu_dominance_risk": 0.1,
+          "overall_risk_score": 0.1863354468599034,
+          "profile_quality_risk": 0.1,
+          "transfer_overhead_risk": 0.005341787439613527
+        },
+        "source_profile_target": "gpu_only",
+        "source_viability_record_id": "l3vr_strain_doping_field_sweep_cross_run_reuse_fpga_only_u280_fixture_fpga_only_36d3b011d1",
+        "target_id": "fpga_only_u280_fixture",
+        "target_type": "fpga_only",
+        "upper_bound": {
+          "estimated_net_gain_ms": 40.19239130434783,
+          "estimated_net_gain_ratio": 0.013397463768115942,
+          "estimated_removable_time_ms": 45.0,
+          "estimated_sync_time_ms": 0.025,
+          "estimated_transfer_time_ms": 4.782608695652174,
+          "family_total_time_ms": 3000.0,
+          "motif_time_ms": 900.0,
+          "runtime_ratio": 0.3
+        },
+        "viability_score": 0.3267265700483091,
+        "workload_family_id": "strain_doping_field_sweep"
+      },
+      "l3vr_strain_doping_field_sweep_cross_run_reuse_gpu_fpga_hybrid_a100_u280_fixture_gpu_fpga_hybrid_54c6db69de": {
+        "decision": "maybe",
+        "evidence_inputs": {
+          "communication_bytes": 120000000.0,
+          "gpu_utilization": 0.68,
+          "mapping_confidence": "high",
+          "memory_movement_bytes": 2200000000.0,
+          "runtime_ratio": 0.3,
+          "time_ms": 900.0,
+          "unmapped_time_ratio": 0.0
+        },
+        "motif_id": "cross_run_reuse",
+        "reason_codes": [
+          "gpu_baseline_present",
+          "gpu_utilization_low",
+          "high_runtime_motif",
+          "hybrid_upper_bound_too_low"
+        ],
+        "risk": {
+          "fpga_resource_risk": 0.30000000000000004,
+          "gpu_dominance_risk": 0.1,
+          "overall_risk_score": 0.1451513888888889,
+          "profile_quality_risk": 0.1,
+          "transfer_overhead_risk": 0.08060555555555556
+        },
+        "source_profile_target": "gpu_only",
+        "source_viability_record_id": "l3vr_strain_doping_field_sweep_cross_run_reuse_gpu_fpga_hybrid_a100_u280_fixture_gpu_fpga_hybrid_54c6db69de",
+        "target_id": "gpu_fpga_hybrid_a100_u280_fixture",
+        "target_type": "gpu_fpga_hybrid",
+        "upper_bound": {
+          "estimated_net_gain_ms": 17.455,
+          "estimated_net_gain_ratio": 0.0058183333333333325,
+          "estimated_removable_time_ms": 90.0,
+          "estimated_sync_time_ms": 0.045,
+          "estimated_transfer_time_ms": 72.5,
+          "family_total_time_ms": 3000.0,
+          "motif_time_ms": 900.0,
+          "runtime_ratio": 0.3
+        },
+        "viability_score": 0.37536416666666667,
+        "workload_family_id": "strain_doping_field_sweep"
+      },
+      "l3vr_strain_doping_field_sweep_cross_run_reuse_gpu_only_a100_fixture_gpu_only_2d23ca42b4": {
+        "decision": "baseline",
+        "evidence_inputs": {
+          "communication_bytes": 120000000.0,
+          "gpu_utilization": 0.68,
+          "mapping_confidence": "high",
+          "memory_movement_bytes": 2200000000.0,
+          "runtime_ratio": 0.3,
+          "time_ms": 900.0,
+          "unmapped_time_ratio": 0.0
+        },
+        "motif_id": "cross_run_reuse",
+        "reason_codes": [
+          "gpu_baseline_present",
+          "gpu_utilization_low",
+          "high_runtime_motif"
+        ],
+        "risk": {
+          "fpga_resource_risk": 0.0,
+          "gpu_dominance_risk": 0.1,
+          "overall_risk_score": 0.05,
+          "profile_quality_risk": 0.1,
+          "transfer_overhead_risk": 0.0
+        },
+        "source_profile_target": "gpu_only",
+        "source_viability_record_id": "l3vr_strain_doping_field_sweep_cross_run_reuse_gpu_only_a100_fixture_gpu_only_2d23ca42b4",
+        "target_id": "gpu_only_a100_fixture",
+        "target_type": "gpu_only",
+        "upper_bound": {
+          "estimated_net_gain_ms": 0.0,
+          "estimated_net_gain_ratio": 0.0,
+          "estimated_removable_time_ms": 0.0,
+          "estimated_sync_time_ms": 0.0,
+          "estimated_transfer_time_ms": 0.0,
+          "family_total_time_ms": 3000.0,
+          "motif_time_ms": 900.0,
+          "runtime_ratio": 0.3
+        },
+        "viability_score": 0.8310000000000001,
+        "workload_family_id": "strain_doping_field_sweep"
+      },
+      "l3vr_strain_doping_field_sweep_workflow_parameter_sweep_fpga_only_u280_fixture_fpga_only_7d13a7d02b": {
+        "decision": "maybe",
+        "evidence_inputs": {
+          "communication_bytes": 300000000.0,
+          "gpu_utilization": 0.68,
+          "mapping_confidence": "high",
+          "memory_movement_bytes": 500000000.0,
+          "runtime_ratio": 0.5333333333333333,
+          "time_ms": 1600.0,
+          "unmapped_time_ratio": 0.0
+        },
+        "motif_id": "workflow_parameter_sweep",
+        "reason_codes": [
+          "fpga_upper_bound_too_low",
+          "gpu_baseline_present",
+          "gpu_utilization_low",
+          "high_runtime_motif"
+        ],
+        "risk": {
+          "fpga_resource_risk": 0.54,
+          "gpu_dominance_risk": 0.1,
+          "overall_risk_score": 0.18517374320652175,
+          "profile_quality_risk": 0.1,
+          "transfer_overhead_risk": 0.0006949728260869564
+        },
+        "source_profile_target": "gpu_only",
+        "source_viability_record_id": "l3vr_strain_doping_field_sweep_workflow_parameter_sweep_fpga_only_u280_fixture_fpga_only_7d13a7d02b",
+        "target_id": "fpga_only_u280_fixture",
+        "target_type": "fpga_only",
+        "upper_bound": {
+          "estimated_net_gain_ms": 78.88804347826087,
+          "estimated_net_gain_ratio": 0.026296014492753622,
+          "estimated_removable_time_ms": 80.0,
+          "estimated_sync_time_ms": 0.025,
+          "estimated_transfer_time_ms": 1.0869565217391304,
+          "family_total_time_ms": 3000.0,
+          "motif_time_ms": 1600.0,
+          "runtime_ratio": 0.5333333333333333
+        },
+        "viability_score": 0.35345303442028986,
+        "workload_family_id": "strain_doping_field_sweep"
+      },
+      "l3vr_strain_doping_field_sweep_workflow_parameter_sweep_gpu_fpga_hybrid_a100_u280_fixture_gpu_fpga_hybrid_19090cd446": {
+        "decision": "maybe",
+        "evidence_inputs": {
+          "communication_bytes": 300000000.0,
+          "gpu_utilization": 0.68,
+          "mapping_confidence": "high",
+          "memory_movement_bytes": 500000000.0,
+          "runtime_ratio": 0.5333333333333333,
+          "time_ms": 1600.0,
+          "unmapped_time_ratio": 0.0
+        },
+        "motif_id": "workflow_parameter_sweep",
+        "reason_codes": [
+          "gpu_baseline_present",
+          "gpu_utilization_low",
+          "high_runtime_motif",
+          "hybrid_overlap_possible"
+        ],
+        "risk": {
+          "fpga_resource_risk": 0.30000000000000004,
+          "gpu_dominance_risk": 0.1,
+          "overall_risk_score": 0.12891328125,
+          "profile_quality_risk": 0.1,
+          "transfer_overhead_risk": 0.015653125
+        },
+        "source_profile_target": "gpu_only",
+        "source_viability_record_id": "l3vr_strain_doping_field_sweep_workflow_parameter_sweep_gpu_fpga_hybrid_a100_u280_fixture_gpu_fpga_hybrid_19090cd446",
+        "target_id": "gpu_fpga_hybrid_a100_u280_fixture",
+        "target_type": "gpu_fpga_hybrid",
+        "upper_bound": {
+          "estimated_net_gain_ms": 134.955,
+          "estimated_net_gain_ratio": 0.044985000000000004,
+          "estimated_removable_time_ms": 160.0,
+          "estimated_sync_time_ms": 0.045,
+          "estimated_transfer_time_ms": 25.0,
+          "family_total_time_ms": 3000.0,
+          "motif_time_ms": 1600.0,
+          "runtime_ratio": 0.5333333333333333
+        },
+        "viability_score": 0.49276656250000006,
+        "workload_family_id": "strain_doping_field_sweep"
+      },
+      "l3vr_strain_doping_field_sweep_workflow_parameter_sweep_gpu_only_a100_fixture_gpu_only_98d2ff4104": {
+        "decision": "baseline",
+        "evidence_inputs": {
+          "communication_bytes": 300000000.0,
+          "gpu_utilization": 0.68,
+          "mapping_confidence": "high",
+          "memory_movement_bytes": 500000000.0,
+          "runtime_ratio": 0.5333333333333333,
+          "time_ms": 1600.0,
+          "unmapped_time_ratio": 0.0
+        },
+        "motif_id": "workflow_parameter_sweep",
+        "reason_codes": [
+          "gpu_baseline_present",
+          "gpu_utilization_low",
+          "high_runtime_motif"
+        ],
+        "risk": {
+          "fpga_resource_risk": 0.0,
+          "gpu_dominance_risk": 0.1,
+          "overall_risk_score": 0.05,
+          "profile_quality_risk": 0.1,
+          "transfer_overhead_risk": 0.0
+        },
+        "source_profile_target": "gpu_only",
+        "source_viability_record_id": "l3vr_strain_doping_field_sweep_workflow_parameter_sweep_gpu_only_a100_fixture_gpu_only_98d2ff4104",
+        "target_id": "gpu_only_a100_fixture",
+        "target_type": "gpu_only",
+        "upper_bound": {
+          "estimated_net_gain_ms": 0.0,
+          "estimated_net_gain_ratio": 0.0,
+          "estimated_removable_time_ms": 0.0,
+          "estimated_sync_time_ms": 0.0,
+          "estimated_transfer_time_ms": 0.0,
+          "family_total_time_ms": 3000.0,
+          "motif_time_ms": 1600.0,
+          "runtime_ratio": 0.5333333333333333
+        },
+        "viability_score": 0.8310000000000001,
+        "workload_family_id": "strain_doping_field_sweep"
+      }
+    },
+    "workload_family_ids": [
+      "ground_state_band_structure",
+      "phonon_dfpt",
+      "electron_phonon_mobility",
+      "strain_doping_field_sweep",
+      "interface_band_offset_defect"
+    ]
+  },
+  "source_layer1_suite_artifact": "qe_ic_workload_suite.json",
+  "source_layer2_motif_profile_artifact": "qe_ic_motif_profile.json",
+  "source_layer3_target_viability_artifact": "qe_ic_target_viability.json",
+  "suite_id": "qe_ic_device_suite_v1",
+  "summary": {
+    "baseline_count": 14,
+    "budget_limits": {
+      "max_gem5_requests": 0,
+      "max_l1_cost_model_requests": 12,
+      "max_real_qe_requests": 0,
+      "max_systemc_requests": 0,
+      "max_vivado_requests": 0
+    },
+    "budget_used": {
+      "max_gem5_requests": 0,
+      "max_l1_cost_model_requests": 12,
+      "max_real_qe_requests": 0,
+      "max_systemc_requests": 0,
+      "max_vivado_requests": 0
+    },
+    "by_target_type": {
+      "fpga_only": {
+        "baseline_count": 0,
+        "candidate_count": 7,
+        "hold_count": 0,
+        "promote_count": 7,
+        "reject_count": 0
+      },
+      "gpu_fpga_hybrid": {
+        "baseline_count": 0,
+        "candidate_count": 8,
+        "hold_count": 3,
+        "promote_count": 5,
+        "reject_count": 0
+      },
+      "gpu_only": {
+        "baseline_count": 14,
+        "candidate_count": 14,
+        "hold_count": 0,
+        "promote_count": 0,
+        "reject_count": 0
+      }
+    },
+    "candidate_count": 29,
+    "diversity": {
+      "motif_required": true,
+      "promoted_motif_count": 8,
+      "promoted_motifs": [
+        "cross_run_reuse",
+        "fft_transpose",
+        "hpsi",
+        "localized_state_analysis",
+        "perturbation_rhs",
+        "reduction_collective",
+        "response_accumulation",
+        "workflow_parameter_sweep"
+      ],
+      "promoted_target_type_count": 2,
+      "promoted_target_types": [
+        "fpga_only",
+        "gpu_fpga_hybrid"
+      ],
+      "target_type_required": true
+    },
+    "evaluation_request_count": 12,
+    "hold_count": 3,
+    "promote_count": 12,
+    "reject_count": 0
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "candidate_count": 29,
+  "errors": [],
+  "evaluation_request_count": 12,
+  "promotion_decision_count": 29,
+  "schema_version": "dse.qe_ic.candidate_plan_validation.v1",
+  "status": "passed",
+  "warnings": []
+}
