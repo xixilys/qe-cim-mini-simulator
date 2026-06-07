@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import hashlib
+import os
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
@@ -31,6 +32,95 @@ def _case_id(workload_family_id: str) -> str:
     return f"{workload_family_id}_initial_real_case"
 
 
+def _as_mapping(value: Any) -> Mapping[str, Any]:
+    return value if isinstance(value, Mapping) else {}
+
+
+def _as_list(value: Any) -> list[Any]:
+    return value if isinstance(value, list) else []
+
+
+def _repo_root() -> Path:
+    return Path(__file__).resolve().parents[3]
+
+
+def _search_roots(config: Mapping[str, Any]) -> list[Path]:
+    roots: list[Path] = []
+    for value in _as_list(config.get("input_deck_search_paths")):
+        if isinstance(value, str) and value:
+            roots.append(Path(value).expanduser())
+    for env_name in ("QE_INPUT_DIR", "QE_EXAMPLES_DIR", "ESPRESSO_ROOT", "QE_ROOT"):
+        value = os.environ.get(env_name)
+        if not value:
+            continue
+        root = Path(value).expanduser()
+        roots.extend([root, root / "examples"])
+    repo = _repo_root()
+    roots.extend(
+        [
+            repo / "dse_v2" / "testdata" / "qe_ic_real_opportunity",
+            repo / "examples",
+            repo / "runs" / "qe_ic_real_opportunity",
+            repo / "artifacts" / "qe_ic_real_opportunity_inputs",
+            repo.parent / "qe" / "examples",
+            repo.parent / "espresso" / "examples",
+            Path("/usr/local/share/qe/examples"),
+            Path("/opt/qe/examples"),
+            Path("/opt/espresso/examples"),
+        ]
+    )
+    unique: list[Path] = []
+    seen: set[str] = set()
+    for root in roots:
+        key = str(root)
+        if key not in seen:
+            seen.add(key)
+            unique.append(root)
+    return unique
+
+
+def _candidate_deck_names(workload_family_id: str, program: str) -> list[str]:
+    stem = workload_family_id
+    names = [
+        f"{stem}.in",
+        f"{stem}.pwi",
+        f"{stem}.pw.in",
+        f"{program}.in",
+    ]
+    if workload_family_id == "ground_state_band_structure":
+        names.extend(["scf.in", "bands.in", "pw.in"])
+    if workload_family_id == "electron_phonon_mobility":
+        names.extend(["epw.in", "ph.in", "mobility.in"])
+    return list(dict.fromkeys(names))
+
+
+def _discover_input_deck(
+    *,
+    config: Mapping[str, Any],
+    workload_family_id: str,
+    program: str,
+) -> Path | None:
+    input_decks = _as_mapping(config.get("input_decks"))
+    deck_value = input_decks.get(workload_family_id)
+    if isinstance(deck_value, str) and deck_value:
+        deck_path = Path(deck_value).expanduser()
+        return deck_path if deck_path.exists() else None
+    names = _candidate_deck_names(workload_family_id, program)
+    for root in _search_roots(config):
+        if not root.exists():
+            continue
+        if root.is_file() and root.name in names:
+            return root
+        for name in names:
+            direct = root / name
+            if direct.exists() and direct.is_file():
+                return direct
+        for candidate in root.rglob("*.in"):
+            if candidate.name in names or workload_family_id in str(candidate):
+                return candidate
+    return None
+
+
 def prepare_qe_ic_cases(config: Mapping[str, Any], *, out_dir: Path | None = None) -> list[dict[str, Any]]:
     """Prepare case descriptors or templates without inventing physical inputs."""
 
@@ -38,13 +128,11 @@ def prepare_qe_ic_cases(config: Mapping[str, Any], *, out_dir: Path | None = Non
     families = case_selection.get("required_workload_families")
     if not isinstance(families, list):
         families = ["ground_state_band_structure", "electron_phonon_mobility"]
-    input_decks = config.get("input_decks") if isinstance(config.get("input_decks"), Mapping) else {}
     base_output = out_dir or Path("runs/qe_ic_real_opportunity_campaign")
     cases: list[dict[str, Any]] = []
     for family_id in families:
         program = PROGRAM_BY_FAMILY.get(str(family_id), "pw.x")
-        deck_value = input_decks.get(str(family_id))
-        deck_path = Path(str(deck_value)) if isinstance(deck_value, str) and deck_value else None
+        deck_path = _discover_input_deck(config=config, workload_family_id=str(family_id), program=program)
         deck_exists = deck_path is not None and deck_path.exists()
         case_status = "ready" if deck_exists else "input_deck_missing"
         template_path = base_output / "case_templates" / f"{family_id}.in"

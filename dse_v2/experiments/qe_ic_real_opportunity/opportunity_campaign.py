@@ -3,7 +3,10 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
+import subprocess
+import time
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
@@ -14,6 +17,7 @@ from dse_v2.experiments.qe_ic_real_opportunity.campaign_config import (
     opportunity_config_from_campaign,
     validate_qe_ic_real_opportunity_campaign_config,
 )
+from dse_v2.experiments.qe_ic_real_opportunity.candidate_evidence import build_candidate_high_fidelity_evidence
 from dse_v2.experiments.qe_ic_real_opportunity.candidate_evidence import candidate_evidence_from_csv
 from dse_v2.experiments.qe_ic_real_opportunity.candidate_evidence import candidate_evidence_from_ingest_payload
 from dse_v2.experiments.qe_ic_real_opportunity.candidate_selection import select_layer4_candidates_for_campaign
@@ -52,6 +56,19 @@ def _load_optional_json(path_text: str | None) -> dict[str, Any] | None:
     return load_json_object(path)
 
 
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return "sha256:" + digest.hexdigest()
+
+
+def _stable_hash(payload: Mapping[str, Any]) -> str:
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return "sha256:" + hashlib.sha256(encoded).hexdigest()
+
+
 def _input_paths(config: Mapping[str, Any]) -> dict[str, str]:
     return {
         str(key): str(value)
@@ -84,6 +101,206 @@ def _candidate_evidence_by_id(evidence: Mapping[str, Any]) -> dict[str, Mapping[
         for record in _as_list(artifact.get("candidate_results"))
         if isinstance(record, Mapping) and isinstance(record.get("candidate_id"), str)
     }
+
+
+def _candidate_evidence_attempts(
+    *,
+    config: Mapping[str, Any],
+    input_paths: Mapping[str, str],
+    environment: Mapping[str, Any],
+    candidate_path_text: str | None,
+    candidate_payload: Mapping[str, Any] | None,
+) -> list[dict[str, Any]]:
+    tools = _as_mapping(environment.get("tools"))
+    profilers = _as_mapping(tools.get("profilers"))
+    systemc = _as_mapping(tools.get("systemc"))
+    eda = _as_mapping(tools.get("eda"))
+    evidence_policy = _as_mapping(config.get("evidence_policy"))
+    trace_source = input_paths.get("profile_logs")
+    design_artifacts = _as_mapping(config.get("candidate_design_artifacts"))
+    return [
+        {
+            "attempt": "ingest_existing_candidate_evidence",
+            "status": "available" if candidate_payload is not None else "not_configured",
+            "path": candidate_path_text,
+            "reason": None if candidate_payload is not None else "no configured candidate evidence artifact was loadable",
+        },
+        {
+            "attempt": "trace_replay",
+            "status": "blocked",
+            "path": trace_source,
+            "reason": (
+                "profile trace input is missing"
+                if not trace_source or not Path(trace_source).exists()
+                else "trace replay runner is not configured for this campaign"
+            ),
+            "tool_available": any(profilers.get(tool) for tool in ("nsys", "ncu")),
+            "policy_enabled": evidence_policy.get("allow_trace_replay") is True,
+        },
+        {
+            "attempt": "systemc_timing",
+            "status": "blocked",
+            "path": systemc.get("systemc_runner") or systemc.get("generic_sim"),
+            "reason": (
+                "SystemC/generic simulator runner is missing"
+                if not (systemc.get("systemc_runner") or systemc.get("generic_sim"))
+                else "candidate SystemC model/config is not configured"
+            ),
+            "policy_enabled": evidence_policy.get("allow_systemc_timing") is True,
+        },
+        {
+            "attempt": "eda_resource_timing",
+            "status": "blocked",
+            "path": None,
+            "reason": (
+                "candidate design artifacts are missing"
+                if not design_artifacts
+                else "EDA execution requires an explicit candidate design artifact binding"
+            ),
+            "available_tools": _as_mapping(eda.get("available_tools")),
+            "policy_enabled": evidence_policy.get("allow_vivado_or_dc_resource_timing") is True,
+        },
+    ]
+
+
+def _execution_attempt_config(config: Mapping[str, Any], key: str) -> Mapping[str, Any]:
+    return _as_mapping(_as_mapping(config.get("candidate_evidence_execution")).get(key))
+
+
+def _run_candidate_evidence_command(
+    *,
+    attempt_name: str,
+    execution_config: Mapping[str, Any],
+    out_dir: Path,
+    selected_candidates: list[Mapping[str, Any]],
+    timeout_seconds: int = 3600,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    command = execution_config.get("command")
+    output_json = execution_config.get("output_json")
+    if not isinstance(command, list) or not command or not all(isinstance(part, str) and part for part in command):
+        return (
+            {
+                "attempt": attempt_name,
+                "status": "not_configured",
+                "reason": "candidate evidence command is not configured",
+            },
+            candidate_evidence_from_ingest_payload(None, selected_candidates=selected_candidates),
+        )
+    if not isinstance(output_json, str) or not output_json:
+        return (
+            {
+                "attempt": attempt_name,
+                "status": "blocked",
+                "reason": "candidate evidence output_json is not configured",
+                "command": command,
+            },
+            candidate_evidence_from_ingest_payload(None, selected_candidates=selected_candidates),
+        )
+    run_dir = out_dir / "runs" / "candidate_evidence" / attempt_name
+    run_dir.mkdir(parents=True, exist_ok=True)
+    stdout_path = run_dir / "stdout.log"
+    stderr_path = run_dir / "stderr.log"
+    start_timestamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    try:
+        result = subprocess.run(
+            command,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=timeout_seconds,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        attempt = {
+            "attempt": attempt_name,
+            "status": "failed",
+            "reason": str(exc),
+            "command": command,
+            "start_timestamp": start_timestamp,
+            "end_timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        }
+        return attempt, candidate_evidence_from_ingest_payload(None, selected_candidates=selected_candidates)
+    end_timestamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    stdout_path.write_text(result.stdout or "", encoding="utf-8")
+    stderr_path.write_text(result.stderr or "", encoding="utf-8")
+    output_path = Path(output_json)
+    attempt = {
+        "attempt": attempt_name,
+        "status": "executed" if result.returncode == 0 and output_path.exists() else "failed",
+        "command": command,
+        "start_timestamp": start_timestamp,
+        "end_timestamp": end_timestamp,
+        "returncode": result.returncode,
+        "stdout_log_path": str(stdout_path),
+        "stderr_log_path": str(stderr_path),
+        "stdout_hash": _sha256_file(stdout_path),
+        "stderr_hash": _sha256_file(stderr_path),
+        "output_json": str(output_path),
+        "output_artifact_hash": _sha256_file(output_path) if output_path.exists() else None,
+        "tool": str(execution_config.get("tool") or attempt_name),
+        "version": str(execution_config.get("version") or "unknown"),
+    }
+    if attempt["status"] != "executed":
+        attempt["reason"] = "candidate evidence command failed or did not produce output_json"
+        return attempt, candidate_evidence_from_ingest_payload(None, selected_candidates=selected_candidates)
+    payload = load_json_object(output_path)
+    evidence = candidate_evidence_from_ingest_payload(payload, selected_candidates=selected_candidates)
+    if evidence.get("results_are_real") is not True:
+        attempt["status"] = "failed"
+        attempt["reason"] = "candidate evidence output failed validation"
+        attempt["validation"] = evidence.get("validation")
+        return attempt, evidence
+    artifact = _as_mapping(evidence.get("artifact"))
+    records: list[dict[str, Any]] = []
+    for record in _as_list(artifact.get("candidate_results")):
+        if not isinstance(record, Mapping):
+            continue
+        row = dict(record)
+        provenance = dict(_as_mapping(row.get("tool_provenance")))
+        provenance.setdefault("tool", attempt["tool"])
+        provenance.setdefault("version", attempt["version"])
+        provenance.setdefault("run_id", f"{attempt_name}_{_stable_hash({'command': command, 'output_json': output_json})[-12:]}")
+        provenance.setdefault("config_hash", _stable_hash(dict(execution_config)))
+        provenance["output_artifact_hash"] = str(attempt["output_artifact_hash"])
+        row["tool_provenance"] = provenance
+        row["evidence_artifact_hash"] = str(attempt["output_artifact_hash"])
+        records.append(row)
+    evidence = build_candidate_high_fidelity_evidence(candidate_records=records, selected_candidates=selected_candidates)
+    attempt["validation"] = evidence.get("validation")
+    return attempt, evidence
+
+
+def _run_candidate_evidence_if_available(
+    *,
+    config: Mapping[str, Any],
+    input_paths: Mapping[str, str],
+    environment: Mapping[str, Any],
+    out_dir: Path,
+    selected_candidates: list[Mapping[str, Any]],
+    candidate_path_text: str | None,
+    candidate_payload: Mapping[str, Any] | None,
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    attempts = _candidate_evidence_attempts(
+        config=config,
+        input_paths=input_paths,
+        environment=environment,
+        candidate_path_text=candidate_path_text,
+        candidate_payload=candidate_payload,
+    )
+    for attempt_name in ("trace_replay", "systemc_timing", "eda_resource_timing"):
+        execution_config = _execution_attempt_config(config, attempt_name)
+        if not execution_config:
+            continue
+        attempt, evidence = _run_candidate_evidence_command(
+            attempt_name=attempt_name,
+            execution_config=execution_config,
+            out_dir=out_dir,
+            selected_candidates=selected_candidates,
+            timeout_seconds=int(_as_mapping(config.get("claim_policy")).get("candidate_evidence_timeout_seconds", 3600)),
+        )
+        attempts = [attempt if row.get("attempt") == attempt_name else row for row in attempts]
+        if evidence.get("results_are_real") is True:
+            return evidence, attempts
+    return candidate_evidence_from_ingest_payload(None, selected_candidates=selected_candidates), attempts
 
 
 def _missing_opportunity_records(
@@ -238,8 +455,6 @@ def _top_level_from_gate(opportunity_summary: Mapping[str, Any], implementation_
     missing = _as_list(conclusion.get("what_evidence_is_missing"))
     if missing:
         return "evidence_missing"
-    if conclusion.get("overall_verdict") == "no_fpga_or_hybrid_opportunity_found":
-        return "gpu_dominant_no_fpga_or_hybrid_opportunity"
     return "inconclusive"
 
 
@@ -356,9 +571,22 @@ def _final_answer(
     }
 
 
-def _campaign_status(final_answer: Mapping[str, Any], environment: Mapping[str, Any]) -> str:
+def _campaign_status(
+    final_answer: Mapping[str, Any],
+    environment: Mapping[str, Any],
+    *,
+    execute_real: bool = False,
+) -> str:
     if final_answer.get("overall_answer") == "opportunity_found":
         return "measured"
+    if execute_real:
+        blockers = set(str(row) for row in _as_list(environment.get("blockers")))
+        if "blocked_by_missing_qe" in blockers:
+            return "blocked_by_missing_qe"
+        if "blocked_by_missing_input_deck" in blockers:
+            return "blocked_by_missing_input_deck"
+        if "blocked_by_missing_candidate_evidence" in blockers:
+            return "blocked_by_missing_candidate_evidence"
     if final_answer.get("overall_answer") == "evidence_missing":
         return "evidence_missing"
     if environment.get("environment_status") in {"ready", "partially_ready"}:
@@ -366,7 +594,65 @@ def _campaign_status(final_answer: Mapping[str, Any], environment: Mapping[str, 
     return "blocked"
 
 
-def run_qe_ic_real_opportunity_campaign(config_path: Path, *, out_dir: Path | None = None) -> dict[str, Any]:
+def _write_real_run_evidence_artifacts(
+    *,
+    out_dir: Path,
+    baseline_evidence: Mapping[str, Any],
+    candidate_evidence: Mapping[str, Any],
+    candidate_attempts: list[Mapping[str, Any]] | None = None,
+) -> dict[str, str]:
+    artifact_paths: dict[str, str] = {}
+    baseline_artifact = _as_mapping(baseline_evidence.get("artifact"))
+    if baseline_artifact:
+        baseline_payload = dict(baseline_artifact)
+        baseline_payload["run_records"] = list(_as_list(baseline_evidence.get("run_records")))
+    else:
+        baseline_payload = {
+            "evidence_status": baseline_evidence.get("evidence_status"),
+            "measurements_are_real": False,
+            "blocker_reasons": list(_as_list(baseline_evidence.get("blocker_reasons"))),
+            "run_records": list(_as_list(baseline_evidence.get("run_records"))),
+        }
+    candidate_payload = _as_mapping(candidate_evidence.get("artifact")) or {
+        "evidence_status": candidate_evidence.get("evidence_status"),
+        "results_are_real": False,
+        "blocker_reasons": list(_as_list(candidate_evidence.get("blocker_reasons"))),
+        "candidate_evidence_attempts": list(candidate_attempts or []),
+    }
+    baseline_path = out_dir / "qe_ic_gpu_baseline_measurements_real_run.json"
+    candidate_path = out_dir / "qe_ic_candidate_high_fidelity_results_real_run.json"
+    _write_json(baseline_path, baseline_payload)
+    _write_json(candidate_path, candidate_payload)
+    artifact_paths["gpu_baseline_measurements_real_run"] = str(baseline_path)
+    artifact_paths["candidate_high_fidelity_results_real_run"] = str(candidate_path)
+    return artifact_paths
+
+
+def _bind_discovered_qe_paths(
+    cases: list[dict[str, Any]],
+    environment: Mapping[str, Any],
+) -> list[dict[str, Any]]:
+    qe_tools = _as_mapping(_as_mapping(environment.get("tools")).get("qe"))
+    bound: list[dict[str, Any]] = []
+    for case in cases:
+        row = dict(case)
+        program = str(row.get("program"))
+        executable = qe_tools.get(program)
+        input_deck = row.get("input_deck_path")
+        if row.get("case_status") == "ready" and isinstance(executable, str) and executable and isinstance(input_deck, str):
+            row["qe_executable_path"] = executable
+            row["run_command"] = f"{executable} -in {input_deck}"
+            row["profile_command"] = f"nsys profile {executable} -in {input_deck}"
+        bound.append(row)
+    return bound
+
+
+def run_qe_ic_real_opportunity_campaign(
+    config_path: Path,
+    *,
+    out_dir: Path | None = None,
+    execute_real: bool = False,
+) -> dict[str, Any]:
     """Run or ingest a QE-IC real opportunity campaign."""
 
     config = load_json_object(config_path)
@@ -387,8 +673,19 @@ def run_qe_ic_real_opportunity_campaign(config_path: Path, *, out_dir: Path | No
         )
     }
     output_dir = out_dir or Path("artifacts/qe_ic_real_opportunity_campaign")
-    environment = probe_qe_ic_real_opportunity_environment()
-    cases = prepare_qe_ic_cases(config, out_dir=Path("artifacts/qe_ic_real_opportunity_campaign"))
+    environment = probe_qe_ic_real_opportunity_environment(
+        config=config,
+        repo_root=Path(__file__).resolve().parents[3],
+        include_qe_discovery=execute_real,
+    )
+    cases = prepare_qe_ic_cases(
+        config,
+        out_dir=output_dir if execute_real else Path("artifacts/qe_ic_real_opportunity_campaign"),
+    )
+    if execute_real:
+        cases = _bind_discovered_qe_paths(cases, environment)
+    if execute_real and not any(case.get("case_status") == "ready" for case in cases):
+        environment.setdefault("blockers", []).append("blocked_by_missing_input_deck")
     profile_summary = ingest_profile_logs(_load_optional_json(input_paths.get("profile_logs")))
     selection = select_layer4_candidates_for_campaign(
         candidate_plan=layer_artifacts["layer4_candidate_plan"],
@@ -405,22 +702,52 @@ def run_qe_ic_real_opportunity_campaign(config_path: Path, *, out_dir: Path | No
         candidate_payload = _load_optional_json(input_paths.get("candidate_high_fidelity_results")) or _load_optional_json(
             input_paths.get("candidate_evidence")
         )
-    if baseline_payload is None and config.get("mode") in {"run_if_available", "run_if_available_or_ingest_only"}:
+    should_run_baseline = execute_real and baseline_payload is None and config.get("mode") in {
+        "run_if_available",
+        "run_if_available_or_ingest_only",
+    }
+    if should_run_baseline:
         baseline_evidence = run_gpu_baseline_commands_if_available(
             cases=cases,
             environment_summary=environment,
             repeat_count=int(_as_mapping(config.get("claim_policy")).get("minimum_repeated_runs", 3)),
+            run_root=output_dir / "runs",
         )
     else:
         baseline_evidence = baseline_from_ingest_payload(baseline_payload)
     if candidate_payload is None and candidate_path_text and Path(candidate_path_text).suffix.lower() == ".csv" and Path(candidate_path_text).exists():
         candidate_evidence = candidate_evidence_from_csv(Path(candidate_path_text), selected_candidates=selected_candidates)
+        candidate_attempts = _candidate_evidence_attempts(
+            config=config,
+            input_paths=input_paths,
+            environment=environment,
+            candidate_path_text=candidate_path_text,
+            candidate_payload=candidate_payload,
+        )
+    elif execute_real and candidate_payload is None and _as_mapping(config.get("candidate_evidence_execution")):
+        candidate_evidence, candidate_attempts = _run_candidate_evidence_if_available(
+            config=config,
+            input_paths=input_paths,
+            environment=environment,
+            out_dir=output_dir,
+            selected_candidates=selected_candidates,
+            candidate_path_text=candidate_path_text,
+            candidate_payload=candidate_payload,
+        )
     else:
         candidate_evidence = candidate_evidence_from_ingest_payload(
             candidate_payload,
             selected_candidates=selected_candidates,
         )
-    if not candidate_payload:
+        candidate_attempts = _candidate_evidence_attempts(
+            config=config,
+            input_paths=input_paths,
+            environment=environment,
+            candidate_path_text=candidate_path_text,
+            candidate_payload=candidate_payload,
+        )
+    if candidate_evidence.get("results_are_real") is not True:
+        environment.setdefault("blockers", []).append("blocked_by_missing_candidate_evidence")
         environment.setdefault("blockers", []).append("blocked_by_missing_candidate_design")
     opportunity_summary = _run_existing_gate(
         out_dir=output_dir,
@@ -442,21 +769,34 @@ def run_qe_ic_real_opportunity_campaign(config_path: Path, *, out_dir: Path | No
     opportunity_summary = _attach_audit_to_opportunity_records(opportunity_summary, implementation_audit)
     baseline_summary = _artifact_summary(baseline_evidence, kind="gpu_baseline")
     candidate_summary = _artifact_summary(candidate_evidence, kind="candidate")
+    candidate_summary["attempt_count"] = len(candidate_attempts)
     final_answer = _final_answer(
         opportunity_summary=opportunity_summary,
         implementation_audit=implementation_audit,
         baseline_summary=baseline_summary,
         candidate_summary=candidate_summary,
     )
+    real_run_artifacts = (
+        _write_real_run_evidence_artifacts(
+            out_dir=output_dir,
+            baseline_evidence=baseline_evidence,
+            candidate_evidence=candidate_evidence,
+            candidate_attempts=candidate_attempts,
+        )
+        if execute_real
+        else {}
+    )
     return {
         "schema_version": QE_IC_REAL_OPPORTUNITY_CAMPAIGN_REPORT_SCHEMA_VERSION,
         "campaign_id": config.get("campaign_id"),
         "campaign_layer": CAMPAIGN_LAYER,
         "producer": PRODUCER,
-        "campaign_status": _campaign_status(final_answer, environment),
+        "campaign_status": _campaign_status(final_answer, environment, execute_real=execute_real),
         "mode": config.get("mode"),
+        "execution_mode": "execute_real" if execute_real else "safe_template",
         "research_question": config.get("research_question"),
         "input_artifact_index": input_paths,
+        "real_run_artifacts": real_run_artifacts,
         "environment_summary": environment,
         "case_summary": cases,
         "profile_summary": profile_summary,
@@ -468,6 +808,7 @@ def run_qe_ic_real_opportunity_campaign(config_path: Path, *, out_dir: Path | No
             if key != "selected_candidates"
         },
         "candidate_evidence_summary": candidate_summary,
+        "candidate_evidence_attempts": candidate_attempts,
         "implementation_audit": implementation_audit,
         "opportunity_summary": opportunity_summary,
         "final_answer": final_answer,

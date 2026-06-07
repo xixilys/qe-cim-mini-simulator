@@ -9,6 +9,8 @@ import statistics
 import time
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
+from hashlib import sha256
+from pathlib import Path
 from typing import Any
 
 from dse_v2.evidence.qe_ic.gpu_baseline import validate_qe_ic_gpu_baseline_measurements
@@ -40,8 +42,8 @@ def _number(value: Any) -> float | None:
     return None
 
 
-def _mean_or_default(values: list[float], default: float = 0.0) -> float:
-    return sum(values) / len(values) if values else default
+def _mean_or_none(values: list[float]) -> float | None:
+    return sum(values) / len(values) if values else None
 
 
 def _availability(values: list[float | None]) -> str:
@@ -77,6 +79,10 @@ def _runtime_stats(runs: list[float]) -> dict[str, Any]:
             "high": mean + ci_delta,
         },
     }
+
+
+def _sha256_text(text: str) -> str:
+    return "sha256:" + sha256(text.encode("utf-8", errors="replace")).hexdigest()
 
 
 def build_gpu_baseline_measurements(
@@ -179,10 +185,10 @@ def build_gpu_baseline_measurements(
                 "precision": key[4],
                 "target_type": "gpu_only",
                 **stats,
-                "gpu_utilization_mean": _mean_or_default([value for value in gpu_utils if value is not None]),
-                "gpu_memory_bandwidth_utilization_mean": _mean_or_default([value for value in bw_utils if value is not None]),
-                "host_device_transfer_seconds": _mean_or_default([value for value in transfers if value is not None]),
-                "communication_seconds": _mean_or_default([value for value in comms if value is not None]),
+                "gpu_utilization_mean": _mean_or_none([value for value in gpu_utils if value is not None]),
+                "gpu_memory_bandwidth_utilization_mean": _mean_or_none([value for value in bw_utils if value is not None]),
+                "host_device_transfer_seconds": _mean_or_none([value for value in transfers if value is not None]),
+                "communication_seconds": _mean_or_none([value for value in comms if value is not None]),
                 "profile_artifact_hash": str(first["profile_artifact_hash"]),
                 "evidence_status": "measured",
                 "metric_availability": {
@@ -249,6 +255,7 @@ def run_gpu_baseline_commands_if_available(
     environment_summary: Mapping[str, Any],
     repeat_count: int = 3,
     timeout_seconds: int = 3600,
+    run_root: Path | None = None,
 ) -> dict[str, Any]:
     """Run ready GPU-only baseline commands when the local environment allows it."""
 
@@ -261,11 +268,19 @@ def run_gpu_baseline_commands_if_available(
         and case.get("run_command")
     ]
     if not ready_cases:
-        return build_gpu_baseline_measurements(run_records=[], platform={})
+        result = build_gpu_baseline_measurements(run_records=[], platform={})
+        blockers = [
+            "blocked_by_missing_input_deck"
+            if any(isinstance(case, Mapping) and case.get("case_status") == "input_deck_missing" for case in cases)
+            else "gpu_baseline_runs_missing"
+        ]
+        result["blocker_reasons"] = blockers
+        return result
     gpu = _as_mapping(environment_summary.get("gpu"))
     tools = _as_mapping(environment_summary.get("tools"))
     qe_tools = _as_mapping(tools.get("qe"))
     run_records: list[dict[str, Any]] = []
+    execution_records: list[dict[str, Any]] = []
     for case in ready_cases:
         program = str(case.get("program"))
         if not qe_tools.get(program):
@@ -281,6 +296,11 @@ def run_gpu_baseline_commands_if_available(
             }
         command = str(case["run_command"])
         for run_index in range(repeat_count):
+            run_dir = (run_root or Path("runs/qe_ic_real_opportunity_campaign")) / str(case["case_id"]) / "gpu_baseline"
+            run_dir.mkdir(parents=True, exist_ok=True)
+            stdout_path = run_dir / f"run_{run_index + 1:03d}.stdout.log"
+            stderr_path = run_dir / f"run_{run_index + 1:03d}.stderr.log"
+            start_timestamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
             start = time.perf_counter()
             result = subprocess.run(
                 command,
@@ -291,6 +311,10 @@ def run_gpu_baseline_commands_if_available(
                 timeout=timeout_seconds,
             )
             elapsed = time.perf_counter() - start
+            end_timestamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+            stdout_path.write_text(result.stdout or "", encoding="utf-8")
+            stderr_path.write_text(result.stderr or "", encoding="utf-8")
+            output_hash = _sha256_text((result.stdout or "") + (result.stderr or ""))
             if result.returncode != 0:
                 return {
                     "evidence_status": "evidence_missing",
@@ -301,23 +325,50 @@ def run_gpu_baseline_commands_if_available(
                         "errors": [{"field": "run_command", "message": f"command failed on run {run_index + 1}"}],
                     },
                     "blocker_reasons": ["gpu_baseline_command_failed"],
+                    "run_records": execution_records,
                 }
+            profile_hash = output_hash
+            execution_record = {
+                "workload_family_id": case["workload_family_id"],
+                "case_id": case["case_id"],
+                "program": program,
+                "input_deck_hash": case["input_deck_hash"],
+                "precision": case["precision"],
+                "command": command,
+                "start_timestamp": start_timestamp,
+                "end_timestamp": end_timestamp,
+                "runtime_seconds": elapsed,
+                "exit_code": result.returncode,
+                "stdout_log_path": str(stdout_path),
+                "stderr_log_path": str(stderr_path),
+                "output_hash": output_hash,
+                "profile_artifact_hash": profile_hash,
+                "nvidia_smi_log_path": None,
+                "gpu_utilization": None,
+                "gpu_memory_bandwidth_utilization": None,
+                "host_device_transfer_seconds": None,
+                "communication_seconds": None,
+            }
+            execution_records.append(execution_record)
             run_records.append(
                 {
-                    "workload_family_id": case["workload_family_id"],
-                    "case_id": case["case_id"],
-                    "program": program,
-                    "input_deck_hash": case["input_deck_hash"],
-                    "precision": case["precision"],
-                    "runtime_seconds": elapsed,
-                    "gpu_utilization": 0.0,
-                    "gpu_memory_bandwidth_utilization": 0.0,
-                    "host_device_transfer_seconds": 0.0,
-                    "communication_seconds": 0.0,
-                    "profile_artifact_hash": f"sha256:{'0' * 63}{run_index}",
+                    key: execution_record[key]
+                    for key in (
+                        "workload_family_id",
+                        "case_id",
+                        "program",
+                        "input_deck_hash",
+                        "precision",
+                        "runtime_seconds",
+                        "gpu_utilization",
+                        "gpu_memory_bandwidth_utilization",
+                        "host_device_transfer_seconds",
+                        "communication_seconds",
+                        "profile_artifact_hash",
+                    )
                 }
             )
-    return build_gpu_baseline_measurements(
+    baseline = build_gpu_baseline_measurements(
         run_records=run_records,
         platform={
             "gpu_name": str(gpu.get("gpu_model") or "unknown_gpu"),
@@ -329,3 +380,5 @@ def run_gpu_baseline_commands_if_available(
             "precision": str(ready_cases[0].get("precision") or "unknown_precision"),
         },
     )
+    baseline["run_records"] = execution_records
+    return baseline

@@ -40,13 +40,24 @@ MANIFEST_CLAIM_BOUNDARY = (
 )
 
 ALLOWED_MODES = {"run_if_available", "ingest_only", "run_if_available_or_ingest_only"}
-ALLOWED_CAMPAIGN_STATUSES = {"ready", "partially_ready", "measured", "blocked", "evidence_missing"}
+ALLOWED_CAMPAIGN_STATUSES = {
+    "ready",
+    "partially_ready",
+    "measured",
+    "blocked",
+    "evidence_missing",
+    "blocked_by_missing_qe",
+    "blocked_by_missing_input_deck",
+    "blocked_by_missing_candidate_evidence",
+}
 ALLOWED_TOP_LEVEL_ANSWERS = {
     "opportunity_found",
     "implementation_limited",
     "fundamental_no_opportunity",
-    "gpu_dominant_no_fpga_or_hybrid_opportunity",
     "evidence_missing",
+    "blocked_by_missing_qe",
+    "blocked_by_missing_input_deck",
+    "blocked_by_missing_candidate_evidence",
     "inconclusive",
 }
 ALLOWED_ENVIRONMENT_STATUSES = {

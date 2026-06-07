@@ -16,11 +16,15 @@ from dse_v2.experiments import qe_ic_real_opportunity as campaign
 from dse_v2.experiments.qe_ic_real_opportunity.candidate_evidence import (
     build_candidate_high_fidelity_evidence,
     candidate_evidence_from_csv,
+    candidate_evidence_from_ingest_payload,
 )
+from dse_v2.experiments.qe_ic_real_opportunity.case_setup import prepare_qe_ic_cases
 from dse_v2.experiments.qe_ic_real_opportunity.candidate_selection import (
     select_layer4_candidates_for_campaign,
 )
 from dse_v2.experiments.qe_ic_real_opportunity.environment_probe import (
+    discover_qe_executables,
+    normalized_qe_probe_output_hash,
     parse_nvidia_smi_query_output,
     parse_ssh_config_hosts,
     probe_qe_ic_real_opportunity_environment,
@@ -214,6 +218,62 @@ def test_local_gpu_probe_parser_accepts_nvidia_smi_like_output():
     }
 
 
+def test_local_gpu_probe_parser_accepts_rtx_3070_output():
+    parsed = parse_nvidia_smi_query_output(
+        "NVIDIA GeForce RTX 3070, 8192 MiB, 596.36, 13.2\n"
+    )
+
+    assert parsed == {
+        "gpu_present": True,
+        "gpu_model": "NVIDIA GeForce RTX 3070",
+        "gpu_memory_total_mib": 8192,
+        "driver_version": "596.36",
+        "cuda_version": "13.2",
+    }
+
+
+def test_qe_discovery_uses_env_qe_bin_and_hashes_probe(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    bin_dir = tmp_path / "qe-bin"
+    bin_dir.mkdir()
+    pw = bin_dir / "pw.x"
+    pw.write_text("#!/bin/sh\necho 'Program PWSCF v.7.5 GPU CUDA enabled'\n", encoding="utf-8")
+    pw.chmod(0o755)
+    monkeypatch.setenv("QE_BIN", str(bin_dir))
+    monkeypatch.delenv("QE_ROOT", raising=False)
+    monkeypatch.delenv("ESPRESSO_ROOT", raising=False)
+
+    discovered = discover_qe_executables(config={}, programs=["pw.x"], repo_root=tmp_path)
+
+    pw_record = discovered["programs"]["pw.x"]
+    assert pw_record["path"] == str(pw)
+    assert pw_record["runs"] is True
+    assert pw_record["gpu_support"] == "detected"
+    assert pw_record["probe_command_output_hash"].startswith("sha256:")
+    assert "7.5" in pw_record["version"]
+
+
+def test_qe_probe_hash_ignores_qe_start_timestamp():
+    first = "Program PWSCF v.6.7MaX starts on  7Jun2026 at 20:43:55\nWaiting for input"
+    second = "Program PWSCF v.6.7MaX starts on  7Jun2026 at 20:44:16\nWaiting for input"
+
+    assert normalized_qe_probe_output_hash(first, returncode=1) == normalized_qe_probe_output_hash(second, returncode=1)
+
+
+def test_qe_discovery_report_omits_volatile_raw_probe_hash(tmp_path: Path):
+    report = campaign.run_qe_ic_real_opportunity_campaign(
+        CONFIG_PATH,
+        out_dir=tmp_path,
+        execute_real=True,
+    )
+
+    discovery = report["environment_summary"]["tools"]["qe_discovery"]["programs"]
+    assert all("probe_command_output_hash" in row for row in discovery.values())
+    assert all("probe_command_raw_output_hash" not in row for row in discovery.values())
+
+
 def test_eda_probe_records_available_tools_but_does_not_imply_speedup(tmp_path: Path):
     report = campaign.run_qe_ic_real_opportunity_campaign(CONFIG_PATH, out_dir=tmp_path)
 
@@ -259,6 +319,23 @@ def test_remote_eda_probe_attempts_discovered_aliases(monkeypatch: pytest.Monkey
     assert result["remote_probe_status"] == "probed"
     assert result["aliases"][0]["available_tools"] == ["vivado"]
     assert result["speedup_claim_implication"] == "none"
+
+
+def test_remote_eda_probe_tolerates_lc_all_warning(monkeypatch: pytest.MonkeyPatch):
+    def fake_run(_command, **_kwargs):
+        class Result:
+            returncode = 0
+            stdout = "/home/Xilinx/Vivado/2019.1/bin/vivado\n"
+            stderr = "setlocale: LC_ALL: cannot change locale (C.UTF-8)\n"
+
+        return Result()
+
+    monkeypatch.setattr("subprocess.run", fake_run)
+
+    result = probe_remote_eda_aliases(["ic-eda"], timeout_seconds=1)
+
+    assert result["aliases"][0]["probe_status"] == "available"
+    assert result["aliases"][0]["available_tools"] == ["vivado"]
 
 
 def test_default_environment_probe_attempts_remote_aliases_without_exposing_names(
@@ -371,6 +448,11 @@ def test_baseline_builder_marks_missing_optional_metrics_unavailable():
     record = baseline["artifact"]["baseline_records"][0]
     assert record["metric_availability"]["gpu_utilization_mean"] == "unavailable"
     assert record["metric_availability"]["host_device_transfer_seconds"] == "unavailable"
+    assert record["gpu_utilization_mean"] is None
+    assert record["gpu_memory_bandwidth_utilization_mean"] is None
+    assert record["host_device_transfer_seconds"] is None
+    assert record["communication_seconds"] is None
+    assert baseline["validation"]["status"] == "passed"
 
 
 def test_measured_baseline_cannot_be_emitted_from_template_only_inputs():
@@ -414,6 +496,44 @@ def test_run_if_available_baseline_runner_executes_ready_case_repeatedly(tmp_pat
     assert len(result["artifact"]["baseline_records"][0]["runtime_seconds_runs"]) == 3
 
 
+def test_run_if_available_baseline_runner_records_logs_without_fake_telemetry(tmp_path: Path):
+    case = {
+        "workload_family_id": "ground_state_band_structure",
+        "case_id": "controlled_ready_case",
+        "program": "pw.x",
+        "input_deck_hash": "sha256:" + "1" * 64,
+        "precision": "fp64_mixed",
+        "run_command": f"{sys.executable} -c \"print('qe ok')\"",
+        "case_status": "ready",
+    }
+    environment = {
+        "gpu": {
+            "gpu_model": "controlled-gpu",
+            "cuda_version": "12.4",
+            "driver_version": "controlled",
+        },
+        "tools": {"qe": {"pw.x": sys.executable}, "profilers": {}},
+    }
+
+    result = run_gpu_baseline_commands_if_available(
+        cases=[case],
+        environment_summary=environment,
+        repeat_count=3,
+        timeout_seconds=10,
+        run_root=tmp_path / "runs",
+    )
+
+    record = result["artifact"]["baseline_records"][0]
+    assert result["artifact"]["measurements_are_real"] is True
+    assert record["gpu_utilization_mean"] is None
+    assert record["metric_availability"]["gpu_utilization_mean"] == "unavailable"
+    run_records = result["run_records"]
+    assert len(run_records) == 3
+    assert all(Path(row["stdout_log_path"]).exists() for row in run_records)
+    assert all(Path(row["stderr_log_path"]).exists() for row in run_records)
+    assert all(row["output_hash"].startswith("sha256:") for row in run_records)
+
+
 def test_case_setup_creates_template_files_without_physical_data(tmp_path: Path):
     config = _load_json(CONFIG_PATH)
     report = campaign.run_qe_ic_real_opportunity_campaign(CONFIG_PATH, out_dir=tmp_path)
@@ -424,6 +544,26 @@ def test_case_setup_creates_template_files_without_physical_data(tmp_path: Path)
         assert template.exists()
         assert "placeholder" in template.read_text().lower()
     assert config["case_selection"]["allow_proxy_case_if_full_workload_unavailable"] is True
+
+
+def test_case_setup_discovers_input_decks_from_search_paths(tmp_path: Path):
+    deck_root = tmp_path / "qe_inputs"
+    deck_root.mkdir()
+    deck = deck_root / "ground_state_band_structure.in"
+    deck.write_text("&control\n calculation='scf'\n/\n", encoding="utf-8")
+    config = _load_json(CONFIG_PATH)
+    config.pop("input_decks", None)
+    config["input_deck_search_paths"] = [str(deck_root)]
+
+    cases = prepare_qe_ic_cases(config, out_dir=tmp_path / "out")
+
+    ground_state = next(case for case in cases if case["workload_family_id"] == "ground_state_band_structure")
+    mobility = next(case for case in cases if case["workload_family_id"] == "electron_phonon_mobility")
+    assert ground_state["case_status"] == "ready"
+    assert ground_state["input_deck_path"] == str(deck)
+    assert ground_state["input_deck_hash"].startswith("sha256:")
+    assert ground_state["run_command"].endswith(f"-in {deck}")
+    assert mobility["case_status"] == "input_deck_missing"
 
 
 def test_candidate_evidence_requires_provenance():
@@ -454,6 +594,122 @@ def test_l1_synthetic_data_cannot_be_used_as_high_fidelity_evidence():
 
     assert evidence["artifact"] is None
     assert "l1_or_synthetic_not_high_fidelity" in evidence["blocker_reasons"]
+
+
+def test_candidate_evidence_missing_uses_campaign_blocker():
+    candidate = _tracked_layer4_candidate()
+
+    evidence = candidate_evidence_from_ingest_payload(None, selected_candidates=[candidate])
+
+    assert evidence["evidence_status"] == "evidence_missing"
+    assert evidence["artifact"] is None
+    assert "blocked_by_missing_candidate_evidence" in evidence["blocker_reasons"]
+
+
+def test_execute_real_reports_candidate_evidence_attempt_ladder(tmp_path: Path):
+    report = campaign.run_qe_ic_real_opportunity_campaign(
+        CONFIG_PATH,
+        out_dir=tmp_path,
+        execute_real=True,
+    )
+
+    attempts = report["candidate_evidence_attempts"]
+    assert [row["attempt"] for row in attempts] == [
+        "ingest_existing_candidate_evidence",
+        "trace_replay",
+        "systemc_timing",
+        "eda_resource_timing",
+    ]
+    assert all(row["status"] in {"not_configured", "blocked"} for row in attempts)
+    assert report["candidate_evidence_summary"]["attempt_count"] == len(attempts)
+
+
+def test_execute_real_runs_configured_trace_replay_candidate_evidence(tmp_path: Path):
+    candidate = _tracked_layer4_candidate()
+    baseline_path = tmp_path / "baseline_runs.json"
+    profile_path = tmp_path / "profile_logs.json"
+    candidate_source = tmp_path / "candidate_source.json"
+    candidate_output = tmp_path / "candidate_output.json"
+    writer = tmp_path / "write_candidate_evidence.py"
+    _write_json(
+        baseline_path,
+        {
+            "platform": {
+                "gpu_name": "controlled-a100",
+                "cpu_name": "controlled-host",
+                "memory": "80GB",
+                "qe_version": "7.5",
+                "cuda_version": "12.4",
+                "driver_version": "controlled",
+                "precision": "fp64_mixed",
+            },
+            "run_records": _measured_baseline_runs(candidate),
+        },
+    )
+    _write_json(profile_path, {"profiles": [{"case_id": "controlled_case", "trace_hash": "sha256:" + "6" * 64}]})
+    _write_json(candidate_source, {"candidate_results": [_candidate_evidence_record(candidate)]})
+    writer.write_text(
+        "import pathlib, shutil, sys\n"
+        "shutil.copyfile(sys.argv[1], sys.argv[2])\n"
+        "pathlib.Path(sys.argv[2]).touch()\n",
+        encoding="utf-8",
+    )
+    config = _load_json(CONFIG_PATH)
+    config["input_artifacts"]["gpu_baseline_runs"] = str(baseline_path)
+    config["input_artifacts"]["profile_logs"] = str(profile_path)
+    config["input_artifacts"]["candidate_high_fidelity_results"] = str(tmp_path / "missing_candidate.json")
+    config["candidate_evidence_execution"] = {
+        "trace_replay": {
+            "command": [sys.executable, str(writer), str(candidate_source), str(candidate_output)],
+            "profile_artifact": str(profile_path),
+            "output_json": str(candidate_output),
+            "tool": "controlled_trace_replay",
+            "version": "test",
+        }
+    }
+    config_path = tmp_path / "config.json"
+    _write_json(config_path, config)
+
+    report = campaign.run_qe_ic_real_opportunity_campaign(
+        config_path,
+        out_dir=tmp_path / "out",
+        execute_real=True,
+    )
+
+    trace_attempt = next(row for row in report["candidate_evidence_attempts"] if row["attempt"] == "trace_replay")
+    assert trace_attempt["status"] == "executed"
+    assert Path(trace_attempt["stdout_log_path"]).exists()
+    assert trace_attempt["output_artifact_hash"].startswith("sha256:")
+    assert report["candidate_evidence_summary"]["results_are_real"] is True
+    assert report["opportunity_summary"]["claim_gate_invoked"] is True
+    assert report["final_answer"]["overall_answer"] == "opportunity_found"
+
+
+def test_execute_real_failed_candidate_evidence_command_remains_missing(tmp_path: Path):
+    config = _load_json(CONFIG_PATH)
+    config["candidate_evidence_execution"] = {
+        "systemc_timing": {
+            "command": [sys.executable, "-c", "import sys; sys.exit(7)"],
+            "output_json": str(tmp_path / "missing_systemc_output.json"),
+            "tool": "controlled_systemc",
+            "version": "test",
+        }
+    }
+    config_path = tmp_path / "config.json"
+    _write_json(config_path, config)
+
+    report = campaign.run_qe_ic_real_opportunity_campaign(
+        config_path,
+        out_dir=tmp_path / "out",
+        execute_real=True,
+    )
+
+    systemc_attempt = next(row for row in report["candidate_evidence_attempts"] if row["attempt"] == "systemc_timing")
+    assert systemc_attempt["status"] == "failed"
+    assert systemc_attempt["returncode"] == 7
+    assert report["candidate_evidence_summary"]["results_are_real"] is False
+    assert report["opportunity_summary"]["claim_gate_invoked"] is False
+    assert report["final_answer"]["overall_answer"] == "evidence_missing"
 
 
 def test_candidate_evidence_can_ingest_external_csv(tmp_path: Path):
@@ -717,6 +973,148 @@ def test_cli_is_thin_wrapper_and_missing_environment_returns_zero(tmp_path: Path
 
     assert result.returncode == 0, result.stderr
     assert json.loads(result.stdout)["status"] == "passed"
+
+
+def test_execute_real_without_qe_or_input_deck_returns_blocked_report(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    empty_bin = tmp_path / "empty-bin"
+    empty_bin.mkdir()
+    monkeypatch.setenv("PATH", str(empty_bin))
+    monkeypatch.delenv("QE_BIN", raising=False)
+    monkeypatch.delenv("QE_ROOT", raising=False)
+    monkeypatch.delenv("ESPRESSO_ROOT", raising=False)
+    config = _load_json(CONFIG_PATH)
+    config.pop("input_decks", None)
+    config["input_deck_search_paths"] = [str(tmp_path / "missing-inputs")]
+    config_path = tmp_path / "config.json"
+    _write_json(config_path, config)
+
+    report = campaign.run_qe_ic_real_opportunity_campaign(
+        config_path,
+        out_dir=tmp_path / "out",
+        execute_real=True,
+    )
+
+    assert report["execution_mode"] == "execute_real"
+    assert report["campaign_status"] in {"blocked_by_missing_qe", "blocked_by_missing_input_deck"}
+    assert report["final_answer"]["overall_answer"] == "evidence_missing"
+    assert "blocked_by_missing_qe" in report["environment_summary"]["blockers"]
+    assert "blocked_by_missing_input_deck" in report["final_answer"]["missing_evidence"]
+    assert campaign.validate_qe_ic_real_opportunity_campaign_report(report)["status"] == "passed"
+
+
+def test_execute_real_uses_discovered_qe_path_for_baseline(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    bin_dir = tmp_path / "qe-bin"
+    bin_dir.mkdir()
+    pw = bin_dir / "pw.x"
+    pw.write_text(
+        "#!/bin/sh\n"
+        "if [ \"$1\" = \"-h\" ]; then echo 'Program PWSCF v.7.5 CUDA'; exit 0; fi\n"
+        "echo \"fake QE run $@\"\n",
+        encoding="utf-8",
+    )
+    pw.chmod(0o755)
+    deck = tmp_path / "ground_state_band_structure.in"
+    deck.write_text("&control\n calculation='scf'\n/\n", encoding="utf-8")
+    empty_bin = tmp_path / "empty-bin"
+    empty_bin.mkdir()
+    monkeypatch.setenv("PATH", str(empty_bin))
+    monkeypatch.setenv("QE_BIN", str(bin_dir))
+    monkeypatch.delenv("QE_ROOT", raising=False)
+    monkeypatch.delenv("ESPRESSO_ROOT", raising=False)
+    config = _load_json(CONFIG_PATH)
+    config["case_selection"]["required_workload_families"] = ["ground_state_band_structure"]
+    config["input_decks"] = {"ground_state_band_structure": str(deck)}
+    config_path = tmp_path / "config.json"
+    _write_json(config_path, config)
+
+    report = campaign.run_qe_ic_real_opportunity_campaign(
+        config_path,
+        out_dir=tmp_path / "out",
+        execute_real=True,
+    )
+
+    case = report["case_summary"][0]
+    assert case["run_command"].startswith(str(pw))
+    assert report["gpu_baseline_summary"]["measurements_are_real"] is True
+    assert report["gpu_baseline_summary"]["baseline_record_count"] == 1
+    assert report["final_answer"]["overall_answer"] == "evidence_missing"
+    assert "blocked_by_missing_candidate_evidence" in report["final_answer"]["missing_evidence"]
+
+
+def test_execute_real_baseline_artifact_keeps_per_run_provenance(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    bin_dir = tmp_path / "qe-bin"
+    bin_dir.mkdir()
+    pw = bin_dir / "pw.x"
+    pw.write_text(
+        "#!/bin/sh\n"
+        "if [ \"$1\" = \"-h\" ]; then echo 'Program PWSCF v.7.5 CUDA'; exit 0; fi\n"
+        "echo \"fake QE run $@\"\n",
+        encoding="utf-8",
+    )
+    pw.chmod(0o755)
+    deck = tmp_path / "ground_state_band_structure.in"
+    deck.write_text("&control\n calculation='scf'\n/\n", encoding="utf-8")
+    empty_bin = tmp_path / "empty-bin"
+    empty_bin.mkdir()
+    monkeypatch.setenv("PATH", str(empty_bin))
+    monkeypatch.setenv("QE_BIN", str(bin_dir))
+    config = _load_json(CONFIG_PATH)
+    config["case_selection"]["required_workload_families"] = ["ground_state_band_structure"]
+    config["input_decks"] = {"ground_state_band_structure": str(deck)}
+    config_path = tmp_path / "config.json"
+    _write_json(config_path, config)
+
+    result = campaign.write_qe_ic_real_opportunity_campaign_artifacts(
+        tmp_path / "out",
+        config_path,
+        execute_real=True,
+    )
+
+    assert result["status"] == "passed"
+    baseline_real_run = _load_json(tmp_path / "out" / "qe_ic_gpu_baseline_measurements_real_run.json")
+    assert baseline_real_run["schema_version"] == "dse.qe_ic.gpu_baseline_measurements.v1"
+    assert baseline_real_run["measurements_are_real"] is True
+    assert len(baseline_real_run["run_records"]) == 3
+    assert all(row["command"].startswith(str(pw)) for row in baseline_real_run["run_records"])
+    assert all(Path(row["stdout_log_path"]).exists() for row in baseline_real_run["run_records"])
+    assert all(row["output_hash"].startswith("sha256:") for row in baseline_real_run["run_records"])
+
+
+def test_cli_accepts_execute_real_as_thin_wrapper(tmp_path: Path):
+    tree = ast.parse(CLI_PATH.read_text())
+    function_names = {
+        node.name
+        for node in ast.walk(tree)
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+    }
+    assert function_names == {"parse_args", "main"}
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(CLI_PATH),
+            "--config",
+            str(CONFIG_PATH),
+            "--out",
+            str(tmp_path),
+            "--execute-real",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout)["status"] == "passed"
+    assert (tmp_path / "qe_ic_real_opportunity_campaign_report.json").exists()
 
 
 def test_readme_explains_real_campaign_interpretation():

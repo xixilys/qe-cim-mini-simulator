@@ -1,7 +1,7 @@
 {
   "campaign_id": "qe_ic_real_opportunity_campaign_v1",
   "campaign_layer": "qe_ic_real_gpu_vs_fpga_hybrid_opportunity_campaign_v1",
-  "campaign_status": "evidence_missing",
+  "campaign_status": "blocked_by_missing_input_deck",
   "candidate_evidence_attempts": [
     {
       "attempt": "ingest_existing_candidate_evidence",
@@ -143,8 +143,8 @@
       "case_status": "input_deck_missing",
       "evidence_status": "evidence_missing",
       "input_deck_hash": null,
-      "input_deck_path": "artifacts/qe_ic_real_opportunity_campaign/case_templates/ground_state_band_structure.in",
-      "output_directory": "artifacts/qe_ic_real_opportunity_campaign/ground_state_band_structure",
+      "input_deck_path": "artifacts/qe_ic_real_opportunity_campaign_real_run/case_templates/ground_state_band_structure.in",
+      "output_directory": "artifacts/qe_ic_real_opportunity_campaign_real_run/ground_state_band_structure",
       "precision": "fp64_mixed",
       "profile_command": null,
       "program": "pw.x",
@@ -158,8 +158,8 @@
       "case_status": "input_deck_missing",
       "evidence_status": "evidence_missing",
       "input_deck_hash": null,
-      "input_deck_path": "artifacts/qe_ic_real_opportunity_campaign/case_templates/electron_phonon_mobility.in",
-      "output_directory": "artifacts/qe_ic_real_opportunity_campaign/electron_phonon_mobility",
+      "input_deck_path": "artifacts/qe_ic_real_opportunity_campaign_real_run/case_templates/electron_phonon_mobility.in",
+      "output_directory": "artifacts/qe_ic_real_opportunity_campaign_real_run/electron_phonon_mobility",
       "precision": "fp64_mixed",
       "profile_command": null,
       "program": "epw.x",
@@ -174,6 +174,7 @@
     "blockers": [
       "blocked_by_missing_systemc",
       "blocked_by_missing_eda",
+      "blocked_by_missing_input_deck",
       "blocked_by_missing_candidate_evidence",
       "blocked_by_missing_candidate_design"
     ],
@@ -209,20 +210,61 @@
         "ph.x": "/usr/bin/ph.x",
         "pw.x": "/usr/bin/pw.x"
       },
+      "qe_discovery": {
+        "discovery_status": "available",
+        "programs": {
+          "epw.x": {
+            "gpu_support": "not_detected",
+            "path": "/usr/bin/epw.x",
+            "probe_command": [
+              "/usr/bin/epw.x",
+              "-h"
+            ],
+            "probe_command_output_hash": "sha256:b389dca69a37eccb35c72f17caf047cd05545af4b97a248a9ed4b96b1d2b1998",
+            "probe_returncode": 1,
+            "runs": false,
+            "version": "5.3.1"
+          },
+          "ph.x": {
+            "gpu_support": "not_detected",
+            "path": "/usr/bin/ph.x",
+            "probe_command": [
+              "/usr/bin/ph.x",
+              "-h"
+            ],
+            "probe_command_output_hash": "sha256:5d0f26fb1e43595a1cf812383f3a8512db194d331358168cc9301d34e2aeb0b3",
+            "probe_returncode": 1,
+            "runs": false,
+            "version": "6.7MaX"
+          },
+          "pw.x": {
+            "gpu_support": "not_detected",
+            "path": "/usr/bin/pw.x",
+            "probe_command": [
+              "/usr/bin/pw.x",
+              "-h"
+            ],
+            "probe_command_output_hash": "sha256:be078f8ec792650790f3f82986e2d879f2c85973728948c9daec164b77a81c70",
+            "probe_returncode": 1,
+            "runs": false,
+            "version": "6.7MaX"
+          }
+        }
+      },
       "systemc": {
         "generic_sim": null,
         "systemc_runner": null
       }
     }
   },
-  "execution_mode": "safe_template",
+  "execution_mode": "execute_real",
   "final_answer": {
     "answer_text": "Evidence is missing. No GPU-vs-FPGA or GPU-vs-hybrid claim is allowed without a validated real GPU baseline and candidate high-fidelity evidence.",
     "best_candidate_id": null,
     "best_speedup_vs_gpu": null,
     "missing_evidence": [
       "blocked_by_missing_candidate_evidence",
-      "gpu_baseline_runs_missing"
+      "blocked_by_missing_input_deck"
     ],
     "next_actions": [
       "provide at least three GPU-only QE baseline runs",
@@ -236,7 +278,7 @@
   "gpu_baseline_summary": {
     "baseline_record_count": 0,
     "blocker_reasons": [
-      "gpu_baseline_runs_missing"
+      "blocked_by_missing_input_deck"
     ],
     "evidence_status": "evidence_missing",
     "measurements_are_real": false
@@ -319,12 +361,12 @@
         "claim_allowed": false,
         "claim_blockers": [
           "blocked_by_missing_candidate_evidence",
-          "gpu_baseline_runs_missing"
+          "blocked_by_missing_input_deck"
         ],
         "claim_strength": "none",
         "failure_reasons": [
           "blocked_by_missing_candidate_evidence",
-          "gpu_baseline_runs_missing"
+          "blocked_by_missing_input_deck"
         ],
         "final_interpretation": "No claim is allowed until matching real GPU baseline and candidate high-fidelity evidence exist.",
         "gpu_baseline_id": null,
@@ -345,12 +387,12 @@
         "claim_allowed": false,
         "claim_blockers": [
           "blocked_by_missing_candidate_evidence",
-          "gpu_baseline_runs_missing"
+          "blocked_by_missing_input_deck"
         ],
         "claim_strength": "none",
         "failure_reasons": [
           "blocked_by_missing_candidate_evidence",
-          "gpu_baseline_runs_missing"
+          "blocked_by_missing_input_deck"
         ],
         "final_interpretation": "No claim is allowed until matching real GPU baseline and candidate high-fidelity evidence exist.",
         "gpu_baseline_id": null,
@@ -371,12 +413,12 @@
         "claim_allowed": false,
         "claim_blockers": [
           "blocked_by_missing_candidate_evidence",
-          "gpu_baseline_runs_missing"
+          "blocked_by_missing_input_deck"
         ],
         "claim_strength": "none",
         "failure_reasons": [
           "blocked_by_missing_candidate_evidence",
-          "gpu_baseline_runs_missing"
+          "blocked_by_missing_input_deck"
         ],
         "final_interpretation": "No claim is allowed until matching real GPU baseline and candidate high-fidelity evidence exist.",
         "gpu_baseline_id": null,
@@ -394,7 +436,7 @@
       "best_speedup_vs_gpu": null,
       "overall_verdict": "evidence_missing",
       "what_evidence_is_missing": [
-        "gpu_baseline_runs_missing",
+        "blocked_by_missing_input_deck",
         "blocked_by_missing_candidate_evidence"
       ]
     }
@@ -408,7 +450,10 @@
     "profile_status": "evidence_missing",
     "profiles_are_real": false
   },
-  "real_run_artifacts": {},
+  "real_run_artifacts": {
+    "candidate_high_fidelity_results_real_run": "artifacts/qe_ic_real_opportunity_campaign_real_run/qe_ic_candidate_high_fidelity_results_real_run.json",
+    "gpu_baseline_measurements_real_run": "artifacts/qe_ic_real_opportunity_campaign_real_run/qe_ic_gpu_baseline_measurements_real_run.json"
+  },
   "research_question": "Under a real GPU-only baseline, do FPGA-only or GPU+FPGA hybrid candidates have an actual opportunity?",
   "schema_version": "dse.qe_ic.real_opportunity_campaign_report.v1"
 }

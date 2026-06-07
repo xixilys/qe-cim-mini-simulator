@@ -78,7 +78,7 @@ def build_candidate_high_fidelity_evidence(
             "results_are_real": False,
             "artifact": None,
             "validation": {"status": "not_applicable", "errors": [], "warnings": []},
-            "blocker_reasons": ["candidate_high_fidelity_results_missing"],
+            "blocker_reasons": ["blocked_by_missing_candidate_evidence"],
         }
 
     blockers: list[str] = []

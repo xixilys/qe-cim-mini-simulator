@@ -1,0 +1,38 @@
+{
+  "blocker_reasons": [
+    "blocked_by_missing_candidate_evidence"
+  ],
+  "candidate_evidence_attempts": [
+    {
+      "attempt": "ingest_existing_candidate_evidence",
+      "path": "dse_v2/testdata/qe_ic_real_opportunity/missing_candidate_high_fidelity_results.json",
+      "reason": "no configured candidate evidence artifact was loadable",
+      "status": "not_configured"
+    },
+    {
+      "attempt": "trace_replay",
+      "path": "dse_v2/testdata/qe_ic_real_opportunity/missing_profile_logs.json",
+      "policy_enabled": true,
+      "reason": "profile trace input is missing",
+      "status": "blocked",
+      "tool_available": true
+    },
+    {
+      "attempt": "systemc_timing",
+      "path": null,
+      "policy_enabled": true,
+      "reason": "SystemC/generic simulator runner is missing",
+      "status": "blocked"
+    },
+    {
+      "attempt": "eda_resource_timing",
+      "available_tools": {},
+      "path": null,
+      "policy_enabled": true,
+      "reason": "candidate design artifacts are missing",
+      "status": "blocked"
+    }
+  ],
+  "evidence_status": "evidence_missing",
+  "results_are_real": false
+}

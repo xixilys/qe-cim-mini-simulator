@@ -35,6 +35,14 @@ def _is_number(value: Any) -> bool:
     )
 
 
+def _optional_metric_is_valid(record: Mapping[str, Any], field: str) -> bool:
+    value = record.get(field)
+    if _is_number(value):
+        return True
+    availability = _as_mapping(record.get("metric_availability")).get(field)
+    return value is None and availability == "unavailable"
+
+
 def _validate_ci(
     ci: Mapping[str, Any],
     *,
@@ -126,13 +134,17 @@ def validate_qe_ic_gpu_baseline_measurements(payload: Mapping[str, Any]) -> dict
         for field in (
             "runtime_seconds_mean",
             "runtime_seconds_std",
+        ):
+            if not _is_number(record.get(field)):
+                _error(errors, f"{prefix}.{field}", f"{field} must be numeric")
+        for field in (
             "gpu_utilization_mean",
             "gpu_memory_bandwidth_utilization_mean",
             "host_device_transfer_seconds",
             "communication_seconds",
         ):
-            if not _is_number(record.get(field)):
-                _error(errors, f"{prefix}.{field}", f"{field} must be numeric")
+            if not _optional_metric_is_valid(record, field):
+                _error(errors, f"{prefix}.{field}", f"{field} must be numeric or null when metric_availability is unavailable")
         if _is_number(record.get("runtime_seconds_mean")) and float(record["runtime_seconds_mean"]) <= 0:
             _error(errors, f"{prefix}.runtime_seconds_mean", "runtime_seconds_mean must be positive")
         for util_field in ("gpu_utilization_mean", "gpu_memory_bandwidth_utilization_mean"):

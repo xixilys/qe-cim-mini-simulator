@@ -25,12 +25,21 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
         default=Path("artifacts/qe_ic_real_opportunity_campaign"),
         help="Output directory for campaign artifacts.",
     )
+    parser.add_argument(
+        "--execute-real",
+        action="store_true",
+        help="Attempt real QE/GPU/candidate evidence execution when tools and inputs are available.",
+    )
     return parser.parse_args(list(argv))
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(sys.argv[1:] if argv is None else argv)
-    result = write_qe_ic_real_opportunity_campaign_artifacts(args.out, args.config)
+    result = write_qe_ic_real_opportunity_campaign_artifacts(
+        args.out,
+        args.config,
+        execute_real=args.execute_real,
+    )
     print(json.dumps(result, indent=2, sort_keys=True))
     return 0 if result["status"] == "passed" else 1
 
