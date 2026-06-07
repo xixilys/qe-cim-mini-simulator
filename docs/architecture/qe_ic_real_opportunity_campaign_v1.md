@@ -70,7 +70,10 @@ EDA execution failure remain allowed terminal failures.
 
 Generated QE cases are marked `case_origin=generated_benchmark` and
 `scientific_claim_scope=performance_benchmark_only`. They are benchmark/proxy
-workloads, not real device-property or mobility science results.
+workloads, not real device-property or mobility science results. For generated
+silicon `pw.x` cases, the campaign searches configured pseudo roots, common QE
+pseudo directories, and `QE_PSEUDO_DIR`/`ESPRESSO_PSEUDO`/`PSEUDO_DIR` before
+classifying the case as `pseudo_missing`.
 
 Candidate execution can be configured under `candidate_evidence_execution`
 with `trace_replay`, `systemc_timing`, or `eda_resource_timing` entries. Each

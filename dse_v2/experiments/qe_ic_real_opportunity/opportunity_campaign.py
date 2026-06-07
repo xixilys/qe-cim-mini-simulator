@@ -848,7 +848,7 @@ def run_qe_ic_real_opportunity_campaign(
     if execute_real:
         cases = _bind_discovered_qe_paths(cases, environment)
     if execute_real and allow_generated_inputs and nonblocking and not any(case.get("case_status") == "ready" for case in cases):
-        cases = generate_qe_ic_benchmark_cases(cases, out_dir=output_dir)
+        cases = generate_qe_ic_benchmark_cases(cases, out_dir=output_dir, config=config)
         cases = _bind_discovered_qe_paths(cases, environment)
     if execute_real and not any(case.get("case_status") == "ready" for case in cases):
         environment.setdefault("blockers", []).append("blocked_by_missing_input_deck")

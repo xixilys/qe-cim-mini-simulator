@@ -145,15 +145,15 @@
       "case_origin": "generated_benchmark",
       "case_status": "ready",
       "evidence_status": "generated_benchmark",
-      "input_deck_hash": "sha256:0b0b03b891da168457df91563c800c41d123a4d8310bf29b0489f27a8f53d5bb",
+      "input_deck_hash": "sha256:9ca34c374fdb247acc953fbbe9ea8d98b503a3f4d733492fd215765baccc293e",
       "input_deck_path": "artifacts/qe_ic_real_opportunity_campaign_real_run/generated_inputs/generated_silicon_scf_pw_v0.in",
       "output_directory": "artifacts/qe_ic_real_opportunity_campaign_real_run/ground_state_band_structure",
       "precision": "fp64_mixed",
       "profile_command": "nsys profile /usr/bin/pw.x -in artifacts/qe_ic_real_opportunity_campaign_real_run/generated_inputs/generated_silicon_scf_pw_v0.in",
       "program": "pw.x",
-      "pseudo_file_path": null,
-      "pseudo_hash": null,
-      "pseudo_status": "pseudo_missing",
+      "pseudo_file_path": "/usr/share/espresso/pseudo/Si.pbe-n-rrkjus_psl.1.0.0.UPF",
+      "pseudo_hash": "sha256:ae3aefd0811f9499dbc4a72f1f9ae02ef4fc7f3568bf6f559b68668719c69e2b",
+      "pseudo_status": "pseudo_available",
       "qe_executable_path": "/usr/bin/pw.x",
       "run_command": "/usr/bin/pw.x -in artifacts/qe_ic_real_opportunity_campaign_real_run/generated_inputs/generated_silicon_scf_pw_v0.in",
       "scientific_claim_scope": "performance_benchmark_only",
@@ -242,7 +242,7 @@
               "/usr/bin/epw.x",
               "-h"
             ],
-            "probe_command_output_hash": "sha256:6ee4c9e8d4bfd1473f29ab88eccfc4f13561c39d44e6b97490be0fdb36cbf44f",
+            "probe_command_output_hash": "sha256:98b9e14d8b3b77baba817a6b3533b2bfa8ce1a374b4c221682ba52c0e35bb4bf",
             "probe_returncode": 1,
             "runs": false,
             "version": "5.3.1"
@@ -254,7 +254,7 @@
               "/usr/bin/ph.x",
               "-h"
             ],
-            "probe_command_output_hash": "sha256:442e069ebcee367f198a70bf065d4ee7b97ff1221cc1a3bb106662b4da1e2bfd",
+            "probe_command_output_hash": "sha256:9ed8df9e79792b49c45028e4a4b5f194743932d9dd5b2e6e11fc365d7272025b",
             "probe_returncode": 1,
             "runs": false,
             "version": "6.7MaX"
@@ -266,7 +266,7 @@
               "/usr/bin/pw.x",
               "-h"
             ],
-            "probe_command_output_hash": "sha256:94f9a167788265af4f6db57bf5047232786c00ddfd50275a70740d4f2501f701",
+            "probe_command_output_hash": "sha256:27328a49e3ad5e17dd32b84b5bc0b6acaddfb93bedd517e7aed6f8f7f59778dd",
             "probe_returncode": 1,
             "runs": false,
             "version": "6.7MaX"
@@ -286,8 +286,7 @@
     "best_speedup_vs_gpu": null,
     "missing_evidence": [
       "blocked_by_missing_candidate_evidence",
-      "gpu_qe_binary_cpu_only",
-      "gpu_qe_execution_unavailable_due_to_pseudopotential"
+      "gpu_qe_binary_cpu_only"
     ],
     "next_actions": [
       "provide at least three GPU-only QE baseline runs",
@@ -301,8 +300,7 @@
   "gpu_baseline_summary": {
     "baseline_record_count": 0,
     "blocker_reasons": [
-      "gpu_qe_binary_cpu_only",
-      "gpu_qe_execution_unavailable_due_to_pseudopotential"
+      "gpu_qe_binary_cpu_only"
     ],
     "evidence_status": "evidence_missing",
     "measurements_are_real": false,
@@ -387,14 +385,12 @@
         "claim_allowed": false,
         "claim_blockers": [
           "blocked_by_missing_candidate_evidence",
-          "gpu_qe_binary_cpu_only",
-          "gpu_qe_execution_unavailable_due_to_pseudopotential"
+          "gpu_qe_binary_cpu_only"
         ],
         "claim_strength": "none",
         "failure_reasons": [
           "blocked_by_missing_candidate_evidence",
-          "gpu_qe_binary_cpu_only",
-          "gpu_qe_execution_unavailable_due_to_pseudopotential"
+          "gpu_qe_binary_cpu_only"
         ],
         "final_interpretation": "No claim is allowed until matching real GPU baseline and candidate high-fidelity evidence exist.",
         "gpu_baseline_id": null,
@@ -415,14 +411,12 @@
         "claim_allowed": false,
         "claim_blockers": [
           "blocked_by_missing_candidate_evidence",
-          "gpu_qe_binary_cpu_only",
-          "gpu_qe_execution_unavailable_due_to_pseudopotential"
+          "gpu_qe_binary_cpu_only"
         ],
         "claim_strength": "none",
         "failure_reasons": [
           "blocked_by_missing_candidate_evidence",
-          "gpu_qe_binary_cpu_only",
-          "gpu_qe_execution_unavailable_due_to_pseudopotential"
+          "gpu_qe_binary_cpu_only"
         ],
         "final_interpretation": "No claim is allowed until matching real GPU baseline and candidate high-fidelity evidence exist.",
         "gpu_baseline_id": null,
@@ -443,14 +437,12 @@
         "claim_allowed": false,
         "claim_blockers": [
           "blocked_by_missing_candidate_evidence",
-          "gpu_qe_binary_cpu_only",
-          "gpu_qe_execution_unavailable_due_to_pseudopotential"
+          "gpu_qe_binary_cpu_only"
         ],
         "claim_strength": "none",
         "failure_reasons": [
           "blocked_by_missing_candidate_evidence",
-          "gpu_qe_binary_cpu_only",
-          "gpu_qe_execution_unavailable_due_to_pseudopotential"
+          "gpu_qe_binary_cpu_only"
         ],
         "final_interpretation": "No claim is allowed until matching real GPU baseline and candidate high-fidelity evidence exist.",
         "gpu_baseline_id": null,
@@ -469,7 +461,6 @@
       "overall_verdict": "evidence_missing",
       "what_evidence_is_missing": [
         "gpu_qe_binary_cpu_only",
-        "gpu_qe_execution_unavailable_due_to_pseudopotential",
         "blocked_by_missing_candidate_evidence"
       ]
     }

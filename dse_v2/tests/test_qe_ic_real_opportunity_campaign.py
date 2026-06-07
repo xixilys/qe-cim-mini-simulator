@@ -19,6 +19,7 @@ from dse_v2.experiments.qe_ic_real_opportunity.candidate_evidence import (
     candidate_evidence_from_csv,
     candidate_evidence_from_ingest_payload,
 )
+from dse_v2.experiments.qe_ic_real_opportunity.case_setup import generate_qe_ic_benchmark_cases
 from dse_v2.experiments.qe_ic_real_opportunity.case_setup import prepare_qe_ic_cases
 from dse_v2.experiments.qe_ic_real_opportunity.candidate_selection import (
     select_layer4_candidates_for_campaign,
@@ -1032,6 +1033,34 @@ def test_nonblocking_generates_benchmark_input_when_deck_missing(tmp_path: Path)
         "gpu_or_eda_failure",
     }
     assert campaign.validate_qe_ic_real_opportunity_campaign_report(report)["status"] == "passed"
+
+
+def test_generated_silicon_benchmark_searches_local_pseudopotential(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    pseudo_dir = tmp_path / "pseudo"
+    pseudo_dir.mkdir()
+    pseudo = pseudo_dir / "Si.pbe-n-kjpaw_psl.1.0.0.UPF"
+    pseudo.write_text("controlled pseudo\n", encoding="utf-8")
+    monkeypatch.setenv("QE_PSEUDO_DIR", str(pseudo_dir))
+    cases = [
+        {
+            "workload_family_id": "ground_state_band_structure",
+            "case_id": "missing_silicon_case",
+            "program": "pw.x",
+            "case_status": "input_deck_missing",
+        }
+    ]
+
+    generated = generate_qe_ic_benchmark_cases(cases, out_dir=tmp_path / "out")
+
+    case = generated[0]
+    deck_text = Path(case["input_deck_path"]).read_text(encoding="utf-8")
+    assert case["pseudo_status"] == "pseudo_available"
+    assert case["pseudo_file_path"] == str(pseudo)
+    assert case["pseudo_hash"].startswith("sha256:")
+    assert f"pseudo_dir = '{pseudo_dir}'" in deck_text
 
 
 def test_nonblocking_report_includes_cpu_baseline_attempt_summary(tmp_path: Path):

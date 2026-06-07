@@ -1,7 +1,6 @@
 {
   "blocker_reasons": [
-    "gpu_qe_binary_cpu_only",
-    "gpu_qe_execution_unavailable_due_to_pseudopotential"
+    "gpu_qe_binary_cpu_only"
   ],
   "evidence_status": "evidence_missing",
   "measurements_are_real": false,

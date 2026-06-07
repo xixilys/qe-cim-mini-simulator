@@ -19,6 +19,11 @@ GENERATED_CASE_ID_BY_FAMILY = {
     "ground_state_band_structure": "generated_silicon_scf_pw_v0",
     "electron_phonon_mobility": "generated_epw_proxy_v0",
 }
+SILICON_PSEUDO_NAMES = (
+    "Si.pbe-n-kjpaw_psl.1.0.0.UPF",
+    "Si.pbe-n-rrkjus_psl.1.0.0.UPF",
+    "Si.pz-vbc.UPF",
+)
 
 
 def _sha256(path: Path) -> str:
@@ -82,6 +87,59 @@ def _search_roots(config: Mapping[str, Any]) -> list[Path]:
             seen.add(key)
             unique.append(root)
     return unique
+
+
+def _pseudo_search_roots(config: Mapping[str, Any] | None = None) -> list[Path]:
+    roots: list[Path] = []
+    config_map = _as_mapping(config)
+    for value in _as_list(config_map.get("pseudo_search_paths")):
+        if isinstance(value, str) and value:
+            roots.append(Path(value).expanduser())
+    for key in ("pseudo_dir", "qe_pseudo_dir"):
+        value = config_map.get(key)
+        if isinstance(value, str) and value:
+            roots.append(Path(value).expanduser())
+    for env_name in ("QE_PSEUDO_DIR", "ESPRESSO_PSEUDO", "PSEUDO_DIR"):
+        value = os.environ.get(env_name)
+        if value:
+            roots.append(Path(value).expanduser())
+    roots.extend(
+        [
+            Path.cwd() / "pseudo",
+            _repo_root() / "pseudo",
+            Path("/usr/share/espresso/pseudo"),
+            Path("/usr/local/share/qe/pseudo"),
+            Path("/opt/qe/pseudo"),
+        ]
+    )
+    unique: list[Path] = []
+    seen: set[str] = set()
+    for root in roots:
+        key = str(root)
+        if key not in seen:
+            seen.add(key)
+            unique.append(root)
+    return unique
+
+
+def _discover_pseudopotential(
+    *,
+    config: Mapping[str, Any] | None = None,
+    names: tuple[str, ...] = SILICON_PSEUDO_NAMES,
+) -> Path | None:
+    for root in _pseudo_search_roots(config):
+        if not root.exists():
+            continue
+        if root.is_file() and root.name in names:
+            return root
+        for name in names:
+            direct = root / name
+            if direct.exists() and direct.is_file():
+                return direct
+        for candidate in root.rglob("*.UPF"):
+            if candidate.name in names:
+                return candidate
+    return None
 
 
 def _candidate_deck_names(workload_family_id: str, program: str) -> list[str]:
@@ -175,7 +233,12 @@ def prepare_qe_ic_cases(config: Mapping[str, Any], *, out_dir: Path | None = Non
     return cases
 
 
-def generate_qe_ic_benchmark_cases(cases: list[Mapping[str, Any]], *, out_dir: Path) -> list[dict[str, Any]]:
+def generate_qe_ic_benchmark_cases(
+    cases: list[Mapping[str, Any]],
+    *,
+    out_dir: Path,
+    config: Mapping[str, Any] | None = None,
+) -> list[dict[str, Any]]:
     """Generate small benchmark/proxy QE input decks for missing cases."""
 
     generated_dir = out_dir / "generated_inputs"
@@ -190,6 +253,9 @@ def generate_qe_ic_benchmark_cases(cases: list[Mapping[str, Any]], *, out_dir: P
         program = str(row.get("program") or PROGRAM_BY_FAMILY.get(family_id, "pw.x"))
         generated_case_id = GENERATED_CASE_ID_BY_FAMILY.get(family_id, f"generated_{family_id}_benchmark_v0")
         deck_path = generated_dir / f"{generated_case_id}.in"
+        pseudo_path = _discover_pseudopotential(config=config) if program == "pw.x" else None
+        pseudo_dir = str(pseudo_path.parent) if pseudo_path is not None else "./pseudo"
+        pseudo_name = pseudo_path.name if pseudo_path is not None else SILICON_PSEUDO_NAMES[0]
         if program == "epw.x":
             deck_text = "\n".join(
                 [
@@ -208,7 +274,7 @@ def generate_qe_ic_benchmark_cases(cases: list[Mapping[str, Any]], *, out_dir: P
                     "&control",
                     "  calculation = 'scf'",
                     "  prefix = 'generated_silicon_scf_pw_v0'",
-                    "  pseudo_dir = './pseudo'",
+                    f"  pseudo_dir = '{pseudo_dir}'",
                     "  outdir = './tmp'",
                     "/",
                     "&system",
@@ -222,7 +288,7 @@ def generate_qe_ic_benchmark_cases(cases: list[Mapping[str, Any]], *, out_dir: P
                     "  conv_thr = 1.0d-6",
                     "/",
                     "ATOMIC_SPECIES",
-                    "  Si 28.0855 Si.pbe-n-kjpaw_psl.1.0.0.UPF",
+                    f"  Si 28.0855 {pseudo_name}",
                     "ATOMIC_POSITIONS crystal",
                     "  Si 0.00 0.00 0.00",
                     "K_POINTS automatic",
@@ -244,9 +310,9 @@ def generate_qe_ic_benchmark_cases(cases: list[Mapping[str, Any]], *, out_dir: P
                 "profile_command": f"nsys profile {program} -in {deck_path}",
                 "template_created": False,
                 "template_note": "Generated benchmark/proxy workload; not real device-physics input.",
-                "pseudo_file_path": None,
-                "pseudo_hash": None,
-                "pseudo_status": "pseudo_missing",
+                "pseudo_file_path": str(pseudo_path) if pseudo_path is not None else None,
+                "pseudo_hash": _sha256(pseudo_path) if pseudo_path is not None else None,
+                "pseudo_status": "pseudo_available" if pseudo_path is not None else "pseudo_missing",
             }
         )
         generated.append(row)
