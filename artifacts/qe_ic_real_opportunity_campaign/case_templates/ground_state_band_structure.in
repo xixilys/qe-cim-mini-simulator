@@ -1,0 +1,3 @@
+# Placeholder QE input deck template for ground_state_band_structure.
+# This file is intentionally not physical input data.
+# Replace with a validated QE input deck before running measurements.

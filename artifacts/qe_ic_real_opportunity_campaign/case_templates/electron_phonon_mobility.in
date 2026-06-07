@@ -1,0 +1,3 @@
+# Placeholder QE input deck template for electron_phonon_mobility.
+# This file is intentionally not physical input data.
+# Replace with a validated QE input deck before running measurements.

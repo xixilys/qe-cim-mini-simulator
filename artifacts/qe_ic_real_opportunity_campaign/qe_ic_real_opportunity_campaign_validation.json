@@ -1,0 +1,9 @@
+{
+  "candidate_selection_count": 3,
+  "errors": [],
+  "opportunity_record_count": 3,
+  "overall_answer": "evidence_missing",
+  "schema_version": "dse.qe_ic.real_opportunity_campaign_validation.v1",
+  "status": "passed",
+  "warnings": []
+}
