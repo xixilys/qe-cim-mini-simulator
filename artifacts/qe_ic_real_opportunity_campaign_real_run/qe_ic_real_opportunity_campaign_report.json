@@ -184,6 +184,15 @@
     }
   ],
   "claim_boundary": "No FPGA/GPU+FPGA superiority claim is made unless real or high-fidelity evidence passes the existing claim gate.",
+  "cpu_baseline_summary": {
+    "baseline_record_count": 0,
+    "blocker_reasons": [
+      "cpu_only_baseline_command_failed"
+    ],
+    "evidence_status": "evidence_missing",
+    "measurements_are_real": false,
+    "target_type": "cpu_only"
+  },
   "environment_summary": {
     "blockers": [
       "blocked_by_missing_systemc",
@@ -233,7 +242,7 @@
               "/usr/bin/epw.x",
               "-h"
             ],
-            "probe_command_output_hash": "sha256:b389dca69a37eccb35c72f17caf047cd05545af4b97a248a9ed4b96b1d2b1998",
+            "probe_command_output_hash": "sha256:6ee4c9e8d4bfd1473f29ab88eccfc4f13561c39d44e6b97490be0fdb36cbf44f",
             "probe_returncode": 1,
             "runs": false,
             "version": "5.3.1"
@@ -245,7 +254,7 @@
               "/usr/bin/ph.x",
               "-h"
             ],
-            "probe_command_output_hash": "sha256:5d0f26fb1e43595a1cf812383f3a8512db194d331358168cc9301d34e2aeb0b3",
+            "probe_command_output_hash": "sha256:442e069ebcee367f198a70bf065d4ee7b97ff1221cc1a3bb106662b4da1e2bfd",
             "probe_returncode": 1,
             "runs": false,
             "version": "6.7MaX"
@@ -257,7 +266,7 @@
               "/usr/bin/pw.x",
               "-h"
             ],
-            "probe_command_output_hash": "sha256:be078f8ec792650790f3f82986e2d879f2c85973728948c9daec164b77a81c70",
+            "probe_command_output_hash": "sha256:94f9a167788265af4f6db57bf5047232786c00ddfd50275a70740d4f2501f701",
             "probe_returncode": 1,
             "runs": false,
             "version": "6.7MaX"
@@ -277,7 +286,8 @@
     "best_speedup_vs_gpu": null,
     "missing_evidence": [
       "blocked_by_missing_candidate_evidence",
-      "gpu_baseline_command_failed"
+      "gpu_qe_binary_cpu_only",
+      "gpu_qe_execution_unavailable_due_to_pseudopotential"
     ],
     "next_actions": [
       "provide at least three GPU-only QE baseline runs",
@@ -291,10 +301,12 @@
   "gpu_baseline_summary": {
     "baseline_record_count": 0,
     "blocker_reasons": [
-      "gpu_baseline_command_failed"
+      "gpu_qe_binary_cpu_only",
+      "gpu_qe_execution_unavailable_due_to_pseudopotential"
     ],
     "evidence_status": "evidence_missing",
-    "measurements_are_real": false
+    "measurements_are_real": false,
+    "target_type": "gpu_only"
   },
   "implementation_audit": [
     {
@@ -375,12 +387,14 @@
         "claim_allowed": false,
         "claim_blockers": [
           "blocked_by_missing_candidate_evidence",
-          "gpu_baseline_command_failed"
+          "gpu_qe_binary_cpu_only",
+          "gpu_qe_execution_unavailable_due_to_pseudopotential"
         ],
         "claim_strength": "none",
         "failure_reasons": [
           "blocked_by_missing_candidate_evidence",
-          "gpu_baseline_command_failed"
+          "gpu_qe_binary_cpu_only",
+          "gpu_qe_execution_unavailable_due_to_pseudopotential"
         ],
         "final_interpretation": "No claim is allowed until matching real GPU baseline and candidate high-fidelity evidence exist.",
         "gpu_baseline_id": null,
@@ -401,12 +415,14 @@
         "claim_allowed": false,
         "claim_blockers": [
           "blocked_by_missing_candidate_evidence",
-          "gpu_baseline_command_failed"
+          "gpu_qe_binary_cpu_only",
+          "gpu_qe_execution_unavailable_due_to_pseudopotential"
         ],
         "claim_strength": "none",
         "failure_reasons": [
           "blocked_by_missing_candidate_evidence",
-          "gpu_baseline_command_failed"
+          "gpu_qe_binary_cpu_only",
+          "gpu_qe_execution_unavailable_due_to_pseudopotential"
         ],
         "final_interpretation": "No claim is allowed until matching real GPU baseline and candidate high-fidelity evidence exist.",
         "gpu_baseline_id": null,
@@ -427,12 +443,14 @@
         "claim_allowed": false,
         "claim_blockers": [
           "blocked_by_missing_candidate_evidence",
-          "gpu_baseline_command_failed"
+          "gpu_qe_binary_cpu_only",
+          "gpu_qe_execution_unavailable_due_to_pseudopotential"
         ],
         "claim_strength": "none",
         "failure_reasons": [
           "blocked_by_missing_candidate_evidence",
-          "gpu_baseline_command_failed"
+          "gpu_qe_binary_cpu_only",
+          "gpu_qe_execution_unavailable_due_to_pseudopotential"
         ],
         "final_interpretation": "No claim is allowed until matching real GPU baseline and candidate high-fidelity evidence exist.",
         "gpu_baseline_id": null,
@@ -450,7 +468,8 @@
       "best_speedup_vs_gpu": null,
       "overall_verdict": "evidence_missing",
       "what_evidence_is_missing": [
-        "gpu_baseline_command_failed",
+        "gpu_qe_binary_cpu_only",
+        "gpu_qe_execution_unavailable_due_to_pseudopotential",
         "blocked_by_missing_candidate_evidence"
       ]
     }
@@ -466,6 +485,7 @@
   },
   "real_run_artifacts": {
     "candidate_high_fidelity_results_real_run": "artifacts/qe_ic_real_opportunity_campaign_real_run/qe_ic_candidate_high_fidelity_results_real_run.json",
+    "cpu_baseline_measurements_real_run": "artifacts/qe_ic_real_opportunity_campaign_real_run/qe_ic_cpu_baseline_measurements_real_run.json",
     "gpu_baseline_measurements_real_run": "artifacts/qe_ic_real_opportunity_campaign_real_run/qe_ic_gpu_baseline_measurements_real_run.json"
   },
   "research_question": "Under a real GPU-only baseline, do FPGA-only or GPU+FPGA hybrid candidates have an actual opportunity?",

@@ -22,12 +22,20 @@ real/ingested evidence, implementation quality audit, and final interpretation.
    roots, local testdata/examples, experiment directories, or common QE example
    roots. Missing input decks are marked `input_deck_missing`; generated
    templates are placeholders only and are not scientific input data.
-3. Build a GPU-only baseline from at least three real QE runs, or ingest a
-   validated GPU-baseline artifact. Real runs write stdout/stderr logs and
-   output hashes under `runs/<case_id>/gpu_baseline/`.
-4. Select up to three candidates from the existing Layer-4 candidate plan only:
+3. In `execute_real` mode, attempt a CPU-only QE baseline when cases and QE are
+   runnable. This is timing context only and is reported separately from the
+   GPU baseline.
+4. Build a GPU-only baseline from at least three real GPU-capable QE runs, or
+   ingest a validated GPU-baseline artifact. Real runs write stdout/stderr logs
+   and output hashes under `runs/<case_id>/gpu_only_baseline/`. A CPU-only QE
+   binary is reported as `gpu_qe_binary_cpu_only`; CPU results must not
+   substitute for GPU-only evidence. Generated benchmark cases with missing
+   pseudopotentials report
+   `gpu_qe_execution_unavailable_due_to_pseudopotential` rather than fake QE
+   runtime.
+5. Select up to three candidates from the existing Layer-4 candidate plan only:
    FPGA FFT/streaming, hybrid reduction sidecar, and hybrid DMA/memory staging.
-5. Try candidate evidence in order: ingest configured evidence, trace replay
+6. Try candidate evidence in order: ingest configured evidence, trace replay
    from real profile data, SystemC timing, then EDA resource/timing from
    explicit design artifacts. If no trace, runner, or design binding exists,
    the campaign records `blocked_by_missing_candidate_evidence`; it does not
@@ -36,10 +44,10 @@ real/ingested evidence, implementation quality audit, and final interpretation.
    artifact. The campaign records stdout/stderr logs and hashes, validates the
    JSON, and then calls the existing claim gate. It never parses stdout into
    performance numbers.
-6. Call the existing real GPU-baseline opportunity analysis package.
-7. Audit whether losses are implementation-limited, fundamentally unattractive,
+7. Call the existing real GPU-baseline opportunity analysis package.
+8. Audit whether losses are implementation-limited, fundamentally unattractive,
    invalid, evidence-missing, or inconclusive.
-8. Emit a plain final answer with missing evidence and next actions.
+9. Emit a plain final answer with missing evidence and next actions.
 
 ## Modes
 
@@ -59,6 +67,10 @@ are missing by generating benchmark/proxy inputs and non-claimable proxy
 candidate evidence. Missing decks and missing candidate evidence become
 fallback reasons, not terminal statuses. GPU/QE execution failure and required
 EDA execution failure remain allowed terminal failures.
+
+Generated QE cases are marked `case_origin=generated_benchmark` and
+`scientific_claim_scope=performance_benchmark_only`. They are benchmark/proxy
+workloads, not real device-property or mobility science results.
 
 Candidate execution can be configured under `candidate_evidence_execution`
 with `trace_replay`, `systemc_timing`, or `eda_resource_timing` entries. Each
@@ -93,8 +105,9 @@ communication time must be represented as `null` with
 The campaign may report `opportunity_found` only when the existing claim gate
 returns a claim-allowed FPGA or hybrid opportunity record.
 
-`execute_real` emits two additional small evidence summaries:
+`execute_real` emits additional small evidence summaries:
 
+- `qe_ic_cpu_baseline_measurements_real_run.json`
 - `qe_ic_gpu_baseline_measurements_real_run.json`
 - `qe_ic_candidate_high_fidelity_results_real_run.json`
 
@@ -106,11 +119,19 @@ measured results.
 - `opportunity_found`
 - `implementation_limited`
 - `fundamental_no_opportunity`
+- `proxy_only_inconclusive`
+- `gpu_or_eda_failure`
 - `evidence_missing`
 - `blocked_by_missing_qe`
 - `blocked_by_missing_input_deck`
 - `blocked_by_missing_candidate_evidence`
 - `inconclusive`
+
+In nonblocking mode, final campaign statuses are constrained to the
+nonblocking status set: `completed_real_claimable`, `completed_proxy_only`,
+`completed_implementation_limited`, `completed_no_opportunity`,
+`gpu_execution_failed`, `eda_execution_failed`, or
+`software_validation_failed`.
 
 ## Forbidden Conclusions
 

@@ -25,6 +25,7 @@ from dse_v2.experiments.qe_ic_real_opportunity.case_setup import generate_qe_ic_
 from dse_v2.experiments.qe_ic_real_opportunity.case_setup import prepare_qe_ic_cases
 from dse_v2.experiments.qe_ic_real_opportunity.environment_probe import probe_qe_ic_real_opportunity_environment
 from dse_v2.experiments.qe_ic_real_opportunity.gpu_baseline import baseline_from_ingest_payload
+from dse_v2.experiments.qe_ic_real_opportunity.gpu_baseline import run_cpu_baseline_commands_if_available
 from dse_v2.experiments.qe_ic_real_opportunity.gpu_baseline import run_gpu_baseline_commands_if_available
 from dse_v2.experiments.qe_ic_real_opportunity.implementation_audit import audit_candidate_implementation_quality
 from dse_v2.experiments.qe_ic_real_opportunity.profile_ingest import ingest_profile_logs
@@ -80,12 +81,13 @@ def _input_paths(config: Mapping[str, Any]) -> dict[str, str]:
 
 def _artifact_summary(evidence: Mapping[str, Any], *, kind: str) -> dict[str, Any]:
     artifact = _as_mapping(evidence.get("artifact"))
-    if kind == "gpu_baseline":
+    if kind in {"gpu_baseline", "cpu_baseline"}:
         return {
             "evidence_status": evidence.get("evidence_status"),
             "measurements_are_real": evidence.get("measurements_are_real") is True,
             "baseline_record_count": len(_as_list(artifact.get("baseline_records"))),
             "blocker_reasons": list(_as_list(evidence.get("blocker_reasons"))),
+            "target_type": "cpu_only" if kind == "cpu_baseline" else "gpu_only",
         }
     return {
         "evidence_status": evidence.get("evidence_status"),
@@ -739,11 +741,24 @@ def _campaign_status(
 def _write_real_run_evidence_artifacts(
     *,
     out_dir: Path,
+    cpu_baseline_evidence: Mapping[str, Any],
     baseline_evidence: Mapping[str, Any],
     candidate_evidence: Mapping[str, Any],
     candidate_attempts: list[Mapping[str, Any]] | None = None,
 ) -> dict[str, str]:
     artifact_paths: dict[str, str] = {}
+    cpu_baseline_artifact = _as_mapping(cpu_baseline_evidence.get("artifact"))
+    if cpu_baseline_artifact:
+        cpu_baseline_payload = dict(cpu_baseline_artifact)
+        cpu_baseline_payload["run_records"] = list(_as_list(cpu_baseline_evidence.get("run_records")))
+    else:
+        cpu_baseline_payload = {
+            "evidence_status": cpu_baseline_evidence.get("evidence_status"),
+            "measurements_are_real": False,
+            "target_type": "cpu_only",
+            "blocker_reasons": list(_as_list(cpu_baseline_evidence.get("blocker_reasons"))),
+            "run_records": list(_as_list(cpu_baseline_evidence.get("run_records"))),
+        }
     baseline_artifact = _as_mapping(baseline_evidence.get("artifact"))
     if baseline_artifact:
         baseline_payload = dict(baseline_artifact)
@@ -752,6 +767,7 @@ def _write_real_run_evidence_artifacts(
         baseline_payload = {
             "evidence_status": baseline_evidence.get("evidence_status"),
             "measurements_are_real": False,
+            "target_type": "gpu_only",
             "blocker_reasons": list(_as_list(baseline_evidence.get("blocker_reasons"))),
             "run_records": list(_as_list(baseline_evidence.get("run_records"))),
         }
@@ -762,9 +778,12 @@ def _write_real_run_evidence_artifacts(
         "candidate_evidence_attempts": list(candidate_attempts or []),
     }
     baseline_path = out_dir / "qe_ic_gpu_baseline_measurements_real_run.json"
+    cpu_baseline_path = out_dir / "qe_ic_cpu_baseline_measurements_real_run.json"
     candidate_path = out_dir / "qe_ic_candidate_high_fidelity_results_real_run.json"
+    _write_json(cpu_baseline_path, cpu_baseline_payload)
     _write_json(baseline_path, baseline_payload)
     _write_json(candidate_path, candidate_payload)
+    artifact_paths["cpu_baseline_measurements_real_run"] = str(cpu_baseline_path)
     artifact_paths["gpu_baseline_measurements_real_run"] = str(baseline_path)
     artifact_paths["candidate_high_fidelity_results_real_run"] = str(candidate_path)
     return artifact_paths
@@ -853,6 +872,26 @@ def run_qe_ic_real_opportunity_campaign(
         "run_if_available",
         "run_if_available_or_ingest_only",
     }
+    if should_run_baseline:
+        cpu_baseline_evidence = run_cpu_baseline_commands_if_available(
+            cases=cases,
+            environment_summary=environment,
+            repeat_count=int(_as_mapping(config.get("claim_policy")).get("minimum_repeated_runs", 3)),
+            run_root=output_dir / "runs",
+        )
+    else:
+        cpu_baseline_evidence = {
+            "evidence_status": "not_attempted",
+            "measurements_are_real": False,
+            "artifact": None,
+            "validation": {
+                "status": "not_applicable",
+                "errors": [],
+                "warnings": [{"field": "cpu_baseline", "message": "CPU baseline was not attempted in ingest mode"}],
+            },
+            "blocker_reasons": ["cpu_baseline_not_attempted"],
+            "run_records": [],
+        }
     if should_run_baseline:
         baseline_evidence = run_gpu_baseline_commands_if_available(
             cases=cases,
@@ -944,6 +983,7 @@ def run_qe_ic_real_opportunity_campaign(
         candidate_evidence_by_id=_candidate_evidence_by_id(candidate_evidence),
     )
     opportunity_summary = _attach_audit_to_opportunity_records(opportunity_summary, implementation_audit)
+    cpu_baseline_summary = _artifact_summary(cpu_baseline_evidence, kind="cpu_baseline")
     baseline_summary = _artifact_summary(baseline_evidence, kind="gpu_baseline")
     candidate_summary = _artifact_summary(candidate_evidence, kind="candidate")
     candidate_summary["attempt_count"] = len(candidate_attempts)
@@ -979,6 +1019,7 @@ def run_qe_ic_real_opportunity_campaign(
     real_run_artifacts = (
         _write_real_run_evidence_artifacts(
             out_dir=output_dir,
+            cpu_baseline_evidence=cpu_baseline_evidence,
             baseline_evidence=baseline_evidence,
             candidate_evidence=candidate_evidence,
             candidate_attempts=candidate_attempts,
@@ -1008,6 +1049,7 @@ def run_qe_ic_real_opportunity_campaign(
         "environment_summary": environment,
         "case_summary": cases,
         "profile_summary": profile_summary,
+        "cpu_baseline_summary": cpu_baseline_summary,
         "gpu_baseline_summary": baseline_summary,
         "candidate_selection": selected_candidates,
         "candidate_selection_summary": {

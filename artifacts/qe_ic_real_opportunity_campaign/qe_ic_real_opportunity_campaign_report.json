@@ -172,6 +172,15 @@
     }
   ],
   "claim_boundary": "No FPGA/GPU+FPGA superiority claim is made unless real or high-fidelity evidence passes the existing claim gate.",
+  "cpu_baseline_summary": {
+    "baseline_record_count": 0,
+    "blocker_reasons": [
+      "cpu_baseline_not_attempted"
+    ],
+    "evidence_status": "not_attempted",
+    "measurements_are_real": false,
+    "target_type": "cpu_only"
+  },
   "environment_summary": {
     "blockers": [
       "blocked_by_missing_systemc",
@@ -241,7 +250,8 @@
       "gpu_baseline_runs_missing"
     ],
     "evidence_status": "evidence_missing",
-    "measurements_are_real": false
+    "measurements_are_real": false,
+    "target_type": "gpu_only"
   },
   "implementation_audit": [
     {

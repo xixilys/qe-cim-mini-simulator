@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 
 from dse_v2.experiments import qe_ic_real_opportunity as campaign
+from dse_v2.experiments.qe_ic_real_opportunity import gpu_baseline as baseline_module
 from dse_v2.experiments.qe_ic_real_opportunity.candidate_evidence import (
     build_candidate_high_fidelity_evidence,
     candidate_evidence_from_csv,
@@ -1031,6 +1032,190 @@ def test_nonblocking_generates_benchmark_input_when_deck_missing(tmp_path: Path)
         "gpu_or_eda_failure",
     }
     assert campaign.validate_qe_ic_real_opportunity_campaign_report(report)["status"] == "passed"
+
+
+def test_nonblocking_report_includes_cpu_baseline_attempt_summary(tmp_path: Path):
+    config = _load_json(CONFIG_PATH)
+    config.pop("input_decks", None)
+    config["input_deck_search_paths"] = [str(tmp_path / "missing-inputs")]
+    config_path = tmp_path / "config.json"
+    _write_json(config_path, config)
+
+    report = campaign.run_qe_ic_real_opportunity_campaign(
+        config_path,
+        out_dir=tmp_path / "out",
+        execute_real=True,
+        allow_generated_inputs=True,
+        nonblocking=True,
+    )
+
+    assert "cpu_baseline_summary" in report
+    assert report["cpu_baseline_summary"]["target_type"] == "cpu_only"
+    assert report["cpu_baseline_summary"]["measurements_are_real"] is False
+    assert report["gpu_baseline_summary"]["target_type"] == "gpu_only"
+    assert report["gpu_baseline_summary"]["measurements_are_real"] is False
+    assert campaign.validate_qe_ic_real_opportunity_campaign_report(report)["status"] == "passed"
+
+
+def test_cpu_baseline_does_not_make_gpu_baseline_real_when_qe_is_cpu_only(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    bin_dir = tmp_path / "qe-bin"
+    bin_dir.mkdir()
+    pw = bin_dir / "pw.x"
+    pw.write_text(
+        "#!/bin/sh\n"
+        "if [ \"$1\" = \"-h\" ]; then echo 'Program PWSCF v.7.5'; exit 0; fi\n"
+        "echo \"cpu-only QE run $@\"\n",
+        encoding="utf-8",
+    )
+    pw.chmod(0o755)
+    deck = tmp_path / "ground_state_band_structure.in"
+    deck.write_text("&control\n calculation='scf'\n/\n", encoding="utf-8")
+    empty_bin = tmp_path / "empty-bin"
+    empty_bin.mkdir()
+    monkeypatch.setenv("PATH", str(empty_bin))
+    monkeypatch.setenv("QE_BIN", str(bin_dir))
+    monkeypatch.delenv("QE_ROOT", raising=False)
+    monkeypatch.delenv("ESPRESSO_ROOT", raising=False)
+    cases = [
+        {
+            "workload_family_id": "ground_state_band_structure",
+            "case_id": "controlled_cpu_only_case",
+            "program": "pw.x",
+            "input_deck_path": str(deck),
+            "input_deck_hash": "sha256:" + "1" * 64,
+            "precision": "fp64_mixed",
+            "case_status": "ready",
+            "run_command": f"{pw} -in {deck}",
+        }
+    ]
+    environment = probe_qe_ic_real_opportunity_environment(
+        {"qe_bin": str(bin_dir)},
+        repo_root=tmp_path,
+        include_qe_discovery=True,
+    )
+
+    assert hasattr(baseline_module, "run_cpu_baseline_commands_if_available")
+    cpu = baseline_module.run_cpu_baseline_commands_if_available(
+        cases=cases,
+        environment_summary=environment,
+        repeat_count=3,
+        run_root=tmp_path / "cpu-runs",
+    )
+    gpu = run_gpu_baseline_commands_if_available(
+        cases=cases,
+        environment_summary=environment,
+        repeat_count=3,
+        run_root=tmp_path / "gpu-runs",
+    )
+
+    assert cpu["measurements_are_real"] is True
+    assert gpu["measurements_are_real"] is False
+    assert "gpu_qe_binary_cpu_only" in gpu["blocker_reasons"]
+
+
+def test_generated_pseudo_missing_classifies_gpu_qe_unavailable(tmp_path: Path):
+    missing_deck = tmp_path / "generated_missing_pseudo.in"
+    missing_deck.write_text(
+        "\n".join(
+            [
+                "&control",
+                "  calculation = 'scf'",
+                "  pseudo_dir = './pseudo'",
+                "/",
+                "ATOMIC_SPECIES",
+                "  Si 28.0855 Si.pbe-n-kjpaw_psl.1.0.0.UPF",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    cases = [
+        {
+            "workload_family_id": "ground_state_band_structure",
+            "case_id": "generated_missing_pseudo",
+            "program": "pw.x",
+            "input_deck_path": str(missing_deck),
+            "input_deck_hash": "sha256:" + "1" * 64,
+            "precision": "fp64_mixed",
+            "case_status": "ready",
+            "case_origin": "generated_benchmark",
+            "scientific_claim_scope": "performance_benchmark_only",
+            "pseudo_status": "pseudo_missing",
+            "run_command": f"{tmp_path / 'missing-pw.x'} -in {missing_deck}",
+        }
+    ]
+    environment = {
+        "gpu": {"gpu_present": True, "gpu_model": "controlled-gpu"},
+        "tools": {
+            "qe": {"pw.x": str(tmp_path / "missing-pw.x")},
+            "qe_discovery": {
+                "programs": {
+                    "pw.x": {
+                        "path": str(tmp_path / "missing-pw.x"),
+                        "gpu_support": "detected",
+                    }
+                }
+            },
+        },
+    }
+
+    gpu = run_gpu_baseline_commands_if_available(
+        cases=cases,
+        environment_summary=environment,
+        repeat_count=3,
+        run_root=tmp_path / "gpu-runs",
+    )
+
+    assert gpu["measurements_are_real"] is False
+    assert "gpu_qe_execution_unavailable_due_to_pseudopotential" in gpu["blocker_reasons"]
+
+
+def test_generated_pseudo_missing_is_retained_when_qe_binary_is_cpu_only(tmp_path: Path):
+    deck = tmp_path / "generated_missing_pseudo.in"
+    deck.write_text("&control\n pseudo_dir='./pseudo'\n/\n", encoding="utf-8")
+    cases = [
+        {
+            "workload_family_id": "ground_state_band_structure",
+            "case_id": "generated_missing_pseudo",
+            "program": "pw.x",
+            "input_deck_path": str(deck),
+            "input_deck_hash": "sha256:" + "1" * 64,
+            "precision": "fp64_mixed",
+            "case_status": "ready",
+            "case_origin": "generated_benchmark",
+            "scientific_claim_scope": "performance_benchmark_only",
+            "pseudo_status": "pseudo_missing",
+            "run_command": f"{tmp_path / 'pw.x'} -in {deck}",
+        }
+    ]
+    environment = {
+        "gpu": {"gpu_present": False},
+        "tools": {
+            "qe": {"pw.x": str(tmp_path / "pw.x")},
+            "qe_discovery": {
+                "programs": {
+                    "pw.x": {
+                        "path": str(tmp_path / "pw.x"),
+                        "gpu_support": "not_detected",
+                    }
+                }
+            },
+        },
+    }
+
+    gpu = run_gpu_baseline_commands_if_available(
+        cases=cases,
+        environment_summary=environment,
+        repeat_count=3,
+        run_root=tmp_path / "gpu-runs",
+    )
+
+    assert gpu["measurements_are_real"] is False
+    assert "gpu_qe_binary_cpu_only" in gpu["blocker_reasons"]
+    assert "gpu_qe_execution_unavailable_due_to_pseudopotential" in gpu["blocker_reasons"]
 
 
 def test_nonblocking_generates_proxy_candidate_evidence_without_strong_claim(tmp_path: Path):

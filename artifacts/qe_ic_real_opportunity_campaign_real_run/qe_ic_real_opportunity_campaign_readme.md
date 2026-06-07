@@ -2,7 +2,7 @@
 
 ## Campaign Flow
 
-The campaign probes the local GPU, QE, profiler, SystemC, and EDA environment; prepares the ground_state_band_structure and electron_phonon_mobility cases; ingests or runs a real GPU baseline; selects Layer-4 FPGA/hybrid candidates; ingests candidate high-fidelity evidence; audits implementation quality; and calls the existing real-baseline opportunity claim gate.
+The campaign probes the local GPU, QE, profiler, SystemC, and EDA environment; prepares the ground_state_band_structure and electron_phonon_mobility cases; attempts CPU and GPU baselines without substituting CPU timing for GPU evidence; selects Layer-4 FPGA/hybrid candidates; ingests candidate high-fidelity evidence; audits implementation quality; and calls the existing real-baseline opportunity claim gate.
 
 ## Modes
 
@@ -10,7 +10,11 @@ The campaign probes the local GPU, QE, profiler, SystemC, and EDA environment; p
 
 ## Real GPU Baseline
 
-A real GPU baseline requires at least three repeated GPU-only QE runs for the same case, program, input_deck_hash, and precision. The baseline must carry `measurements_are_real=true` and `evidence_status=measured`.
+A real GPU baseline requires at least three repeated GPU-only QE runs for the same case, program, input_deck_hash, and precision. The baseline must carry `measurements_are_real=true` and `evidence_status=measured`. CPU-only QE timing is reported separately as CPU context and must not replace GPU-only evidence.
+
+## Generated Benchmark Boundary
+
+Nonblocking generated QE cases use `case_origin=generated_benchmark` and `scientific_claim_scope=performance_benchmark_only`. Missing pseudopotentials are reported explicitly; QE runtime is not fabricated.
 
 ## Candidate High-Fidelity Evidence
 

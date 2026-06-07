@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import math
+import os
 import subprocess
 import statistics
 import time
@@ -83,6 +84,239 @@ def _runtime_stats(runs: list[float]) -> dict[str, Any]:
 
 def _sha256_text(text: str) -> str:
     return "sha256:" + sha256(text.encode("utf-8", errors="replace")).hexdigest()
+
+
+def _qe_program_record(environment_summary: Mapping[str, Any], program: str) -> Mapping[str, Any]:
+    discovery = _as_mapping(_as_mapping(_as_mapping(environment_summary.get("tools")).get("qe_discovery")).get("programs"))
+    return _as_mapping(discovery.get(program))
+
+
+def _qe_gpu_support(environment_summary: Mapping[str, Any], program: str) -> str:
+    return str(_qe_program_record(environment_summary, program).get("gpu_support") or "unknown")
+
+
+def _qe_is_gpu_capable(environment_summary: Mapping[str, Any], program: str) -> bool:
+    return _qe_gpu_support(environment_summary, program) != "not_detected"
+
+
+def _case_declares_missing_pseudo(case: Mapping[str, Any]) -> bool:
+    return case.get("pseudo_status") == "pseudo_missing" or (
+        case.get("case_origin") == "generated_benchmark" and case.get("pseudo_file_path") in (None, "")
+    )
+
+
+def _output_reports_missing_pseudo(text: str) -> bool:
+    lowered = text.lower()
+    return "readpp" in lowered and "not found" in lowered and "pseudo" in lowered
+
+
+def _gpu_preflight_blocker(blockers: list[str]) -> dict[str, Any]:
+    return {
+        "evidence_status": "evidence_missing",
+        "measurements_are_real": False,
+        "artifact": None,
+        "validation": {
+            "status": "failed",
+            "errors": [{"field": "gpu_baseline_preflight", "message": ", ".join(blockers)}],
+        },
+        "blocker_reasons": blockers,
+        "run_records": [],
+    }
+
+
+def _run_ready_cases(
+    *,
+    cases: Sequence[Mapping[str, Any]],
+    environment_summary: Mapping[str, Any],
+    repeat_count: int,
+    timeout_seconds: int,
+    run_root: Path | None,
+    target_type: str,
+) -> dict[str, Any]:
+    ready_cases = [
+        case
+        for case in cases
+        if isinstance(case, Mapping)
+        and case.get("case_status") == "ready"
+        and isinstance(case.get("run_command"), str)
+        and case.get("run_command")
+    ]
+    if not ready_cases:
+        return {
+            "evidence_status": "evidence_missing",
+            "measurements_are_real": False,
+            "artifact": None,
+            "validation": {
+                "status": "not_applicable",
+                "errors": [],
+                "warnings": [{"field": "run_records", "message": f"no {target_type} baseline-ready cases supplied"}],
+            },
+            "blocker_reasons": [
+                "blocked_by_missing_input_deck"
+                if any(isinstance(case, Mapping) and case.get("case_status") == "input_deck_missing" for case in cases)
+                else f"{target_type}_baseline_runs_missing"
+            ],
+            "run_records": [],
+        }
+    tools = _as_mapping(environment_summary.get("tools"))
+    qe_tools = _as_mapping(tools.get("qe"))
+    gpu = _as_mapping(environment_summary.get("gpu"))
+    run_records: list[dict[str, Any]] = []
+    execution_records: list[dict[str, Any]] = []
+    for case in ready_cases:
+        program = str(case.get("program"))
+        if not qe_tools.get(program):
+            return {
+                "evidence_status": "evidence_missing",
+                "measurements_are_real": False,
+                "artifact": None,
+                "validation": {
+                    "status": "failed",
+                    "errors": [{"field": "environment.tools.qe", "message": f"{program} not available"}],
+                },
+                "blocker_reasons": ["blocked_by_missing_qe"],
+                "run_records": execution_records,
+            }
+        if target_type == "gpu_only":
+            preflight_blockers: list[str] = []
+            if not _qe_is_gpu_capable(environment_summary, program):
+                preflight_blockers.append("gpu_qe_binary_cpu_only")
+            if _case_declares_missing_pseudo(case):
+                preflight_blockers.append("gpu_qe_execution_unavailable_due_to_pseudopotential")
+            if preflight_blockers:
+                return _gpu_preflight_blocker(preflight_blockers)
+        command = str(case["run_command"])
+        if target_type == "cpu_only":
+            command = f"QE_ENABLE_GPU=0 CUDA_VISIBLE_DEVICES= {command}"
+        for run_index in range(repeat_count):
+            run_dir = (run_root or Path("runs/qe_ic_real_opportunity_campaign")) / str(case["case_id"]) / f"{target_type}_baseline"
+            run_dir.mkdir(parents=True, exist_ok=True)
+            stdout_path = run_dir / f"run_{run_index + 1:03d}.stdout.log"
+            stderr_path = run_dir / f"run_{run_index + 1:03d}.stderr.log"
+            start_timestamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+            start = time.perf_counter()
+            result = subprocess.run(
+                command,
+                shell=True,
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=timeout_seconds,
+                env={**os.environ, "CUDA_VISIBLE_DEVICES": ""} if target_type == "cpu_only" else None,
+            )
+            elapsed = time.perf_counter() - start
+            end_timestamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+            stdout_path.write_text(result.stdout or "", encoding="utf-8")
+            stderr_path.write_text(result.stderr or "", encoding="utf-8")
+            output = (result.stdout or "") + (result.stderr or "")
+            output_hash = _sha256_text(output)
+            if result.returncode != 0:
+                blocker = (
+                    "gpu_qe_execution_unavailable_due_to_pseudopotential"
+                    if target_type == "gpu_only" and _output_reports_missing_pseudo(output)
+                    else f"{target_type}_baseline_command_failed"
+                )
+                return {
+                    "evidence_status": "evidence_missing",
+                    "measurements_are_real": False,
+                    "artifact": None,
+                    "validation": {
+                        "status": "failed",
+                        "errors": [{"field": "run_command", "message": f"command failed on run {run_index + 1}"}],
+                    },
+                    "blocker_reasons": [blocker],
+                    "run_records": execution_records,
+                }
+            profile_hash = output_hash
+            execution_record = {
+                "workload_family_id": case["workload_family_id"],
+                "case_id": case["case_id"],
+                "program": program,
+                "input_deck_hash": case["input_deck_hash"],
+                "precision": case["precision"],
+                "target_type": target_type,
+                "command": command,
+                "start_timestamp": start_timestamp,
+                "end_timestamp": end_timestamp,
+                "runtime_seconds": elapsed,
+                "exit_code": result.returncode,
+                "stdout_log_path": str(stdout_path),
+                "stderr_log_path": str(stderr_path),
+                "output_hash": output_hash,
+                "profile_artifact_hash": profile_hash,
+                "nvidia_smi_log_path": None,
+                "gpu_utilization": None,
+                "gpu_memory_bandwidth_utilization": None,
+                "host_device_transfer_seconds": None,
+                "communication_seconds": None,
+            }
+            execution_records.append(execution_record)
+            run_records.append(
+                {
+                    key: execution_record[key]
+                    for key in (
+                        "workload_family_id",
+                        "case_id",
+                        "program",
+                        "input_deck_hash",
+                        "precision",
+                        "runtime_seconds",
+                        "gpu_utilization",
+                        "gpu_memory_bandwidth_utilization",
+                        "host_device_transfer_seconds",
+                        "communication_seconds",
+                        "profile_artifact_hash",
+                    )
+                }
+            )
+    baseline = build_gpu_baseline_measurements(
+        run_records=run_records,
+        platform={
+            "gpu_name": str(gpu.get("gpu_model") or ("cpu_only_disabled" if target_type == "cpu_only" else "unknown_gpu")),
+            "cpu_name": "local_host",
+            "memory": str(gpu.get("gpu_memory_total_mib") or "unknown_memory"),
+            "qe_version": str(_qe_program_record(environment_summary, str(ready_cases[0].get("program"))).get("version") or "unknown_qe"),
+            "cuda_version": str(gpu.get("cuda_version") or "unknown_cuda"),
+            "driver_version": str(gpu.get("driver_version") or "unknown_driver"),
+            "precision": str(ready_cases[0].get("precision") or "unknown_precision"),
+        },
+    )
+    baseline["run_records"] = execution_records
+    if target_type == "cpu_only":
+        artifact = _as_mapping(baseline.get("artifact"))
+        if artifact:
+            baseline_records = []
+            for record in _as_list(artifact.get("baseline_records")):
+                if isinstance(record, Mapping):
+                    baseline_records.append({**dict(record), "target_type": "cpu_only"})
+            baseline["artifact"] = {
+                **dict(artifact),
+                "measurement_role": "cpu_only_baseline",
+                "target_type": "cpu_only",
+                "baseline_records": baseline_records,
+                "claim_boundary": "CPU-only baseline timing context; not GPU-only baseline evidence.",
+            }
+    return baseline
+
+
+def run_cpu_baseline_commands_if_available(
+    *,
+    cases: Sequence[Mapping[str, Any]],
+    environment_summary: Mapping[str, Any],
+    repeat_count: int = 3,
+    timeout_seconds: int = 3600,
+    run_root: Path | None = None,
+) -> dict[str, Any]:
+    """Run ready CPU-only QE baseline commands when possible."""
+
+    return _run_ready_cases(
+        cases=cases,
+        environment_summary=environment_summary,
+        repeat_count=repeat_count,
+        timeout_seconds=timeout_seconds,
+        run_root=run_root,
+        target_type="cpu_only",
+    )
 
 
 def build_gpu_baseline_measurements(
@@ -258,127 +492,11 @@ def run_gpu_baseline_commands_if_available(
     run_root: Path | None = None,
 ) -> dict[str, Any]:
     """Run ready GPU-only baseline commands when the local environment allows it."""
-
-    ready_cases = [
-        case
-        for case in cases
-        if isinstance(case, Mapping)
-        and case.get("case_status") == "ready"
-        and isinstance(case.get("run_command"), str)
-        and case.get("run_command")
-    ]
-    if not ready_cases:
-        result = build_gpu_baseline_measurements(run_records=[], platform={})
-        blockers = [
-            "blocked_by_missing_input_deck"
-            if any(isinstance(case, Mapping) and case.get("case_status") == "input_deck_missing" for case in cases)
-            else "gpu_baseline_runs_missing"
-        ]
-        result["blocker_reasons"] = blockers
-        return result
-    gpu = _as_mapping(environment_summary.get("gpu"))
-    tools = _as_mapping(environment_summary.get("tools"))
-    qe_tools = _as_mapping(tools.get("qe"))
-    run_records: list[dict[str, Any]] = []
-    execution_records: list[dict[str, Any]] = []
-    for case in ready_cases:
-        program = str(case.get("program"))
-        if not qe_tools.get(program):
-            return {
-                "evidence_status": "evidence_missing",
-                "measurements_are_real": False,
-                "artifact": None,
-                "validation": {
-                    "status": "failed",
-                    "errors": [{"field": "environment.tools.qe", "message": f"{program} not available"}],
-                },
-                "blocker_reasons": ["blocked_by_missing_qe"],
-            }
-        command = str(case["run_command"])
-        for run_index in range(repeat_count):
-            run_dir = (run_root or Path("runs/qe_ic_real_opportunity_campaign")) / str(case["case_id"]) / "gpu_baseline"
-            run_dir.mkdir(parents=True, exist_ok=True)
-            stdout_path = run_dir / f"run_{run_index + 1:03d}.stdout.log"
-            stderr_path = run_dir / f"run_{run_index + 1:03d}.stderr.log"
-            start_timestamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-            start = time.perf_counter()
-            result = subprocess.run(
-                command,
-                shell=True,
-                check=False,
-                capture_output=True,
-                text=True,
-                timeout=timeout_seconds,
-            )
-            elapsed = time.perf_counter() - start
-            end_timestamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-            stdout_path.write_text(result.stdout or "", encoding="utf-8")
-            stderr_path.write_text(result.stderr or "", encoding="utf-8")
-            output_hash = _sha256_text((result.stdout or "") + (result.stderr or ""))
-            if result.returncode != 0:
-                return {
-                    "evidence_status": "evidence_missing",
-                    "measurements_are_real": False,
-                    "artifact": None,
-                    "validation": {
-                        "status": "failed",
-                        "errors": [{"field": "run_command", "message": f"command failed on run {run_index + 1}"}],
-                    },
-                    "blocker_reasons": ["gpu_baseline_command_failed"],
-                    "run_records": execution_records,
-                }
-            profile_hash = output_hash
-            execution_record = {
-                "workload_family_id": case["workload_family_id"],
-                "case_id": case["case_id"],
-                "program": program,
-                "input_deck_hash": case["input_deck_hash"],
-                "precision": case["precision"],
-                "command": command,
-                "start_timestamp": start_timestamp,
-                "end_timestamp": end_timestamp,
-                "runtime_seconds": elapsed,
-                "exit_code": result.returncode,
-                "stdout_log_path": str(stdout_path),
-                "stderr_log_path": str(stderr_path),
-                "output_hash": output_hash,
-                "profile_artifact_hash": profile_hash,
-                "nvidia_smi_log_path": None,
-                "gpu_utilization": None,
-                "gpu_memory_bandwidth_utilization": None,
-                "host_device_transfer_seconds": None,
-                "communication_seconds": None,
-            }
-            execution_records.append(execution_record)
-            run_records.append(
-                {
-                    key: execution_record[key]
-                    for key in (
-                        "workload_family_id",
-                        "case_id",
-                        "program",
-                        "input_deck_hash",
-                        "precision",
-                        "runtime_seconds",
-                        "gpu_utilization",
-                        "gpu_memory_bandwidth_utilization",
-                        "host_device_transfer_seconds",
-                        "communication_seconds",
-                        "profile_artifact_hash",
-                    )
-                }
-            )
-    baseline = build_gpu_baseline_measurements(
-        run_records=run_records,
-        platform={
-            "gpu_name": str(gpu.get("gpu_model") or "unknown_gpu"),
-            "cpu_name": "local_host",
-            "memory": str(gpu.get("gpu_memory_total_mib") or "unknown_memory"),
-            "qe_version": "unknown_qe",
-            "cuda_version": str(gpu.get("cuda_version") or "unknown_cuda"),
-            "driver_version": str(gpu.get("driver_version") or "unknown_driver"),
-            "precision": str(ready_cases[0].get("precision") or "unknown_precision"),
-        },
+    return _run_ready_cases(
+        cases=cases,
+        environment_summary=environment_summary,
+        repeat_count=repeat_count,
+        timeout_seconds=timeout_seconds,
+        run_root=run_root,
+        target_type="gpu_only",
     )
-    baseline["run_records"] = execution_records
-    return baseline
