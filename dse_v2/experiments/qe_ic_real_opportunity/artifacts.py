@@ -143,6 +143,8 @@ def write_qe_ic_real_opportunity_campaign_artifacts(
     config_path: Path,
     *,
     execute_real: bool = False,
+    allow_generated_inputs: bool = False,
+    nonblocking: bool = False,
 ) -> dict[str, Any]:
     """Write campaign report, validation, manifest, and README artifacts."""
 
@@ -151,7 +153,13 @@ def write_qe_ic_real_opportunity_campaign_artifacts(
         config = load_json_object(config_path)
         if config.get("schema_version") != "dse.qe_ic.real_opportunity_campaign_config.v1":
             raise QeIcRealOpportunityCampaignError("campaign config schema_version is incorrect")
-        report = run_qe_ic_real_opportunity_campaign(config_path, out_dir=out_dir, execute_real=execute_real)
+        report = run_qe_ic_real_opportunity_campaign(
+            config_path,
+            out_dir=out_dir,
+            execute_real=execute_real,
+            allow_generated_inputs=allow_generated_inputs,
+            nonblocking=nonblocking,
+        )
         validation = validate_qe_ic_real_opportunity_campaign_report(report)
     except (OSError, ValueError, QeIcRealOpportunityCampaignError) as exc:
         _remove_stale_canonical_artifacts(out_dir)

@@ -49,6 +49,13 @@ ALLOWED_CAMPAIGN_STATUSES = {
     "blocked_by_missing_qe",
     "blocked_by_missing_input_deck",
     "blocked_by_missing_candidate_evidence",
+    "completed_real_claimable",
+    "completed_proxy_only",
+    "completed_implementation_limited",
+    "completed_no_opportunity",
+    "gpu_execution_failed",
+    "eda_execution_failed",
+    "software_validation_failed",
 }
 ALLOWED_TOP_LEVEL_ANSWERS = {
     "opportunity_found",
@@ -58,6 +65,8 @@ ALLOWED_TOP_LEVEL_ANSWERS = {
     "blocked_by_missing_qe",
     "blocked_by_missing_input_deck",
     "blocked_by_missing_candidate_evidence",
+    "proxy_only_inconclusive",
+    "gpu_or_eda_failure",
     "inconclusive",
 }
 ALLOWED_ENVIRONMENT_STATUSES = {

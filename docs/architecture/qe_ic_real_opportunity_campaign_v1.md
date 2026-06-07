@@ -53,6 +53,13 @@ deck and executable are available, candidate evidence ingestion/attempt
 recording, and claim-gate analysis only when both baseline and candidate
 evidence are valid.
 
+`nonblocking` is selected with `--nonblocking --allow-generated-inputs`. It
+continues when real input decks, traces, SystemC configs, or candidate designs
+are missing by generating benchmark/proxy inputs and non-claimable proxy
+candidate evidence. Missing decks and missing candidate evidence become
+fallback reasons, not terminal statuses. GPU/QE execution failure and required
+EDA execution failure remain allowed terminal failures.
+
 Candidate execution can be configured under `candidate_evidence_execution`
 with `trace_replay`, `systemc_timing`, or `eda_resource_timing` entries. Each
 entry supplies a command, an `output_json` path, tool name, and version. The
@@ -67,7 +74,9 @@ The canonical command is:
 python3 dse_v2/scripts/dse/run_qe_ic_real_opportunity_campaign.py \
   --config dse_v2/testdata/qe_ic_real_opportunity/qe_ic_real_opportunity_campaign_config_template.json \
   --out artifacts/qe_ic_real_opportunity_campaign_real_run \
-  --execute-real
+  --execute-real \
+  --allow-generated-inputs \
+  --nonblocking
 ```
 
 ## Evidence Boundary

@@ -2,7 +2,7 @@
   "artifact_role": "qe_ic_real_gpu_vs_fpga_hybrid_opportunity_campaign",
   "campaign_id": "qe_ic_real_opportunity_campaign_v1",
   "claim_boundary": "This manifest registers the QE-IC real opportunity campaign artifacts. It is not GPU, FPGA, or GPU+FPGA superiority evidence.",
-  "overall_answer": "evidence_missing",
+  "overall_answer": "gpu_or_eda_failure",
   "producer": "dse_v2.experiments.qe_ic_real_opportunity",
   "readme_artifact": "qe_ic_real_opportunity_campaign_readme.md",
   "report_artifact": "qe_ic_real_opportunity_campaign_report.json",

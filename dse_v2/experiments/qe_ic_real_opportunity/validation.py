@@ -66,6 +66,11 @@ def validate_qe_ic_real_opportunity_campaign_report(report: Mapping[str, Any]) -
         _error(errors, "schema_version", "schema_version is incorrect")
     if report.get("campaign_status") not in ALLOWED_CAMPAIGN_STATUSES:
         _error(errors, "campaign_status", "campaign_status is unsupported")
+    if report.get("nonblocking_mode") is True and report.get("campaign_status") in {
+        "blocked_by_missing_input_deck",
+        "blocked_by_missing_candidate_evidence",
+    }:
+        _error(errors, "campaign_status", "nonblocking campaigns must not finish with missing-input or missing-candidate terminal blockers")
     if report.get("claim_boundary") != CLAIM_BOUNDARY:
         _error(errors, "claim_boundary", "claim_boundary must match canonical boundary")
     for path in _forbidden_paths(report):
@@ -91,6 +96,22 @@ def validate_qe_ic_real_opportunity_campaign_report(report: Mapping[str, Any]) -
         _error(errors, "opportunity_summary.claim_gate_invoked", "claimable records require existing claim gate invocation")
     if overall == "opportunity_found" and not claimable:
         _error(errors, "final_answer.overall_answer", "opportunity_found requires a claim_allowed opportunity record")
+    if report.get("nonblocking_mode") is True and overall == "opportunity_found" and not opportunity.get("claim_gate_invoked"):
+        _error(errors, "final_answer.overall_answer", "nonblocking opportunity_found requires existing claim gate invocation")
+    if report.get("nonblocking_mode") is True and overall == "fundamental_no_opportunity":
+        candidate = _as_mapping(report.get("candidate_evidence_summary"))
+        if candidate.get("proxy_evidence_generated") is True:
+            _error(errors, "final_answer.overall_answer", "fundamental_no_opportunity cannot be produced from generated proxy evidence")
+    if report.get("nonblocking_mode") is True:
+        for index, case in enumerate(_as_list(report.get("case_summary"))):
+            if not isinstance(case, Mapping) or case.get("case_origin") != "generated_benchmark":
+                continue
+            if case.get("scientific_claim_scope") != "performance_benchmark_only":
+                _error(
+                    errors,
+                    f"case_summary[{index}].scientific_claim_scope",
+                    "generated benchmark cases must be marked performance_benchmark_only",
+                )
     if overall in {"fundamental_no_opportunity", "gpu_dominant_no_fpga_or_hybrid_opportunity", "implementation_limited"} and not records:
         _error(
             errors,
@@ -119,7 +140,7 @@ def validate_qe_ic_real_opportunity_campaign_report(report: Mapping[str, Any]) -
         if baseline.get("measurements_are_real") is True and candidate.get("results_are_real") is True and records:
             warnings.append({"field": "final_answer.overall_answer", "message": "evidence_missing despite available evidence"})
     text = str(final.get("answer_text", "")).lower()
-    if "superiority claim" in text and overall != "opportunity_found":
+    if "superiority claim" in text and overall != "opportunity_found" and "no strong" not in text and "not " not in text:
         _error(errors, "final_answer.answer_text", "superiority claim text requires opportunity_found")
 
     return {

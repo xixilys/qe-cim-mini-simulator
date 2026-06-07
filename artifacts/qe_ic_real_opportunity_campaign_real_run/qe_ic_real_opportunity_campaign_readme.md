@@ -30,4 +30,4 @@ Do not claim FPGA-only or GPU+FPGA is faster than GPU-only unless the claim gate
 
 ## Current Answer
 
-Evidence is missing. No GPU-vs-FPGA or GPU-vs-hybrid claim is allowed without a validated real GPU baseline and candidate high-fidelity evidence.
+Campaign could not answer the question because GPU/QE execution was unavailable.

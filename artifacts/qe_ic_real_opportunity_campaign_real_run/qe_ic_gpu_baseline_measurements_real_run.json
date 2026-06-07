@@ -1,6 +1,6 @@
 {
   "blocker_reasons": [
-    "blocked_by_missing_input_deck"
+    "gpu_baseline_command_failed"
   ],
   "evidence_status": "evidence_missing",
   "measurements_are_real": false,

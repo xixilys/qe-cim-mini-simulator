@@ -15,6 +15,11 @@ PROGRAM_BY_FAMILY = {
     "electron_phonon_mobility": "epw.x",
 }
 
+GENERATED_CASE_ID_BY_FAMILY = {
+    "ground_state_band_structure": "generated_silicon_scf_pw_v0",
+    "electron_phonon_mobility": "generated_epw_proxy_v0",
+}
+
 
 def _sha256(path: Path) -> str:
     digest = hashlib.sha256()
@@ -168,3 +173,81 @@ def prepare_qe_ic_cases(config: Mapping[str, Any], *, out_dir: Path | None = Non
             }
         )
     return cases
+
+
+def generate_qe_ic_benchmark_cases(cases: list[Mapping[str, Any]], *, out_dir: Path) -> list[dict[str, Any]]:
+    """Generate small benchmark/proxy QE input decks for missing cases."""
+
+    generated_dir = out_dir / "generated_inputs"
+    generated_dir.mkdir(parents=True, exist_ok=True)
+    generated: list[dict[str, Any]] = []
+    for case in cases:
+        row = dict(case)
+        if row.get("case_status") == "ready":
+            generated.append(row)
+            continue
+        family_id = str(row.get("workload_family_id"))
+        program = str(row.get("program") or PROGRAM_BY_FAMILY.get(family_id, "pw.x"))
+        generated_case_id = GENERATED_CASE_ID_BY_FAMILY.get(family_id, f"generated_{family_id}_benchmark_v0")
+        deck_path = generated_dir / f"{generated_case_id}.in"
+        if program == "epw.x":
+            deck_text = "\n".join(
+                [
+                    "! Generated EPW proxy benchmark descriptor.",
+                    "! This is not a real mobility science input.",
+                    "&inputepw",
+                    "  prefix = 'generated_epw_proxy'",
+                    "  outdir = './tmp'",
+                    "/",
+                    "",
+                ]
+            )
+        else:
+            deck_text = "\n".join(
+                [
+                    "&control",
+                    "  calculation = 'scf'",
+                    "  prefix = 'generated_silicon_scf_pw_v0'",
+                    "  pseudo_dir = './pseudo'",
+                    "  outdir = './tmp'",
+                    "/",
+                    "&system",
+                    "  ibrav = 2",
+                    "  celldm(1) = 10.2",
+                    "  nat = 1",
+                    "  ntyp = 1",
+                    "  ecutwfc = 10.0",
+                    "/",
+                    "&electrons",
+                    "  conv_thr = 1.0d-6",
+                    "/",
+                    "ATOMIC_SPECIES",
+                    "  Si 28.0855 Si.pbe-n-kjpaw_psl.1.0.0.UPF",
+                    "ATOMIC_POSITIONS crystal",
+                    "  Si 0.00 0.00 0.00",
+                    "K_POINTS automatic",
+                    "  1 1 1 0 0 0",
+                    "",
+                ]
+            )
+        deck_path.write_text(deck_text, encoding="utf-8")
+        row.update(
+            {
+                "case_id": generated_case_id,
+                "input_deck_path": str(deck_path),
+                "input_deck_hash": _sha256(deck_path),
+                "case_status": "ready",
+                "evidence_status": "generated_benchmark",
+                "case_origin": "generated_benchmark",
+                "scientific_claim_scope": "performance_benchmark_only",
+                "run_command": f"{program} -in {deck_path}",
+                "profile_command": f"nsys profile {program} -in {deck_path}",
+                "template_created": False,
+                "template_note": "Generated benchmark/proxy workload; not real device-physics input.",
+                "pseudo_file_path": None,
+                "pseudo_hash": None,
+                "pseudo_status": "pseudo_missing",
+            }
+        )
+        generated.append(row)
+    return generated

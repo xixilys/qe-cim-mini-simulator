@@ -1,0 +1,6 @@
+! Generated EPW proxy benchmark descriptor.
+! This is not a real mobility science input.
+&inputepw
+  prefix = 'generated_epw_proxy'
+  outdir = './tmp'
+/

@@ -1,7 +1,8 @@
 {
+  "allow_generated_inputs": true,
   "campaign_id": "qe_ic_real_opportunity_campaign_v1",
   "campaign_layer": "qe_ic_real_gpu_vs_fpga_hybrid_opportunity_campaign_v1",
-  "campaign_status": "blocked_by_missing_input_deck",
+  "campaign_status": "gpu_execution_failed",
   "candidate_evidence_attempts": [
     {
       "attempt": "ingest_existing_candidate_evidence",
@@ -40,6 +41,7 @@
     ],
     "candidate_result_count": 0,
     "evidence_status": "evidence_missing",
+    "proxy_evidence_generated": false,
     "results_are_real": false
   },
   "candidate_selection": [
@@ -139,33 +141,45 @@
   },
   "case_summary": [
     {
-      "case_id": "ground_state_band_structure_initial_real_case",
-      "case_status": "input_deck_missing",
-      "evidence_status": "evidence_missing",
-      "input_deck_hash": null,
-      "input_deck_path": "artifacts/qe_ic_real_opportunity_campaign_real_run/case_templates/ground_state_band_structure.in",
+      "case_id": "generated_silicon_scf_pw_v0",
+      "case_origin": "generated_benchmark",
+      "case_status": "ready",
+      "evidence_status": "generated_benchmark",
+      "input_deck_hash": "sha256:0b0b03b891da168457df91563c800c41d123a4d8310bf29b0489f27a8f53d5bb",
+      "input_deck_path": "artifacts/qe_ic_real_opportunity_campaign_real_run/generated_inputs/generated_silicon_scf_pw_v0.in",
       "output_directory": "artifacts/qe_ic_real_opportunity_campaign_real_run/ground_state_band_structure",
       "precision": "fp64_mixed",
-      "profile_command": null,
+      "profile_command": "nsys profile /usr/bin/pw.x -in artifacts/qe_ic_real_opportunity_campaign_real_run/generated_inputs/generated_silicon_scf_pw_v0.in",
       "program": "pw.x",
-      "run_command": null,
-      "template_created": true,
-      "template_note": "Template descriptor only; no physical QE input data is invented.",
+      "pseudo_file_path": null,
+      "pseudo_hash": null,
+      "pseudo_status": "pseudo_missing",
+      "qe_executable_path": "/usr/bin/pw.x",
+      "run_command": "/usr/bin/pw.x -in artifacts/qe_ic_real_opportunity_campaign_real_run/generated_inputs/generated_silicon_scf_pw_v0.in",
+      "scientific_claim_scope": "performance_benchmark_only",
+      "template_created": false,
+      "template_note": "Generated benchmark/proxy workload; not real device-physics input.",
       "workload_family_id": "ground_state_band_structure"
     },
     {
-      "case_id": "electron_phonon_mobility_initial_real_case",
-      "case_status": "input_deck_missing",
-      "evidence_status": "evidence_missing",
-      "input_deck_hash": null,
-      "input_deck_path": "artifacts/qe_ic_real_opportunity_campaign_real_run/case_templates/electron_phonon_mobility.in",
+      "case_id": "generated_epw_proxy_v0",
+      "case_origin": "generated_benchmark",
+      "case_status": "ready",
+      "evidence_status": "generated_benchmark",
+      "input_deck_hash": "sha256:797608b469777bf2caf8966eb77a43c2accbf5fcd7d84025504a6ac39d7d3da4",
+      "input_deck_path": "artifacts/qe_ic_real_opportunity_campaign_real_run/generated_inputs/generated_epw_proxy_v0.in",
       "output_directory": "artifacts/qe_ic_real_opportunity_campaign_real_run/electron_phonon_mobility",
       "precision": "fp64_mixed",
-      "profile_command": null,
+      "profile_command": "nsys profile /usr/bin/epw.x -in artifacts/qe_ic_real_opportunity_campaign_real_run/generated_inputs/generated_epw_proxy_v0.in",
       "program": "epw.x",
-      "run_command": null,
-      "template_created": true,
-      "template_note": "Template descriptor only; no physical QE input data is invented.",
+      "pseudo_file_path": null,
+      "pseudo_hash": null,
+      "pseudo_status": "pseudo_missing",
+      "qe_executable_path": "/usr/bin/epw.x",
+      "run_command": "/usr/bin/epw.x -in artifacts/qe_ic_real_opportunity_campaign_real_run/generated_inputs/generated_epw_proxy_v0.in",
+      "scientific_claim_scope": "performance_benchmark_only",
+      "template_created": false,
+      "template_note": "Generated benchmark/proxy workload; not real device-physics input.",
       "workload_family_id": "electron_phonon_mobility"
     }
   ],
@@ -174,7 +188,6 @@
     "blockers": [
       "blocked_by_missing_systemc",
       "blocked_by_missing_eda",
-      "blocked_by_missing_input_deck",
       "blocked_by_missing_candidate_evidence",
       "blocked_by_missing_candidate_design"
     ],
@@ -259,26 +272,26 @@
   },
   "execution_mode": "execute_real",
   "final_answer": {
-    "answer_text": "Evidence is missing. No GPU-vs-FPGA or GPU-vs-hybrid claim is allowed without a validated real GPU baseline and candidate high-fidelity evidence.",
+    "answer_text": "Campaign could not answer the question because GPU/QE execution was unavailable.",
     "best_candidate_id": null,
     "best_speedup_vs_gpu": null,
     "missing_evidence": [
       "blocked_by_missing_candidate_evidence",
-      "blocked_by_missing_input_deck"
+      "gpu_baseline_command_failed"
     ],
     "next_actions": [
       "provide at least three GPU-only QE baseline runs",
       "provide workflow-level trace replay/SystemC/gem5/real-QE candidate evidence",
       "provide Vivado or DC resource/timing evidence when making FPGA/ASIC feasibility claims"
     ],
-    "overall_answer": "evidence_missing",
+    "overall_answer": "gpu_or_eda_failure",
     "what_we_can_say": "The campaign can prepare cases, select Layer-4 candidates, and report exact missing evidence.",
     "what_we_cannot_say": "We cannot say FPGA-only or GPU+FPGA is faster than the GPU-only baseline without measured baseline and high-fidelity candidate evidence."
   },
   "gpu_baseline_summary": {
     "baseline_record_count": 0,
     "blocker_reasons": [
-      "blocked_by_missing_input_deck"
+      "gpu_baseline_command_failed"
     ],
     "evidence_status": "evidence_missing",
     "measurements_are_real": false
@@ -348,6 +361,7 @@
     "profile_logs": "dse_v2/testdata/qe_ic_real_opportunity/missing_profile_logs.json"
   },
   "mode": "run_if_available_or_ingest_only",
+  "nonblocking_mode": true,
   "opportunity_summary": {
     "claim_boundary": "No FPGA/GPU+FPGA superiority claim is made unless real or high-fidelity evidence passes the existing claim gate.",
     "claim_gate_invoked": false,
@@ -361,12 +375,12 @@
         "claim_allowed": false,
         "claim_blockers": [
           "blocked_by_missing_candidate_evidence",
-          "blocked_by_missing_input_deck"
+          "gpu_baseline_command_failed"
         ],
         "claim_strength": "none",
         "failure_reasons": [
           "blocked_by_missing_candidate_evidence",
-          "blocked_by_missing_input_deck"
+          "gpu_baseline_command_failed"
         ],
         "final_interpretation": "No claim is allowed until matching real GPU baseline and candidate high-fidelity evidence exist.",
         "gpu_baseline_id": null,
@@ -387,12 +401,12 @@
         "claim_allowed": false,
         "claim_blockers": [
           "blocked_by_missing_candidate_evidence",
-          "blocked_by_missing_input_deck"
+          "gpu_baseline_command_failed"
         ],
         "claim_strength": "none",
         "failure_reasons": [
           "blocked_by_missing_candidate_evidence",
-          "blocked_by_missing_input_deck"
+          "gpu_baseline_command_failed"
         ],
         "final_interpretation": "No claim is allowed until matching real GPU baseline and candidate high-fidelity evidence exist.",
         "gpu_baseline_id": null,
@@ -413,12 +427,12 @@
         "claim_allowed": false,
         "claim_blockers": [
           "blocked_by_missing_candidate_evidence",
-          "blocked_by_missing_input_deck"
+          "gpu_baseline_command_failed"
         ],
         "claim_strength": "none",
         "failure_reasons": [
           "blocked_by_missing_candidate_evidence",
-          "blocked_by_missing_input_deck"
+          "gpu_baseline_command_failed"
         ],
         "final_interpretation": "No claim is allowed until matching real GPU baseline and candidate high-fidelity evidence exist.",
         "gpu_baseline_id": null,
@@ -436,7 +450,7 @@
       "best_speedup_vs_gpu": null,
       "overall_verdict": "evidence_missing",
       "what_evidence_is_missing": [
-        "blocked_by_missing_input_deck",
+        "gpu_baseline_command_failed",
         "blocked_by_missing_candidate_evidence"
       ]
     }

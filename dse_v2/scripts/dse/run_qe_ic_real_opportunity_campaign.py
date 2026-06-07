@@ -30,6 +30,16 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
         action="store_true",
         help="Attempt real QE/GPU/candidate evidence execution when tools and inputs are available.",
     )
+    parser.add_argument(
+        "--allow-generated-inputs",
+        action="store_true",
+        help="Allow generated benchmark/proxy input decks when real input decks are missing.",
+    )
+    parser.add_argument(
+        "--nonblocking",
+        action="store_true",
+        help="Continue with generated benchmark/proxy evidence instead of terminal missing-input/evidence blockers.",
+    )
     return parser.parse_args(list(argv))
 
 
@@ -39,6 +49,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         args.out,
         args.config,
         execute_real=args.execute_real,
+        allow_generated_inputs=args.allow_generated_inputs,
+        nonblocking=args.nonblocking,
     )
     print(json.dumps(result, indent=2, sort_keys=True))
     return 0 if result["status"] == "passed" else 1

@@ -1,4 +1,5 @@
 {
+  "allow_generated_inputs": false,
   "campaign_id": "qe_ic_real_opportunity_campaign_v1",
   "campaign_layer": "qe_ic_real_gpu_vs_fpga_hybrid_opportunity_campaign_v1",
   "campaign_status": "evidence_missing",
@@ -40,6 +41,7 @@
     ],
     "candidate_result_count": 0,
     "evidence_status": "evidence_missing",
+    "proxy_evidence_generated": false,
     "results_are_real": false
   },
   "candidate_selection": [
@@ -306,6 +308,7 @@
     "profile_logs": "dse_v2/testdata/qe_ic_real_opportunity/missing_profile_logs.json"
   },
   "mode": "run_if_available_or_ingest_only",
+  "nonblocking_mode": false,
   "opportunity_summary": {
     "claim_boundary": "No FPGA/GPU+FPGA superiority claim is made unless real or high-fidelity evidence passes the existing claim gate.",
     "claim_gate_invoked": false,

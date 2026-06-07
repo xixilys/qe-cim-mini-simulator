@@ -21,6 +21,7 @@ from dse_v2.experiments.qe_ic_real_opportunity.candidate_evidence import build_c
 from dse_v2.experiments.qe_ic_real_opportunity.candidate_evidence import candidate_evidence_from_csv
 from dse_v2.experiments.qe_ic_real_opportunity.candidate_evidence import candidate_evidence_from_ingest_payload
 from dse_v2.experiments.qe_ic_real_opportunity.candidate_selection import select_layer4_candidates_for_campaign
+from dse_v2.experiments.qe_ic_real_opportunity.case_setup import generate_qe_ic_benchmark_cases
 from dse_v2.experiments.qe_ic_real_opportunity.case_setup import prepare_qe_ic_cases
 from dse_v2.experiments.qe_ic_real_opportunity.environment_probe import probe_qe_ic_real_opportunity_environment
 from dse_v2.experiments.qe_ic_real_opportunity.gpu_baseline import baseline_from_ingest_payload
@@ -91,6 +92,7 @@ def _artifact_summary(evidence: Mapping[str, Any], *, kind: str) -> dict[str, An
         "results_are_real": evidence.get("results_are_real") is True,
         "candidate_result_count": len(_as_list(artifact.get("candidate_results"))),
         "blocker_reasons": list(_as_list(evidence.get("blocker_reasons"))),
+        "proxy_evidence_generated": evidence.get("proxy_evidence_generated") is True,
     }
 
 
@@ -303,6 +305,86 @@ def _run_candidate_evidence_if_available(
     return candidate_evidence_from_ingest_payload(None, selected_candidates=selected_candidates), attempts
 
 
+def _proxy_candidate_evidence(
+    *,
+    selected_candidates: list[Mapping[str, Any]],
+    baseline_evidence: Mapping[str, Any],
+) -> dict[str, Any]:
+    baseline_artifact = _as_mapping(baseline_evidence.get("artifact"))
+    baseline_records = _as_list(baseline_artifact.get("baseline_records"))
+    baseline = _as_mapping(baseline_records[0] if baseline_records else {})
+    runtime_mean = baseline.get("runtime_seconds_mean") if isinstance(baseline.get("runtime_seconds_mean"), int | float) else 100.0
+    records: list[dict[str, Any]] = []
+    for index, candidate in enumerate(selected_candidates):
+        candidate_id = str(candidate.get("candidate_id"))
+        proxy_runtime = float(runtime_mean) * (1.20 + 0.05 * index)
+        records.append(
+            {
+                "candidate_id": candidate_id,
+                "workload_family_id": str(candidate.get("workload_family_id") or baseline.get("workload_family_id") or "generated_benchmark"),
+                "motif_id": str(candidate.get("motif_id") or "generated_proxy_motif"),
+                "target_type": str(candidate.get("target_type") or "fpga_only"),
+                "case_id": str(baseline.get("case_id") or "generated_proxy_case"),
+                "program": str(baseline.get("program") or "proxy"),
+                "input_deck_hash": str(baseline.get("input_deck_hash") or "sha256:" + "0" * 64),
+                "precision": str(baseline.get("precision") or "unknown_precision"),
+                "evidence_level": "generated_trace_proxy",
+                "evidence_status": "proxy_estimate",
+                "implementation_maturity": "generated_stub",
+                "trace_origin": "generated_from_qe_runtime_and_layer2_profile",
+                "claim_strength": "none",
+                "architecture_summary": {
+                    "architecture_id": f"{candidate_id}_generated_proxy_stub",
+                    "architecture_family": str(candidate.get("template_family") or "generated_proxy"),
+                    "gpu_role": "baseline_reference",
+                    "fpga_role": str(candidate.get("target_candidate_kind") or "generated_stub"),
+                    "host_role": "scf_control_retained",
+                    "dataflow_summary": "generated analytical trace proxy from baseline runtime and Layer-4 motif metadata",
+                    "memory_interface": "proxy_memory_interface",
+                    "synchronization_model": "proxy_barrier",
+                },
+                "runtime_seconds_runs": [proxy_runtime * 0.99, proxy_runtime, proxy_runtime * 1.01],
+                "runtime_seconds_mean": proxy_runtime,
+                "runtime_seconds_std": proxy_runtime * 0.01,
+                "confidence_interval_95": {"low": proxy_runtime * 0.98, "high": proxy_runtime * 1.02},
+                "workflow_runtime_seconds_mean": proxy_runtime,
+                "kernel_runtime_seconds_mean": proxy_runtime * 0.75,
+                "transfer_overhead_seconds": proxy_runtime * 0.10,
+                "workflow_overhead_seconds": proxy_runtime * 0.05,
+                "resource": {
+                    "resource_feasible": True,
+                    "timing_feasible": True,
+                    "lut_utilization": 0.10,
+                    "ff_utilization": 0.10,
+                    "bram_utilization": 0.05,
+                    "dsp_utilization": 0.05,
+                    "hbm_port_utilization": 0.0,
+                    "fmax_mhz": 200.0,
+                },
+                "evidence_artifact_hash": _stable_hash({"candidate_id": candidate_id, "proxy_runtime": proxy_runtime}),
+                "tool_provenance": {
+                    "tool": "generated_trace_proxy",
+                    "version": "v0",
+                    "run_id": f"{candidate_id}_generated_proxy",
+                    "config_hash": _stable_hash(dict(candidate)),
+                    "output_artifact_hash": _stable_hash({"candidate_id": candidate_id, "kind": "generated_proxy"}),
+                },
+            }
+        )
+    return {
+        "evidence_status": "proxy_estimate",
+        "results_are_real": False,
+        "artifact": {
+            "schema_version": "dse.qe_ic.candidate_high_fidelity_results.v1",
+            "results_are_real": False,
+            "candidate_results": records,
+        },
+        "validation": {"status": "not_applicable", "errors": [], "warnings": [{"field": "candidate_results", "message": "generated proxy evidence is not claim-gate eligible"}]},
+        "blocker_reasons": [],
+        "proxy_evidence_generated": True,
+    }
+
+
 def _missing_opportunity_records(
     *,
     selected_candidates: list[Mapping[str, Any]],
@@ -458,6 +540,52 @@ def _top_level_from_gate(opportunity_summary: Mapping[str, Any], implementation_
     return "inconclusive"
 
 
+def _proxy_opportunity_records(
+    *,
+    selected_candidates: list[Mapping[str, Any]],
+    baseline_evidence: Mapping[str, Any],
+    candidate_evidence: Mapping[str, Any],
+) -> list[dict[str, Any]]:
+    baseline_artifact = _as_mapping(baseline_evidence.get("artifact"))
+    baseline_records = _as_list(baseline_artifact.get("baseline_records"))
+    baseline = _as_mapping(baseline_records[0] if baseline_records else {})
+    baseline_runtime = baseline.get("runtime_seconds_mean") if isinstance(baseline.get("runtime_seconds_mean"), int | float) else None
+    candidate_records = {
+        str(record.get("candidate_id")): record
+        for record in _as_list(_as_mapping(candidate_evidence.get("artifact")).get("candidate_results"))
+        if isinstance(record, Mapping)
+    }
+    records: list[dict[str, Any]] = []
+    for candidate in selected_candidates:
+        candidate_id = str(candidate.get("candidate_id"))
+        candidate_record = _as_mapping(candidate_records.get(candidate_id))
+        candidate_runtime = candidate_record.get("workflow_runtime_seconds_mean")
+        speedup = float(baseline_runtime) / float(candidate_runtime) if isinstance(baseline_runtime, int | float) and isinstance(candidate_runtime, int | float) and candidate_runtime else None
+        records.append(
+            {
+                "candidate_id": candidate_id,
+                "workload_family_id": candidate.get("workload_family_id"),
+                "motif_id": candidate.get("motif_id"),
+                "target_type": candidate.get("target_type"),
+                "architecture_summary": {
+                    "template_id": candidate.get("template_id"),
+                    "template_family": candidate.get("template_family"),
+                },
+                "gpu_baseline_id": baseline.get("baseline_id"),
+                "speedup_vs_gpu_mean": speedup,
+                "speedup_vs_gpu_conservative_ci": None,
+                "verdict": "proxy_only_inconclusive",
+                "claim_strength": "none",
+                "claim_allowed": False,
+                "claim_blockers": ["generated_proxy_not_claim_gate_eligible"],
+                "failure_reasons": ["generated_proxy_not_claim_gate_eligible"],
+                "implementation_quality_classification": "proxy_only_inconclusive",
+                "final_interpretation": "Generated proxy/stub evidence is not eligible for a strong GPU-vs-FPGA claim.",
+            }
+        )
+    return records
+
+
 def _attach_audit_to_opportunity_records(
     opportunity_summary: Mapping[str, Any],
     implementation_audit: list[Mapping[str, Any]],
@@ -576,9 +704,23 @@ def _campaign_status(
     environment: Mapping[str, Any],
     *,
     execute_real: bool = False,
+    nonblocking: bool = False,
+    candidate_summary: Mapping[str, Any] | None = None,
 ) -> str:
     if final_answer.get("overall_answer") == "opportunity_found":
-        return "measured"
+        return "completed_real_claimable" if nonblocking else "measured"
+    if nonblocking:
+        if final_answer.get("overall_answer") == "proxy_only_inconclusive":
+            return "completed_proxy_only"
+        if final_answer.get("overall_answer") == "implementation_limited":
+            return "completed_implementation_limited"
+        if final_answer.get("overall_answer") == "fundamental_no_opportunity":
+            return "completed_no_opportunity"
+        if final_answer.get("overall_answer") == "gpu_or_eda_failure":
+            return "gpu_execution_failed"
+        if _as_mapping(candidate_summary).get("proxy_evidence_generated") is True:
+            return "completed_proxy_only"
+        return "completed_proxy_only"
     if execute_real:
         blockers = set(str(row) for row in _as_list(environment.get("blockers")))
         if "blocked_by_missing_qe" in blockers:
@@ -652,6 +794,8 @@ def run_qe_ic_real_opportunity_campaign(
     *,
     out_dir: Path | None = None,
     execute_real: bool = False,
+    allow_generated_inputs: bool = False,
+    nonblocking: bool = False,
 ) -> dict[str, Any]:
     """Run or ingest a QE-IC real opportunity campaign."""
 
@@ -683,6 +827,9 @@ def run_qe_ic_real_opportunity_campaign(
         out_dir=output_dir if execute_real else Path("artifacts/qe_ic_real_opportunity_campaign"),
     )
     if execute_real:
+        cases = _bind_discovered_qe_paths(cases, environment)
+    if execute_real and allow_generated_inputs and nonblocking and not any(case.get("case_status") == "ready" for case in cases):
+        cases = generate_qe_ic_benchmark_cases(cases, out_dir=output_dir)
         cases = _bind_discovered_qe_paths(cases, environment)
     if execute_real and not any(case.get("case_status") == "ready" for case in cases):
         environment.setdefault("blockers", []).append("blocked_by_missing_input_deck")
@@ -746,17 +893,47 @@ def run_qe_ic_real_opportunity_campaign(
             candidate_path_text=candidate_path_text,
             candidate_payload=candidate_payload,
         )
+    if nonblocking and candidate_evidence.get("results_are_real") is not True and baseline_evidence.get("measurements_are_real") is True:
+        candidate_evidence = _proxy_candidate_evidence(
+            selected_candidates=selected_candidates,
+            baseline_evidence=baseline_evidence,
+        )
+        candidate_attempts = [
+            *candidate_attempts,
+            {
+                "attempt": "generated_trace_proxy",
+                "status": "generated",
+                "reason": "candidate design/trace evidence missing; generated non-claimable proxy evidence",
+            },
+        ]
     if candidate_evidence.get("results_are_real") is not True:
         environment.setdefault("blockers", []).append("blocked_by_missing_candidate_evidence")
         environment.setdefault("blockers", []).append("blocked_by_missing_candidate_design")
-    opportunity_summary = _run_existing_gate(
-        out_dir=output_dir,
-        config=config,
-        layer_artifacts=layer_artifacts,
-        baseline_evidence=baseline_evidence,
-        candidate_evidence=candidate_evidence,
-        selected_candidates=selected_candidates,
-    )
+    if nonblocking and candidate_evidence.get("proxy_evidence_generated") is True:
+        opportunity_summary = {
+            "claim_gate_invoked": False,
+            "opportunity_records": _proxy_opportunity_records(
+                selected_candidates=selected_candidates,
+                baseline_evidence=baseline_evidence,
+                candidate_evidence=candidate_evidence,
+            ),
+            "system_conclusion": {
+                "overall_verdict": "proxy_only_inconclusive",
+                "best_candidate_id": None,
+                "best_speedup_vs_gpu": None,
+                "what_evidence_is_missing": [],
+            },
+            "claim_boundary": CLAIM_BOUNDARY,
+        }
+    else:
+        opportunity_summary = _run_existing_gate(
+            out_dir=output_dir,
+            config=config,
+            layer_artifacts=layer_artifacts,
+            baseline_evidence=baseline_evidence,
+            candidate_evidence=candidate_evidence,
+            selected_candidates=selected_candidates,
+        )
     implementation_audit = audit_candidate_implementation_quality(
         candidate_selection=selected_candidates,
         opportunity_records=[
@@ -776,6 +953,29 @@ def run_qe_ic_real_opportunity_campaign(
         baseline_summary=baseline_summary,
         candidate_summary=candidate_summary,
     )
+    if nonblocking and candidate_summary.get("proxy_evidence_generated") is True and final_answer.get("overall_answer") == "inconclusive":
+        final_answer["overall_answer"] = "proxy_only_inconclusive"
+        final_answer["answer_text"] = (
+            "Generated benchmark/proxy evidence was produced, but it is not claim-gate eligible; "
+            "no strong GPU-vs-FPGA superiority claim is allowed."
+        )
+        final_answer["what_we_can_say"] = "The campaign continued with generated benchmark/proxy evidence."
+        final_answer["what_we_cannot_say"] = "Generated proxy/stub evidence is not final measured acceleration evidence."
+    if nonblocking and candidate_summary.get("proxy_evidence_generated") is True and final_answer.get("overall_answer") == "evidence_missing":
+        final_answer["overall_answer"] = "proxy_only_inconclusive"
+        final_answer["answer_text"] = (
+            "Generated benchmark/proxy evidence was produced, but it is not claim-gate eligible; "
+            "no strong GPU-vs-FPGA superiority claim is allowed."
+        )
+    if nonblocking and candidate_summary.get("proxy_evidence_generated") is True and final_answer.get("overall_answer") == "implementation_limited":
+        final_answer["overall_answer"] = "proxy_only_inconclusive"
+        final_answer["answer_text"] = (
+            "Generated proxy/stub evidence is available, but it is not final measured performance; "
+            "no strong GPU-vs-FPGA superiority claim is allowed."
+        )
+    if nonblocking and baseline_summary.get("measurements_are_real") is not True and final_answer.get("overall_answer") == "evidence_missing":
+        final_answer["overall_answer"] = "gpu_or_eda_failure"
+        final_answer["answer_text"] = "Campaign could not answer the question because GPU/QE execution was unavailable."
     real_run_artifacts = (
         _write_real_run_evidence_artifacts(
             out_dir=output_dir,
@@ -791,9 +991,17 @@ def run_qe_ic_real_opportunity_campaign(
         "campaign_id": config.get("campaign_id"),
         "campaign_layer": CAMPAIGN_LAYER,
         "producer": PRODUCER,
-        "campaign_status": _campaign_status(final_answer, environment, execute_real=execute_real),
+        "campaign_status": _campaign_status(
+            final_answer,
+            environment,
+            execute_real=execute_real,
+            nonblocking=nonblocking,
+            candidate_summary=candidate_summary,
+        ),
         "mode": config.get("mode"),
         "execution_mode": "execute_real" if execute_real else "safe_template",
+        "nonblocking_mode": nonblocking,
+        "allow_generated_inputs": allow_generated_inputs,
         "research_question": config.get("research_question"),
         "input_artifact_index": input_paths,
         "real_run_artifacts": real_run_artifacts,

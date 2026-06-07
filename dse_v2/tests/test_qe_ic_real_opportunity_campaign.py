@@ -1005,6 +1005,91 @@ def test_execute_real_without_qe_or_input_deck_returns_blocked_report(
     assert campaign.validate_qe_ic_real_opportunity_campaign_report(report)["status"] == "passed"
 
 
+def test_nonblocking_generates_benchmark_input_when_deck_missing(tmp_path: Path):
+    config = _load_json(CONFIG_PATH)
+    config.pop("input_decks", None)
+    config["input_deck_search_paths"] = [str(tmp_path / "missing-inputs")]
+    config_path = tmp_path / "config.json"
+    _write_json(config_path, config)
+
+    report = campaign.run_qe_ic_real_opportunity_campaign(
+        config_path,
+        out_dir=tmp_path / "out",
+        execute_real=True,
+        allow_generated_inputs=True,
+        nonblocking=True,
+    )
+
+    generated_cases = [case for case in report["case_summary"] if case.get("case_origin") == "generated_benchmark"]
+    assert generated_cases
+    assert all(case["scientific_claim_scope"] == "performance_benchmark_only" for case in generated_cases)
+    assert all(Path(case["input_deck_path"]).exists() for case in generated_cases)
+    assert report["campaign_status"] != "blocked_by_missing_input_deck"
+    assert report["final_answer"]["overall_answer"] in {
+        "proxy_only_inconclusive",
+        "implementation_limited",
+        "gpu_or_eda_failure",
+    }
+    assert campaign.validate_qe_ic_real_opportunity_campaign_report(report)["status"] == "passed"
+
+
+def test_nonblocking_generates_proxy_candidate_evidence_without_strong_claim(tmp_path: Path):
+    candidate = _tracked_layer4_candidate()
+    baseline_path = tmp_path / "baseline_runs.json"
+    _write_json(
+        baseline_path,
+        {
+            "platform": {
+                "gpu_name": "controlled-a100",
+                "cpu_name": "controlled-host",
+                "memory": "80GB",
+                "qe_version": "7.5",
+                "cuda_version": "12.4",
+                "driver_version": "controlled",
+                "precision": "fp64_mixed",
+            },
+            "run_records": _measured_baseline_runs(candidate),
+        },
+    )
+    config = _load_json(CONFIG_PATH)
+    config["input_artifacts"]["gpu_baseline_runs"] = str(baseline_path)
+    config["input_artifacts"]["candidate_high_fidelity_results"] = str(tmp_path / "missing_candidate.json")
+    config_path = tmp_path / "config.json"
+    _write_json(config_path, config)
+
+    report = campaign.run_qe_ic_real_opportunity_campaign(
+        config_path,
+        out_dir=tmp_path / "out",
+        execute_real=True,
+        allow_generated_inputs=True,
+        nonblocking=True,
+    )
+
+    assert report["campaign_status"] == "completed_proxy_only"
+    assert report["final_answer"]["overall_answer"] == "proxy_only_inconclusive"
+    assert report["candidate_evidence_summary"]["results_are_real"] is False
+    assert report["candidate_evidence_summary"]["proxy_evidence_generated"] is True
+    assert all(row["claim_allowed"] is False for row in report["opportunity_summary"]["opportunity_records"])
+    assert report["final_answer"]["best_candidate_id"] is None
+    assert campaign.validate_qe_ic_real_opportunity_campaign_report(report)["status"] == "passed"
+
+
+def test_validator_rejects_nonblocking_missing_input_terminal_status(tmp_path: Path):
+    report = campaign.run_qe_ic_real_opportunity_campaign(
+        CONFIG_PATH,
+        out_dir=tmp_path,
+        execute_real=True,
+        allow_generated_inputs=True,
+        nonblocking=True,
+    )
+    report["campaign_status"] = "blocked_by_missing_input_deck"
+
+    validation = campaign.validate_qe_ic_real_opportunity_campaign_report(report)
+
+    assert validation["status"] == "failed"
+    assert any("nonblocking" in error["message"] for error in validation["errors"])
+
+
 def test_execute_real_uses_discovered_qe_path_for_baseline(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -1115,6 +1200,31 @@ def test_cli_accepts_execute_real_as_thin_wrapper(tmp_path: Path):
     assert result.returncode == 0, result.stderr
     assert json.loads(result.stdout)["status"] == "passed"
     assert (tmp_path / "qe_ic_real_opportunity_campaign_report.json").exists()
+
+
+def test_cli_accepts_nonblocking_and_allow_generated_inputs(tmp_path: Path):
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(CLI_PATH),
+            "--config",
+            str(CONFIG_PATH),
+            "--out",
+            str(tmp_path),
+            "--execute-real",
+            "--allow-generated-inputs",
+            "--nonblocking",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout)["status"] == "passed"
+    report = _load_json(tmp_path / "qe_ic_real_opportunity_campaign_report.json")
+    assert report["execution_mode"] == "execute_real"
+    assert report["nonblocking_mode"] is True
 
 
 def test_readme_explains_real_campaign_interpretation():
