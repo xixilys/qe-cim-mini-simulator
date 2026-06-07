@@ -264,6 +264,13 @@ def test_qe_probe_hash_ignores_qe_start_timestamp():
     assert normalized_qe_probe_output_hash(first, returncode=1) == normalized_qe_probe_output_hash(second, returncode=1)
 
 
+def test_qe_probe_hash_ignores_single_digit_second_timestamp():
+    first = "Program PWSCF v.6.7MaX starts on  8Jun2026 at  0:20: 2\nWaiting for input"
+    second = "Program PWSCF v.6.7MaX starts on  8Jun2026 at  0:20: 9\nWaiting for input"
+
+    assert normalized_qe_probe_output_hash(first, returncode=1) == normalized_qe_probe_output_hash(second, returncode=1)
+
+
 def test_qe_discovery_report_omits_volatile_raw_probe_hash(tmp_path: Path):
     report = campaign.run_qe_ic_real_opportunity_campaign(
         CONFIG_PATH,

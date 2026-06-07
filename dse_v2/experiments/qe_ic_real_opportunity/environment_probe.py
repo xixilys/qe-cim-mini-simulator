@@ -30,7 +30,7 @@ def _normalize_qe_probe_output(output: str) -> str:
     for line in output.splitlines():
         normalized_lines.append(
             re.sub(
-                r"(starts on\s+).*?(\s+at\s+)\d{1,2}:\d{2}:\d{2}",
+                r"(starts on\s+).*?(\s+at\s+)\s*\d{1,2}:\s*\d{1,2}:\s*\d{1,2}",
                 r"\1<date>\2<time>",
                 line,
                 flags=re.IGNORECASE,
