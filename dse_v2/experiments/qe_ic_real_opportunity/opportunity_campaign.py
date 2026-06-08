@@ -23,6 +23,7 @@ from dse_v2.experiments.qe_ic_real_opportunity.candidate_evidence import candida
 from dse_v2.experiments.qe_ic_real_opportunity.candidate_selection import select_layer4_candidates_for_campaign
 from dse_v2.experiments.qe_ic_real_opportunity.case_setup import generate_qe_ic_benchmark_cases
 from dse_v2.experiments.qe_ic_real_opportunity.case_setup import prepare_qe_ic_cases
+from dse_v2.experiments.qe_ic_real_opportunity.eda_stub_evidence import build_generated_eda_stub_evidence
 from dse_v2.experiments.qe_ic_real_opportunity.environment_probe import probe_qe_ic_real_opportunity_environment
 from dse_v2.experiments.qe_ic_real_opportunity.gpu_baseline import baseline_from_ingest_payload
 from dse_v2.experiments.qe_ic_real_opportunity.gpu_baseline import run_cpu_baseline_commands_if_available
@@ -720,6 +721,10 @@ def _campaign_status(
             return "completed_no_opportunity"
         if final_answer.get("overall_answer") == "gpu_or_eda_failure":
             return "gpu_execution_failed"
+        if final_answer.get("overall_answer") == "gpu_qe_build_failed":
+            return "gpu_qe_build_failed"
+        if final_answer.get("overall_answer") == "gpu_qe_binary_cpu_only":
+            return "gpu_qe_binary_cpu_only"
         if _as_mapping(candidate_summary).get("proxy_evidence_generated") is True:
             return "completed_proxy_only"
         return "completed_proxy_only"
@@ -744,6 +749,7 @@ def _write_real_run_evidence_artifacts(
     cpu_baseline_evidence: Mapping[str, Any],
     baseline_evidence: Mapping[str, Any],
     candidate_evidence: Mapping[str, Any],
+    eda_stub_evidence: Mapping[str, Any] | None = None,
     candidate_attempts: list[Mapping[str, Any]] | None = None,
 ) -> dict[str, str]:
     artifact_paths: dict[str, str] = {}
@@ -780,20 +786,37 @@ def _write_real_run_evidence_artifacts(
     baseline_path = out_dir / "qe_ic_gpu_baseline_measurements_real_run.json"
     cpu_baseline_path = out_dir / "qe_ic_cpu_baseline_measurements_real_run.json"
     candidate_path = out_dir / "qe_ic_candidate_high_fidelity_results_real_run.json"
+    eda_stub_path = out_dir / "qe_ic_candidate_eda_stub_evidence_real_run.json"
     _write_json(cpu_baseline_path, cpu_baseline_payload)
     _write_json(baseline_path, baseline_payload)
     _write_json(candidate_path, candidate_payload)
+    if eda_stub_evidence is not None and _as_mapping(eda_stub_evidence.get("artifact")):
+        _write_json(eda_stub_path, _as_mapping(eda_stub_evidence.get("artifact")))
+        artifact_paths["candidate_eda_stub_evidence_real_run"] = str(eda_stub_path)
     artifact_paths["cpu_baseline_measurements_real_run"] = str(cpu_baseline_path)
     artifact_paths["gpu_baseline_measurements_real_run"] = str(baseline_path)
     artifact_paths["candidate_high_fidelity_results_real_run"] = str(candidate_path)
     return artifact_paths
 
 
+def _shell_env_prefix(env: Mapping[str, Any]) -> str:
+    parts: list[str] = []
+    for key, value in env.items():
+        if not isinstance(key, str) or not key or not isinstance(value, str):
+            continue
+        escaped = value.replace("'", "'\\''")
+        parts.append(f"{key}='{escaped}'")
+    return " ".join(parts)
+
+
 def _bind_discovered_qe_paths(
     cases: list[dict[str, Any]],
     environment: Mapping[str, Any],
 ) -> list[dict[str, Any]]:
-    qe_tools = _as_mapping(_as_mapping(environment.get("tools")).get("qe"))
+    tools = _as_mapping(environment.get("tools"))
+    qe_tools = _as_mapping(tools.get("qe"))
+    runtime_env = {str(key): str(value) for key, value in _as_mapping(tools.get("qe_runtime_env")).items() if isinstance(value, str)}
+    env_prefix = _shell_env_prefix(runtime_env)
     bound: list[dict[str, Any]] = []
     for case in cases:
         row = dict(case)
@@ -802,8 +825,11 @@ def _bind_discovered_qe_paths(
         input_deck = row.get("input_deck_path")
         if row.get("case_status") == "ready" and isinstance(executable, str) and executable and isinstance(input_deck, str):
             row["qe_executable_path"] = executable
-            row["run_command"] = f"{executable} -in {input_deck}"
-            row["profile_command"] = f"nsys profile {executable} -in {input_deck}"
+            row["run_environment"] = runtime_env
+            command = f"{executable} -in {input_deck}"
+            row["run_command"] = f"{env_prefix} {command}".strip()
+            profile_command = f"nsys profile {executable} -in {input_deck}"
+            row["profile_command"] = f"{env_prefix} {profile_command}".strip()
         bound.append(row)
     return bound
 
@@ -945,9 +971,22 @@ def run_qe_ic_real_opportunity_campaign(
                 "reason": "candidate design/trace evidence missing; generated non-claimable proxy evidence",
             },
         ]
+    eda_stub_evidence: dict[str, Any] | None = None
+    if execute_real and nonblocking and selected_candidates:
+        eda_stub_evidence = build_generated_eda_stub_evidence(
+            selected_candidates=selected_candidates,
+            environment=environment,
+            out_dir=output_dir,
+            timeout_seconds=int(_as_mapping(config.get("claim_policy")).get("candidate_evidence_timeout_seconds", 120)),
+        )
+        candidate_attempts = [
+            *candidate_attempts,
+            dict(_as_mapping(eda_stub_evidence.get("attempt"))),
+        ]
     if candidate_evidence.get("results_are_real") is not True:
         environment.setdefault("blockers", []).append("blocked_by_missing_candidate_evidence")
-        environment.setdefault("blockers", []).append("blocked_by_missing_candidate_design")
+        if not eda_stub_evidence or eda_stub_evidence.get("blocker_reasons"):
+            environment.setdefault("blockers", []).append("blocked_by_missing_candidate_design")
     if nonblocking and candidate_evidence.get("proxy_evidence_generated") is True:
         opportunity_summary = {
             "claim_gate_invoked": False,
@@ -1014,14 +1053,27 @@ def run_qe_ic_real_opportunity_campaign(
             "no strong GPU-vs-FPGA superiority claim is allowed."
         )
     if nonblocking and baseline_summary.get("measurements_are_real") is not True and final_answer.get("overall_answer") == "evidence_missing":
-        final_answer["overall_answer"] = "gpu_or_eda_failure"
-        final_answer["answer_text"] = "Campaign could not answer the question because GPU/QE execution was unavailable."
+        baseline_blockers = set(str(row) for row in _as_list(baseline_summary.get("blocker_reasons")))
+        if "gpu_qe_build_failed" in baseline_blockers:
+            final_answer["overall_answer"] = "gpu_qe_build_failed"
+            final_answer["answer_text"] = (
+                "GPU-enabled QE build or discovery failed; no strong GPU-vs-FPGA superiority claim is allowed."
+            )
+        elif "gpu_qe_binary_cpu_only" in baseline_blockers:
+            final_answer["overall_answer"] = "gpu_qe_binary_cpu_only"
+            final_answer["answer_text"] = (
+                "The available QE binary is CPU-only; no strong GPU-vs-FPGA superiority claim is allowed."
+            )
+        else:
+            final_answer["overall_answer"] = "gpu_or_eda_failure"
+            final_answer["answer_text"] = "Campaign could not answer the question because GPU/QE execution was unavailable."
     real_run_artifacts = (
         _write_real_run_evidence_artifacts(
             out_dir=output_dir,
             cpu_baseline_evidence=cpu_baseline_evidence,
             baseline_evidence=baseline_evidence,
             candidate_evidence=candidate_evidence,
+            eda_stub_evidence=eda_stub_evidence,
             candidate_attempts=candidate_attempts,
         )
         if execute_real

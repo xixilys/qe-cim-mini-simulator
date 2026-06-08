@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import re
+import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Sequence
 
@@ -700,6 +701,9 @@ def parse_qe_pw_input(source: Any, *, source_path: Optional[str] = None, run_id:
 def _qe_assignment_field(namelist: str, key: str) -> Optional[str]:
     mapping = {
         ("control", "calculation"): "input.calculation",
+        ("control", "prefix"): "input.prefix",
+        ("control", "outdir"): "input.outdir",
+        ("control", "pseudo_dir"): "input.pseudo_dir",
         ("system", "nat"): "dimension.nat",
         ("system", "ntyp"): "dimension.ntyp",
         ("system", "nbnd"): "dimension.nbnd",
@@ -737,6 +741,22 @@ def parse_qe_pw_log(source: Any, *, source_path: Optional[str] = None, run_id: O
         lower = line.lower()
         if not line:
             continue
+        match = re.search(r"program\s+pwscf\s+v\.?\s*([0-9][0-9A-Za-z._-]*)", lower)
+        if match:
+            facts.append(_fact("runtime.qe_version", match.group(1), source_type="log", source_path=path, evidence_level="observed_runtime", confidence="high", raw_excerpt=line, run_id=run_id))
+            continue
+        match = re.search(r"number of mpi processes:\s*(\d+)", lower)
+        if match:
+            facts.append(_fact("runtime.mpi_processes", int(match.group(1)), unit="count", source_type="log", source_path=path, evidence_level="observed_runtime", confidence="high", raw_excerpt=line, run_id=run_id))
+            continue
+        match = re.search(r"parallel version\s*\(mpi\),\s*running on\s*(\d+)\s*processors", lower)
+        if match:
+            facts.append(_fact("runtime.mpi_processes", int(match.group(1)), unit="count", source_type="log", source_path=path, evidence_level="observed_runtime", confidence="high", raw_excerpt=line, run_id=run_id))
+            continue
+        match = re.search(r"number of openmp threads:\s*(\d+)", lower)
+        if match:
+            facts.append(_fact("runtime.openmp_threads", int(match.group(1)), unit="count", source_type="log", source_path=path, evidence_level="observed_runtime", confidence="high", raw_excerpt=line, run_id=run_id))
+            continue
         match = re.search(r"number of k points\s*=\s*(\d+)", lower)
         if match:
             facts.append(_fact("dimension.kpoint_count", int(match.group(1)), unit="count", source_type="log", source_path=path, evidence_level="observed_preprocessed", confidence="high", raw_excerpt=line, run_id=run_id))
@@ -758,6 +778,18 @@ def parse_qe_pw_log(source: Any, *, source_path: Optional[str] = None, run_id: O
         match = re.search(r"convergence has been achieved in\s+(\d+)\s+iterations", lower)
         if match:
             facts.append(_fact("iteration.scf.count", int(match.group(1)), unit="count", source_type="log", source_path=path, evidence_level="observed_runtime", confidence="high", raw_excerpt=line, run_id=run_id))
+            continue
+        match = re.search(r"total energy\s*=\s*([-+]?\d+(?:\.\d*)?(?:[de][-+]?\d+)?)\s*ry", lower)
+        if match:
+            facts.append(_fact("observable.final_total_energy_ry", float(match.group(1).replace("d", "e")), unit="Ry", source_type="log", source_path=path, evidence_level="observed_output", confidence="high", raw_excerpt=line, run_id=run_id))
+            continue
+        match = re.search(r"estimated scf accuracy\s*[<=>]+\s*([-+]?\d+(?:\.\d*)?(?:[de][-+]?\d+)?)\s*ry", lower)
+        if match:
+            facts.append(_fact("observable.scf_accuracy_ry", float(match.group(1).replace("d", "e")), unit="Ry", source_type="log", source_path=path, evidence_level="observed_output", confidence="high", raw_excerpt=line, run_id=run_id))
+            continue
+        match = re.search(r"fermi energy is\s*([-+]?\d+(?:\.\d*)?(?:[de][-+]?\d+)?)\s*ev", lower)
+        if match:
+            facts.append(_fact("observable.fermi_energy_ev", float(match.group(1).replace("d", "e")), unit="eV", source_type="log", source_path=path, evidence_level="observed_output", confidence="high", raw_excerpt=line, run_id=run_id))
             continue
         if re.search(r"iteration\s*#\s*\d+", lower):
             iteration_count += 1
@@ -832,6 +864,173 @@ def parse_qe_profile(source: Any, *, source_path: Optional[str] = None, run_id: 
             if isinstance(item, Mapping):
                 facts.extend(parse_qe_profile({"phases": [item]}, source_path=path, run_id=run_id))
     return facts
+
+
+def parse_qe_data_file_schema_xml(source: Any, *, source_path: Optional[str] = None, run_id: Optional[str] = None) -> List[SourceFact]:
+    """Parse selected QE ``data-file-schema.xml`` metadata facts."""
+
+    text, detected_path = _read_text_source(source)
+    path = source_path or detected_path
+    try:
+        root = ET.fromstring(text)
+    except ET.ParseError as exc:
+        return [_fact(
+            "artifact.qe_metadata_xml.parse_error",
+            str(exc),
+            source_type="generated",
+            source_path=path,
+            evidence_level="observed_artifact",
+            confidence="low",
+            raw_excerpt="unparseable QE XML metadata",
+            run_id=run_id,
+        )]
+
+    facts: List[SourceFact] = []
+    atomic_structure = _first_xml_element(root, "atomic_structure")
+    if atomic_structure is not None and atomic_structure.get("nat"):
+        facts.append(_fact(
+            "dimension.nat",
+            _xml_int(atomic_structure.get("nat")),
+            unit="count",
+            source_type="log",
+            source_path=path,
+            evidence_level="observed_metadata",
+            confidence="high",
+            raw_excerpt="atomic_structure@nat",
+            run_id=run_id,
+        ))
+
+    for tag, field, unit in [
+        ("ecutwfc", "parameter.ecutwfc", "Ry"),
+        ("ecutrho", "parameter.ecutrho", "Ry"),
+        ("npw", "dimension.npw", "count"),
+        ("nbnd", "dimension.nbnd", "count"),
+        ("nks", "dimension.kpoint_count", "count"),
+        ("fermi_energy", "observable.fermi_energy_ev", "eV"),
+    ]:
+        element = _first_xml_element(root, tag)
+        if element is None:
+            continue
+        value = _xml_float(element.text)
+        if value is None:
+            continue
+        facts.append(_fact(
+            field,
+            int(value) if unit == "count" else value,
+            unit=unit,
+            source_type="log",
+            source_path=path,
+            evidence_level="observed_output" if field.startswith("observable.") else "observed_metadata",
+            confidence="high",
+            raw_excerpt=f"{tag}: {element.text.strip() if element.text else ''}",
+            run_id=run_id,
+        ))
+
+    for tag, field in [
+        ("fft_grid", "dimension.fft_grid"),
+        ("smooth_fft_grid", "dimension.smooth_fft_grid"),
+    ]:
+        grid = _xml_grid(_first_xml_element(root, tag))
+        if not grid:
+            continue
+        facts.append(_fact(
+            field,
+            grid,
+            unit="grid",
+            source_type="log",
+            source_path=path,
+            evidence_level="observed_metadata",
+            confidence="high",
+            raw_excerpt=f"{tag}: {grid}",
+            run_id=run_id,
+        ))
+        if tag == "fft_grid":
+            facts.append(_fact(
+                "dimension.nfft",
+                grid[0] * grid[1] * grid[2],
+                unit="count",
+                source_type="log",
+                source_path=path,
+                evidence_level="observed_metadata",
+                confidence="high",
+                raw_excerpt=f"{tag}: {grid}",
+                run_id=run_id,
+            ))
+
+    eigenvalues = _xml_number_streams(root, "eigenvalues")
+    occupations = _xml_number_streams(root, "occupations")
+    if eigenvalues:
+        facts.extend([
+            _fact("observable.eigenvalue_count", len(eigenvalues), unit="count", source_type="log", source_path=path, evidence_level="observed_output", confidence="high", raw_excerpt="QE XML eigenvalues", run_id=run_id),
+            _fact("observable.eigenvalue_min_ev", min(eigenvalues), unit="eV", source_type="log", source_path=path, evidence_level="observed_output", confidence="high", raw_excerpt="QE XML eigenvalues", run_id=run_id),
+            _fact("observable.eigenvalue_max_ev", max(eigenvalues), unit="eV", source_type="log", source_path=path, evidence_level="observed_output", confidence="high", raw_excerpt="QE XML eigenvalues", run_id=run_id),
+        ])
+    if occupations:
+        facts.append(_fact(
+            "observable.occupation_count",
+            len(occupations),
+            unit="count",
+            source_type="log",
+            source_path=path,
+            evidence_level="observed_output",
+            confidence="high",
+            raw_excerpt="QE XML occupations",
+            run_id=run_id,
+        ))
+    return facts
+
+
+def _xml_local_name(tag: str) -> str:
+    return tag.rsplit("}", 1)[-1] if "}" in tag else tag
+
+
+def _first_xml_element(root: ET.Element, local_name: str) -> Optional[ET.Element]:
+    for element in root.iter():
+        if _xml_local_name(str(element.tag)) == local_name:
+            return element
+    return None
+
+
+def _xml_float(value: Any) -> Optional[float]:
+    if value is None:
+        return None
+    text = str(value).strip().replace("D", "E").replace("d", "e")
+    try:
+        return float(text)
+    except Exception:
+        return None
+
+
+def _xml_int(value: Any) -> int:
+    parsed = _xml_float(value)
+    return int(parsed) if parsed is not None else 0
+
+
+def _xml_grid(element: Optional[ET.Element]) -> List[int]:
+    if element is None:
+        return []
+    values = [
+        _xml_int(element.get("nr1") or element.get("n1")),
+        _xml_int(element.get("nr2") or element.get("n2")),
+        _xml_int(element.get("nr3") or element.get("n3")),
+    ]
+    if all(value > 0 for value in values):
+        return values
+    numbers = [_xml_int(token) for token in (element.text or "").replace(",", " ").split()]
+    numbers = [value for value in numbers if value > 0]
+    return numbers[:3] if len(numbers) >= 3 else []
+
+
+def _xml_number_streams(root: ET.Element, local_name: str) -> List[float]:
+    numbers: List[float] = []
+    for element in root.iter():
+        if _xml_local_name(str(element.tag)) != local_name:
+            continue
+        for token in (element.text or "").replace(",", " ").split():
+            value = _xml_float(token)
+            if value is not None:
+                numbers.append(value)
+    return numbers
 
 
 def _parse_qe_profile_text(text: str, *, source_path: Optional[str], run_id: Optional[str]) -> List[SourceFact]:

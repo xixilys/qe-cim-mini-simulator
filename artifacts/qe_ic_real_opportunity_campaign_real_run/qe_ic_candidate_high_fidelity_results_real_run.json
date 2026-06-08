@@ -1,38 +1,180 @@
 {
-  "blocker_reasons": [
-    "blocked_by_missing_candidate_evidence"
-  ],
-  "candidate_evidence_attempts": [
+  "candidate_results": [
     {
-      "attempt": "ingest_existing_candidate_evidence",
-      "path": "dse_v2/testdata/qe_ic_real_opportunity/missing_candidate_high_fidelity_results.json",
-      "reason": "no configured candidate evidence artifact was loadable",
-      "status": "not_configured"
+      "architecture_summary": {
+        "architecture_family": "fpga_fft",
+        "architecture_id": "qeic_l4_fpga_candidate_ground_state_band_structure_fft_transpose_fpga_only_fpga_fft_transpose_engine_9bfbea2b1f_generated_proxy_stub",
+        "dataflow_summary": "generated analytical trace proxy from baseline runtime and Layer-4 motif metadata",
+        "fpga_role": "fpga_fft_transpose_pipeline",
+        "gpu_role": "baseline_reference",
+        "host_role": "scf_control_retained",
+        "memory_interface": "proxy_memory_interface",
+        "synchronization_model": "proxy_barrier"
+      },
+      "candidate_id": "qeic_l4_fpga_candidate_ground_state_band_structure_fft_transpose_fpga_only_fpga_fft_transpose_engine_9bfbea2b1f",
+      "case_id": "generated_silicon_scf_pw_v0",
+      "claim_strength": "none",
+      "confidence_interval_95": {
+        "high": 1.090710276817088,
+        "low": 1.0479373247850452
+      },
+      "evidence_artifact_hash": "sha256:6b01de08139be1953fe1a7e34a33729655e10acafdd9f4b400e02f3609e3468d",
+      "evidence_level": "generated_trace_proxy",
+      "evidence_status": "proxy_estimate",
+      "implementation_maturity": "generated_stub",
+      "input_deck_hash": "sha256:9ca34c374fdb247acc953fbbe9ea8d98b503a3f4d733492fd215765baccc293e",
+      "kernel_runtime_seconds_mean": 0.8019928506008,
+      "motif_id": "fft_transpose",
+      "precision": "fp64_mixed",
+      "program": "pw.x",
+      "resource": {
+        "bram_utilization": 0.05,
+        "dsp_utilization": 0.05,
+        "ff_utilization": 0.1,
+        "fmax_mhz": 200.0,
+        "hbm_port_utilization": 0.0,
+        "lut_utilization": 0.1,
+        "resource_feasible": true,
+        "timing_feasible": true
+      },
+      "runtime_seconds_mean": 1.0693238008010666,
+      "runtime_seconds_runs": [
+        1.058630562793056,
+        1.0693238008010666,
+        1.0800170388090773
+      ],
+      "runtime_seconds_std": 0.010693238008010666,
+      "target_type": "fpga_only",
+      "tool_provenance": {
+        "config_hash": "sha256:88b2f1baa8306644d44868cb1b4e398034829f80f7dffd2d98fc9f93637e497c",
+        "output_artifact_hash": "sha256:7ddeea49af3ad8a9941df0968dacc87164c6c18879325da33284fdf6d763691b",
+        "run_id": "qeic_l4_fpga_candidate_ground_state_band_structure_fft_transpose_fpga_only_fpga_fft_transpose_engine_9bfbea2b1f_generated_proxy",
+        "tool": "generated_trace_proxy",
+        "version": "v0"
+      },
+      "trace_origin": "generated_from_qe_runtime_and_layer2_profile",
+      "transfer_overhead_seconds": 0.10693238008010666,
+      "workflow_overhead_seconds": 0.05346619004005333,
+      "workflow_runtime_seconds_mean": 1.0693238008010666,
+      "workload_family_id": "ground_state_band_structure"
     },
     {
-      "attempt": "trace_replay",
-      "path": "dse_v2/testdata/qe_ic_real_opportunity/missing_profile_logs.json",
-      "policy_enabled": true,
-      "reason": "profile trace input is missing",
-      "status": "blocked",
-      "tool_available": true
+      "architecture_summary": {
+        "architecture_family": "hybrid_sidecar",
+        "architecture_id": "qeic_l4_hybrid_candidate_phonon_dfpt_reduction_collective_gpu_fpga_hybrid_hybrid_reduction_sidecar_423b828955_generated_proxy_stub",
+        "dataflow_summary": "generated analytical trace proxy from baseline runtime and Layer-4 motif metadata",
+        "fpga_role": "hybrid_reduction_sidecar",
+        "gpu_role": "baseline_reference",
+        "host_role": "scf_control_retained",
+        "memory_interface": "proxy_memory_interface",
+        "synchronization_model": "proxy_barrier"
+      },
+      "candidate_id": "qeic_l4_hybrid_candidate_phonon_dfpt_reduction_collective_gpu_fpga_hybrid_hybrid_reduction_sidecar_423b828955",
+      "case_id": "generated_silicon_scf_pw_v0",
+      "claim_strength": "none",
+      "confidence_interval_95": {
+        "high": 1.1361565383511334,
+        "low": 1.0916013799844222
+      },
+      "evidence_artifact_hash": "sha256:a8bec9f02055e6e144a6792a6f1e2fe12449aa6eb8abf28d1c6ba7de62063454",
+      "evidence_level": "generated_trace_proxy",
+      "evidence_status": "proxy_estimate",
+      "implementation_maturity": "generated_stub",
+      "input_deck_hash": "sha256:9ca34c374fdb247acc953fbbe9ea8d98b503a3f4d733492fd215765baccc293e",
+      "kernel_runtime_seconds_mean": 0.8354092193758333,
+      "motif_id": "reduction_collective",
+      "precision": "fp64_mixed",
+      "program": "pw.x",
+      "resource": {
+        "bram_utilization": 0.05,
+        "dsp_utilization": 0.05,
+        "ff_utilization": 0.1,
+        "fmax_mhz": 200.0,
+        "hbm_port_utilization": 0.0,
+        "lut_utilization": 0.1,
+        "resource_feasible": true,
+        "timing_feasible": true
+      },
+      "runtime_seconds_mean": 1.1138789591677778,
+      "runtime_seconds_runs": [
+        1.1027401695761,
+        1.1138789591677778,
+        1.1250177487594555
+      ],
+      "runtime_seconds_std": 0.011138789591677778,
+      "target_type": "gpu_fpga_hybrid",
+      "tool_provenance": {
+        "config_hash": "sha256:b16bd656a37fbe9ec9f5459f742add83468a1084ae091f10caa9dbe4ed8f5c6d",
+        "output_artifact_hash": "sha256:ad405aedf0199b845fdd5f2fc6d032ae0b9fbc01ce7f3e9a535cc4f210f91139",
+        "run_id": "qeic_l4_hybrid_candidate_phonon_dfpt_reduction_collective_gpu_fpga_hybrid_hybrid_reduction_sidecar_423b828955_generated_proxy",
+        "tool": "generated_trace_proxy",
+        "version": "v0"
+      },
+      "trace_origin": "generated_from_qe_runtime_and_layer2_profile",
+      "transfer_overhead_seconds": 0.11138789591677778,
+      "workflow_overhead_seconds": 0.05569394795838889,
+      "workflow_runtime_seconds_mean": 1.1138789591677778,
+      "workload_family_id": "phonon_dfpt"
     },
     {
-      "attempt": "systemc_timing",
-      "path": null,
-      "policy_enabled": true,
-      "reason": "SystemC/generic simulator runner is missing",
-      "status": "blocked"
-    },
-    {
-      "attempt": "eda_resource_timing",
-      "available_tools": {},
-      "path": null,
-      "policy_enabled": true,
-      "reason": "candidate design artifacts are missing",
-      "status": "blocked"
+      "architecture_summary": {
+        "architecture_family": "hybrid_dma",
+        "architecture_id": "qeic_l4_hybrid_candidate_phonon_dfpt_reduction_collective_gpu_fpga_hybrid_hybrid_dma_overlap_sidecar_9a9fa929fc_generated_proxy_stub",
+        "dataflow_summary": "generated analytical trace proxy from baseline runtime and Layer-4 motif metadata",
+        "fpga_role": "hybrid_dma_or_memory_staging_sidecar",
+        "gpu_role": "baseline_reference",
+        "host_role": "scf_control_retained",
+        "memory_interface": "proxy_memory_interface",
+        "synchronization_model": "proxy_barrier"
+      },
+      "candidate_id": "qeic_l4_hybrid_candidate_phonon_dfpt_reduction_collective_gpu_fpga_hybrid_hybrid_dma_overlap_sidecar_9a9fa929fc",
+      "case_id": "generated_silicon_scf_pw_v0",
+      "claim_strength": "none",
+      "confidence_interval_95": {
+        "high": 1.1816027998851788,
+        "low": 1.1352654351837992
+      },
+      "evidence_artifact_hash": "sha256:5d40d64f256083ee5d76df4e0012a4fa3e0188b148bffbcea5e4bc5636eb117a",
+      "evidence_level": "generated_trace_proxy",
+      "evidence_status": "proxy_estimate",
+      "implementation_maturity": "generated_stub",
+      "input_deck_hash": "sha256:9ca34c374fdb247acc953fbbe9ea8d98b503a3f4d733492fd215765baccc293e",
+      "kernel_runtime_seconds_mean": 0.8688255881508667,
+      "motif_id": "reduction_collective",
+      "precision": "fp64_mixed",
+      "program": "pw.x",
+      "resource": {
+        "bram_utilization": 0.05,
+        "dsp_utilization": 0.05,
+        "ff_utilization": 0.1,
+        "fmax_mhz": 200.0,
+        "hbm_port_utilization": 0.0,
+        "lut_utilization": 0.1,
+        "resource_feasible": true,
+        "timing_feasible": true
+      },
+      "runtime_seconds_mean": 1.158434117534489,
+      "runtime_seconds_runs": [
+        1.146849776359144,
+        1.158434117534489,
+        1.170018458709834
+      ],
+      "runtime_seconds_std": 0.01158434117534489,
+      "target_type": "gpu_fpga_hybrid",
+      "tool_provenance": {
+        "config_hash": "sha256:3eadbe54869591254c3e194ef00758256b2601832af2571a4acd5df4ac0f456e",
+        "output_artifact_hash": "sha256:bc7fd059e63c8cc3f9294de5dc9ed0a0532fe402d2ddb8543c8b18700c8477cf",
+        "run_id": "qeic_l4_hybrid_candidate_phonon_dfpt_reduction_collective_gpu_fpga_hybrid_hybrid_dma_overlap_sidecar_9a9fa929fc_generated_proxy",
+        "tool": "generated_trace_proxy",
+        "version": "v0"
+      },
+      "trace_origin": "generated_from_qe_runtime_and_layer2_profile",
+      "transfer_overhead_seconds": 0.11584341175344891,
+      "workflow_overhead_seconds": 0.057921705876724454,
+      "workflow_runtime_seconds_mean": 1.158434117534489,
+      "workload_family_id": "phonon_dfpt"
     }
   ],
-  "evidence_status": "evidence_missing",
-  "results_are_real": false
+  "results_are_real": false,
+  "schema_version": "dse.qe_ic.candidate_high_fidelity_results.v1"
 }

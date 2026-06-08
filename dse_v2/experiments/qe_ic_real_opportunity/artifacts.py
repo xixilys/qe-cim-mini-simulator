@@ -88,6 +88,7 @@ def build_qe_ic_real_opportunity_campaign_readme(report: Mapping[str, Any]) -> s
             "prepares the ground_state_band_structure and electron_phonon_mobility cases; "
             "attempts CPU and GPU baselines without substituting CPU timing for GPU evidence; "
             "selects Layer-4 FPGA/hybrid candidates; "
+            "generates non-claimable candidate stubs for EDA syntax attempts when real designs are missing; "
             "ingests candidate high-fidelity evidence; audits implementation quality; and "
             "calls the existing real-baseline opportunity claim gate.",
             "",
@@ -96,7 +97,8 @@ def build_qe_ic_real_opportunity_campaign_readme(report: Mapping[str, Any]) -> s
             "`run_if_available` may execute available local measurements. `ingest_only` only "
             "accepts externally provided logs or JSON records. `run_if_available_or_ingest_only` "
             "uses local measurements when available and otherwise emits evidence_missing rather "
-            "than fabricating results.",
+            "than fabricating results. In nonblocking execute-real mode, generated stubs may be "
+            "sent to real EDA tools as syntax/readiness evidence, not acceleration evidence.",
             "",
             "## Real GPU Baseline",
             "",
@@ -117,6 +119,14 @@ def build_qe_ic_real_opportunity_campaign_readme(report: Mapping[str, Any]) -> s
             "gem5/SystemC, real QE candidate runs, or Vivado/DC resource and timing evidence with "
             "explicit tool provenance. L1 estimates and synthetic labels are not high-fidelity evidence.",
             "",
+            "## Generated EDA Stub Evidence",
+            "",
+            "When selected Layer-4 candidates do not have implementation bindings, the campaign "
+            "generates minimal RTL, HLS, and SystemC stubs and attempts a real EDA syntax run "
+            "through local tools or `ic-eda`. Remote EDA commands force `LC_ALL=C LANG=C`. "
+            "The resulting `qe_ic_candidate_eda_stub_evidence_real_run.json` artifact is "
+            "non-claimable and does not replace workflow-level candidate evidence.",
+            "",
             "## Implementation-Limited vs Fundamental-No-Opportunity",
             "",
             "`implementation_limited` means the current candidate loses but weak utilization, poor "
@@ -135,8 +145,8 @@ def build_qe_ic_real_opportunity_campaign_readme(report: Mapping[str, Any]) -> s
             "## Forbidden Conclusions",
             "",
             "Do not claim FPGA-only or GPU+FPGA is faster than GPU-only unless the claim gate passes. "
-            "EDA tool availability alone does not imply speedup. Fixture evidence, templates, L1 "
-            "estimates, and synthetic labels are progress evidence only.",
+            "EDA tool availability and generated-stub syntax success do not imply speedup. Fixture "
+            "evidence, templates, L1 estimates, and synthetic labels are progress evidence only.",
             "",
             "## Current Answer",
             "",

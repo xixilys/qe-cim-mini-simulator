@@ -1,9 +1,118 @@
 {
-  "blocker_reasons": [
-    "gpu_qe_binary_cpu_only"
+  "baseline_records": [
+    {
+      "baseline_id": "gpu_baseline_ground_state_band_structure_generated_silicon_scf_pw_v0",
+      "case_id": "generated_silicon_scf_pw_v0",
+      "communication_seconds": null,
+      "confidence_interval_95": {
+        "high": 0.9522931661184952,
+        "low": 0.8299131685499492
+      },
+      "evidence_status": "measured",
+      "gpu_memory_bandwidth_utilization_mean": null,
+      "gpu_utilization_mean": null,
+      "host_device_transfer_seconds": null,
+      "input_deck_hash": "sha256:9ca34c374fdb247acc953fbbe9ea8d98b503a3f4d733492fd215765baccc293e",
+      "metric_availability": {
+        "communication_seconds": "unavailable",
+        "gpu_memory_bandwidth_utilization_mean": "unavailable",
+        "gpu_utilization_mean": "unavailable",
+        "host_device_transfer_seconds": "unavailable"
+      },
+      "precision": "fp64_mixed",
+      "profile_artifact_hash": "sha256:228c106dfdf31926dc428a23741216952f0256182bc818957b2d8724031f3990",
+      "program": "pw.x",
+      "runtime_seconds_mean": 0.8911031673342222,
+      "runtime_seconds_runs": [
+        0.8691042450082023,
+        0.9177162519918056,
+        0.8864890050026588
+      ],
+      "runtime_seconds_std": 0.02463228930205208,
+      "target_type": "gpu_only",
+      "workload_family_id": "ground_state_band_structure"
+    }
   ],
-  "evidence_status": "evidence_missing",
-  "measurements_are_real": false,
-  "run_records": [],
-  "target_type": "gpu_only"
+  "claim_boundary": "GPU baseline records are only real measurement evidence when measurements_are_real is true and evidence_status is measured.",
+  "evidence_status": "measured",
+  "measurement_role": "gpu_only_baseline",
+  "measurements_are_real": true,
+  "platform": {
+    "cpu_name": "local_host",
+    "cuda_version": "13.2",
+    "driver_version": "596.36",
+    "gpu_name": "NVIDIA GeForce RTX 3070",
+    "memory": "8192",
+    "precision": "fp64_mixed",
+    "qe_version": "7.5"
+  },
+  "run_records": [
+    {
+      "case_id": "generated_silicon_scf_pw_v0",
+      "command": "CUDA_VISIBLE_DEVICES='0' LD_LIBRARY_PATH='/usr/lib/wsl/drivers/nv_dispi.inf_amd64_67995ceab8993b08:/usr/lib/wsl/lib:/opt/nvidia/hpc_sdk/Linux_x86_64/26.1/compilers/lib:/opt/nvidia/hpc_sdk/Linux_x86_64/26.1/cuda/13.1/lib64:/opt/nvidia/hpc_sdk/Linux_x86_64/26.1/math_libs/13.1/lib64' /home/xixilys/project/qe_gpu_build/q-e/build_gpu_serial_nvhpc_cuda_no_gomp/bin/pw.x -in artifacts/qe_ic_real_opportunity_campaign_real_run/generated_inputs/generated_silicon_scf_pw_v0.in",
+      "communication_seconds": null,
+      "end_timestamp": "2026-06-08T04:30:21Z",
+      "exit_code": 0,
+      "gpu_memory_bandwidth_utilization": null,
+      "gpu_utilization": null,
+      "host_device_transfer_seconds": null,
+      "input_deck_hash": "sha256:9ca34c374fdb247acc953fbbe9ea8d98b503a3f4d733492fd215765baccc293e",
+      "nvidia_smi_log_path": null,
+      "output_hash": "sha256:228c106dfdf31926dc428a23741216952f0256182bc818957b2d8724031f3990",
+      "precision": "fp64_mixed",
+      "profile_artifact_hash": "sha256:228c106dfdf31926dc428a23741216952f0256182bc818957b2d8724031f3990",
+      "program": "pw.x",
+      "runtime_seconds": 0.8691042450082023,
+      "start_timestamp": "2026-06-08T04:30:20Z",
+      "stderr_log_path": "artifacts/qe_ic_real_opportunity_campaign_real_run/runs/generated_silicon_scf_pw_v0/gpu_only_baseline/run_001.stderr.log",
+      "stdout_log_path": "artifacts/qe_ic_real_opportunity_campaign_real_run/runs/generated_silicon_scf_pw_v0/gpu_only_baseline/run_001.stdout.log",
+      "target_type": "gpu_only",
+      "workload_family_id": "ground_state_band_structure"
+    },
+    {
+      "case_id": "generated_silicon_scf_pw_v0",
+      "command": "CUDA_VISIBLE_DEVICES='0' LD_LIBRARY_PATH='/usr/lib/wsl/drivers/nv_dispi.inf_amd64_67995ceab8993b08:/usr/lib/wsl/lib:/opt/nvidia/hpc_sdk/Linux_x86_64/26.1/compilers/lib:/opt/nvidia/hpc_sdk/Linux_x86_64/26.1/cuda/13.1/lib64:/opt/nvidia/hpc_sdk/Linux_x86_64/26.1/math_libs/13.1/lib64' /home/xixilys/project/qe_gpu_build/q-e/build_gpu_serial_nvhpc_cuda_no_gomp/bin/pw.x -in artifacts/qe_ic_real_opportunity_campaign_real_run/generated_inputs/generated_silicon_scf_pw_v0.in",
+      "communication_seconds": null,
+      "end_timestamp": "2026-06-08T04:30:22Z",
+      "exit_code": 0,
+      "gpu_memory_bandwidth_utilization": null,
+      "gpu_utilization": null,
+      "host_device_transfer_seconds": null,
+      "input_deck_hash": "sha256:9ca34c374fdb247acc953fbbe9ea8d98b503a3f4d733492fd215765baccc293e",
+      "nvidia_smi_log_path": null,
+      "output_hash": "sha256:2d9ef9f72cf95987ee3df670b853e6e8e8d8fa3918b362f3e56ccffaaf332377",
+      "precision": "fp64_mixed",
+      "profile_artifact_hash": "sha256:2d9ef9f72cf95987ee3df670b853e6e8e8d8fa3918b362f3e56ccffaaf332377",
+      "program": "pw.x",
+      "runtime_seconds": 0.9177162519918056,
+      "start_timestamp": "2026-06-08T04:30:21Z",
+      "stderr_log_path": "artifacts/qe_ic_real_opportunity_campaign_real_run/runs/generated_silicon_scf_pw_v0/gpu_only_baseline/run_002.stderr.log",
+      "stdout_log_path": "artifacts/qe_ic_real_opportunity_campaign_real_run/runs/generated_silicon_scf_pw_v0/gpu_only_baseline/run_002.stdout.log",
+      "target_type": "gpu_only",
+      "workload_family_id": "ground_state_band_structure"
+    },
+    {
+      "case_id": "generated_silicon_scf_pw_v0",
+      "command": "CUDA_VISIBLE_DEVICES='0' LD_LIBRARY_PATH='/usr/lib/wsl/drivers/nv_dispi.inf_amd64_67995ceab8993b08:/usr/lib/wsl/lib:/opt/nvidia/hpc_sdk/Linux_x86_64/26.1/compilers/lib:/opt/nvidia/hpc_sdk/Linux_x86_64/26.1/cuda/13.1/lib64:/opt/nvidia/hpc_sdk/Linux_x86_64/26.1/math_libs/13.1/lib64' /home/xixilys/project/qe_gpu_build/q-e/build_gpu_serial_nvhpc_cuda_no_gomp/bin/pw.x -in artifacts/qe_ic_real_opportunity_campaign_real_run/generated_inputs/generated_silicon_scf_pw_v0.in",
+      "communication_seconds": null,
+      "end_timestamp": "2026-06-08T04:30:23Z",
+      "exit_code": 0,
+      "gpu_memory_bandwidth_utilization": null,
+      "gpu_utilization": null,
+      "host_device_transfer_seconds": null,
+      "input_deck_hash": "sha256:9ca34c374fdb247acc953fbbe9ea8d98b503a3f4d733492fd215765baccc293e",
+      "nvidia_smi_log_path": null,
+      "output_hash": "sha256:9f00f3ee733f2c6843b83260ce433ec35e39a758eff978c6c5e713f1fc61d1fa",
+      "precision": "fp64_mixed",
+      "profile_artifact_hash": "sha256:9f00f3ee733f2c6843b83260ce433ec35e39a758eff978c6c5e713f1fc61d1fa",
+      "program": "pw.x",
+      "runtime_seconds": 0.8864890050026588,
+      "start_timestamp": "2026-06-08T04:30:22Z",
+      "stderr_log_path": "artifacts/qe_ic_real_opportunity_campaign_real_run/runs/generated_silicon_scf_pw_v0/gpu_only_baseline/run_003.stderr.log",
+      "stdout_log_path": "artifacts/qe_ic_real_opportunity_campaign_real_run/runs/generated_silicon_scf_pw_v0/gpu_only_baseline/run_003.stdout.log",
+      "target_type": "gpu_only",
+      "workload_family_id": "ground_state_band_structure"
+    }
+  ],
+  "schema_version": "dse.qe_ic.gpu_baseline_measurements.v1"
 }

@@ -73,6 +73,9 @@ FIRST_PROTOTYPE_HOST_BOUND_STAGES = (
 )
 
 REQUIRED_IC_EDA_TOOLS: tuple[str, ...] = ("dc_shell", "vcs", "vivado")
+OPTIONAL_IC_EDA_TOOL_GROUPS: Dict[str, tuple[str, ...]] = {
+    "hls": ("vitis_hls", "vivado_hls"),
+}
 
 
 def _norm(value: Any) -> str:
@@ -425,6 +428,7 @@ def build_ic_eda_tool_availability_report(
     tool_results: Iterable[Mapping[str, Any]],
     *,
     required_tools: Sequence[str] = REQUIRED_IC_EDA_TOOLS,
+    optional_tool_groups: Mapping[str, Sequence[str]] | None = None,
     environment: str = "ic-eda",
 ) -> Dict[str, Any]:
     """Normalize real IC/EDA tool probes into a fail-closed availability report."""
@@ -442,7 +446,7 @@ def build_ic_eda_tool_availability_report(
         explicit_status = _norm(raw.get("status"))
         version_like_output = any(
             marker in stdout.lower()
-            for marker in ("version", "vivado", "vcs", "dc_shell")
+            for marker in ("version", "vivado", "vcs", "dc_shell", "vitis hls", "vivado hls")
         )
         not_found_error = any(
             marker in (stdout + "\n" + stderr).lower()
@@ -494,6 +498,40 @@ def build_ic_eda_tool_availability_report(
         if tool in by_tool and by_tool[tool]["status"] != "passed"
     ]
     tool_rows = [by_tool[tool] for tool in required_tools if tool in by_tool]
+    optional_groups: Dict[str, Dict[str, Any]] = {}
+    for group_id, group_tools in (optional_tool_groups or {}).items():
+        available_tools = [
+            tool for tool in group_tools
+            if tool in by_tool and by_tool[tool]["status"] == "passed"
+        ]
+        attempted_tools = [tool for tool in group_tools if tool in by_tool]
+        blocked_group_tools = [
+            tool for tool in group_tools
+            if tool in by_tool and by_tool[tool]["status"] != "passed"
+        ]
+        missing_group_tools = [tool for tool in group_tools if tool not in by_tool]
+        group_status = "passed" if available_tools else "blocked"
+        optional_groups[str(group_id)] = {
+            "group_id": str(group_id),
+            "availability_policy": "any_of",
+            "required_for_ic_eda_availability_status": False,
+            "tools": list(group_tools),
+            "attempted_tools": attempted_tools,
+            "available_tools": available_tools,
+            "blocked_tools": blocked_group_tools,
+            "missing_tools": missing_group_tools,
+            "status": group_status,
+            "available": bool(available_tools),
+            "availability_probe_passed": bool(available_tools),
+            "tool_rows": [by_tool[tool] for tool in group_tools if tool in by_tool],
+            "hardware_completion_eligible": False,
+            "kernel_ppa_evidence": False,
+            "claim_boundary": (
+                "Optional tool-group reachability supports planning downstream "
+                "tool runs only; it is not synthesis, implementation, timing, "
+                "area, PPA, bitstream, or QE correctness evidence."
+            ),
+        }
     blockers: list[Dict[str, Any]] = []
     if missing_tools:
         blockers.append(
@@ -512,7 +550,7 @@ def build_ic_eda_tool_availability_report(
             }
         )
 
-    return {
+    report = {
         "schema_version": IC_EDA_TOOL_AVAILABILITY_SCHEMA,
         "environment": environment,
         "required_tools": list(required_tools),
@@ -537,6 +575,12 @@ def build_ic_eda_tool_availability_report(
             "kernel synthesis, timing, area, implementation, or PPA evidence."
         ),
     }
+    if optional_groups:
+        report["optional_tool_groups"] = optional_groups
+        if "hls" in optional_groups:
+            report["hls_tool_available"] = bool(optional_groups["hls"]["available"])
+            report["hls_tool_available_tools"] = list(optional_groups["hls"]["available_tools"])
+    return report
 
 
 def run_tool_probe_commands(

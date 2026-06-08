@@ -2,7 +2,7 @@
   "candidate_selection_count": 3,
   "errors": [],
   "opportunity_record_count": 3,
-  "overall_answer": "gpu_or_eda_failure",
+  "overall_answer": "proxy_only_inconclusive",
   "schema_version": "dse.qe_ic.real_opportunity_campaign_validation.v1",
   "status": "passed",
   "warnings": []

@@ -99,6 +99,15 @@ def _qe_is_gpu_capable(environment_summary: Mapping[str, Any], program: str) -> 
     return _qe_gpu_support(environment_summary, program) != "not_detected"
 
 
+def _qe_gpu_build_failed(environment_summary: Mapping[str, Any], program: str | None = None) -> bool:
+    build_probe = _as_mapping(_as_mapping(environment_summary.get("tools")).get("qe_gpu_build_probe"))
+    if build_probe.get("status") != "gpu_qe_build_failed":
+        return False
+    if program and _qe_is_gpu_capable(environment_summary, program):
+        return False
+    return True
+
+
 def _case_declares_missing_pseudo(case: Mapping[str, Any]) -> bool:
     return case.get("pseudo_status") == "pseudo_missing" or (
         case.get("case_origin") == "generated_benchmark" and case.get("pseudo_file_path") in (None, "")
@@ -179,7 +188,9 @@ def _run_ready_cases(
             }
         if target_type == "gpu_only":
             preflight_blockers: list[str] = []
-            if not _qe_is_gpu_capable(environment_summary, program):
+            if _qe_gpu_build_failed(environment_summary, program):
+                preflight_blockers.append("gpu_qe_build_failed")
+            elif not _qe_is_gpu_capable(environment_summary, program):
                 preflight_blockers.append("gpu_qe_binary_cpu_only")
             if _case_declares_missing_pseudo(case):
                 preflight_blockers.append("gpu_qe_execution_unavailable_due_to_pseudopotential")

@@ -450,6 +450,31 @@ def test_ic_eda_tool_availability_blocks_missing_required_tools():
     assert report["blockers"][0]["tools"] == ["vcs", "vivado"]
 
 
+def test_ic_eda_tool_availability_tracks_hls_anyof_without_kernel_ppa_claim():
+    report = build_ic_eda_tool_availability_report(
+        [
+            {"tool": "dc_shell", "returncode": 0, "stdout": "dc_shell version O-2018.06-SP1"},
+            {"tool": "vcs", "returncode": 0, "stdout": "vcs script version O-2018.09"},
+            {"tool": "vivado", "returncode": 0, "stdout": "Vivado v2019.1"},
+            {"tool": "vitis_hls", "returncode": 0, "stdout": "Vitis HLS v2023.2"},
+            {"tool": "vivado_hls", "returncode": 127, "stderr": "vivado_hls: command not found"},
+        ],
+        required_tools=["dc_shell", "vcs", "vivado"],
+        optional_tool_groups={"hls": ["vitis_hls", "vivado_hls"]},
+        environment="ssh ic-eda",
+    )
+
+    hls = report["optional_tool_groups"]["hls"]
+    assert report["status"] == "passed"
+    assert report["hls_tool_available"] is True
+    assert hls["status"] == "passed"
+    assert hls["availability_policy"] == "any_of"
+    assert hls["available_tools"] == ["vitis_hls"]
+    assert hls["blocked_tools"] == ["vivado_hls"]
+    assert hls["hardware_completion_eligible"] is False
+    assert hls["kernel_ppa_evidence"] is False
+
+
 def test_tool_probe_runner_normalizes_command_results():
     def fake_runner(command):
         return {"returncode": 0, "stdout": " ".join(command)}
@@ -483,6 +508,10 @@ def test_ic_eda_probe_cli_falls_back_from_missing_ic_to_ssh_availability_only(
             return {"returncode": 1, "stdout": "/eda/bin/dc_shell\ndc_shell version O-2018.06-SP1\n", "stderr": ""}
         if command[0] == "ssh" and "vcs" in joined:
             return {"returncode": 0, "stdout": "/eda/bin/vcs\nvcs script version O-2018.09\n", "stderr": ""}
+        if command[0] == "ssh" and "vitis_hls" in joined:
+            return {"returncode": 0, "stdout": "/eda/bin/vitis_hls\nVitis HLS v2023.2\n", "stderr": ""}
+        if command[0] == "ssh" and "vivado_hls" in joined:
+            return {"returncode": 127, "stdout": "", "stderr": "vivado_hls: command not found"}
         if command[0] == "ssh" and "vivado" in joined:
             return {"returncode": 0, "stdout": "/eda/bin/vivado\nVivado v2019.1 (64-bit)\n", "stderr": ""}
         raise AssertionError(f"unexpected command: {command}")
@@ -519,6 +548,10 @@ def test_ic_eda_probe_cli_falls_back_from_missing_ic_to_ssh_availability_only(
         "source ~/.bashrc; which vivado || true; LC_ALL=C LANG=C vivado -version" in attempt["command"]
         for attempt in attempts
     )
+    assert report["hls_tool_available"] is True
+    assert report["optional_tool_groups"]["hls"]["available_tools"] == ["vitis_hls"]
+    assert any("which vitis_hls || true; LC_ALL=C LANG=C vitis_hls -version" in attempt["command"] for attempt in attempts)
+    assert any("which vivado_hls || true; LC_ALL=C LANG=C vivado_hls -version" in attempt["command"] for attempt in attempts)
 
 
 def test_ic_eda_probe_cli_exposes_ssh_tool_blockers_without_completion_claim(
@@ -529,6 +562,10 @@ def test_ic_eda_probe_cli_exposes_ssh_tool_blockers_without_completion_claim(
         joined = " ".join(command)
         if command == ["bash", "-lc", "command -v ic"]:
             return {"returncode": 1, "stdout": "", "stderr": "ic missing"}
+        if command[0] == "ssh" and "vitis_hls" in joined:
+            return {"returncode": 127, "stdout": "", "stderr": "vitis_hls: command not found"}
+        if command[0] == "ssh" and "vivado_hls" in joined:
+            return {"returncode": 127, "stdout": "", "stderr": "vivado_hls: command not found"}
         if command[0] == "ssh" and "vivado" in joined:
             return {"returncode": 127, "stdout": "", "stderr": "vivado: command not found"}
         if command[0] == "ssh" and "dc_shell" in joined:

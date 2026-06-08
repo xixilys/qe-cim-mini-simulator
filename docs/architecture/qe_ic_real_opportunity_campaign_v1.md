@@ -15,8 +15,14 @@ real/ingested evidence, implementation quality audit, and final interpretation.
 
 1. Probe local GPU, QE, profiler, SystemC, and EDA availability.
    In `execute_real` mode, QE discovery records executable path, probe run
-   status, version when parseable, GPU-support signal when detectable, and a
-   hash of the probe output.
+   status, version when parseable, help-output accelerator signals, dynamic
+   GPU library links from `ldd`, and a hash of the probe output. A QE binary is
+   GPU-enabled only when both the executable probe and dynamic library probe
+   support that conclusion. GPU probing uses a WSL-compatible `nvidia-smi`
+   query and records CUDA version from the normal `nvidia-smi` table when
+   present. EDA probing checks local PATH and discovered SSH aliases such as
+   `ic-eda`; reachable remote Vivado, DC, and VCS tools are recorded in
+   `tools.eda.available_tools` as remote paths.
 2. Prepare `ground_state_band_structure` and `electron_phonon_mobility` case
    descriptors. Input decks may come from config paths, configured search
    roots, local testdata/examples, experiment directories, or common QE example
@@ -32,14 +38,23 @@ real/ingested evidence, implementation quality audit, and final interpretation.
    substitute for GPU-only evidence. Generated benchmark cases with missing
    pseudopotentials report
    `gpu_qe_execution_unavailable_due_to_pseudopotential` rather than fake QE
-   runtime.
+   runtime. If a local GPU-QE build probe is present at
+   `artifacts/qe_gpu_build/qe_gpu_build_probe.json` or `QE_GPU_BUILD_PROBE`,
+   the campaign records its status. A GPU-linked QE build whose `pw.x`,
+   `ph.x`, or `epw.x` runtime probes segfault is reported as
+   `gpu_qe_build_failed`, not as a usable GPU baseline and not as a GPU-vs-FPGA
+   claim.
 5. Select up to three candidates from the existing Layer-4 candidate plan only:
    FPGA FFT/streaming, hybrid reduction sidecar, and hybrid DMA/memory staging.
 6. Try candidate evidence in order: ingest configured evidence, trace replay
    from real profile data, SystemC timing, then EDA resource/timing from
-   explicit design artifacts. If no trace, runner, or design binding exists,
-   the campaign records `blocked_by_missing_candidate_evidence`; it does not
-   fabricate SystemC, Vivado, or DC results.
+   explicit design artifacts. In nonblocking `execute_real` mode, if the three
+   Layer-4 candidates have no implementation binding, the campaign generates
+   minimal RTL/HLS/SystemC stubs and attempts a real EDA syntax run through the
+   available local or `ic-eda` tool path. This clears
+   `blocked_by_missing_candidate_design` only for the stub-readiness path; it
+   does not clear `blocked_by_missing_candidate_evidence` and does not create
+   workflow high-fidelity performance evidence.
    Configured execution commands must write a complete candidate evidence JSON
    artifact. The campaign records stdout/stderr logs and hashes, validates the
    JSON, and then calls the existing claim gate. It never parses stdout into
@@ -63,10 +78,11 @@ evidence are valid.
 
 `nonblocking` is selected with `--nonblocking --allow-generated-inputs`. It
 continues when real input decks, traces, SystemC configs, or candidate designs
-are missing by generating benchmark/proxy inputs and non-claimable proxy
-candidate evidence. Missing decks and missing candidate evidence become
-fallback reasons, not terminal statuses. GPU/QE execution failure and required
-EDA execution failure remain allowed terminal failures.
+are missing by generating benchmark/proxy inputs, non-claimable proxy candidate
+evidence, and generated candidate stubs with EDA syntax-attempt evidence.
+Missing decks and missing candidate evidence become fallback reasons, not
+terminal statuses. GPU/QE execution failure and required EDA execution failure
+remain allowed terminal failures.
 
 Generated QE cases are marked `case_origin=generated_benchmark` and
 `scientific_claim_scope=performance_benchmark_only`. They are benchmark/proxy
@@ -108,11 +124,19 @@ communication time must be represented as `null` with
 The campaign may report `opportunity_found` only when the existing claim gate
 returns a claim-allowed FPGA or hybrid opportunity record.
 
+EDA tool availability is machine capability only. A remote `ic-eda` tool path
+can unlock stub/resource/timing attempts when a candidate design binding exists
+or when nonblocking mode generates minimal candidate stubs. The runner sets
+`LC_ALL=C LANG=C` for remote EDA tools because Vivado 2019.1 can fail under the
+default remote `C.UTF-8` locale. Tool availability or generated-stub syntax
+success is not itself synthesis, timing, PPA, or superiority evidence.
+
 `execute_real` emits additional small evidence summaries:
 
 - `qe_ic_cpu_baseline_measurements_real_run.json`
 - `qe_ic_gpu_baseline_measurements_real_run.json`
 - `qe_ic_candidate_high_fidelity_results_real_run.json`
+- `qe_ic_candidate_eda_stub_evidence_real_run.json`
 
 When evidence is unavailable these files contain blocker summaries rather than
 measured results.
@@ -124,6 +148,8 @@ measured results.
 - `fundamental_no_opportunity`
 - `proxy_only_inconclusive`
 - `gpu_or_eda_failure`
+- `gpu_qe_binary_cpu_only`
+- `gpu_qe_build_failed`
 - `evidence_missing`
 - `blocked_by_missing_qe`
 - `blocked_by_missing_input_deck`
@@ -134,7 +160,16 @@ In nonblocking mode, final campaign statuses are constrained to the
 nonblocking status set: `completed_real_claimable`, `completed_proxy_only`,
 `completed_implementation_limited`, `completed_no_opportunity`,
 `gpu_execution_failed`, `eda_execution_failed`, or
-`software_validation_failed`.
+`software_validation_failed`. When the GPU baseline cannot run because QE is
+CPU-only or a GPU-enabled QE build fails, the final answer is the precise
+`gpu_qe_binary_cpu_only` or `gpu_qe_build_failed` blocker rather than the
+generic `gpu_or_eda_failure`.
+
+For the current local machine, the recorded GPU-QE build status is
+`gpu_qe_build_failed`: QE 7.5 binaries were built with CUDA/NVHPC/OpenACC
+libraries linked, but `pw.x -h`, `ph.x -h`, `epw.x -h`, and version probes
+segfault during startup. The report therefore preserves the build evidence
+without running or claiming a measured GPU baseline.
 
 ## Forbidden Conclusions
 

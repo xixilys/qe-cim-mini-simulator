@@ -33,6 +33,16 @@ from dse_v2.mapping.search_policy import (
     search_problem_from_dict,
     step4_feedback_observations,
 )
+from dse_v2.mapping.multifidelity_benchmark import (
+    build_multifidelity_search_benchmark_report,
+    build_multifidelity_search_benchmark_suite_report,
+    build_workflow_conditioned_multifidelity_benchmark_suite_report,
+)
+from dse_v2.mapping.multifidelity_validation import (
+    build_multifidelity_algorithm_validation_report,
+    build_validation_gated_next_evaluation_queue,
+    build_validation_gated_search_control_report,
+)
 from dse_v2.mapping.step2_workflow import (
     STEP2_ARTIFACT_NAMES,
     STEP2_LOW_FIDELITY_ARTIFACTS,
@@ -63,6 +73,12 @@ __all__ = [
     "CapabilityDecision",
     "BottleneckGuidedPolicy",
     "build_search_iteration_plan",
+    "build_multifidelity_search_benchmark_report",
+    "build_multifidelity_search_benchmark_suite_report",
+    "build_workflow_conditioned_multifidelity_benchmark_suite_report",
+    "build_multifidelity_algorithm_validation_report",
+    "build_validation_gated_next_evaluation_queue",
+    "build_validation_gated_search_control_report",
     "candidate_observation_id_lookup",
     "observe_step4_feedback",
     "search_policy_from_checkpoint",

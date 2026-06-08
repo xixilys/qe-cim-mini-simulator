@@ -105,6 +105,17 @@ STEP2_CANDIDATE_QUEUE_ARTIFACTS = [
     "step3_simulation_queue.json",
 ]
 
+STEP2_MAPPING_SEARCH_DESIGN_AXES = (
+    "node_placement_signature",
+    "op_target_signature",
+    "accelerator_target_set",
+    "accelerated_node_count",
+    "host_node_count",
+    "data_movement_mb_bucket",
+    "latency_ms_bucket",
+    "energy_j_bucket",
+)
+
 STEP2_ARTIFACT_NAMES = [
     "step2_status.json",
     "architecture_catalog.json",
@@ -2105,6 +2116,67 @@ def _candidate_priority_score(candidate: Mapping[str, Any]) -> float:
     return 0.0
 
 
+def _screening_metric(record: Mapping[str, Any], key: str, default: float = 0.0) -> float:
+    screening = record.get("screening", {}) if isinstance(record.get("screening", {}), Mapping) else {}
+    return _finite_float(record.get(key, screening.get(key)), default=default)
+
+
+def _metric_bucket(value: float, edges: Sequence[float], *, suffix: str) -> str:
+    number = _finite_float(value, default=0.0)
+    lower = 0.0
+    for edge in edges:
+        if number < edge:
+            return f"{lower:g}_{edge:g}{suffix}"
+        lower = float(edge)
+    return f"gte_{lower:g}{suffix}"
+
+
+def _mapping_design_axis_parameters(record: Mapping[str, Any]) -> Dict[str, Any]:
+    """Return generic Step2 design axes for SearchPolicy learning/provenance.
+
+    These axes describe placement and coarse L1 cost structure.  They are not
+    Step3 admission authority and they intentionally avoid workload-family names.
+    """
+
+    mapping = dict(record.get("mapping", {}) or {})
+    node_target_pairs = sorted((str(node_id), str(target)) for node_id, target in mapping.items())
+    accelerator_targets = sorted({
+        target
+        for _node_id, target in node_target_pairs
+        if target and target != "host"
+    })
+    op_targets: List[str] = []
+    annotations = record.get("annotations", {}) if isinstance(record.get("annotations", {}), Mapping) else {}
+    op_type_by_node = annotations.get("op_type_by_node", {}) if isinstance(annotations.get("op_type_by_node", {}), Mapping) else {}
+    for node_id, target in node_target_pairs:
+        op_type = str(op_type_by_node.get(node_id) or "unknown_op")
+        op_targets.append(f"{op_type}->{target}")
+    if not op_targets:
+        op_targets = ["empty_mapping"]
+    return {
+        "node_placement_signature": "|".join(f"{node_id}->{target}" for node_id, target in node_target_pairs) or "empty_mapping",
+        "op_target_signature": "|".join(sorted(op_targets)),
+        "accelerator_target_set": "+".join(accelerator_targets) if accelerator_targets else "host_only",
+        "accelerated_node_count": len([target for _node_id, target in node_target_pairs if target != "host"]),
+        "host_node_count": len([target for _node_id, target in node_target_pairs if target == "host"]),
+        "data_movement_mb_bucket": _metric_bucket(
+            _screening_metric(record, "predicted_data_movement_mb"),
+            (1.0, 8.0, 32.0, 128.0, 512.0),
+            suffix="mb",
+        ),
+        "latency_ms_bucket": _metric_bucket(
+            _screening_metric(record, "predicted_latency_ms"),
+            (0.01, 0.1, 1.0, 10.0, 100.0),
+            suffix="ms",
+        ),
+        "energy_j_bucket": _metric_bucket(
+            _screening_metric(record, "predicted_energy_j"),
+            (0.001, 0.01, 0.1, 1.0, 10.0),
+            suffix="j",
+        ),
+    }
+
+
 def _mapping_record_search_parameters(
     record: Mapping[str, Any],
     *,
@@ -2125,6 +2197,12 @@ def _mapping_record_search_parameters(
     mapping = dict(record.get("mapping", {}) or {})
     candidate_id = str(record.get("candidate_id") or f"mapping_candidate_{index}")
     priority = _candidate_priority_score(record)
+    design_axes = _mapping_design_axis_parameters(record)
+    latency_ms = _screening_metric(record, "predicted_latency_ms")
+    energy_j = _screening_metric(record, "predicted_energy_j")
+    data_movement_mb = _screening_metric(record, "predicted_data_movement_mb")
+    screening = record.get("screening", {}) if isinstance(record.get("screening", {}), Mapping) else {}
+    confidence = _finite_float(record.get("confidence", screening.get("confidence")), 0.0)
     return {
         "architecture_id": str(record.get("architecture_id") or architecture_id),
         "backend": backend,
@@ -2137,6 +2215,12 @@ def _mapping_record_search_parameters(
         "step2_candidate_rank_score": priority,
         "source_candidate_index": index,
         "release_lane": "release" if not record.get("violations") else "blocked",
+        "predicted_latency_ms": latency_ms,
+        "predicted_energy_j": energy_j,
+        "predicted_data_movement_mb": data_movement_mb,
+        "screening_confidence": confidence,
+        "model_uncertainty": max(0.0, 1.0 - confidence),
+        **design_axes,
     }
 
 
@@ -2175,6 +2259,24 @@ def _build_step2_search_policy_payload(
     ]
     candidate_ids = [str(seed.get("mapping_candidate_id")) for seed in seed_candidates]
     release_lanes = sorted({str(seed.get("release_lane")) for seed in seed_candidates if seed.get("release_lane")})
+    design_axis_domains = {
+        axis: sorted({seed.get(axis) for seed in seed_candidates if seed.get(axis) not in (None, "")})
+        for axis in STEP2_MAPPING_SEARCH_DESIGN_AXES
+    }
+    model_metric_domains = {
+        axis: sorted({
+            seed.get(axis)
+            for seed in seed_candidates
+            if seed.get(axis) not in (None, "")
+        })
+        for axis in (
+            "predicted_latency_ms",
+            "predicted_energy_j",
+            "predicted_data_movement_mb",
+            "screening_confidence",
+            "model_uncertainty",
+        )
+    }
     problem = SearchProblem(
         problem_id=f"step2::{scope.get('trial_id', workload_package.workload_id)}::mapping_candidates",
         workload_run_id=str(scope.get("workload_run_id") or workload_package.workload_id),
@@ -2183,10 +2285,54 @@ def _build_step2_search_policy_payload(
             "architecture_id": sorted({str(seed.get("architecture_id") or architecture_id) for seed in seed_candidates}) or [architecture_id],
             "backend": [backend],
             "mapping_candidate_id": candidate_ids,
+            "mapping_parameter_hash": sorted({
+                str(seed.get("mapping_parameter_hash"))
+                for seed in seed_candidates
+                if seed.get("mapping_parameter_hash")
+            }),
+            "mapping_policy": sorted({
+                str(seed.get("mapping_policy"))
+                for seed in seed_candidates
+                if seed.get("mapping_policy")
+            }) or [mapping_policy],
+            "source_state": sorted({
+                str(seed.get("source_state"))
+                for seed in seed_candidates
+                if seed.get("source_state")
+            }),
+            "step2_candidate_rank_score": sorted({
+                seed.get("step2_candidate_rank_score")
+                for seed in seed_candidates
+                if seed.get("step2_candidate_rank_score") is not None
+            }),
             "release_lane": release_lanes or ["release"],
+            **model_metric_domains,
+            **design_axis_domains,
         },
         constraints={
             "objective_directions": dict(objective_directions),
+            "model_objectives": [
+                {
+                    "metric": "predicted_latency_ms",
+                    "direction": "minimize",
+                    "weight": 1.0,
+                    "scale": 1.0,
+                },
+                {
+                    "metric": "predicted_energy_j",
+                    "direction": "minimize",
+                    "weight": 0.35,
+                    "scale": 1.0,
+                },
+                {
+                    "metric": "predicted_data_movement_mb",
+                    "direction": "minimize",
+                    "weight": 0.15,
+                    "scale": 1.0,
+                },
+            ],
+            "uncertainty_metric": "model_uncertainty",
+            "uncertainty_weight": 0.05,
             "required_parameters": [
                 "architecture_id",
                 "backend",
@@ -2201,6 +2347,20 @@ def _build_step2_search_policy_payload(
             "step3_admission_queue": "step3_simulation_queue.json",
             "top_k_queue_role": "provenance_only_not_step3_admission",
             "candidate_generation_only": True,
+            "design_axes": list(STEP2_MAPPING_SEARCH_DESIGN_AXES),
+            "coverage_axes": [
+                "accelerator_target_set",
+                "accelerated_node_count",
+                "data_movement_mb_bucket",
+                "latency_ms_bucket",
+            ],
+            "feedback_generalization_axes": [
+                "accelerator_target_set",
+                "accelerated_node_count",
+                "data_movement_mb_bucket",
+                "latency_ms_bucket",
+            ],
+            "feedback_generalization_strength": 0.10,
             "trusted_final_claim": False,
         },
         seed_candidates=tuple(seed_candidates),
@@ -2248,6 +2408,8 @@ def _build_step2_search_policy_payload(
         "top_k_queue_role": "provenance_only_not_step3_admission",
         "candidate_source_artifact": "mapping_candidate_records.json",
         "candidate_identity_policy": "stable_problem_policy_parameter_hash",
+        "design_axes": list(STEP2_MAPPING_SEARCH_DESIGN_AXES),
+        "parameters_are_design_axis_visible": True,
         "candidates": candidate_payloads,
         "checkpoint": checkpoint,
         "release_completion_eligible": False,
@@ -2277,6 +2439,11 @@ def _search_policy_candidate_lookup(search_policy_payload: Optional[Mapping[str,
 def _compact_search_policy_candidate(candidate: Mapping[str, Any]) -> Dict[str, Any]:
     provenance = candidate.get("provenance", {}) if isinstance(candidate.get("provenance", {}), Mapping) else {}
     parameters = candidate.get("parameters", {}) if isinstance(candidate.get("parameters", {}), Mapping) else {}
+    design_axis_parameters = {
+        axis: parameters.get(axis)
+        for axis in STEP2_MAPPING_SEARCH_DESIGN_AXES
+        if axis in parameters
+    }
     return {
         "policy_name": provenance.get("policy_name"),
         "candidate_id": candidate.get("candidate_id"),
@@ -2288,6 +2455,8 @@ def _compact_search_policy_candidate(candidate: Mapping[str, Any]) -> Dict[str, 
         "promotion_reasons": list(candidate.get("promotion_reasons", []) or []),
         "blocker_reasons": list(candidate.get("blocker_reasons", []) or []),
         "simulation_eligible": bool(candidate.get("simulation_eligible", False)),
+        "parameters": dict(parameters),
+        "design_axis_parameters": design_axis_parameters,
         "provenance": dict(provenance),
         "trusted_final_claim": False,
     }
@@ -2581,6 +2750,10 @@ def build_step2_search_checkpoint_artifact(
         "search_policy_candidates": compact_policy_candidates,
         "search_policy_checkpoint": search_policy_payload.get("checkpoint") if isinstance(search_policy_payload, Mapping) else None,
         "search_policy_problem": search_policy_payload.get("problem") if isinstance(search_policy_payload, Mapping) else None,
+        "search_policy_design_axes": list(search_policy_payload.get("design_axes", [])) if isinstance(search_policy_payload, Mapping) else [],
+        "search_policy_parameters_are_design_axis_visible": bool(
+            search_policy_payload.get("parameters_are_design_axis_visible", False)
+        ) if isinstance(search_policy_payload, Mapping) else False,
         "search_policy_feedback": {
             "feedback_update_artifact": "feedback_update.json",
             "calibration_record_artifact": "calibration_record.json",

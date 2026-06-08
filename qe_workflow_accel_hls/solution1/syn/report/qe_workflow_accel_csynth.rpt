@@ -1,0 +1,9 @@
+== Performance Estimates
+Latency (cycles): min = 64 max = 64
+Interval Min = 1
+Timing: 4.000 ns
+== Utilization Estimates
+BRAM_18K: 3
+DSP48E: 5
+FF: 1024
+LUT: 2048

@@ -160,6 +160,21 @@ def test_qe_input_log_and_profile_parsers_emit_source_facts_with_provenance():
     assert by_field["dimension.npw"].source_path == "qe.out"
 
 
+def test_qe_log_parser_accepts_standard_parallel_version_mpi_line():
+    log_facts = parse_qe_pw_log(
+        """
+     Program PWSCF v.7.5 starts on  1Jun2026
+     Parallel version (MPI), running on     4 processors
+""",
+        source_path="qe75.out",
+    )
+
+    by_field = {fact.field: fact for fact in log_facts}
+    assert by_field["runtime.qe_version"].value == "7.5"
+    assert by_field["runtime.mpi_processes"].value == 4
+    assert by_field["runtime.mpi_processes"].raw_excerpt == "Parallel version (MPI), running on     4 processors"
+
+
 def test_vasp_input_log_and_profile_parsers_emit_source_facts_with_provenance():
     incar_facts = parse_vasp_incar(VASP_INCAR, source_path="INCAR")
     kpoint_facts = parse_vasp_kpoints(VASP_KPOINTS, source_path="KPOINTS")

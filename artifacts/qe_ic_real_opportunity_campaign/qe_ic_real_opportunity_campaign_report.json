@@ -27,7 +27,11 @@
     },
     {
       "attempt": "eda_resource_timing",
-      "available_tools": {},
+      "available_tools": {
+        "dc_shell": "ssh://ic-eda/home/synopsys/syn/O-2018.06-SP1/bin/dc_shell",
+        "vcs": "ssh://ic-eda/home/synopsys/vcs-mx/O-2018.09-1/bin/vcs",
+        "vivado": "ssh://ic-eda/home/Xilinx/Vivado/2019.1/bin/vivado"
+      },
       "path": null,
       "policy_enabled": true,
       "reason": "candidate design artifacts are missing",
@@ -184,31 +188,31 @@
   "environment_summary": {
     "blockers": [
       "blocked_by_missing_systemc",
-      "blocked_by_missing_eda",
       "blocked_by_missing_candidate_evidence",
       "blocked_by_missing_candidate_design"
     ],
-    "environment_status": "ingest_only_available",
+    "environment_status": "partially_ready",
     "gpu": {
-      "cuda_version": null,
-      "driver_version": null,
-      "gpu_memory_total_mib": null,
-      "gpu_model": null,
-      "gpu_present": false,
-      "probe_error": ""
+      "cuda_version": "13.2",
+      "driver_version": "596.36",
+      "gpu_memory_total_mib": 8192,
+      "gpu_model": "NVIDIA GeForce RTX 3070",
+      "gpu_present": true
     },
     "tools": {
       "eda": {
-        "available_tools": {},
+        "available_tools": {
+          "dc_shell": "ssh://ic-eda/home/synopsys/syn/O-2018.06-SP1/bin/dc_shell",
+          "vcs": "ssh://ic-eda/home/synopsys/vcs-mx/O-2018.09-1/bin/vcs",
+          "vivado": "ssh://ic-eda/home/Xilinx/Vivado/2019.1/bin/vivado"
+        },
         "missing_tools": [
-          "vivado",
-          "dc_shell",
           "yosys"
         ],
-        "remote_available_tool_count": "redacted",
-        "remote_probe_status": "checked_redacted",
-        "remote_ssh_alias_count": "redacted",
-        "remote_ssh_aliases_checked": "redacted",
+        "remote_available_tool_count": 6,
+        "remote_probe_status": "probed",
+        "remote_ssh_alias_count": 3,
+        "remote_ssh_aliases_checked": 3,
         "speedup_claim_implication": "none"
       },
       "profilers": {
@@ -219,6 +223,41 @@
         "epw.x": "/usr/bin/epw.x",
         "ph.x": "/usr/bin/ph.x",
         "pw.x": "/usr/bin/pw.x"
+      },
+      "qe_gpu_build_probe": {
+        "build": {
+          "build_dir": "/home/xixilys/project/qe_gpu_build/q-e/build_gpu_serial_nvhpc_cuda",
+          "build_logs": {
+            "epw.x": "/home/xixilys/project/dft_accelerate/artifacts/qe_gpu_build/build_qe_epw_exe_gpu_serial_nvhpc_cuda.log",
+            "ph.x": "/home/xixilys/project/dft_accelerate/artifacts/qe_gpu_build/build_qe_phonon_ph_exe_gpu_serial_nvhpc_cuda.log",
+            "pw.x": "/home/xixilys/project/dft_accelerate/artifacts/qe_gpu_build/build_qe_pw_exe_gpu_serial_nvhpc_cuda.log"
+          },
+          "configure_log": "/home/xixilys/project/dft_accelerate/artifacts/qe_gpu_build/cmake_configure_gpu_serial_nvhpc_cuda.log"
+        },
+        "failure_reason": "GPU-enabled QE 7.5 binaries were built and link CUDA/OpenACC/NVHPC libraries, but strong runtime probes are not reusable: help/version invocations segfault (shell rc 139, Python signal -11) for built QE binaries. Minimal NVHPC cudart program also segfaults, while nvaccelinfo and OpenACC probes work when /usr/lib/wsl/lib is first in LD_LIBRARY_PATH. This points to an NVHPC CUDA runtime/CUDA-Fortran startup compatibility issue in the local WSL environment, not CPU-only QE.",
+        "path": "/home/xixilys/project/dft_accelerate/artifacts/qe_gpu_build/qe_gpu_build_probe.json",
+        "program_count": 3,
+        "program_paths": {
+          "epw.x": "/home/xixilys/project/qe_gpu_build/q-e/build_gpu_serial_nvhpc_cuda/bin/epw.x",
+          "ph.x": "/home/xixilys/project/qe_gpu_build/q-e/build_gpu_serial_nvhpc_cuda/bin/ph.x",
+          "pw.x": "/home/xixilys/project/qe_gpu_build/q-e/build_gpu_serial_nvhpc_cuda/bin/pw.x"
+        },
+        "runtime_validation": {
+          "all_programs_gpu_linked": true,
+          "all_programs_runtime_usable": false,
+          "segfault_return_codes": {
+            "python_subprocess": -11,
+            "shell": 139
+          },
+          "verdict": "not_ready_due_to_runtime_segfault"
+        },
+        "source": {
+          "commit": "770a0b2d12928a67048e2f3da8d10d057e52179e",
+          "repo": "https://github.com/QEF/q-e.git",
+          "source_dir": "/home/xixilys/project/qe_gpu_build/q-e",
+          "tag": "qe-7.5"
+        },
+        "status": "gpu_qe_build_failed"
       },
       "systemc": {
         "generic_sim": null,

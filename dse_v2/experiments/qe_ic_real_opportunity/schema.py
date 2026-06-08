@@ -54,6 +54,8 @@ ALLOWED_CAMPAIGN_STATUSES = {
     "completed_implementation_limited",
     "completed_no_opportunity",
     "gpu_execution_failed",
+    "gpu_qe_build_failed",
+    "gpu_qe_binary_cpu_only",
     "eda_execution_failed",
     "software_validation_failed",
 }
@@ -67,6 +69,8 @@ ALLOWED_TOP_LEVEL_ANSWERS = {
     "blocked_by_missing_candidate_evidence",
     "proxy_only_inconclusive",
     "gpu_or_eda_failure",
+    "gpu_qe_build_failed",
+    "gpu_qe_binary_cpu_only",
     "inconclusive",
 }
 ALLOWED_ENVIRONMENT_STATUSES = {

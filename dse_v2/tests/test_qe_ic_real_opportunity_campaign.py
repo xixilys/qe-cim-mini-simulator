@@ -24,8 +24,12 @@ from dse_v2.experiments.qe_ic_real_opportunity.case_setup import prepare_qe_ic_c
 from dse_v2.experiments.qe_ic_real_opportunity.candidate_selection import (
     select_layer4_candidates_for_campaign,
 )
+from dse_v2.experiments.qe_ic_real_opportunity.eda_stub_evidence import (
+    build_generated_eda_stub_evidence,
+)
 from dse_v2.experiments.qe_ic_real_opportunity.environment_probe import (
     discover_qe_executables,
+    merge_local_and_remote_eda_tools,
     normalized_qe_probe_output_hash,
     parse_nvidia_smi_query_output,
     parse_ssh_config_hosts,
@@ -234,7 +238,38 @@ def test_local_gpu_probe_parser_accepts_rtx_3070_output():
     }
 
 
-def test_qe_discovery_uses_env_qe_bin_and_hashes_probe(
+def test_environment_probe_uses_wsl_compatible_nvidia_smi_query(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    commands: list[list[str]] = []
+
+    def fake_run(command, **_kwargs):
+        commands.append(command)
+
+        class Result:
+            returncode = 0
+            stdout = "NVIDIA GeForce RTX 3070, 8192, 596.36\n"
+            stderr = ""
+
+        return Result()
+
+    monkeypatch.setattr(
+        "dse_v2.experiments.qe_ic_real_opportunity.environment_probe._which",
+        lambda name: "/usr/bin/nvidia-smi" if name == "nvidia-smi" else None,
+    )
+    monkeypatch.setattr("subprocess.run", fake_run)
+
+    env = probe_qe_ic_real_opportunity_environment()
+
+    assert env["gpu"]["gpu_present"] is True
+    assert env["gpu"]["gpu_model"] == "NVIDIA GeForce RTX 3070"
+    assert env["gpu"]["gpu_memory_total_mib"] == 8192
+    assert env["gpu"]["driver_version"] == "596.36"
+    assert env["gpu"]["cuda_version"] is None
+    assert "--query-gpu=name,memory.total,driver_version" in commands[0]
+
+
+def test_qe_discovery_uses_env_qe_bin_and_requires_dynamic_gpu_library(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ):
@@ -252,9 +287,136 @@ def test_qe_discovery_uses_env_qe_bin_and_hashes_probe(
     pw_record = discovered["programs"]["pw.x"]
     assert pw_record["path"] == str(pw)
     assert pw_record["runs"] is True
-    assert pw_record["gpu_support"] == "detected"
+    assert pw_record["help_gpu_support"] == "detected"
+    assert pw_record["dynamic_gpu_library_support"] == "not_detected"
+    assert pw_record["gpu_support"] == "not_detected"
+    assert pw_record["dynamic_gpu_libraries"] == []
     assert pw_record["probe_command_output_hash"].startswith("sha256:")
     assert "7.5" in pw_record["version"]
+
+
+def test_qe_discovery_marks_gpu_support_when_help_and_ldd_agree(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    bin_dir = tmp_path / "qe-bin"
+    bin_dir.mkdir()
+    pw = bin_dir / "pw.x"
+    pw.write_text("#!/bin/sh\necho 'Program PWSCF v.7.5 GPU CUDA enabled'\n", encoding="utf-8")
+    pw.chmod(0o755)
+    monkeypatch.setenv("QE_BIN", str(bin_dir))
+    monkeypatch.delenv("QE_ROOT", raising=False)
+    monkeypatch.delenv("ESPRESSO_ROOT", raising=False)
+    original_run = subprocess.run
+
+    def fake_run(command, **kwargs):
+        if command[0] == "ldd":
+            class LddResult:
+                returncode = 0
+                stdout = "\tlibcudart.so.12 => /usr/local/cuda/lib64/libcudart.so.12\n"
+                stderr = ""
+
+            return LddResult()
+        return original_run(command, **kwargs)
+
+    monkeypatch.setattr(
+        "dse_v2.experiments.qe_ic_real_opportunity.environment_probe.subprocess.run",
+        fake_run,
+    )
+
+    discovered = discover_qe_executables(config={}, programs=["pw.x"], repo_root=tmp_path)
+    pw_record = discovered["programs"]["pw.x"]
+
+    assert pw_record["help_gpu_support"] == "detected"
+    assert pw_record["dynamic_gpu_library_support"] == "detected"
+    assert pw_record["dynamic_gpu_libraries"] == ["libcudart.so.12"]
+    assert pw_record["gpu_support"] == "detected"
+
+
+def test_environment_probe_records_gpu_qe_build_probe(tmp_path: Path):
+    probe_path = tmp_path / "artifacts" / "qe_gpu_build" / "qe_gpu_build_probe.json"
+    probe_path.parent.mkdir(parents=True)
+    _write_json(
+        probe_path,
+        {
+            "status": "gpu_qe_build_failed",
+            "failure_reason": "built GPU-linked QE segfaulted during -h probe",
+            "programs": [
+                {
+                    "program": "pw.x",
+                    "path": "/tmp/qe-gpu/bin/pw.x",
+                    "ldd": {"gpu_lib_lines": ["libcudart.so.13 => /opt/cuda/libcudart.so.13"]},
+                    "help": {"returncode": -11},
+                }
+            ],
+        },
+    )
+
+    env = probe_qe_ic_real_opportunity_environment(
+        config={},
+        repo_root=tmp_path,
+        include_qe_discovery=True,
+    )
+
+    build_probe = env["tools"]["qe_gpu_build_probe"]
+    assert build_probe["status"] == "gpu_qe_build_failed"
+    assert build_probe["failure_reason"] == "built GPU-linked QE segfaulted during -h probe"
+    assert build_probe["program_count"] == 1
+    assert build_probe["path"] == str(probe_path)
+
+
+def test_execute_real_prefers_gpu_qe_build_failed_when_build_probe_failed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    def fake_probe(*_args, **_kwargs):
+        return {
+            "environment_status": "partially_ready",
+            "blockers": [],
+            "gpu": {"gpu_present": True, "gpu_model": "controlled-gpu"},
+            "tools": {
+                "qe": {"pw.x": "/bin/true", "ph.x": None, "epw.x": None},
+                "qe_discovery": {
+                    "discovery_status": "available",
+                    "programs": {
+                        "pw.x": {
+                            "path": "/bin/true",
+                            "runs": True,
+                            "version": "controlled",
+                            "gpu_support": "not_detected",
+                            "help_gpu_support": "not_detected",
+                            "dynamic_gpu_library_support": "not_detected",
+                            "dynamic_gpu_libraries": [],
+                        }
+                    },
+                },
+                "qe_gpu_build_probe": {
+                    "status": "gpu_qe_build_failed",
+                    "failure_reason": "controlled GPU-linked QE segfault",
+                },
+                "profilers": {"nsys": "/bin/true", "ncu": None},
+                "systemc": {"generic_sim": None, "systemc_runner": None},
+                "eda": {"available_tools": {}, "missing_tools": ["vivado", "dc_shell", "vcs", "yosys"]},
+            },
+        }
+
+    monkeypatch.setattr(
+        "dse_v2.experiments.qe_ic_real_opportunity.opportunity_campaign.probe_qe_ic_real_opportunity_environment",
+        fake_probe,
+    )
+
+    report = campaign.run_qe_ic_real_opportunity_campaign(
+        CONFIG_PATH,
+        out_dir=tmp_path,
+        execute_real=True,
+        allow_generated_inputs=True,
+        nonblocking=True,
+    )
+
+    assert report["final_answer"]["overall_answer"] == "gpu_qe_build_failed"
+    assert "gpu_qe_build_failed" in report["gpu_baseline_summary"]["blocker_reasons"]
+    assert "gpu_qe_build_failed" in report["final_answer"]["missing_evidence"]
+    assert report["final_answer"]["best_speedup_vs_gpu"] is None
 
 
 def test_qe_probe_hash_ignores_qe_start_timestamp():
@@ -330,6 +492,61 @@ def test_remote_eda_probe_attempts_discovered_aliases(monkeypatch: pytest.Monkey
     assert result["speedup_claim_implication"] == "none"
 
 
+def test_remote_eda_probe_keeps_partial_tools_when_optional_tool_missing(monkeypatch: pytest.MonkeyPatch):
+    def fake_run(_command, **_kwargs):
+        class Result:
+            returncode = 1
+            stdout = "\n".join(
+                [
+                    "/home/Xilinx/Vivado/2019.1/bin/vivado",
+                    "/home/synopsys/syn/O-2018.06-SP1/bin/dc_shell",
+                    "/home/synopsys/vcs-mx/O-2018.09-1/bin/vcs",
+                    "",
+                ]
+            )
+            stderr = "setlocale: LC_ALL: cannot change locale (C.UTF-8)\n"
+
+        return Result()
+
+    monkeypatch.setattr("subprocess.run", fake_run)
+
+    result = probe_remote_eda_aliases(["ic-eda"], timeout_seconds=1)
+
+    row = result["aliases"][0]
+    assert row["probe_status"] == "available"
+    assert row["available_tools"] == ["vivado", "dc_shell", "vcs"]
+
+
+def test_remote_eda_tools_are_merged_into_environment_availability():
+    merged = merge_local_and_remote_eda_tools(
+        local_tools={"vivado": None, "dc_shell": None, "vcs": None, "yosys": None},
+        remote_probe={
+            "remote_probe_status": "probed",
+            "aliases": [
+                {
+                    "alias": "ic-eda",
+                    "probe_status": "available",
+                    "available_tool_paths": {
+                        "vivado": "/home/Xilinx/Vivado/2019.1/bin/vivado",
+                        "dc_shell": "/home/synopsys/syn/O-2018.06-SP1/bin/dc_shell",
+                        "vcs": "/home/synopsys/vcs-mx/O-2018.09-1/bin/vcs",
+                    },
+                    "available_tools": ["vivado", "dc_shell", "vcs"],
+                }
+            ],
+            "speedup_claim_implication": "none",
+        },
+    )
+
+    assert merged["available_tools"] == {
+        "vivado": "ssh://ic-eda/home/Xilinx/Vivado/2019.1/bin/vivado",
+        "dc_shell": "ssh://ic-eda/home/synopsys/syn/O-2018.06-SP1/bin/dc_shell",
+        "vcs": "ssh://ic-eda/home/synopsys/vcs-mx/O-2018.09-1/bin/vcs",
+    }
+    assert merged["missing_tools"] == ["yosys"]
+    assert merged["remote_probe_status"] == "probed"
+
+
 def test_remote_eda_probe_tolerates_lc_all_warning(monkeypatch: pytest.MonkeyPatch):
     def fake_run(_command, **_kwargs):
         class Result:
@@ -361,7 +578,7 @@ def test_default_environment_probe_attempts_remote_aliases_without_exposing_name
 
         class Result:
             returncode = 0
-            stdout = "vivado\n" if command and command[0] == "ssh" else ""
+            stdout = "/home/Xilinx/Vivado/2019.1/bin/vivado\n" if command and command[0] == "ssh" else ""
             stderr = ""
 
         return Result()
@@ -371,10 +588,10 @@ def test_default_environment_probe_attempts_remote_aliases_without_exposing_name
 
     eda = env["tools"]["eda"]
     assert any(call and call[0] == "ssh" and "eda-vivado" in call for call in calls)
-    assert eda["remote_probe_status"] == "checked_redacted"
-    assert eda["remote_available_tool_count"] == "redacted"
-    assert eda["remote_ssh_aliases_checked"] == "redacted"
-    assert "eda-vivado" not in json.dumps(env)
+    assert eda["remote_probe_status"] == "probed"
+    assert eda["remote_available_tool_count"] == 1
+    assert eda["remote_ssh_aliases_checked"] == 1
+    assert eda["available_tools"] == {"vivado": "ssh://eda-vivado/home/Xilinx/Vivado/2019.1/bin/vivado"}
 
 
 def test_candidate_selection_uses_only_layer4_candidates():
@@ -1038,6 +1255,8 @@ def test_nonblocking_generates_benchmark_input_when_deck_missing(tmp_path: Path)
         "proxy_only_inconclusive",
         "implementation_limited",
         "gpu_or_eda_failure",
+        "gpu_qe_binary_cpu_only",
+        "gpu_qe_build_failed",
     }
     assert campaign.validate_qe_ic_real_opportunity_campaign_report(report)["status"] == "passed"
 
@@ -1254,6 +1473,126 @@ def test_generated_pseudo_missing_is_retained_when_qe_binary_is_cpu_only(tmp_pat
     assert "gpu_qe_execution_unavailable_due_to_pseudopotential" in gpu["blocker_reasons"]
 
 
+def test_execute_real_cpu_only_qe_uses_precise_final_answer(tmp_path: Path):
+    config = _load_json(CONFIG_PATH)
+    config["qe_gpu_build_probe"] = str(tmp_path / "missing_qe_gpu_build_probe.json")
+    config_path = tmp_path / "config.json"
+    _write_json(config_path, config)
+
+    report = campaign.run_qe_ic_real_opportunity_campaign(
+        config_path,
+        out_dir=tmp_path,
+        execute_real=True,
+        allow_generated_inputs=True,
+        nonblocking=True,
+    )
+
+    assert report["final_answer"]["overall_answer"] == "gpu_qe_binary_cpu_only"
+    assert "gpu_qe_binary_cpu_only" in report["final_answer"]["missing_evidence"]
+    assert report["final_answer"]["best_speedup_vs_gpu"] is None
+    assert report["opportunity_summary"]["claim_gate_invoked"] is False
+
+
+def test_execute_real_generates_eda_stub_evidence_without_gpu_qe(tmp_path: Path):
+    report = campaign.run_qe_ic_real_opportunity_campaign(
+        CONFIG_PATH,
+        out_dir=tmp_path,
+        execute_real=True,
+        allow_generated_inputs=True,
+        nonblocking=True,
+    )
+
+    artifact_path = Path(report["real_run_artifacts"]["candidate_eda_stub_evidence_real_run"])
+    artifact = _load_json(artifact_path)
+
+    assert artifact["schema_version"] == "dse.qe_ic.eda_stub_evidence.v1"
+    assert artifact["claim_strength"] == "none"
+    assert artifact["results_are_real"] is False
+    assert artifact["resource_timing_scope"] == "syntax_only"
+    assert artifact["resource_metrics_available"] is False
+    assert artifact["timing_metrics_available"] is False
+    assert artifact["selected_candidate_count"] == 3
+    assert len(artifact["candidate_stub_results"]) == 3
+    assert all(row["resource_timing_scope"] == "syntax_only" for row in artifact["candidate_stub_results"])
+    assert {row["candidate_id"] for row in artifact["candidate_stub_results"]} == {
+        row["candidate_id"] for row in report["candidate_selection"]
+    }
+    assert any(
+        attempt["attempt"] == "generated_eda_stub_resource_timing" and attempt["status"] in {"executed", "failed"}
+        for attempt in report["candidate_evidence_attempts"]
+    )
+    assert "blocked_by_missing_candidate_design" not in report["environment_summary"]["blockers"]
+
+
+def test_generated_eda_stub_evidence_falls_back_when_no_tool_available(tmp_path: Path):
+    candidates = [
+        _tracked_layer4_candidate("fpga_only"),
+        _tracked_layer4_candidate("gpu_fpga_hybrid"),
+    ]
+
+    evidence = build_generated_eda_stub_evidence(
+        selected_candidates=candidates,
+        environment={"tools": {"eda": {"available_tools": {}}}},
+        out_dir=tmp_path,
+    )
+    artifact = evidence["artifact"]
+
+    assert evidence["results_are_real"] is False
+    assert evidence["tool_execution_is_real"] is False
+    assert evidence["blocker_reasons"] == []
+    assert artifact["claim_strength"] == "none"
+    assert len(artifact["candidate_stub_results"]) == 2
+    assert artifact["tool_attempts"][0]["status"] == "blocked"
+    assert Path(artifact["combined_rtl_stub_path"]).exists()
+    assert all(Path(row["rtl_stub_path"]).exists() for row in artifact["candidate_stub_results"])
+
+
+def test_generated_eda_stub_remote_vcs_sets_portable_locale(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    commands: list[tuple[list[str], str | None]] = []
+
+    def fake_run(command, **kwargs):
+        commands.append((list(command), kwargs.get("input")))
+
+        class Result:
+            returncode = 0
+            stdout = "ok\n"
+            stderr = ""
+
+        return Result()
+
+    monkeypatch.setattr(
+        "dse_v2.experiments.qe_ic_real_opportunity.eda_stub_evidence.subprocess.run",
+        fake_run,
+    )
+
+    evidence = build_generated_eda_stub_evidence(
+        selected_candidates=[_tracked_layer4_candidate("fpga_only")],
+        environment={
+            "tools": {
+                "eda": {
+                    "available_tools": {
+                        "vcs": "ssh://ic-eda/home/synopsys/vcs-mx/O-2018.09-1/bin/vcs",
+                    }
+                }
+            }
+        },
+        out_dir=tmp_path,
+    )
+
+    assert evidence["tool_execution_is_real"] is True
+    assert len(commands) == 2
+    assert commands[0][0][:2] == ["ssh", "ic-eda"]
+    assert commands[1][0][:2] == ["ssh", "ic-eda"]
+    assert "export LC_ALL=C LANG=C" in commands[0][0][2]
+    assert "export LC_ALL=C LANG=C" in commands[1][0][2]
+    assert "rm -rf /tmp/dse_qe_ic_eda_stub_" in commands[0][0][2]
+    assert "/home/synopsys/vcs-mx/O-2018.09-1/bin/vcs" in commands[1][0][2]
+    assert "-full64" in commands[1][0][2]
+
+
 def test_nonblocking_generates_proxy_candidate_evidence_without_strong_claim(tmp_path: Path):
     candidate = _tracked_layer4_candidate()
     baseline_path = tmp_path / "baseline_runs.json"
@@ -1333,7 +1672,18 @@ def test_execute_real_uses_discovered_qe_path_for_baseline(
     monkeypatch.setenv("QE_BIN", str(bin_dir))
     monkeypatch.delenv("QE_ROOT", raising=False)
     monkeypatch.delenv("ESPRESSO_ROOT", raising=False)
+    monkeypatch.setattr(
+        "dse_v2.experiments.qe_ic_real_opportunity.environment_probe._probe_dynamic_gpu_libraries",
+        lambda _path: {
+            "dynamic_gpu_library_support": "detected",
+            "dynamic_gpu_libraries": ["libcudart.so.12"],
+            "ldd_command": ["ldd", str(pw)],
+            "ldd_returncode": 0,
+            "ldd_output_hash": "sha256:" + "6" * 64,
+        },
+    )
     config = _load_json(CONFIG_PATH)
+    config["qe_gpu_build_probe"] = str(tmp_path / "missing_qe_gpu_build_probe.json")
     config["case_selection"]["required_workload_families"] = ["ground_state_band_structure"]
     config["input_decks"] = {"ground_state_band_structure": str(deck)}
     config_path = tmp_path / "config.json"
@@ -1373,7 +1723,18 @@ def test_execute_real_baseline_artifact_keeps_per_run_provenance(
     empty_bin.mkdir()
     monkeypatch.setenv("PATH", str(empty_bin))
     monkeypatch.setenv("QE_BIN", str(bin_dir))
+    monkeypatch.setattr(
+        "dse_v2.experiments.qe_ic_real_opportunity.environment_probe._probe_dynamic_gpu_libraries",
+        lambda _path: {
+            "dynamic_gpu_library_support": "detected",
+            "dynamic_gpu_libraries": ["libcudart.so.12"],
+            "ldd_command": ["ldd", str(pw)],
+            "ldd_returncode": 0,
+            "ldd_output_hash": "sha256:" + "6" * 64,
+        },
+    )
     config = _load_json(CONFIG_PATH)
+    config["qe_gpu_build_probe"] = str(tmp_path / "missing_qe_gpu_build_probe.json")
     config["case_selection"]["required_workload_families"] = ["ground_state_band_structure"]
     config["input_decks"] = {"ground_state_band_structure": str(deck)}
     config_path = tmp_path / "config.json"

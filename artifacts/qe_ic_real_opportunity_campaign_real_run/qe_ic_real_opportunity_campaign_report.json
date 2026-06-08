@@ -2,7 +2,7 @@
   "allow_generated_inputs": true,
   "campaign_id": "qe_ic_real_opportunity_campaign_v1",
   "campaign_layer": "qe_ic_real_gpu_vs_fpga_hybrid_opportunity_campaign_v1",
-  "campaign_status": "gpu_execution_failed",
+  "campaign_status": "completed_proxy_only",
   "candidate_evidence_attempts": [
     {
       "attempt": "ingest_existing_candidate_evidence",
@@ -27,21 +27,39 @@
     },
     {
       "attempt": "eda_resource_timing",
-      "available_tools": {},
+      "available_tools": {
+        "dc_shell": "ssh://ic-eda/home/synopsys/syn/O-2018.06-SP1/bin/dc_shell",
+        "vcs": "ssh://ic-eda/home/synopsys/vcs-mx/O-2018.09-1/bin/vcs",
+        "vivado": "ssh://ic-eda/home/Xilinx/Vivado/2019.1/bin/vivado"
+      },
       "path": null,
       "policy_enabled": true,
       "reason": "candidate design artifacts are missing",
       "status": "blocked"
+    },
+    {
+      "attempt": "generated_trace_proxy",
+      "reason": "candidate design/trace evidence missing; generated non-claimable proxy evidence",
+      "status": "generated"
+    },
+    {
+      "attempt": "generated_eda_stub_resource_timing",
+      "combined_rtl_stub_path": "artifacts/qe_ic_real_opportunity_campaign_real_run/generated_candidate_stubs/qe_ic_generated_stub_bundle.sv",
+      "reason": null,
+      "selected_candidate_count": 3,
+      "status": "executed",
+      "syntax_check_passed": true,
+      "tool": "vcs",
+      "tool_execution_is_real": true,
+      "tool_path": "ssh://ic-eda/home/synopsys/vcs-mx/O-2018.09-1/bin/vcs"
     }
   ],
   "candidate_evidence_summary": {
-    "attempt_count": 4,
-    "blocker_reasons": [
-      "blocked_by_missing_candidate_evidence"
-    ],
-    "candidate_result_count": 0,
-    "evidence_status": "evidence_missing",
-    "proxy_evidence_generated": false,
+    "attempt_count": 6,
+    "blocker_reasons": [],
+    "candidate_result_count": 3,
+    "evidence_status": "proxy_estimate",
+    "proxy_evidence_generated": true,
     "results_are_real": false
   },
   "candidate_selection": [
@@ -149,78 +167,58 @@
       "input_deck_path": "artifacts/qe_ic_real_opportunity_campaign_real_run/generated_inputs/generated_silicon_scf_pw_v0.in",
       "output_directory": "artifacts/qe_ic_real_opportunity_campaign_real_run/ground_state_band_structure",
       "precision": "fp64_mixed",
-      "profile_command": "nsys profile /usr/bin/pw.x -in artifacts/qe_ic_real_opportunity_campaign_real_run/generated_inputs/generated_silicon_scf_pw_v0.in",
+      "profile_command": "CUDA_VISIBLE_DEVICES='0' LD_LIBRARY_PATH='/usr/lib/wsl/drivers/nv_dispi.inf_amd64_67995ceab8993b08:/usr/lib/wsl/lib:/opt/nvidia/hpc_sdk/Linux_x86_64/26.1/compilers/lib:/opt/nvidia/hpc_sdk/Linux_x86_64/26.1/cuda/13.1/lib64:/opt/nvidia/hpc_sdk/Linux_x86_64/26.1/math_libs/13.1/lib64' nsys profile /home/xixilys/project/qe_gpu_build/q-e/build_gpu_serial_nvhpc_cuda_no_gomp/bin/pw.x -in artifacts/qe_ic_real_opportunity_campaign_real_run/generated_inputs/generated_silicon_scf_pw_v0.in",
       "program": "pw.x",
       "pseudo_file_path": "/usr/share/espresso/pseudo/Si.pbe-n-rrkjus_psl.1.0.0.UPF",
       "pseudo_hash": "sha256:ae3aefd0811f9499dbc4a72f1f9ae02ef4fc7f3568bf6f559b68668719c69e2b",
       "pseudo_status": "pseudo_available",
-      "qe_executable_path": "/usr/bin/pw.x",
-      "run_command": "/usr/bin/pw.x -in artifacts/qe_ic_real_opportunity_campaign_real_run/generated_inputs/generated_silicon_scf_pw_v0.in",
+      "qe_executable_path": "/home/xixilys/project/qe_gpu_build/q-e/build_gpu_serial_nvhpc_cuda_no_gomp/bin/pw.x",
+      "run_command": "CUDA_VISIBLE_DEVICES='0' LD_LIBRARY_PATH='/usr/lib/wsl/drivers/nv_dispi.inf_amd64_67995ceab8993b08:/usr/lib/wsl/lib:/opt/nvidia/hpc_sdk/Linux_x86_64/26.1/compilers/lib:/opt/nvidia/hpc_sdk/Linux_x86_64/26.1/cuda/13.1/lib64:/opt/nvidia/hpc_sdk/Linux_x86_64/26.1/math_libs/13.1/lib64' /home/xixilys/project/qe_gpu_build/q-e/build_gpu_serial_nvhpc_cuda_no_gomp/bin/pw.x -in artifacts/qe_ic_real_opportunity_campaign_real_run/generated_inputs/generated_silicon_scf_pw_v0.in",
+      "run_environment": {
+        "CUDA_VISIBLE_DEVICES": "0",
+        "LD_LIBRARY_PATH": "/usr/lib/wsl/drivers/nv_dispi.inf_amd64_67995ceab8993b08:/usr/lib/wsl/lib:/opt/nvidia/hpc_sdk/Linux_x86_64/26.1/compilers/lib:/opt/nvidia/hpc_sdk/Linux_x86_64/26.1/cuda/13.1/lib64:/opt/nvidia/hpc_sdk/Linux_x86_64/26.1/math_libs/13.1/lib64"
+      },
       "scientific_claim_scope": "performance_benchmark_only",
       "template_created": false,
       "template_note": "Generated benchmark/proxy workload; not real device-physics input.",
       "workload_family_id": "ground_state_band_structure"
-    },
-    {
-      "case_id": "generated_epw_proxy_v0",
-      "case_origin": "generated_benchmark",
-      "case_status": "ready",
-      "evidence_status": "generated_benchmark",
-      "input_deck_hash": "sha256:797608b469777bf2caf8966eb77a43c2accbf5fcd7d84025504a6ac39d7d3da4",
-      "input_deck_path": "artifacts/qe_ic_real_opportunity_campaign_real_run/generated_inputs/generated_epw_proxy_v0.in",
-      "output_directory": "artifacts/qe_ic_real_opportunity_campaign_real_run/electron_phonon_mobility",
-      "precision": "fp64_mixed",
-      "profile_command": "nsys profile /usr/bin/epw.x -in artifacts/qe_ic_real_opportunity_campaign_real_run/generated_inputs/generated_epw_proxy_v0.in",
-      "program": "epw.x",
-      "pseudo_file_path": null,
-      "pseudo_hash": null,
-      "pseudo_status": "pseudo_missing",
-      "qe_executable_path": "/usr/bin/epw.x",
-      "run_command": "/usr/bin/epw.x -in artifacts/qe_ic_real_opportunity_campaign_real_run/generated_inputs/generated_epw_proxy_v0.in",
-      "scientific_claim_scope": "performance_benchmark_only",
-      "template_created": false,
-      "template_note": "Generated benchmark/proxy workload; not real device-physics input.",
-      "workload_family_id": "electron_phonon_mobility"
     }
   ],
   "claim_boundary": "No FPGA/GPU+FPGA superiority claim is made unless real or high-fidelity evidence passes the existing claim gate.",
   "cpu_baseline_summary": {
-    "baseline_record_count": 0,
-    "blocker_reasons": [
-      "cpu_only_baseline_command_failed"
-    ],
-    "evidence_status": "evidence_missing",
-    "measurements_are_real": false,
+    "baseline_record_count": 1,
+    "blocker_reasons": [],
+    "evidence_status": "measured",
+    "measurements_are_real": true,
     "target_type": "cpu_only"
   },
   "environment_summary": {
     "blockers": [
       "blocked_by_missing_systemc",
-      "blocked_by_missing_eda",
-      "blocked_by_missing_candidate_evidence",
-      "blocked_by_missing_candidate_design"
+      "blocked_by_missing_candidate_evidence"
     ],
-    "environment_status": "ingest_only_available",
+    "environment_status": "partially_ready",
     "gpu": {
-      "cuda_version": null,
-      "driver_version": null,
-      "gpu_memory_total_mib": null,
-      "gpu_model": null,
-      "gpu_present": false,
-      "probe_error": ""
+      "cuda_version": "13.2",
+      "driver_version": "596.36",
+      "gpu_memory_total_mib": 8192,
+      "gpu_model": "NVIDIA GeForce RTX 3070",
+      "gpu_present": true
     },
     "tools": {
       "eda": {
-        "available_tools": {},
+        "available_tools": {
+          "dc_shell": "ssh://ic-eda/home/synopsys/syn/O-2018.06-SP1/bin/dc_shell",
+          "vcs": "ssh://ic-eda/home/synopsys/vcs-mx/O-2018.09-1/bin/vcs",
+          "vivado": "ssh://ic-eda/home/Xilinx/Vivado/2019.1/bin/vivado"
+        },
         "missing_tools": [
-          "vivado",
-          "dc_shell",
           "yosys"
         ],
-        "remote_available_tool_count": "redacted",
-        "remote_probe_status": "checked_redacted",
-        "remote_ssh_alias_count": "redacted",
-        "remote_ssh_aliases_checked": "redacted",
+        "remote_available_tool_count": 6,
+        "remote_probe_status": "probed",
+        "remote_ssh_alias_count": 3,
+        "remote_ssh_aliases_checked": 3,
         "speedup_claim_implication": "none"
       },
       "profilers": {
@@ -230,48 +228,114 @@
       "qe": {
         "epw.x": "/usr/bin/epw.x",
         "ph.x": "/usr/bin/ph.x",
-        "pw.x": "/usr/bin/pw.x"
+        "pw.x": "/home/xixilys/project/qe_gpu_build/q-e/build_gpu_serial_nvhpc_cuda_no_gomp/bin/pw.x"
       },
       "qe_discovery": {
         "discovery_status": "available",
         "programs": {
           "epw.x": {
+            "dynamic_gpu_libraries": [],
+            "dynamic_gpu_library_support": "not_detected",
             "gpu_support": "not_detected",
+            "help_gpu_support": "not_detected",
+            "ldd_command": [
+              "ldd",
+              "/usr/bin/epw.x"
+            ],
+            "ldd_output_hash": "sha256:71932173e94d1a9370f002d49db5b97f992a8e9323efc879d6a54b0321084d86",
+            "ldd_returncode": 0,
             "path": "/usr/bin/epw.x",
             "probe_command": [
               "/usr/bin/epw.x",
               "-h"
             ],
-            "probe_command_output_hash": "sha256:98b9e14d8b3b77baba817a6b3533b2bfa8ce1a374b4c221682ba52c0e35bb4bf",
+            "probe_command_output_hash": "sha256:b389dca69a37eccb35c72f17caf047cd05545af4b97a248a9ed4b96b1d2b1998",
             "probe_returncode": 1,
             "runs": false,
+            "runtime_env_keys": [
+              "CUDA_VISIBLE_DEVICES",
+              "LD_LIBRARY_PATH"
+            ],
             "version": "5.3.1"
           },
           "ph.x": {
+            "dynamic_gpu_libraries": [],
+            "dynamic_gpu_library_support": "not_detected",
             "gpu_support": "not_detected",
+            "help_gpu_support": "not_detected",
+            "ldd_command": [
+              "ldd",
+              "/usr/bin/ph.x"
+            ],
+            "ldd_output_hash": "sha256:0010f54e2ee0a2331960ec4f706df9398eab891463a2739b7c1a2998ea4b8489",
+            "ldd_returncode": 0,
             "path": "/usr/bin/ph.x",
             "probe_command": [
               "/usr/bin/ph.x",
               "-h"
             ],
-            "probe_command_output_hash": "sha256:9ed8df9e79792b49c45028e4a4b5f194743932d9dd5b2e6e11fc365d7272025b",
+            "probe_command_output_hash": "sha256:5d0f26fb1e43595a1cf812383f3a8512db194d331358168cc9301d34e2aeb0b3",
             "probe_returncode": 1,
             "runs": false,
+            "runtime_env_keys": [
+              "CUDA_VISIBLE_DEVICES",
+              "LD_LIBRARY_PATH"
+            ],
             "version": "6.7MaX"
           },
           "pw.x": {
-            "gpu_support": "not_detected",
-            "path": "/usr/bin/pw.x",
+            "dynamic_gpu_libraries": [
+              "libnvhpcwrapcufft.so",
+              "libcufft.so.12",
+              "libcudaforwraprand.so",
+              "libcusolver.so.12",
+              "libcublas.so.13",
+              "libcublasLt.so.13",
+              "libcudaforwrapblas.so",
+              "libcudaforwrapblas117.so",
+              "libcudart.so.13",
+              "libcudafor_130.so",
+              "libcudafor.so",
+              "libacchost.so",
+              "libaccdevaux.so",
+              "libaccdevice.so",
+              "libcudadevice.so",
+              "libcudafor2.so",
+              "libnvhpcatm.so",
+              "libcusparse.so.12"
+            ],
+            "dynamic_gpu_library_support": "detected",
+            "gpu_support": "detected",
+            "help_gpu_support": "not_detected",
+            "ldd_command": [
+              "ldd",
+              "/home/xixilys/project/qe_gpu_build/q-e/build_gpu_serial_nvhpc_cuda_no_gomp/bin/pw.x"
+            ],
+            "ldd_output_hash": "sha256:7d1e927dae3a341da3852afd3720552791e2e60fed790b72abddc4e55ccfba47",
+            "ldd_returncode": 0,
+            "path": "/home/xixilys/project/qe_gpu_build/q-e/build_gpu_serial_nvhpc_cuda_no_gomp/bin/pw.x",
             "probe_command": [
-              "/usr/bin/pw.x",
+              "/home/xixilys/project/qe_gpu_build/q-e/build_gpu_serial_nvhpc_cuda_no_gomp/bin/pw.x",
               "-h"
             ],
-            "probe_command_output_hash": "sha256:27328a49e3ad5e17dd32b84b5bc0b6acaddfb93bedd517e7aed6f8f7f59778dd",
+            "probe_command_output_hash": "sha256:1127111190fc38fd7165c61aa641889c5bdd3797c161059e7e9dcfb7cda55cc5",
             "probe_returncode": 1,
             "runs": false,
-            "version": "6.7MaX"
+            "runtime_env_keys": [
+              "CUDA_VISIBLE_DEVICES",
+              "LD_LIBRARY_PATH"
+            ],
+            "version": "7.5"
           }
-        }
+        },
+        "runtime_env_keys": [
+          "CUDA_VISIBLE_DEVICES",
+          "LD_LIBRARY_PATH"
+        ]
+      },
+      "qe_runtime_env": {
+        "CUDA_VISIBLE_DEVICES": "0",
+        "LD_LIBRARY_PATH": "/usr/lib/wsl/drivers/nv_dispi.inf_amd64_67995ceab8993b08:/usr/lib/wsl/lib:/opt/nvidia/hpc_sdk/Linux_x86_64/26.1/compilers/lib:/opt/nvidia/hpc_sdk/Linux_x86_64/26.1/cuda/13.1/lib64:/opt/nvidia/hpc_sdk/Linux_x86_64/26.1/math_libs/13.1/lib64"
       },
       "systemc": {
         "generic_sim": null,
@@ -281,29 +345,24 @@
   },
   "execution_mode": "execute_real",
   "final_answer": {
-    "answer_text": "Campaign could not answer the question because GPU/QE execution was unavailable.",
+    "answer_text": "Generated proxy/stub evidence is available, but it is not final measured performance; no strong GPU-vs-FPGA superiority claim is allowed.",
     "best_candidate_id": null,
     "best_speedup_vs_gpu": null,
-    "missing_evidence": [
-      "blocked_by_missing_candidate_evidence",
-      "gpu_qe_binary_cpu_only"
-    ],
+    "missing_evidence": [],
     "next_actions": [
-      "provide at least three GPU-only QE baseline runs",
-      "provide workflow-level trace replay/SystemC/gem5/real-QE candidate evidence",
-      "provide Vivado or DC resource/timing evidence when making FPGA/ASIC feasibility claims"
+      "improve pipeline utilization",
+      "calibrate SystemC/proxy evidence",
+      "repeat workflow-level measurements"
     ],
-    "overall_answer": "gpu_or_eda_failure",
-    "what_we_can_say": "The campaign can prepare cases, select Layer-4 candidates, and report exact missing evidence.",
-    "what_we_cannot_say": "We cannot say FPGA-only or GPU+FPGA is faster than the GPU-only baseline without measured baseline and high-fidelity candidate evidence."
+    "overall_answer": "proxy_only_inconclusive",
+    "what_we_can_say": "The current implementation is weak or insufficiently calibrated.",
+    "what_we_cannot_say": "We cannot conclude the FPGA/hybrid idea has no opportunity."
   },
   "gpu_baseline_summary": {
-    "baseline_record_count": 0,
-    "blocker_reasons": [
-      "gpu_qe_binary_cpu_only"
-    ],
-    "evidence_status": "evidence_missing",
-    "measurements_are_real": false,
+    "baseline_record_count": 1,
+    "blocker_reasons": [],
+    "evidence_status": "measured",
+    "measurements_are_real": true,
     "target_type": "gpu_only"
   },
   "implementation_audit": [
@@ -317,7 +376,7 @@
       "implementation_limited_reasons": [
         "SystemC/proxy not calibrated"
       ],
-      "implementation_quality_classification": "evidence_missing",
+      "implementation_quality_classification": "implementation_limited",
       "motif_id": "fft_transpose",
       "quality_observations": {},
       "rule_boundary": "Actual loss with idealized upper bound above 1.0 is implementation_limited, not fundamental_no_opportunity.",
@@ -334,7 +393,7 @@
       "implementation_limited_reasons": [
         "SystemC/proxy not calibrated"
       ],
-      "implementation_quality_classification": "evidence_missing",
+      "implementation_quality_classification": "implementation_limited",
       "motif_id": "reduction_collective",
       "quality_observations": {},
       "rule_boundary": "Actual loss with idealized upper bound above 1.0 is implementation_limited, not fundamental_no_opportunity.",
@@ -351,7 +410,7 @@
       "implementation_limited_reasons": [
         "SystemC/proxy not calibrated"
       ],
-      "implementation_quality_classification": "evidence_missing",
+      "implementation_quality_classification": "implementation_limited",
       "motif_id": "reduction_collective",
       "quality_observations": {},
       "rule_boundary": "Actual loss with idealized upper bound above 1.0 is implementation_limited, not fundamental_no_opportunity.",
@@ -384,22 +443,20 @@
         "candidate_id": "qeic_l4_fpga_candidate_ground_state_band_structure_fft_transpose_fpga_only_fpga_fft_transpose_engine_9bfbea2b1f",
         "claim_allowed": false,
         "claim_blockers": [
-          "blocked_by_missing_candidate_evidence",
-          "gpu_qe_binary_cpu_only"
+          "generated_proxy_not_claim_gate_eligible"
         ],
         "claim_strength": "none",
         "failure_reasons": [
-          "blocked_by_missing_candidate_evidence",
-          "gpu_qe_binary_cpu_only"
+          "generated_proxy_not_claim_gate_eligible"
         ],
-        "final_interpretation": "No claim is allowed until matching real GPU baseline and candidate high-fidelity evidence exist.",
-        "gpu_baseline_id": null,
-        "implementation_quality_classification": "evidence_missing",
+        "final_interpretation": "Generated proxy/stub evidence is not eligible for a strong GPU-vs-FPGA claim.",
+        "gpu_baseline_id": "gpu_baseline_ground_state_band_structure_generated_silicon_scf_pw_v0",
+        "implementation_quality_classification": "implementation_limited",
         "motif_id": "fft_transpose",
         "speedup_vs_gpu_conservative_ci": null,
-        "speedup_vs_gpu_mean": null,
+        "speedup_vs_gpu_mean": 0.8333333333333334,
         "target_type": "fpga_only",
-        "verdict": "evidence_missing",
+        "verdict": "proxy_only_inconclusive",
         "workload_family_id": "ground_state_band_structure"
       },
       {
@@ -410,22 +467,20 @@
         "candidate_id": "qeic_l4_hybrid_candidate_phonon_dfpt_reduction_collective_gpu_fpga_hybrid_hybrid_reduction_sidecar_423b828955",
         "claim_allowed": false,
         "claim_blockers": [
-          "blocked_by_missing_candidate_evidence",
-          "gpu_qe_binary_cpu_only"
+          "generated_proxy_not_claim_gate_eligible"
         ],
         "claim_strength": "none",
         "failure_reasons": [
-          "blocked_by_missing_candidate_evidence",
-          "gpu_qe_binary_cpu_only"
+          "generated_proxy_not_claim_gate_eligible"
         ],
-        "final_interpretation": "No claim is allowed until matching real GPU baseline and candidate high-fidelity evidence exist.",
-        "gpu_baseline_id": null,
-        "implementation_quality_classification": "evidence_missing",
+        "final_interpretation": "Generated proxy/stub evidence is not eligible for a strong GPU-vs-FPGA claim.",
+        "gpu_baseline_id": "gpu_baseline_ground_state_band_structure_generated_silicon_scf_pw_v0",
+        "implementation_quality_classification": "implementation_limited",
         "motif_id": "reduction_collective",
         "speedup_vs_gpu_conservative_ci": null,
-        "speedup_vs_gpu_mean": null,
+        "speedup_vs_gpu_mean": 0.8,
         "target_type": "gpu_fpga_hybrid",
-        "verdict": "evidence_missing",
+        "verdict": "proxy_only_inconclusive",
         "workload_family_id": "phonon_dfpt"
       },
       {
@@ -436,33 +491,28 @@
         "candidate_id": "qeic_l4_hybrid_candidate_phonon_dfpt_reduction_collective_gpu_fpga_hybrid_hybrid_dma_overlap_sidecar_9a9fa929fc",
         "claim_allowed": false,
         "claim_blockers": [
-          "blocked_by_missing_candidate_evidence",
-          "gpu_qe_binary_cpu_only"
+          "generated_proxy_not_claim_gate_eligible"
         ],
         "claim_strength": "none",
         "failure_reasons": [
-          "blocked_by_missing_candidate_evidence",
-          "gpu_qe_binary_cpu_only"
+          "generated_proxy_not_claim_gate_eligible"
         ],
-        "final_interpretation": "No claim is allowed until matching real GPU baseline and candidate high-fidelity evidence exist.",
-        "gpu_baseline_id": null,
-        "implementation_quality_classification": "evidence_missing",
+        "final_interpretation": "Generated proxy/stub evidence is not eligible for a strong GPU-vs-FPGA claim.",
+        "gpu_baseline_id": "gpu_baseline_ground_state_band_structure_generated_silicon_scf_pw_v0",
+        "implementation_quality_classification": "implementation_limited",
         "motif_id": "reduction_collective",
         "speedup_vs_gpu_conservative_ci": null,
-        "speedup_vs_gpu_mean": null,
+        "speedup_vs_gpu_mean": 0.7692307692307692,
         "target_type": "gpu_fpga_hybrid",
-        "verdict": "evidence_missing",
+        "verdict": "proxy_only_inconclusive",
         "workload_family_id": "phonon_dfpt"
       }
     ],
     "system_conclusion": {
       "best_candidate_id": null,
       "best_speedup_vs_gpu": null,
-      "overall_verdict": "evidence_missing",
-      "what_evidence_is_missing": [
-        "gpu_qe_binary_cpu_only",
-        "blocked_by_missing_candidate_evidence"
-      ]
+      "overall_verdict": "proxy_only_inconclusive",
+      "what_evidence_is_missing": []
     }
   },
   "producer": "dse_v2.experiments.qe_ic_real_opportunity",
@@ -475,6 +525,7 @@
     "profiles_are_real": false
   },
   "real_run_artifacts": {
+    "candidate_eda_stub_evidence_real_run": "artifacts/qe_ic_real_opportunity_campaign_real_run/qe_ic_candidate_eda_stub_evidence_real_run.json",
     "candidate_high_fidelity_results_real_run": "artifacts/qe_ic_real_opportunity_campaign_real_run/qe_ic_candidate_high_fidelity_results_real_run.json",
     "cpu_baseline_measurements_real_run": "artifacts/qe_ic_real_opportunity_campaign_real_run/qe_ic_cpu_baseline_measurements_real_run.json",
     "gpu_baseline_measurements_real_run": "artifacts/qe_ic_real_opportunity_campaign_real_run/qe_ic_gpu_baseline_measurements_real_run.json"

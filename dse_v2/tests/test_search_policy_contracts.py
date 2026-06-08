@@ -154,6 +154,83 @@ def test_hierarchical_funnel_records_required_stages_and_isolates_exploratory_ro
     )
 
 
+def test_hierarchical_funnel_can_emit_proposals_without_step3_promotion():
+    problem = SearchProblem(
+        problem_id="p4-proposal-only",
+        workload_run_id="w4-proposal-only",
+        objective="maximize throughput",
+        parameters={
+            "release_lane": ["release"],
+            "template_family": ["streaming", "wide"],
+            "pe_count": [4],
+        },
+        constraints={
+            "formal_pareto_lane_field": "release_lane",
+            "release_lane": "release",
+            "proposal_only_before_model_promotion": True,
+            "hierarchical_funnel_stages": HIERARCHICAL_FUNNEL_STAGES,
+        },
+    )
+    policy = HierarchicalFunnelSearchPolicy(bottleneck_keys=("pe_count",))
+
+    payloads = [record.to_dict() for record in policy.propose(problem, budget=2)]
+
+    assert payloads
+    assert all(payload["step2_screenable"] is True for payload in payloads)
+    assert all(payload["step3_evaluable"] is False for payload in payloads)
+    assert all(payload["simulation_eligible"] is False for payload in payloads)
+    assert all(payload["promoted_for_simulation"] is False for payload in payloads)
+    assert all(payload["simulation_blockers"] == ["not_promoted_for_simulation"] for payload in payloads)
+    assert all("formal_release_pareto_eligible" in payload["promotion_reasons"] for payload in payloads)
+    assert all("promoted_for_simulation" not in payload["promotion_reasons"] for payload in payloads)
+    assert all(
+        payload["provenance"]["promotion_authority"]["proposal_only_before_model_promotion"] is True
+        for payload in payloads
+    )
+
+
+def test_hierarchical_funnel_feedback_does_not_restore_direct_promotion_when_proposal_only():
+    problem = SearchProblem(
+        problem_id="p4-proposal-only-feedback",
+        workload_run_id="w4-proposal-only-feedback",
+        objective="maximize throughput",
+        parameters={
+            "release_lane": ["release"],
+            "template_family": ["streaming", "wide"],
+            "pe_count": [4],
+        },
+        constraints={
+            "formal_pareto_lane_field": "release_lane",
+            "release_lane": "release",
+            "proposal_only_before_model_promotion": True,
+        },
+    )
+    policy = HierarchicalFunnelSearchPolicy(bottleneck_keys=("pe_count",))
+    first_round = policy.propose(problem, budget=2)
+    policy.observe(
+        first_round[0].candidate_id,
+        {
+            "trusted_sample": True,
+            "promoted": True,
+            "step4_verdict": "trusted_pass",
+            "calibrated_score_delta": 100.0,
+        },
+    )
+
+    payloads = [record.to_dict() for record in policy.propose(problem, budget=2)]
+
+    assert payloads[0]["observed_metrics"]["trusted_sample"] is True
+    assert all(payload["step2_screenable"] is True for payload in payloads)
+    assert all(payload["step3_evaluable"] is False for payload in payloads)
+    assert all(payload["simulation_eligible"] is False for payload in payloads)
+    assert all("promoted_for_simulation" not in payload["promotion_reasons"] for payload in payloads)
+    assert all(
+        payload["provenance"]["promotion_authority"]["promotion_owner"]
+        == "downstream_model_screening_or_campaign_admission"
+        for payload in payloads
+    )
+
+
 def test_hierarchical_funnel_keeps_legacy_tier_constraints_non_authoritative():
     problem = SearchProblem(
         problem_id="p4-legacy",
@@ -229,6 +306,171 @@ def test_hierarchical_funnel_observations_change_later_proposal_order():
     assert second_round[0].parameter_hash == baseline.parameter_hash
     assert checkpoint["observed_count"] == 1
     assert checkpoint["best_candidate_id"] == second_round[0].candidate_id
+
+
+def test_hierarchical_funnel_uses_model_objectives_before_hash_heuristics():
+    problem = SearchProblem(
+        problem_id="p5-model-objectives",
+        workload_run_id="w5-model-objectives",
+        objective="minimize predicted deployment cost",
+        parameters={
+            "release_lane": ["release"],
+            "mapping_candidate_id": ["zz_bad_hash_preferred", "aa_good_model_preferred"],
+            "latency_ms": [900.0, 10.0],
+            "energy_j": [100.0, 1.0],
+            "resource_pressure": [0.95, 0.20],
+            "uncertainty": [0.01, 0.30],
+            "non_objective_rank_noise": [0.0, 1_000_000.0],
+        },
+        constraints={
+            "formal_pareto_lane_field": "release_lane",
+            "release_lane": "release",
+            "max_candidate_enumeration": 0,
+            "model_objectives": [
+                {"metric": "latency_ms", "direction": "minimize", "weight": 1.0, "scale": 1000.0},
+                {"metric": "energy_j", "direction": "minimize", "weight": 0.5, "scale": 100.0},
+                {"metric": "resource_pressure", "direction": "minimize", "weight": 0.25, "scale": 1.0},
+            ],
+            "uncertainty_metric": "uncertainty",
+            "uncertainty_weight": 0.05,
+        },
+        seed_candidates=(
+            {
+                "release_lane": "release",
+                "mapping_candidate_id": "zz_bad_hash_preferred",
+                "latency_ms": 900.0,
+                "energy_j": 100.0,
+                "resource_pressure": 0.95,
+                "uncertainty": 0.01,
+                "non_objective_rank_noise": 0.0,
+            },
+            {
+                "release_lane": "release",
+                "mapping_candidate_id": "aa_good_model_preferred",
+                "latency_ms": 10.0,
+                "energy_j": 1.0,
+                "resource_pressure": 0.20,
+                "uncertainty": 0.30,
+                "non_objective_rank_noise": 1_000_000.0,
+            },
+        ),
+    )
+    policy = HierarchicalFunnelSearchPolicy()
+
+    selected = policy.propose(problem, budget=1)[0].to_dict()
+
+    assert selected["parameters"]["mapping_candidate_id"] == "aa_good_model_preferred"
+    acquisition = selected["provenance"]["model_acquisition"]
+    assert acquisition["status"] == "applied"
+    assert acquisition["objective_count"] == 3
+    assert acquisition["uncertainty_metric"] == "uncertainty"
+
+
+def test_hierarchical_funnel_generalizes_calibrated_feedback_to_similar_candidates():
+    problem = SearchProblem(
+        problem_id="p5-feedback-generalization",
+        workload_run_id="w5-feedback-generalization",
+        objective="maximize throughput",
+        parameters={
+            "release_lane": ["release"],
+            "architecture_template": ["arch_good", "arch_other"],
+            "memory_topology": ["mem_good", "mem_other"],
+            "offload_boundary": ["boundary_observed", "boundary_neighbor"],
+        },
+        constraints={
+            "formal_pareto_lane_field": "release_lane",
+            "release_lane": "release",
+            "feedback_generalization_axes": ["architecture_template", "memory_topology"],
+            "feedback_generalization_strength": 0.25,
+        },
+    )
+    policy = HierarchicalFunnelSearchPolicy()
+
+    first_round = policy.propose(problem, budget=8)
+    observed = next(
+        record for record in first_round
+        if record.parameters["architecture_template"] == "arch_good"
+        and record.parameters["memory_topology"] == "mem_good"
+        and record.parameters["offload_boundary"] == "boundary_observed"
+    )
+    policy.observe(
+        observed.candidate_id,
+        {
+            "trusted_sample": True,
+            "step4_verdict": "trusted_pass",
+            "calibrated_score_delta": 100.0,
+            "objective_metric_name": "edp",
+            "objective_metric_value": 1000.0,
+            "objective_direction": "minimize",
+            "objective_metric_weight": 0.0,
+        },
+    )
+
+    second_round = policy.propose(problem, budget=3)
+    generalized = second_round[1]
+    generalized_provenance = generalized.to_dict()["provenance"]["feedback_generalization"]
+
+    assert second_round[0].candidate_id == observed.candidate_id
+    assert generalized.candidate_id != observed.candidate_id
+    assert generalized.parameters["architecture_template"] == "arch_good"
+    assert generalized.parameters["memory_topology"] == "mem_good"
+    assert generalized.observed_metrics == {}
+    assert generalized_provenance["status"] == "applied"
+    assert generalized_provenance["matched_observation_count"] == 1
+    assert generalized_provenance["matched_axis_count"] == 2
+    assert generalized_provenance["applied_bias"] > 0.0
+
+
+def test_hierarchical_funnel_does_not_generalize_uncalibrated_diagnostic_feedback():
+    problem = SearchProblem(
+        problem_id="p5-feedback-generalization-gated",
+        workload_run_id="w5-feedback-generalization-gated",
+        objective="maximize throughput",
+        parameters={
+            "release_lane": ["release"],
+            "architecture_template": ["arch_good", "arch_other"],
+            "memory_topology": ["mem_good", "mem_other"],
+            "offload_boundary": ["boundary_observed", "boundary_neighbor"],
+        },
+        constraints={
+            "formal_pareto_lane_field": "release_lane",
+            "release_lane": "release",
+            "feedback_generalization_axes": ["architecture_template", "memory_topology"],
+            "feedback_generalization_strength": 0.25,
+        },
+    )
+    policy = HierarchicalFunnelSearchPolicy()
+
+    first_round = policy.propose(problem, budget=8)
+    observed = next(
+        record for record in first_round
+        if record.parameters["architecture_template"] == "arch_good"
+        and record.parameters["memory_topology"] == "mem_good"
+        and record.parameters["offload_boundary"] == "boundary_observed"
+    )
+    policy.observe(
+        observed.candidate_id,
+        {
+            "trusted_sample": True,
+            "step4_verdict": "trusted_pass",
+            "latency_ms": 1.0,
+        },
+    )
+
+    second_round = policy.propose(problem, budget=3)
+    generalized_rows = [
+        record for record in second_round
+        if record.candidate_id != observed.candidate_id
+        and record.parameters["architecture_template"] == "arch_good"
+        and record.parameters["memory_topology"] == "mem_good"
+    ]
+
+    assert generalized_rows == []
+    assert all(
+        record.to_dict()["provenance"]["feedback_generalization"]["status"] == "no_feedback_observations"
+        for record in second_round
+        if record.candidate_id != observed.candidate_id
+    )
 
 
 def test_hierarchical_funnel_observes_step4_feedback_updates_with_candidate_aliases():
@@ -380,6 +622,108 @@ def test_persisted_checkpoint_feedback_builds_next_search_iteration_plan():
     assert plan["trusted_final_claim"] is False
 
 
+def test_search_iteration_plan_records_feedback_generalization_for_calibrated_candidates():
+    problem = SearchProblem(
+        problem_id="p5-feedback-plan-generalization",
+        workload_run_id="w5-feedback-plan-generalization",
+        objective="maximize throughput",
+        parameters={
+            "release_lane": ["release"],
+            "architecture_template": ["arch_good", "arch_other"],
+            "memory_topology": ["mem_good", "mem_other"],
+            "offload_boundary": ["boundary_observed", "boundary_neighbor"],
+        },
+        constraints={
+            "formal_pareto_lane_field": "release_lane",
+            "release_lane": "release",
+            "feedback_generalization_axes": ["architecture_template", "memory_topology"],
+            "feedback_generalization_strength": 0.25,
+        },
+    )
+    policy = HierarchicalFunnelSearchPolicy()
+
+    first_round = policy.propose(problem, budget=8)
+    observed = next(
+        record for record in first_round
+        if record.parameters["architecture_template"] == "arch_good"
+        and record.parameters["memory_topology"] == "mem_good"
+        and record.parameters["offload_boundary"] == "boundary_observed"
+    )
+    lookup = candidate_observation_id_lookup(record.to_dict() for record in first_round)
+    feedback_update = {
+        "schema_version": "dse.contract.feedback_update.v1",
+        "campaign_id": "campaign",
+        "workload_run_id": "w5-feedback-plan-generalization",
+        "trial_id": "trial",
+        "updates": [
+            {
+                "target": "search_policy",
+                "status": "available",
+                "candidate_refs": {
+                    "mapping_candidate_id": observed.candidate_id,
+                    "mapping_parameter_hash": observed.parameter_hash,
+                },
+                "metrics": {
+                    "latency_ms": 1.2,
+                    "trusted_sample": True,
+                    "step4_verdict": "trusted_pass",
+                    "calibrated_score_delta": 100.0,
+                    "objective_metric_name": "edp",
+                    "objective_metric_value": 1000.0,
+                    "objective_direction": "minimize",
+                    "objective_metric_weight": 0.0,
+                },
+                "source_artifacts": ["simulation_result.json", "mapping_feedback_state.json"],
+            }
+        ],
+        "source_artifact_hashes": {},
+    }
+    calibration_record = {
+        "schema_version": "dse.contract.calibration_record.v1",
+        "campaign_id": "campaign",
+        "workload_run_id": "w5-feedback-plan-generalization",
+        "trial_id": "trial",
+        "levels": ["l3"],
+        "confidence": 0.8,
+        "error_metrics": {"max_abs_error": 0.0},
+        "source_artifact_hashes": {},
+    }
+
+    applied = observe_step4_feedback(
+        policy,
+        feedback_update,
+        calibration_record,
+        candidate_id_lookup=lookup,
+    )
+    assert applied == 1
+
+    checkpoint = policy.checkpoint(problem).to_dict()
+    checkpoint["proposal_budget"] = 8
+    plan = build_search_iteration_plan(
+        search_checkpoint={
+            "schema_version": "dse.step2.search_checkpoint_summary.v1",
+            "search_policy_name": "hierarchical_funnel",
+            "search_policy_problem": problem.to_dict(),
+            "search_policy_checkpoint": checkpoint,
+            "search_policy_proposal_budget": 8,
+        },
+        feedback_update=feedback_update,
+        calibration_record={"confidence": 0.8, "error_metrics": {"max_abs_error": 0.0}},
+    )
+
+    assert plan["feedback_informed_proposal_ordering"] is True
+    assert plan["search_policy_problem"]["constraints"]["feedback_generalization_axes"] == [
+        "architecture_template",
+        "memory_topology",
+    ]
+    assert plan["search_policy_problem"]["constraints"]["feedback_generalization_strength"] == 0.25
+    assert any(
+        candidate["provenance"].get("feedback_generalization", {}).get("status") == "applied"
+        for candidate in plan["next_candidates"]
+        if candidate["candidate_id"] != observed.candidate_id
+    )
+
+
 def test_hierarchical_funnel_considers_full_grid_before_budgeting_outputs():
     problem = SearchProblem(
         problem_id="p6",
@@ -429,6 +773,51 @@ def test_hierarchical_funnel_declares_bounded_candidate_enumeration():
     assert enumeration["grid_candidate_enumerated_count"] == 4
     assert enumeration["complete_grid_enumeration"] is False
     assert enumeration["max_candidate_enumeration"] == 4
+
+
+def test_hierarchical_funnel_can_disable_grid_enumeration_for_seed_only_replay():
+    problem = SearchProblem(
+        problem_id="p7-seed-only",
+        workload_run_id="w7-seed-only",
+        objective="maximize throughput",
+        parameters={
+            "mapping_candidate_id": ["seed-a", "seed-b"],
+            "accelerator_target_set": ["fpga", "gpu"],
+            "release_lane": ["release"],
+        },
+        constraints={
+            "formal_pareto_lane_field": "release_lane",
+            "release_lane": "release",
+            "max_candidate_enumeration": 0,
+        },
+        seed_candidates=(
+            {
+                "mapping_candidate_id": "seed-a",
+                "accelerator_target_set": "fpga",
+                "release_lane": "release",
+            },
+            {
+                "mapping_candidate_id": "seed-b",
+                "accelerator_target_set": "gpu",
+                "release_lane": "release",
+            },
+        ),
+    )
+    policy = HierarchicalFunnelSearchPolicy()
+
+    payloads = [record.to_dict() for record in policy.propose(problem, budget=8)]
+    enumeration = payloads[0]["provenance"]["search_space_enumeration"]
+
+    assert len(payloads) == 2
+    assert {payload["parameters"]["mapping_candidate_id"] for payload in payloads} == {
+        "seed-a",
+        "seed-b",
+    }
+    assert {payload["parameters"]["accelerator_target_set"] for payload in payloads} == {"fpga", "gpu"}
+    assert enumeration["grid_candidate_enumerated_count"] == 0
+    assert enumeration["seed_candidate_count"] == 2
+    assert enumeration["deduped_candidate_count"] == 2
+    assert enumeration["complete_grid_enumeration"] is False
 
 
 def test_search_policy_records_are_safe_for_step2_canonical_artifact_projection():

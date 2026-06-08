@@ -546,15 +546,17 @@ def generate_seed_mappings(
     unique: Dict[Tuple[Tuple[str, str], ...], Dict[str, Any]] = {}
     for name, description, mapping, annotations in seeds:
         key = tuple(sorted(mapping.items()))
+        payload_annotations = _graph_mapping_annotations(graph)
+        if annotations:
+            payload_annotations.update(dict(annotations))
         payload = {
             "seed_name": name,
             "description": description,
             "workload_family": family,
             "workflow_mapping_policies": list(workflow.get("default_mapping_policies", []) or []),
             "mapping": mapping,
+            "annotations": payload_annotations,
         }
-        if annotations:
-            payload["annotations"] = dict(annotations)
         unique.setdefault(key, payload)
     return list(unique.values())
 
@@ -616,6 +618,15 @@ def _stable_mapping_candidate_id(graph: ComputeGraph, architecture: SystemArchit
     return f"map_{digest[:16]}"
 
 
+def _graph_mapping_annotations(graph: ComputeGraph) -> Dict[str, Any]:
+    op_type_by_node = {node_id: str(node.op_type) for node_id, node in graph.nodes.items()}
+    return {
+        "op_type_by_node": op_type_by_node,
+        "graph_node_count": len(graph.nodes),
+        "graph_op_type_count": len(set(op_type_by_node.values())),
+    }
+
+
 def screen_mapping(seed: Mapping[str, Any], graph: ComputeGraph, architecture: SystemArchitecture, candidate_index: int) -> MappingCandidate:
     mapping = dict(seed["mapping"])
     violations: List[str] = []
@@ -651,7 +662,14 @@ def screen_mapping(seed: Mapping[str, Any], graph: ComputeGraph, architecture: S
         state="screened" if not violations else "rejected",
         selection_reason="workflow_seed_screening" if not violations else "illegal_mapping",
         violations=violations,
-        annotations=dict(seed.get("annotations", {}) if isinstance(seed.get("annotations", {}), Mapping) else {}),
+        annotations={
+            **_graph_mapping_annotations(graph),
+            **(
+                dict(seed.get("annotations", {}))
+                if isinstance(seed.get("annotations", {}), Mapping)
+                else {}
+            ),
+        },
     )
 
 

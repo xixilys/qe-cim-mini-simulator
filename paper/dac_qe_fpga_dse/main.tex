@@ -1,0 +1,185 @@
+\documentclass[sigconf,anonymous,review]{acmart}
+
+\usepackage{lmodern}
+\microtypesetup{expansion=false}
+
+\settopmatter{printacmref=true, printccs=true, printfolios=true}
+\renewcommand\footnotetextcopyrightpermission[1]{}
+
+\acmConference[DAC '26]{63rd Design Automation Conference}{July 26--29, 2026}{Long Beach, CA, USA}
+\acmYear{2026}
+\copyrightyear{2026}
+\acmISBN{}
+\acmDOI{}
+
+\begin{CCSXML}
+<ccs2012>
+ <concept>
+  <concept_id>10010520.10010521.10010537</concept_id>
+  <concept_desc>Computer systems organization~Reconfigurable computing</concept_desc>
+  <concept_significance>500</concept_significance>
+ </concept>
+ <concept>
+  <concept_id>10010583.10010682.10010697</concept_id>
+  <concept_desc>Hardware~Design automation</concept_desc>
+  <concept_significance>500</concept_significance>
+ </concept>
+ <concept>
+  <concept_id>10010147.10010178.10010205</concept_id>
+  <concept_desc>Computing methodologies~Search methodologies</concept_desc>
+  <concept_significance>300</concept_significance>
+ </concept>
+</ccs2012>
+\end{CCSXML}
+
+\ccsdesc[500]{Computer systems organization~Reconfigurable computing}
+\ccsdesc[500]{Hardware~Design automation}
+\ccsdesc[300]{Computing methodologies~Search methodologies}
+
+\keywords{design-space exploration, FPGA acceleration, Quantum ESPRESSO, workflow abstraction, multi-fidelity search}
+
+\title{WAMF-DSE: Workflow-Abstraction-Guided Multi-Fidelity Active DSE for QE-to-FPGA Deployment}
+
+\author{Anonymous Author(s)}
+\affiliation{%
+  \institution{Anonymous Institution}
+  \city{Anonymous City}
+  \country{Anonymous Country}}
+
+\begin{document}
+
+\begin{abstract}
+Quantum ESPRESSO (QE) exposes a full scientific workflow rather than a single isolated kernel: self-consistent field loops, non-self-consistent analysis, bands, force/relaxation steps, reductions, file traffic, and host-side convergence control interact with accelerator offload choices.  This draft introduces WAMF-DSE, a Workflow-Abstraction-Guided Multi-Fidelity Active DSE method for selecting FPGA deployment candidates from QE-like input bundles.  The method separates cheap analytical screening, learned surrogate ranking, active Pareto acquisition, and a small number of transaction-level or implementation-package evaluations.  The prototype currently emits replayable workload, candidate, screening, baseline, multi-workload, WAMF-DSE method, and HLS/Vivado package artifacts.  Its current measurements are model-level artifacts only: HLS synthesis is not yet closed, bitstream generation remains future work, and the present search result is not yet a hardware performance result.  The paper therefore states a concrete method and evaluation plan, together with the missing experiments required before this becomes a complete DAC-grade hardware result.
+\end{abstract}
+
+\maketitle
+
+\section{Introduction}
+
+FPGA acceleration for density functional theory (DFT) codes is hard to frame as a single-kernel optimization problem.  In QE, the visible cost of an accelerated FFT, transpose, projector, reduction, or Hamiltonian application depends on surrounding SCF control, diagonalization, charge mixing, force evaluation, host-device movement, and persistent data residency.  A design that looks attractive for one hotspot may lose at the workflow boundary if it triggers extra synchronization or cannot preserve hot arrays across stages.
+
+This work studies a deployment DSE problem: given a QE workload bundle resembling QE input and run descriptors, select a small set of FPGA architecture/mapping/schedule/offload-boundary candidates for expensive implementation attempts.  The intended output is not simply a ranking table.  The system should produce Pareto candidates, explain why they were selected, materialize candidate-bound HLS/Vivado inputs, and feed higher-fidelity evidence back into the search.
+
+The central idea is to treat evidence as a service to search, not as the search itself.  Large candidate populations are screened with cheap models; a risk-diverse subset is promoted to transaction-level or SystemC-style models; only a few candidates should reach HLS, RTL, Vivado, board, or IC-EDA flows.  This follows the broader DSE pattern in analytical modeling, surrogate-assisted DSE, Bayesian optimization, evolutionary search, and multi-fidelity search~\cite{paria2019flexible,deb2002fast,zhang2020dnn,wu2013opentuner,kao2020confuciux}.
+
+The prototype is built as a domain-neutral DSE control plane with a QE/DFT reference adapter.  The domain-neutral core remains responsible for campaign/trial orchestration, artifacts, candidate generation, and evidence progression; QE-specific facts live in workload profiles and reference adapters.
+
+\section{Background and Motivation}
+
+\subsection{Why kernel-only DSE is weak for QE}
+
+QE workloads couple compute kernels and dataflow phases.  A full-SCF evaluated hybrid design may keep I/O, SCF orchestration, convergence checks, diagonalization, and mixing on the host while accelerating FFT, transpose, Hamiltonian application, projector, reduction, and DMA-heavy paths.  The host-retained work still contributes to end-to-end time and energy.  Ignoring those costs creates inflated accelerator expectations and hides the real trade-off between broader offload and integration risk.
+
+\subsection{DSE pattern}
+
+State-of-practice accelerator DSE rarely runs expensive implementation tools across the full Cartesian product.  Analytical models such as MAESTRO and ZigZag enable broad early pruning~\cite{kwon2019maestro,mei2021zigzag}; surrogate models and active learning reduce expensive tool calls~\cite{zhang2020dnn}; Bayesian and evolutionary methods provide search baselines for black-box optimization~\cite{paria2019flexible,deb2002fast}; and HLS-oriented flows expose the cost of validating only selected points~\cite{pilato2013legup}.  The QE-to-FPGA problem should follow this pattern: many candidates pass through cheap workload-aware screening, fewer through mid-fidelity simulation, and only selected candidates through real hardware flows.
+
+\section{Method}
+
+\subsection{Problem definition}
+
+The input is a QE workload bundle with stage descriptors, kernel coverage, profiling hints, physical quantities, dependency edges, and data artifacts.  The current prototype enumerates architecture template, offload boundary, mapping granularity, runtime schedule, data residency, memory topology, vector-lane count, HBM channel count, tile capacity, precision policy, and release lane.  These lower-level FPGA knobs now reach L1/L2 models and candidate-bound HLS/Vivado packages, but they are not yet validated by implementation timing or bitstream evidence.  The objectives minimize estimated workflow latency, energy, data movement, resource pressure, and infeasibility risk under constraints such as strict FP64 release eligibility.
+
+\subsection{Formal WAMF-DSE algorithm}
+
+Let $W$ denote the QE workflow workload set, $X$ the FPGA deployment candidate space, $F$ the ordered fidelity ladder, and $B$ the expensive-evaluation budget.  For workload $w\in W$, candidate $x\in X$, and fidelity $f\in F$, the evaluator returns or predicts a minimized objective vector $y_f(x,w)$ containing latency, energy, EDP, resource pressure, data movement, and feasibility risk.  The method returns a Pareto set $P\subset X$ plus a replayable evaluation trace; it stops when the expensive-evaluation budget is consumed, the candidate pool is exhausted, or no admissible candidate--fidelity action remains.
+
+At iteration $t$, WAMF-DSE selects a candidate--fidelity action $a_t=(x,f)$ rather than an evidence-closure row.  The acquisition rule is
+\begin{align*}
+A_t(x,f) &= P_{\mathrm{feas}}(x)\, Q_t(x)\, I_G(f)\, U_R(f)\, Cal_t(f)/(C_x C_f),\\
+Q_t(x) &= \widehat{\mathrm{EHVI}}_t(x)+\lambda_u U_t(x)+\lambda_r R_w(x)+\lambda_d D_t(x).
+\end{align*}
+Here $\widehat{\mathrm{EHVI}}_t$ is a constrained hypervolume-improvement proxy, $U_t$ is surrogate uncertainty, $R_w$ covers workflow-risk axes such as host control, post-processing, data lifetime, and transfer synchronization, $D_t$ rewards design diversity, $I_G(f)$ and $U_R(f)$ model fidelity information gain and uncertainty reduction, $Cal_t(f)$ is calibration value, and $C_x C_f$ is the candidate/fidelity cost product.
+
+The surrogate target is residual, not absolute architecture generation:
+\[
+r_f(x,w)=\log y_f(x,w)-\log y_{L1}(x,w).
+\]
+The neural model is therefore a residual and uncertainty model conditioned on workload, candidate, and L1 features, not a standalone architecture generator and not hardware performance proof.  Evidence gates consume the action queue; they do not define the search objective.
+
+\subsection{WAMF-DSE: Workflow-Abstraction-Guided Multi-Fidelity Active DSE}
+
+The current method has five layers.
+
+\begin{enumerate}
+  \item \textbf{Workload abstraction.}  The adapter summarizes workflow classes, stage count, kernel weights, physical quantities, dependency edges, estimated data volume, host-control intensity, post-processing intensity, and data-scale variation.
+  \item \textbf{L1 screening.}  A transparent analytical model estimates workflow wall time, energy, EDP, data movement, and resource pressure for a large candidate set.  The deterministic workflow-aware Pareto funnel is a cheap prior, not the full method.
+  \item \textbf{Surrogate modeling.}  A neural or tabular ensemble backend learns residual quality and uncertainty from promoted observations and workload-structured features.
+  \item \textbf{Active Pareto acquisition.}  WAMF-kernel, a domain-neutral constrained active-Pareto acquisition kernel, selects candidates by constrained Pareto gain, uncertainty, workflow-risk coverage, design diversity, evaluation cost, and feasibility probability.
+  \item \textbf{Higher-fidelity handoff.}  Promoted candidates are converted into L2 requests and candidate-specific implementation package plans.  These are intended to feed SystemC/gem5/HLS/Vivado flows as the evidence matures.
+\end{enumerate}
+
+Algorithmically, the important design choice is the acquisition rule.  It should not merely pick the lowest cheap-model EDP, because cheap models are most likely to be wrong exactly where offload boundaries, data residency, and host synchronization interact.  The current prototype therefore uses WAMF-kernel as the method-center selection policy: QE-specific rows are projected into a domain-neutral candidate contract with minimized objective vectors, feasibility probability, workflow-risk axes, uncertainty, and evaluation cost.  The workflow-aware L1 prior and neural surrogate supply inputs to this kernel; they are not the method by themselves.  The WAMF-DSE report records the problem formulation, workload abstraction, deployment search space, model stack, active acquisition components, fidelity-feedback trace, baseline policies, required ablations, and downstream hardware-generation path.  Full-L2 ranks and regret are kept in separate retrospective baseline artifacts rather than precomputed inside the adaptive method loop.  This is still method-development evidence because the feedback is not yet SystemC, gem5, HLS, Vivado, or board measurement.
+Current fidelity maturity is reported in generated validation tables and limitations, not used as the search objective.
+
+\section{Prototype Implementation}
+
+The current implementation emits replayable artifacts rather than free-form logs.  The main driver writes a QE workload suite, a search problem, candidate queues, L1 screening, a promotion queue, L2 requests and results, L1/L2 calibration, policy baselines, multi-workload experiments, implementation package plans, materialized HLS package files, and a summary with stable artifact hashes.
+
+The generated implementation package contains a candidate manifest, HLS header/source, host stub, HLS script, Vivado packaging script, and README.  This is useful because it binds an architectural decision to tool inputs instead of leaving the search result as an abstract row.  It is still an early artifact: HLS synthesis is not yet closed, bitstream generation remains future work, and candidate package materialization is not yet a hardware performance result.
+
+\section{Evaluation Plan and Current Artifacts}
+
+The current artifact set supports evaluation of search behavior, not final hardware performance.  The most relevant files are:
+
+% Raw artifact identifiers for source-level audit:
+% qe_fpga_search_baseline_report.json
+% qe_fpga_multi_workload_experiment_report.json
+% qe_fpga_implementation_package_materialization.json
+The raw artifact identifiers are embedded in the source for reproducibility.
+
+\begin{itemize}
+  \item \texttt{qe\_fpga\_wamf\_dse\_report.json}: records the unified WAMF-DSE method object, including workflow abstraction, deployment search space, model stack, active Pareto acquisition, selected candidates, baselines, ablations, and hardware-generation handoff boundaries.
+  \item \texttt{qe\_fpga\_adaptive\_multifidelity\_search\_report.json}: records a budget-limited L1-to-L2 adaptive search trace, online residual-surrogate updates, acquisition components, and the actually consumed L2/external-feedback observations.  Retrospective full-oracle rank/regret fields are intentionally absent from the method loop unless supplied by a separate evaluation artifact.
+  \item \texttt{qe\_fpga\_search\_baseline\_report.json}: compares the WAMF-kernel policy against the workflow-aware cheap prior, seeded random, manual HBM streaming heuristic, NSGA-II-lite, single-fidelity L1, kernel-hotspot-only, and no-workflow-abstraction policies using a common L2 model target.
+  \item \texttt{qe\_fpga\_multi\_workload\_experiment\_report.json}: runs the policy comparison across balanced, FFT/data-heavy, post-processing-heavy, and relax/control-heavy workflow fixtures.
+  \item \texttt{qe\_fpga\_implementation\_package\_materialization.json}: records candidate-specific HLS/Vivado package materialization and the remaining tool gates.
+\end{itemize}
+
+The search-quality protocol compares WAMF-DSE under equal budgets against random, manual HBM heuristic, NSGA-II/EA, surrogate expected-improvement or BO-style selection, single-fidelity L1, and kernel-hotspot-only policies.  Required ablations remove workflow abstraction, multi-fidelity feedback, active-Pareto selection, kernel-level search scope, or surrogate calibration; the paper tables use the labels no-workflow-abstraction, no-multi-fidelity-feedback, no-active-Pareto, kernel-level-only, and uncalibrated-surrogate.  The retrospective oracle is not used inside the method loop; it is used only after the run to report simple regret, top-$k$ hit rate, hypervolume, sample efficiency, rank correlation, and calibration error.
+
+For a complete DAC-grade result, the evaluation must add measured QE workload profiles, parser coverage for realistic QE input bundles, golden correctness vectors for accelerated kernels, SystemC/gem5 calibration, HLS C simulation, HLS synthesis, Vivado synthesis/implementation, and at least one reproducible board or bitstream path.  The adaptive report is useful for algorithm development, but its current L2 feedback is still model-derived; its observed-objective curves and the separate baseline rank/regret comparisons must be reproduced with independent higher-fidelity evidence.
+
+\subsection{Artifact and Table Provenance}
+
+The tables below are generated from the paper-ready summary by the table builder.  The include file records the source path and SHA-256 digest used for this build.  This provenance is only for reproducibility: the source summary is a fixture generic-sim feedback run, not measured QE, HLS, Vivado, bitstream, or board evidence.
+
+\input{generated/results_tables.tex}
+
+\begin{table}
+  \caption{Experiments required before final submission.}
+  \label{tab:missing}
+  \small
+  \begin{tabular}{@{}ll@{}}
+    \toprule
+    Question & Required experiment \\
+    \midrule
+    Search quality & Budget sweep vs. random, manual, NSGA-II, BO \\
+    Workflow value & Remove workflow features and measure rank loss \\
+    Model fidelity & L1/L2/L3/L4 calibration and ranking stability \\
+    QE realism & Parse and profile representative QE input bundles \\
+    Correctness & Golden vectors for major accelerated kernels \\
+    FPGA viability & HLS C-sim, C-synth, Vivado timing/utilization \\
+    Deployment & Host runtime, transfers, synchronization, bitstream \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\section{Related Work}
+
+Analytical accelerator mappers such as MAESTRO and ZigZag show the value of fast, structured cost models for pruning large spaces~\cite{kwon2019maestro,mei2021zigzag}.  General autotuning systems such as OpenTuner and black-box Bayesian optimization frameworks motivate search methods that spend expensive evaluations selectively~\cite{wu2013opentuner,paria2019flexible}.  Evolutionary multi-objective search, including NSGA-II, remains a strong baseline for Pareto optimization~\cite{deb2002fast}.  HLS and accelerator-design flows show why source generation is only an early step and why synthesis, timing, and correctness gates are essential before reporting hardware results~\cite{pilato2013legup}.  QE itself is a mature electronic-structure suite with complex application workflows rather than a single accelerator kernel~\cite{giannozzi2009quantum,giannozzi2017advanced}.
+
+\section{Limitations}
+
+This draft is intentionally conservative about current evidence.  The workload variants are adapter-level fixtures, not measured QE runtime profiles.  The L2 Python TLM oracle is useful for algorithm development but is not SystemC, gem5, HLS, Vivado, or board evidence.  The generated HLS package is candidate-bound source material, not verified RTL.  HLS synthesis is not yet closed, and bitstream generation remains future work.
+
+There is also an algorithmic limitation.  The adaptive search report adds an acquisition trace and online residual updates, but the current feedback source is still the Python TLM model family.  A complete method must demonstrate that its acquisition rule improves expensive-evaluation efficiency across real workload diversity, not merely that it selects plausible candidates under a related model.  That requires feedback from independent fidelity levels and measured QE runs.
+
+\section{Conclusion}
+
+This draft defines the QE-to-FPGA deployment DSE problem and presents WAMF-DSE, a workflow-abstraction-guided multi-fidelity active search method that turns QE-like workload bundles into a small number of candidate-specific FPGA implementation packages.  The current prototype is a useful research scaffold because it already records replayable search, baseline, multi-workload, WAMF-DSE method, calibration, and package-generation artifacts.  It is not yet a final DAC hardware result.  The remaining work is clear: close realistic QE workload extraction, independent multi-fidelity calibration, correctness vectors, HLS/RTL/Vivado/bitstream evidence, and stronger active-search comparisons.
+
+\bibliographystyle{ACM-Reference-Format}
+\bibliography{references}
+
+\end{document}

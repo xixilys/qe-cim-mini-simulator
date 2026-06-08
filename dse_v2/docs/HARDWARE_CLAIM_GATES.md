@@ -162,7 +162,10 @@ shared workstream tests.
 ## IC/EDA availability probe
 
 `dse_v2/scripts/dse/probe_dft_ic_eda_tools.py` records whether the real IC/EDA
-tools are reachable through the configured local/SSH environment:
+tools are reachable through the configured local/SSH environment.  The required
+availability set is `dc_shell`, `vcs`, and `vivado`; the report also records the
+optional HLS any-of group `vitis_hls`/`vivado_hls` so downstream candidate
+package synthesis is no longer left as an unknown tool-access condition.
 
 ```bash
 python3 dse_v2/scripts/dse/probe_dft_ic_eda_tools.py \
@@ -188,6 +191,9 @@ The availability report is intentionally self-labeling:
 - `kernel_ppa_evidence = false`;
 - `hardware_completion_eligible = false`;
 - `deliverable_complete = false`;
+- `optional_tool_groups.hls.status` and `hls_tool_available` describe HLS tool
+  reachability only; they do not satisfy HLS C-sim, HLS C-synth, Vivado
+  implementation, bitstream, or QE correctness gates.
 - each tool row records the `availability_evidence_kind`, so a version banner
   observed with a non-zero return code is transparent reachability evidence,
   not a hidden synthesis pass.

@@ -1,0 +1,168 @@
+{
+  "all_required_tools_available": false,
+  "artifact_role": "tool_availability_only_not_kernel_ppa",
+  "availability_only_not_kernel_ppa": true,
+  "blocker_ids": [
+    "required_ic_eda_tool_blocked"
+  ],
+  "blockers": [
+    {
+      "id": "required_ic_eda_tool_blocked",
+      "reason": "required IC/EDA tool probe did not produce pass evidence",
+      "tools": [
+        "dc_shell",
+        "vcs",
+        "vivado"
+      ]
+    }
+  ],
+  "claim_boundary": "Tool availability proves that commands are reachable.  It is not kernel synthesis, timing, area, implementation, or PPA evidence.",
+  "completion_claim": "availability_only_not_kernel_ppa",
+  "deliverable_complete": false,
+  "environment": "ssh ic-eda",
+  "hardware_completion_eligible": false,
+  "implementation_evidence": false,
+  "kernel_ppa_evidence": false,
+  "probe_order": [
+    "local_ic",
+    "ssh"
+  ],
+  "probe_policy": "Try local `ic` first; if it is missing or does not prove all required tools reachable, fall back to SSH target.  Both paths source ~/.bashrc and run `which` plus the tool version probe.",
+  "raw_attempts": [
+    {
+      "artifact_role": "tool_availability_only_not_kernel_ppa",
+      "availability_only_not_kernel_ppa": true,
+      "command": "ic <<'EOS'\nsource ~/.bashrc; which dc_shell || true; dc_shell -version\nexit\nEOS",
+      "environment": "local ic launcher",
+      "hardware_completion_eligible": false,
+      "kernel_ppa_evidence": false,
+      "returncode": 127,
+      "stderr": "local ic launcher not found on PATH; falling back to ssh ic-eda.",
+      "stdout": "",
+      "tool": "dc_shell",
+      "transport": "local_ic"
+    },
+    {
+      "artifact_role": "tool_availability_only_not_kernel_ppa",
+      "availability_only_not_kernel_ppa": true,
+      "command": "ic <<'EOS'\nsource ~/.bashrc; which vcs || true; vcs -ID\nexit\nEOS",
+      "environment": "local ic launcher",
+      "hardware_completion_eligible": false,
+      "kernel_ppa_evidence": false,
+      "returncode": 127,
+      "stderr": "local ic launcher not found on PATH; falling back to ssh ic-eda.",
+      "stdout": "",
+      "tool": "vcs",
+      "transport": "local_ic"
+    },
+    {
+      "artifact_role": "tool_availability_only_not_kernel_ppa",
+      "availability_only_not_kernel_ppa": true,
+      "command": "ic <<'EOS'\nsource ~/.bashrc; which vivado || true; LC_ALL=C LANG=C vivado -version\nexit\nEOS",
+      "environment": "local ic launcher",
+      "hardware_completion_eligible": false,
+      "kernel_ppa_evidence": false,
+      "returncode": 127,
+      "stderr": "local ic launcher not found on PATH; falling back to ssh ic-eda.",
+      "stdout": "",
+      "tool": "vivado",
+      "transport": "local_ic"
+    },
+    {
+      "artifact_role": "tool_availability_only_not_kernel_ppa",
+      "availability_only_not_kernel_ppa": true,
+      "command": "ssh -o BatchMode=yes -o ConnectTimeout=3 ic-eda source ~/.bashrc; which dc_shell || true; dc_shell -version",
+      "environment": "ssh ic-eda",
+      "hardware_completion_eligible": false,
+      "kernel_ppa_evidence": false,
+      "returncode": 124,
+      "stderr": "Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=3', 'ic-eda', 'source ~/.bashrc; which dc_shell || true; dc_shell -version']' timed out after 3 seconds",
+      "stdout": "",
+      "tool": "dc_shell",
+      "transport": "ssh"
+    },
+    {
+      "artifact_role": "tool_availability_only_not_kernel_ppa",
+      "availability_only_not_kernel_ppa": true,
+      "command": "ssh -o BatchMode=yes -o ConnectTimeout=3 ic-eda source ~/.bashrc; which vcs || true; vcs -ID",
+      "environment": "ssh ic-eda",
+      "hardware_completion_eligible": false,
+      "kernel_ppa_evidence": false,
+      "returncode": 124,
+      "stderr": "Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=3', 'ic-eda', 'source ~/.bashrc; which vcs || true; vcs -ID']' timed out after 3 seconds",
+      "stdout": "",
+      "tool": "vcs",
+      "transport": "ssh"
+    },
+    {
+      "artifact_role": "tool_availability_only_not_kernel_ppa",
+      "availability_only_not_kernel_ppa": true,
+      "command": "ssh -o BatchMode=yes -o ConnectTimeout=3 ic-eda source ~/.bashrc; which vivado || true; LC_ALL=C LANG=C vivado -version",
+      "environment": "ssh ic-eda",
+      "hardware_completion_eligible": false,
+      "kernel_ppa_evidence": false,
+      "returncode": 124,
+      "stderr": "Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=3', 'ic-eda', 'source ~/.bashrc; which vivado || true; LC_ALL=C LANG=C vivado -version']' timed out after 3 seconds",
+      "stdout": "",
+      "tool": "vivado",
+      "transport": "ssh"
+    }
+  ],
+  "required_next_step": "Run per-kernel golden/sim/synth/Vivado/DC flows before allowing FPGA/ASIC acceleration claims.  This availability artifact is not PPA.",
+  "required_tools": [
+    "dc_shell",
+    "vcs",
+    "vivado"
+  ],
+  "schema_version": "dse.dft_scf.ic_eda_tool_availability.v1",
+  "selected_probe_transport": "ssh",
+  "status": "blocked",
+  "timing_area_evidence": false,
+  "tool_rows": [
+    {
+      "availability_evidence_kind": "blocked_or_missing_output",
+      "availability_probe_passed": false,
+      "available": false,
+      "claim_boundary": "This row proves tool reachability only; it is not a candidate-specific kernel simulation/synthesis/timing/area or FPGA implementation result.",
+      "command": "ssh -o BatchMode=yes -o ConnectTimeout=3 ic-eda source ~/.bashrc; which dc_shell || true; dc_shell -version",
+      "completion_eligible": false,
+      "hardware_completion_eligible": false,
+      "kernel_ppa_evidence": false,
+      "returncode": 124,
+      "status": "blocked",
+      "stderr": "Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=3', 'ic-eda', 'source ~/.bashrc; which dc_shell || true; dc_shell -version']' timed out after 3 seconds",
+      "tool": "dc_shell",
+      "version_text": ""
+    },
+    {
+      "availability_evidence_kind": "blocked_or_missing_output",
+      "availability_probe_passed": false,
+      "available": false,
+      "claim_boundary": "This row proves tool reachability only; it is not a candidate-specific kernel simulation/synthesis/timing/area or FPGA implementation result.",
+      "command": "ssh -o BatchMode=yes -o ConnectTimeout=3 ic-eda source ~/.bashrc; which vcs || true; vcs -ID",
+      "completion_eligible": false,
+      "hardware_completion_eligible": false,
+      "kernel_ppa_evidence": false,
+      "returncode": 124,
+      "status": "blocked",
+      "stderr": "Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=3', 'ic-eda', 'source ~/.bashrc; which vcs || true; vcs -ID']' timed out after 3 seconds",
+      "tool": "vcs",
+      "version_text": ""
+    },
+    {
+      "availability_evidence_kind": "blocked_or_missing_output",
+      "availability_probe_passed": false,
+      "available": false,
+      "claim_boundary": "This row proves tool reachability only; it is not a candidate-specific kernel simulation/synthesis/timing/area or FPGA implementation result.",
+      "command": "ssh -o BatchMode=yes -o ConnectTimeout=3 ic-eda source ~/.bashrc; which vivado || true; LC_ALL=C LANG=C vivado -version",
+      "completion_eligible": false,
+      "hardware_completion_eligible": false,
+      "kernel_ppa_evidence": false,
+      "returncode": 124,
+      "status": "blocked",
+      "stderr": "Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=3', 'ic-eda', 'source ~/.bashrc; which vivado || true; LC_ALL=C LANG=C vivado -version']' timed out after 3 seconds",
+      "tool": "vivado",
+      "version_text": ""
+    }
+  ]
+}

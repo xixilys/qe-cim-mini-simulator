@@ -115,7 +115,11 @@ def validate_qe_ic_real_opportunity_campaign_report(report: Mapping[str, Any]) -
             _error(errors, "gpu_baseline_summary.target_type", "GPU baseline summary must remain gpu_only")
         if cpu_baseline.get("measurements_are_real") is True and gpu_baseline.get("measurements_are_real") is not True:
             blockers = set(str(row) for row in _as_list(gpu_baseline.get("blocker_reasons")))
-            if "gpu_qe_binary_cpu_only" not in blockers and "gpu_qe_execution_unavailable_due_to_pseudopotential" not in blockers:
+            if (
+                "gpu_qe_binary_cpu_only" not in blockers
+                and "gpu_qe_build_failed" not in blockers
+                and "gpu_qe_execution_unavailable_due_to_pseudopotential" not in blockers
+            ):
                 _error(
                     errors,
                     "gpu_baseline_summary.measurements_are_real",

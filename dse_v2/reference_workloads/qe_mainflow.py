@@ -15,6 +15,7 @@ import json
 from typing import Any, Dict, List, Mapping, Sequence
 
 from dse_v2.core.workload.package import WorkloadPackage
+from dse_v2.mapping.search_policy import SearchProblem
 from dse_v2.reference_workloads.dft_qe import DftQePwImporter, dft_qe_pw_profile
 
 
@@ -257,6 +258,34 @@ def _sha256_text(text: str) -> str:
 
 def _without_hash(payload: Mapping[str, Any], *hash_keys: str) -> Dict[str, Any]:
     return {key: copy.deepcopy(value) for key, value in payload.items() if key not in set(hash_keys)}
+
+
+def workflow_bundle_from_qe_mainflow_manifest(manifest: Mapping[str, Any]) -> Dict[str, Any]:
+    """Adapt the QE mainflow manifest into the workflow-bundle input contract."""
+
+    stages: List[Dict[str, Any]] = []
+    seen_stage_ids: set[str] = set()
+    for case in manifest.get("cases", []) or []:
+        if not isinstance(case, Mapping):
+            continue
+        source = case.get("step1_source", {}) if isinstance(case.get("step1_source"), Mapping) else {}
+        for index, stage in enumerate(source.get("stages", []) or []):
+            if not isinstance(stage, Mapping):
+                continue
+            stage_id = str(stage.get("stage_id") or f"{case.get('case_id', 'case')}_{index:02d}")
+            dedupe_id = f"{case.get('case_id', '')}:{stage_id}"
+            if dedupe_id in seen_stage_ids:
+                continue
+            seen_stage_ids.add(dedupe_id)
+            row = copy.deepcopy(dict(stage))
+            row["stage_id"] = dedupe_id.replace(":", "__")
+            row.setdefault("stage_type", str(case.get("stage_type", "")))
+            row.setdefault("program", str(case.get("qe_command", ["pw.x"])[0] if case.get("qe_command") else "pw.x"))
+            stages.append(row)
+    return {
+        "workflow_id": str(manifest.get("suite_id", "qe_mainflow_workload_suite")),
+        "stages": stages,
+    }
 
 
 def _stage_class(stage_type: str) -> str:
@@ -660,6 +689,804 @@ def package_qe_mainflow_case(case: Mapping[str, Any]) -> WorkloadPackage:
     )
 
 
+def build_qe_fpga_deployment_search_problem(
+    manifest: Mapping[str, Any],
+    *,
+    workload_run_id: str,
+    workflow_abstraction: Mapping[str, Any] | None = None,
+) -> SearchProblem:
+    """Build a Step2 search problem for QE workflow-level FPGA deployment DSE.
+
+    The output is intentionally a search input, not an implementation result.
+    It keeps SCF as one stage in the workflow and makes FPGA deployment choices
+    explicit: architecture template, offload boundary, mapping granularity,
+    runtime schedule, data residency, memory topology, and precision policy.
+    """
+    contract = (
+        workflow_abstraction.get("workflow_feature_contract", {})
+        if isinstance(workflow_abstraction, Mapping)
+        else {}
+    )
+    if _workflow_feature_contract_is_valid(contract):
+        return build_qe_fpga_deployment_search_problem_from_workflow_contract(
+            contract,
+            workload_run_id=workload_run_id,
+            manifest=manifest,
+        )
+    validation = validate_qe_mainflow_workload_suite(manifest)
+    workflow_scope = str(manifest.get("workflow_scope", "full_qe_mainflow"))
+    allow_measured_scf_seed = workflow_scope == "scf_only_measured_seed"
+    if not validation["valid"] and not allow_measured_scf_seed:
+        raise ValueError("QE mainflow suite must be structurally valid before DSE search construction")
+
+    stage_types = sorted({str(case.get("stage_type")) for case in manifest.get("cases", []) or [] if isinstance(case, Mapping)})
+    workflow_classes = sorted({_stage_class(stage_type) for stage_type in stage_types})
+    release_completion_eligible = validation["valid"] and workflow_classes != ["scf"] and "post_processing" in workflow_classes
+    if not release_completion_eligible and not allow_measured_scf_seed:
+        raise ValueError("QE FPGA deployment DSE requires a multi-program workflow, not an SCF-only slice")
+
+    kernel_kinds = sorted({
+        str(kernel)
+        for case in manifest.get("cases", []) or []
+        if isinstance(case, Mapping)
+        for kernel in case.get("kernel_coverage", []) or []
+    })
+    physical_quantities = sorted({
+        str(quantity)
+        for case in manifest.get("cases", []) or []
+        if isinstance(case, Mapping)
+        for quantity in case.get("physical_quantities", []) or []
+    })
+    dependency_edges = _workflow_dependency_edges_from_cases(manifest.get("cases", []) or [])
+    data_artifacts = _workflow_data_artifacts_from_cases(manifest.get("cases", []) or [])
+    parameters = {
+        "deployment_target": [
+            "fpga",
+        ],
+        "release_lane": [
+            "release",
+            "exploratory",
+        ],
+        "architecture_template": [
+            "fpga_hbm_streaming_dataflow",
+            "fpga_fft_transpose_pipeline",
+            "fpga_hybrid_cpu_control_accel_kernels",
+        ],
+        "offload_boundary": [
+            "workflow_hotspot_bundle",
+            "stage_cluster_bundle",
+            "kernel_callsite_bundle",
+        ],
+        "mapping_granularity": [
+            "stage_phase",
+            "kernel_callsite",
+        ],
+        "runtime_schedule": [
+            "cpu_orchestrated_sequential",
+            "overlap_dma_compute",
+            "batched_stage_pipeline",
+        ],
+        "data_residency": [
+            "host_resident_with_streaming_windows",
+            "fpga_hbm_resident_hot_arrays",
+            "hybrid_checkpointed_residency",
+        ],
+        "memory_topology": [
+            "ddr_streaming",
+            "hbm_multi_channel",
+            "bram_uram_tiled_locality",
+        ],
+        "vector_lanes": [
+            2,
+            4,
+            8,
+        ],
+        "hbm_channel_count": [
+            0,
+            4,
+            8,
+        ],
+        "tile_doubles": [
+            1024,
+            2048,
+            4096,
+        ],
+        "precision_policy": [
+            "fp64_strict",
+            "mixed_precision_candidate_requires_tolerance_review",
+        ],
+    }
+    seed_candidates = [
+        {
+            "seed_id": "qe_fpga_hbm_streaming_workflow_seed",
+            "deployment_target": "fpga",
+            "release_lane": "release",
+            "architecture_template": "fpga_hbm_streaming_dataflow",
+            "offload_boundary": "workflow_hotspot_bundle",
+            "mapping_granularity": "kernel_callsite",
+            "runtime_schedule": "overlap_dma_compute",
+            "data_residency": "fpga_hbm_resident_hot_arrays",
+            "memory_topology": "hbm_multi_channel",
+            "vector_lanes": 8,
+            "hbm_channel_count": 8,
+            "tile_doubles": 2048,
+            "precision_policy": "fp64_strict",
+            "source": "qe_workflow_dse_method_seed",
+        },
+        {
+            "seed_id": "qe_fpga_cpu_control_hybrid_seed",
+            "deployment_target": "fpga",
+            "release_lane": "release",
+            "architecture_template": "fpga_hybrid_cpu_control_accel_kernels",
+            "offload_boundary": "stage_cluster_bundle",
+            "mapping_granularity": "stage_phase",
+            "runtime_schedule": "cpu_orchestrated_sequential",
+            "data_residency": "host_resident_with_streaming_windows",
+            "memory_topology": "ddr_streaming",
+            "vector_lanes": 2,
+            "hbm_channel_count": 0,
+            "tile_doubles": 1024,
+            "precision_policy": "fp64_strict",
+            "source": "qe_workflow_dse_method_seed",
+        },
+        {
+            "seed_id": "qe_fpga_mid_tier_tiled_seed",
+            "deployment_target": "fpga",
+            "release_lane": "release",
+            "architecture_template": "fpga_fft_transpose_pipeline",
+            "offload_boundary": "stage_cluster_bundle",
+            "mapping_granularity": "kernel_callsite",
+            "runtime_schedule": "batched_stage_pipeline",
+            "data_residency": "hybrid_checkpointed_residency",
+            "memory_topology": "hbm_multi_channel",
+            "vector_lanes": 4,
+            "hbm_channel_count": 4,
+            "tile_doubles": 2048,
+            "precision_policy": "fp64_strict",
+            "source": "qe_workflow_dse_method_seed",
+        },
+    ]
+    constraints = {
+        "search_problem_source": "qe_mainflow_manifest_compatibility_fallback",
+        "feature_source_priority": ["qe_mainflow_manifest_compatibility_fallback"],
+        "manifest_compatibility_fallback_used": True,
+        "input_scope": "qe_measured_scf_seed_model_input" if allow_measured_scf_seed else "qe_multi_program_workflow",
+        "workflow_scope": workflow_scope,
+        "release_completion_eligible": release_completion_eligible,
+        "model_level_seed_only": allow_measured_scf_seed,
+        "workflow_coverage_limitations": (
+            ["scf_only_measured_seed_missing_nscf_post_processing_relax_workflow_coverage"]
+            if allow_measured_scf_seed
+            else []
+        ),
+        "workflow_stage_types": stage_types,
+        "workflow_classes": workflow_classes,
+        "requires_post_processing_stage": "post_processing" in workflow_classes,
+        "kernel_kinds": kernel_kinds,
+        "physical_quantities": physical_quantities,
+        "workflow_dependency_edges": dependency_edges,
+        "workflow_data_artifacts": data_artifacts,
+        "deployment_target": "fpga",
+        "required_parameters": [
+            "deployment_target",
+            "release_lane",
+            "architecture_template",
+            "offload_boundary",
+            "mapping_granularity",
+            "runtime_schedule",
+            "data_residency",
+            "memory_topology",
+            "vector_lanes",
+            "hbm_channel_count",
+            "tile_doubles",
+            "precision_policy",
+        ],
+        "formal_pareto_lane_field": "release_lane",
+        "release_lane": "release",
+        "proposal_only_before_model_promotion": True,
+        "fail_closed_candidate_budget": True,
+        "coverage_axes": [
+            "architecture_template",
+            "offload_boundary",
+            "mapping_granularity",
+            "runtime_schedule",
+            "data_residency",
+            "memory_topology",
+            "vector_lanes",
+            "hbm_channel_count",
+            "tile_doubles",
+        ],
+        "feedback_generalization_axes": [
+            "architecture_template",
+            "offload_boundary",
+            "mapping_granularity",
+            "runtime_schedule",
+            "data_residency",
+            "memory_topology",
+        ],
+        "feedback_generalization_strength": 0.15,
+        "requires_physical_evidence": True,
+        "legal_values": {
+            "deployment_target": ["fpga"],
+            "precision_policy": ["fp64_strict"],
+        },
+        "cross_axis_constraints": [
+            {
+                "rule_id": "hbm_topology_requires_positive_hbm_channels",
+                "when": {"memory_topology": "hbm_multi_channel"},
+                "require": {"hbm_channel_count": {"gt": 0}},
+                "blocker": "illegal_hbm_channel_count_for_hbm_topology",
+            },
+            {
+                "rule_id": "non_hbm_topology_requires_zero_hbm_channels",
+                "when": {"memory_topology": {"ne": "hbm_multi_channel"}},
+                "require": {"hbm_channel_count": 0},
+                "blocker": "illegal_hbm_channel_count_for_non_hbm_topology",
+            },
+        ],
+        "model_objectives": [
+            {
+                "metric": "vector_lanes",
+                "direction": "maximize",
+                "weight": 0.25,
+                "scale": 8.0,
+                "role": "cheap_proxy_for_candidate_compute_parallelism_before_L1_screening",
+            },
+            {
+                "metric": "hbm_channel_count",
+                "direction": "maximize",
+                "weight": 0.20,
+                "scale": 8.0,
+                "role": "cheap_proxy_for_memory_bandwidth_before_L1_screening",
+            },
+            {
+                "metric": "tile_doubles",
+                "direction": "maximize",
+                "weight": 0.05,
+                "scale": 4096.0,
+                "role": "cheap_proxy_for_locality_before_L1_screening",
+            },
+        ],
+        "model_objective_boundary": (
+            "pre_l1_candidate_ordering_only; L1 workflow model and later "
+            "multi_fidelity feedback remain authoritative for promotion"
+        ),
+        "optimization_metrics": [
+            "workflow_wall_time",
+            "energy",
+            "edp",
+            "fpga_resource_pressure",
+            "implementation_feasibility",
+        ],
+        "forbidden_shortcuts": [
+            "single_kernel_speedup_as_workflow_result",
+            "scf_only_as_final_boundary",
+            "hls_report_without_implementation_feasibility",
+        ],
+    }
+    return SearchProblem(
+        problem_id="qe_mainflow_fpga_deployment_dse",
+        workload_run_id=workload_run_id,
+        objective="pareto_latency_energy_resource_feasibility",
+        parameters=parameters,
+        constraints=constraints,
+        seed_candidates=seed_candidates,
+    )
+
+
+def build_qe_fpga_deployment_search_problem_from_workflow_contract(
+    workflow_feature_contract: Mapping[str, Any],
+    *,
+    workload_run_id: str,
+    manifest: Mapping[str, Any] | None = None,
+) -> SearchProblem:
+    """Build Step2 FPGA deployment search input from a workflow contract.
+
+    The workflow feature contract is the authoritative Step1-to-Step2 method
+    boundary.  QE mainflow manifests are accepted only as compatibility
+    provenance for legacy callers and measured-SCF seed policy.
+    """
+
+    if not _workflow_feature_contract_is_valid(workflow_feature_contract):
+        raise ValueError("valid workflow_feature_contract is required for contract-first QE FPGA DSE search construction")
+    facts = _workflow_contract_search_facts(workflow_feature_contract)
+    workflow_classes = facts["workflow_classes"]
+    workflow_stage_types = facts["workflow_stage_types"]
+    allow_measured_scf_seed = (
+        isinstance(manifest, Mapping)
+        and str(manifest.get("workflow_scope", "")) == "scf_only_measured_seed"
+    )
+    release_completion_eligible = (
+        workflow_classes != ["scf"]
+        and "post_processing" in workflow_classes
+        and len(workflow_stage_types) >= 2
+    )
+    if not release_completion_eligible and not allow_measured_scf_seed:
+        raise ValueError("QE FPGA deployment DSE requires a workflow_feature_contract with a multi-stage workflow, not an SCF-only slice")
+
+    constraints = _qe_fpga_base_search_constraints(
+        input_scope="qe_measured_scf_seed_model_input" if allow_measured_scf_seed else "qe_workflow_feature_contract",
+        workflow_scope="scf_only_measured_seed" if allow_measured_scf_seed else "contract_full_qe_workflow",
+        release_completion_eligible=release_completion_eligible,
+        model_level_seed_only=allow_measured_scf_seed,
+        workflow_coverage_limitations=(
+            ["scf_only_measured_seed_missing_nscf_post_processing_relax_workflow_coverage"]
+            if allow_measured_scf_seed
+            else []
+        ),
+        workflow_stage_types=workflow_stage_types,
+        workflow_classes=workflow_classes,
+        kernel_kinds=facts["kernel_kinds"],
+        physical_quantities=facts["physical_quantities"],
+        dependency_edges=facts["workflow_dependency_edges"],
+        data_artifacts=facts["workflow_data_artifacts"],
+    )
+    constraints.update({
+        "search_problem_source": "workflow_feature_contract",
+        "feature_source_priority": [
+            "workflow_feature_contract",
+            "qe_mainflow_manifest_compatibility_fallback",
+        ],
+        "manifest_compatibility_fallback_used": False,
+        "workflow_feature_contract": {
+            "schema_version": str(workflow_feature_contract.get("schema_version", "")),
+            "domain_neutral": bool(workflow_feature_contract.get("domain_neutral", False)),
+            "source_adapter": str(workflow_feature_contract.get("source_adapter", "")),
+            "workload_family": str(workflow_feature_contract.get("workload_family", "")),
+            "workflow_id": str(workflow_feature_contract.get("workflow_id", "")),
+            "claim_boundary": str(workflow_feature_contract.get("claim_boundary", "")),
+        },
+        "workflow_stage_features": facts["workflow_stage_features"],
+        "workflow_compute_features": facts["workflow_compute_features"],
+        "workflow_correctness_observables": facts["workflow_correctness_observables"],
+        "workflow_search_objectives": facts["workflow_search_objectives"],
+        "workflow_model_update_policy": facts["workflow_model_update_policy"],
+        "workflow_contract_statistics": facts["workflow_contract_statistics"],
+    })
+    return SearchProblem(
+        problem_id="qe_mainflow_fpga_deployment_dse",
+        workload_run_id=workload_run_id,
+        objective="pareto_latency_energy_resource_feasibility",
+        parameters=_qe_fpga_deployment_parameters(),
+        constraints=constraints,
+        seed_candidates=_qe_fpga_deployment_seed_candidates(),
+    )
+
+
+def _workflow_feature_contract_is_valid(contract: Mapping[str, Any]) -> bool:
+    if not isinstance(contract, Mapping):
+        return False
+    if contract.get("schema_version") != "dse.workflow_feature_contract.v1":
+        return False
+    if contract.get("domain_neutral") is not True:
+        return False
+    if contract.get("source_adapter") != "qe_workflow_fpga_abstraction":
+        return False
+    if contract.get("claim_boundary") != "workflow_features_only_not_evidence_not_candidate_identity":
+        return False
+    return isinstance(contract.get("workflow_dag"), Mapping)
+
+
+def _workflow_contract_search_facts(contract: Mapping[str, Any]) -> Dict[str, Any]:
+    dag = contract.get("workflow_dag", {}) if isinstance(contract.get("workflow_dag"), Mapping) else {}
+    stages = [row for row in dag.get("stages", []) or [] if isinstance(row, Mapping)]
+    stage_features = [row for row in contract.get("stage_feature_table", []) or [] if isinstance(row, Mapping)]
+    compute_features = [row for row in contract.get("compute_feature_table", []) or [] if isinstance(row, Mapping)]
+    data_objects = [row for row in contract.get("data_object_table", []) or [] if isinstance(row, Mapping)]
+    correctness = (
+        contract.get("correctness_observable_table", {})
+        if isinstance(contract.get("correctness_observable_table"), Mapping)
+        else {}
+    )
+    workflow_stage_types = sorted({
+        str(row.get("stage_type", ""))
+        for row in stages
+        if str(row.get("stage_type", ""))
+    })
+    workflow_classes = sorted({
+        str(row.get("stage_class") or _stage_class(str(row.get("stage_type", ""))))
+        for row in stages
+        if str(row.get("stage_class") or row.get("stage_type") or "")
+    })
+    kernel_kinds = sorted({
+        str(row.get("compute_id", ""))
+        for row in compute_features
+        if str(row.get("compute_id", ""))
+    })
+    workflow_edges = [
+        {
+            "source_stage": str(row.get("source_stage", "")),
+            "target_stage": str(row.get("target_stage", "")),
+            "dependency_kind": str(row.get("edge_kind", "workflow_dag_edge")),
+            "tensor_name": str(row.get("tensor_name", "")),
+            "estimated_bytes": int(_safe_int(row.get("estimated_bytes"), default=0)),
+            "source": "workflow_feature_contract",
+        }
+        for row in dag.get("edges", []) or []
+        if isinstance(row, Mapping)
+    ]
+    workflow_data_artifacts = [
+        {
+            "object_id": str(row.get("object_id", "")),
+            "object_kind": str(row.get("object_kind", "")),
+            "bytes": int(_safe_int(row.get("bytes"), default=0)),
+            "producer_stages": [str(item) for item in row.get("producer_stages", []) or []],
+            "consumer_stages": [str(item) for item in row.get("consumer_stages", []) or []],
+            "lifetime": str(row.get("lifetime", "")),
+            "residency_constraint": str(row.get("residency_constraint", "")),
+            "transfer_sync_requirement": str(row.get("transfer_sync_requirement", "")),
+            "source": "workflow_feature_contract",
+        }
+        for row in data_objects
+        if str(row.get("object_id", ""))
+    ]
+    workflow_compute_features = [
+        {
+            "compute_id": str(row.get("compute_id", "")),
+            "weight_seconds": _safe_float(row.get("weight_seconds"), default=0.0),
+            "source_confidence": str(row.get("source_confidence", "")),
+            "uncertainty": copy.deepcopy(dict(row.get("uncertainty", {}) if isinstance(row.get("uncertainty"), Mapping) else {})),
+            "estimated_memory_bytes": int(_safe_int(row.get("estimated_memory_bytes"), default=0)),
+            "estimated_flops": int(_safe_int(row.get("estimated_flops"), default=0)),
+            "accelerator_candidate": bool(row.get("accelerator_candidate", False)),
+            "host_retained_hint": bool(row.get("host_retained_hint", False)),
+        }
+        for row in compute_features
+        if str(row.get("compute_id", ""))
+    ]
+    workflow_stage_features = [
+        {
+            "stage_id": str(row.get("stage_id", "")),
+            "stage_type": str(row.get("stage_type", "")),
+            "stage_class": str(row.get("stage_class") or _stage_class(str(row.get("stage_type", "")))),
+            "program": str(row.get("program", "")),
+            "dimensions": copy.deepcopy(dict(row.get("dimensions", {}) if isinstance(row.get("dimensions"), Mapping) else {})),
+            "expected_repetition": int(_safe_int(row.get("expected_repetition"), default=1)),
+            "host_control_barrier": bool(row.get("host_control_barrier", False)),
+            "include_in_performance_model": bool(row.get("include_in_performance_model", True)),
+            "observed_wall_seconds": _safe_float(row.get("observed_wall_seconds"), default=0.0),
+            "source_confidence": str(row.get("source_confidence", "")),
+        }
+        for row in stage_features
+        if str(row.get("stage_id", ""))
+    ]
+    physical_quantities = sorted({
+        str(item)
+        for item in correctness.get("workflow", []) or []
+        if str(item)
+    })
+    search_objectives = [str(item) for item in contract.get("search_objectives", []) or [] if str(item)]
+    model_update_policy = (
+        copy.deepcopy(dict(contract.get("model_update_policy", {})))
+        if isinstance(contract.get("model_update_policy"), Mapping)
+        else {}
+    )
+    return {
+        "workflow_stage_types": workflow_stage_types,
+        "workflow_classes": workflow_classes,
+        "kernel_kinds": kernel_kinds,
+        "physical_quantities": physical_quantities,
+        "workflow_dependency_edges": workflow_edges,
+        "workflow_data_artifacts": workflow_data_artifacts,
+        "workflow_stage_features": workflow_stage_features,
+        "workflow_compute_features": workflow_compute_features,
+        "workflow_correctness_observables": copy.deepcopy(dict(correctness)),
+        "workflow_search_objectives": search_objectives,
+        "workflow_model_update_policy": model_update_policy,
+        "workflow_contract_statistics": {
+            "stage_count": int(_safe_int(dag.get("stage_count"), default=len(stages))),
+            "stage_feature_count": len(stage_features),
+            "compute_feature_count": len(compute_features),
+            "data_object_count": len(data_objects),
+            "dependency_edge_count": len(workflow_edges),
+            "accelerator_candidate_compute_count": sum(1 for row in compute_features if row.get("accelerator_candidate") is True),
+            "host_retained_compute_count": sum(1 for row in compute_features if row.get("host_retained_hint") is True),
+        },
+    }
+
+
+def _safe_float(value: Any, *, default: float) -> float:
+    if isinstance(value, bool):
+        return default
+    if isinstance(value, (int, float)):
+        return float(value)
+    try:
+        return float(str(value))
+    except (TypeError, ValueError):
+        return default
+
+
+def _safe_int(value: Any, *, default: int) -> int:
+    try:
+        return int(_safe_float(value, default=float(default)))
+    except (TypeError, ValueError, OverflowError):
+        return default
+
+
+def _qe_fpga_deployment_parameters() -> Dict[str, List[Any]]:
+    return {
+        "deployment_target": [
+            "fpga",
+        ],
+        "release_lane": [
+            "release",
+            "exploratory",
+        ],
+        "architecture_template": [
+            "fpga_hbm_streaming_dataflow",
+            "fpga_fft_transpose_pipeline",
+            "fpga_hybrid_cpu_control_accel_kernels",
+        ],
+        "offload_boundary": [
+            "workflow_hotspot_bundle",
+            "stage_cluster_bundle",
+            "kernel_callsite_bundle",
+        ],
+        "mapping_granularity": [
+            "stage_phase",
+            "kernel_callsite",
+        ],
+        "runtime_schedule": [
+            "cpu_orchestrated_sequential",
+            "overlap_dma_compute",
+            "batched_stage_pipeline",
+        ],
+        "data_residency": [
+            "host_resident_with_streaming_windows",
+            "fpga_hbm_resident_hot_arrays",
+            "hybrid_checkpointed_residency",
+        ],
+        "memory_topology": [
+            "ddr_streaming",
+            "hbm_multi_channel",
+            "bram_uram_tiled_locality",
+        ],
+        "vector_lanes": [
+            2,
+            4,
+            8,
+        ],
+        "hbm_channel_count": [
+            0,
+            4,
+            8,
+        ],
+        "tile_doubles": [
+            1024,
+            2048,
+            4096,
+        ],
+        "precision_policy": [
+            "fp64_strict",
+            "mixed_precision_candidate_requires_tolerance_review",
+        ],
+    }
+
+
+def _qe_fpga_deployment_seed_candidates() -> List[Dict[str, Any]]:
+    return [
+        {
+            "seed_id": "qe_fpga_hbm_streaming_workflow_seed",
+            "deployment_target": "fpga",
+            "release_lane": "release",
+            "architecture_template": "fpga_hbm_streaming_dataflow",
+            "offload_boundary": "workflow_hotspot_bundle",
+            "mapping_granularity": "kernel_callsite",
+            "runtime_schedule": "overlap_dma_compute",
+            "data_residency": "fpga_hbm_resident_hot_arrays",
+            "memory_topology": "hbm_multi_channel",
+            "vector_lanes": 8,
+            "hbm_channel_count": 8,
+            "tile_doubles": 2048,
+            "precision_policy": "fp64_strict",
+            "source": "qe_workflow_dse_method_seed",
+        },
+        {
+            "seed_id": "qe_fpga_cpu_control_hybrid_seed",
+            "deployment_target": "fpga",
+            "release_lane": "release",
+            "architecture_template": "fpga_hybrid_cpu_control_accel_kernels",
+            "offload_boundary": "stage_cluster_bundle",
+            "mapping_granularity": "stage_phase",
+            "runtime_schedule": "cpu_orchestrated_sequential",
+            "data_residency": "host_resident_with_streaming_windows",
+            "memory_topology": "ddr_streaming",
+            "vector_lanes": 2,
+            "hbm_channel_count": 0,
+            "tile_doubles": 1024,
+            "precision_policy": "fp64_strict",
+            "source": "qe_workflow_dse_method_seed",
+        },
+        {
+            "seed_id": "qe_fpga_mid_tier_tiled_seed",
+            "deployment_target": "fpga",
+            "release_lane": "release",
+            "architecture_template": "fpga_fft_transpose_pipeline",
+            "offload_boundary": "stage_cluster_bundle",
+            "mapping_granularity": "kernel_callsite",
+            "runtime_schedule": "batched_stage_pipeline",
+            "data_residency": "hybrid_checkpointed_residency",
+            "memory_topology": "hbm_multi_channel",
+            "vector_lanes": 4,
+            "hbm_channel_count": 4,
+            "tile_doubles": 2048,
+            "precision_policy": "fp64_strict",
+            "source": "qe_workflow_dse_method_seed",
+        },
+    ]
+
+
+def _qe_fpga_base_search_constraints(
+    *,
+    input_scope: str,
+    workflow_scope: str,
+    release_completion_eligible: bool,
+    model_level_seed_only: bool,
+    workflow_coverage_limitations: Sequence[str],
+    workflow_stage_types: Sequence[str],
+    workflow_classes: Sequence[str],
+    kernel_kinds: Sequence[str],
+    physical_quantities: Sequence[str],
+    dependency_edges: Sequence[Mapping[str, Any]],
+    data_artifacts: Sequence[Mapping[str, Any]],
+) -> Dict[str, Any]:
+    return {
+        "input_scope": input_scope,
+        "workflow_scope": workflow_scope,
+        "release_completion_eligible": release_completion_eligible,
+        "model_level_seed_only": model_level_seed_only,
+        "workflow_coverage_limitations": list(workflow_coverage_limitations),
+        "workflow_stage_types": list(workflow_stage_types),
+        "workflow_classes": list(workflow_classes),
+        "requires_post_processing_stage": "post_processing" in set(workflow_classes),
+        "kernel_kinds": list(kernel_kinds),
+        "physical_quantities": list(physical_quantities),
+        "workflow_dependency_edges": [dict(row) for row in dependency_edges],
+        "workflow_data_artifacts": [dict(row) for row in data_artifacts],
+        "deployment_target": "fpga",
+        "required_parameters": [
+            "deployment_target",
+            "release_lane",
+            "architecture_template",
+            "offload_boundary",
+            "mapping_granularity",
+            "runtime_schedule",
+            "data_residency",
+            "memory_topology",
+            "vector_lanes",
+            "hbm_channel_count",
+            "tile_doubles",
+            "precision_policy",
+        ],
+        "formal_pareto_lane_field": "release_lane",
+        "release_lane": "release",
+        "proposal_only_before_model_promotion": True,
+        "fail_closed_candidate_budget": True,
+        "coverage_axes": [
+            "architecture_template",
+            "offload_boundary",
+            "mapping_granularity",
+            "runtime_schedule",
+            "data_residency",
+            "memory_topology",
+            "vector_lanes",
+            "hbm_channel_count",
+            "tile_doubles",
+        ],
+        "feedback_generalization_axes": [
+            "architecture_template",
+            "offload_boundary",
+            "mapping_granularity",
+            "runtime_schedule",
+            "data_residency",
+            "memory_topology",
+        ],
+        "feedback_generalization_strength": 0.15,
+        "requires_physical_evidence": True,
+        "legal_values": {
+            "deployment_target": ["fpga"],
+            "precision_policy": ["fp64_strict"],
+        },
+        "cross_axis_constraints": [
+            {
+                "rule_id": "hbm_topology_requires_positive_hbm_channels",
+                "when": {"memory_topology": "hbm_multi_channel"},
+                "require": {"hbm_channel_count": {"gt": 0}},
+                "blocker": "illegal_hbm_channel_count_for_hbm_topology",
+            },
+            {
+                "rule_id": "non_hbm_topology_requires_zero_hbm_channels",
+                "when": {"memory_topology": {"ne": "hbm_multi_channel"}},
+                "require": {"hbm_channel_count": 0},
+                "blocker": "illegal_hbm_channel_count_for_non_hbm_topology",
+            },
+        ],
+        "model_objectives": [
+            {
+                "metric": "vector_lanes",
+                "direction": "maximize",
+                "weight": 0.25,
+                "scale": 8.0,
+                "role": "cheap_proxy_for_candidate_compute_parallelism_before_L1_screening",
+            },
+            {
+                "metric": "hbm_channel_count",
+                "direction": "maximize",
+                "weight": 0.20,
+                "scale": 8.0,
+                "role": "cheap_proxy_for_memory_bandwidth_before_L1_screening",
+            },
+            {
+                "metric": "tile_doubles",
+                "direction": "maximize",
+                "weight": 0.05,
+                "scale": 4096.0,
+                "role": "cheap_proxy_for_locality_before_L1_screening",
+            },
+        ],
+        "model_objective_boundary": (
+            "pre_l1_candidate_ordering_only; L1 workflow model and later "
+            "multi_fidelity feedback remain authoritative for promotion"
+        ),
+        "optimization_metrics": [
+            "workflow_wall_time",
+            "energy",
+            "edp",
+            "fpga_resource_pressure",
+            "implementation_feasibility",
+        ],
+        "forbidden_shortcuts": [
+            "single_kernel_speedup_as_workflow_result",
+            "scf_only_as_final_boundary",
+            "hls_report_without_implementation_feasibility",
+        ],
+    }
+
+
+def _workflow_dependency_edges_from_cases(cases: Sequence[Any]) -> List[Dict[str, Any]]:
+    edges_by_key: Dict[tuple[str, str, str], Dict[str, Any]] = {}
+    for case in cases:
+        if not isinstance(case, Mapping):
+            continue
+        sequence = case.get("baseline_sequence", []) or []
+        if not isinstance(sequence, Sequence) or isinstance(sequence, (str, bytes)):
+            continue
+        previous_step_id: str | None = None
+        for index, step in enumerate(sequence):
+            if not isinstance(step, Mapping):
+                continue
+            step_id = str(step.get("step_id") or f"step_{index:02d}")
+            if previous_step_id is not None:
+                key = (str(case.get("case_id", "qe_case")), previous_step_id, step_id)
+                edges_by_key.setdefault(key, {
+                    "case_id": key[0],
+                    "source_step_id": previous_step_id,
+                    "target_step_id": step_id,
+                    "dependency_kind": "baseline_sequence_order",
+                })
+            previous_step_id = step_id
+    return [edges_by_key[key] for key in sorted(edges_by_key)]
+
+
+def _workflow_data_artifacts_from_cases(cases: Sequence[Any]) -> List[Dict[str, Any]]:
+    artifacts_by_path: Dict[str, Dict[str, Any]] = {}
+    for case in cases:
+        if not isinstance(case, Mapping):
+            continue
+        for artifact in case.get("input_artifacts", []) or []:
+            if not isinstance(artifact, Mapping):
+                continue
+            path = str(artifact.get("path") or "")
+            if not path:
+                continue
+            artifacts_by_path.setdefault(path, {
+                "path": path,
+                "purpose": str(artifact.get("purpose", "unknown")),
+                "sha256": str(artifact.get("sha256", "")),
+            })
+    return [artifacts_by_path[key] for key in sorted(artifacts_by_path)]
+
+
 def qe_patch_runtime_manifest_schema(*, status: str = "draft") -> Dict[str, Any]:
     """Return the machine-readable QE patch/runtime manifest schema contract."""
     return {
@@ -755,9 +1582,12 @@ __all__ = [
     "REQUIRED_PATCH_ROW_FIELDS",
     "default_qe_mainflow_workload_suite",
     "example_qe_patch_runtime_manifest",
+    "build_qe_fpga_deployment_search_problem",
+    "build_qe_fpga_deployment_search_problem_from_workflow_contract",
     "package_qe_mainflow_case",
     "qe_patch_runtime_manifest_schema",
     "qe_workload_case_to_step1_source",
     "validate_qe_mainflow_workload_suite",
     "validate_qe_patch_runtime_manifest",
+    "workflow_bundle_from_qe_mainflow_manifest",
 ]

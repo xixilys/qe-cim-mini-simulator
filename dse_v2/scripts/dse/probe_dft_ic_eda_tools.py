@@ -20,6 +20,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from dse_v2.codesign.dft_hardware_evidence import (  # noqa: E402
+    OPTIONAL_IC_EDA_TOOL_GROUPS,
     REQUIRED_IC_EDA_TOOLS,
     build_ic_eda_tool_availability_report,
 )
@@ -29,7 +30,18 @@ TOOL_VERSION_COMMANDS = {
     "dc_shell": "dc_shell -version",
     "vcs": "vcs -ID",
     "vivado": "LC_ALL=C LANG=C vivado -version",
+    "vitis_hls": "LC_ALL=C LANG=C vitis_hls -version",
+    "vivado_hls": "LC_ALL=C LANG=C vivado_hls -version",
 }
+
+
+def _probe_tools() -> tuple[str, ...]:
+    tools = list(REQUIRED_IC_EDA_TOOLS)
+    for group_tools in OPTIONAL_IC_EDA_TOOL_GROUPS.values():
+        for tool in group_tools:
+            if tool not in tools:
+                tools.append(tool)
+    return tuple(tools)
 
 
 def _tool_probe_shell(tool: str) -> str:
@@ -104,11 +116,11 @@ def _probe_local_ic(timeout_s: int) -> list[dict[str, Any]]:
                 transport="local_ic",
                 environment="local ic launcher",
             )
-            for tool in REQUIRED_IC_EDA_TOOLS
+            for tool in _probe_tools()
         ]
 
     results: list[dict[str, Any]] = []
-    for tool in REQUIRED_IC_EDA_TOOLS:
+    for tool in _probe_tools():
         probe_script = _tool_probe_shell(tool)
         command_text = f"ic <<'EOS'\n{probe_script}\nexit\nEOS"
         command = [
@@ -131,7 +143,7 @@ def _probe_local_ic(timeout_s: int) -> list[dict[str, Any]]:
 
 def _probe_ssh(target: str, timeout_s: int) -> list[dict[str, Any]]:
     results: list[dict[str, Any]] = []
-    for tool in REQUIRED_IC_EDA_TOOLS:
+    for tool in _probe_tools():
         remote_command = _tool_probe_shell(tool)
         command = [
             "ssh",
@@ -159,6 +171,7 @@ def _availability_passed(attempts: Sequence[Mapping[str, Any]], *, environment: 
     report = build_ic_eda_tool_availability_report(
         attempts,
         required_tools=REQUIRED_IC_EDA_TOOLS,
+        optional_tool_groups=OPTIONAL_IC_EDA_TOOL_GROUPS,
         environment=environment,
     )
     return bool(report["all_required_tools_available"])
@@ -175,6 +188,7 @@ def _build_cli_report(
     report = build_ic_eda_tool_availability_report(
         selected_attempts,
         required_tools=REQUIRED_IC_EDA_TOOLS,
+        optional_tool_groups=OPTIONAL_IC_EDA_TOOL_GROUPS,
         environment=environment,
     )
     report["raw_attempts"] = list(raw_attempts)
@@ -265,6 +279,7 @@ def main() -> int:
                 "all_required_tools_available": report["all_required_tools_available"],
                 "selected_probe_transport": report["selected_probe_transport"],
                 "availability_only_not_kernel_ppa": True,
+                "hls_tool_available": report.get("hls_tool_available", False),
                 "ic_eda_tool_availability": str(args.out / "ic_eda_tool_availability.json"),
                 "ic_eda_tool_attempts": str(args.out / "ic_eda_tool_attempts.json"),
             },

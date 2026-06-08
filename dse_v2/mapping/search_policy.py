@@ -1404,6 +1404,67 @@ def _objective_metric_feedback_bias(metrics: Mapping[str, Any]) -> float:
     return (-value if lower_is_better else value) * weight
 
 
+def _model_acquisition_summary(problem: SearchProblem, parameters: Mapping[str, Any]) -> Dict[str, Any]:
+    raw_objectives = (problem.constraints or {}).get("model_objectives", ()) or ()
+    objectives: List[Dict[str, Any]] = []
+    score = 0.0
+    missing_metrics: List[str] = []
+    for raw in raw_objectives:
+        if not isinstance(raw, Mapping):
+            continue
+        metric = str(raw.get("metric") or raw.get("name") or "")
+        if not metric:
+            continue
+        value = _coerce_float(parameters.get(metric))
+        if value is None:
+            missing_metrics.append(metric)
+            continue
+        direction = str(raw.get("direction") or raw.get("objective_direction") or "minimize").strip().lower()
+        weight = _coerce_float(raw.get("weight"))
+        if weight is None:
+            weight = 1.0
+        scale = _coerce_float(raw.get("scale") or raw.get("normalizer"))
+        if scale is None or scale <= 0.0:
+            scale = 1.0
+        normalized = value / scale
+        if direction in {"min", "minimize", "minimise", "lower_is_better"}:
+            contribution = -normalized * weight
+        elif direction in {"max", "maximize", "maximise", "higher_is_better"}:
+            contribution = normalized * weight
+        else:
+            missing_metrics.append(metric)
+            continue
+        score += contribution
+        objectives.append({
+            "metric": metric,
+            "direction": direction,
+            "weight": weight,
+            "scale": scale,
+            "value": value,
+            "normalized_value": normalized,
+            "score_contribution": contribution,
+        })
+    uncertainty_metric = str((problem.constraints or {}).get("uncertainty_metric") or "")
+    uncertainty_weight = _coerce_float((problem.constraints or {}).get("uncertainty_weight"))
+    uncertainty_value = _coerce_float(parameters.get(uncertainty_metric)) if uncertainty_metric else None
+    uncertainty_contribution = 0.0
+    if uncertainty_value is not None and uncertainty_weight is not None:
+        uncertainty_contribution = uncertainty_value * uncertainty_weight
+        score += uncertainty_contribution
+    return {
+        "status": "applied" if objectives else "disabled",
+        "score": score,
+        "objective_count": len(objectives),
+        "objectives": objectives,
+        "missing_metrics": missing_metrics,
+        "uncertainty_metric": uncertainty_metric,
+        "uncertainty_value": uncertainty_value,
+        "uncertainty_weight": uncertainty_weight,
+        "uncertainty_contribution": uncertainty_contribution,
+        "policy": "model_objective_weighted_acquisition",
+    }
+
+
 def _parameter_hash(parameters: Mapping[str, Any]) -> str:
     data = json.dumps(dict(parameters), sort_keys=True, separators=(",", ":"), default=str)
     return "sha256:" + hashlib.sha256(data.encode("utf-8")).hexdigest()
@@ -1584,6 +1645,68 @@ def _stable_parameter_key(parameters: Mapping[str, Any]) -> str:
     return json.dumps(dict(parameters), sort_keys=True, separators=(",", ":"), default=str)
 
 
+def _canonical_design_parameters(problem: SearchProblem, parameters: Mapping[str, Any]) -> Dict[str, Any]:
+    parameter_axes = set(problem.parameters.keys())
+    canonical = {
+        str(key): value
+        for key, value in parameters.items()
+        if key in parameter_axes
+    }
+    return canonical
+
+
+def _cross_axis_constraint_blocker(parameters: Mapping[str, Any], rule: Mapping[str, Any]) -> Optional[str]:
+    rule_id = str(rule.get("rule_id") or rule.get("id") or "cross_axis_constraint")
+    when = rule.get("when", {}) if isinstance(rule.get("when"), Mapping) else {}
+    unless = rule.get("unless", {}) if isinstance(rule.get("unless"), Mapping) else {}
+    if when and not _parameter_conditions_match(parameters, when):
+        return None
+    if unless and _parameter_conditions_match(parameters, unless):
+        return None
+    require = rule.get("require", {}) if isinstance(rule.get("require"), Mapping) else {}
+    forbidden = rule.get("forbid", {}) if isinstance(rule.get("forbid"), Mapping) else {}
+    if require and not _parameter_conditions_match(parameters, require):
+        return str(rule.get("blocker") or f"cross_axis_constraint_failed:{rule_id}")
+    if forbidden and _parameter_conditions_match(parameters, forbidden):
+        return str(rule.get("blocker") or f"cross_axis_constraint_failed:{rule_id}")
+    return None
+
+
+def _parameter_conditions_match(parameters: Mapping[str, Any], conditions: Mapping[str, Any]) -> bool:
+    for key, expected in conditions.items():
+        if not _parameter_condition_matches(parameters.get(str(key)), expected):
+            return False
+    return True
+
+
+def _parameter_condition_matches(actual: Any, expected: Any) -> bool:
+    if isinstance(expected, Mapping):
+        if "eq" in expected:
+            return actual == expected["eq"]
+        if "ne" in expected:
+            return actual != expected["ne"]
+        if "in" in expected:
+            return actual in set(expected.get("in") or ())
+        if "not_in" in expected:
+            return actual not in set(expected.get("not_in") or ())
+        if "gt" in expected:
+            value = _coerce_float(actual)
+            return value is not None and value > float(expected["gt"])
+        if "gte" in expected:
+            value = _coerce_float(actual)
+            return value is not None and value >= float(expected["gte"])
+        if "lt" in expected:
+            value = _coerce_float(actual)
+            return value is not None and value < float(expected["lt"])
+        if "lte" in expected:
+            value = _coerce_float(actual)
+            return value is not None and value <= float(expected["lte"])
+        return False
+    if isinstance(expected, (list, tuple, set)):
+        return actual in set(expected)
+    return actual == expected
+
+
 class HierarchicalFunnelSearchPolicy(_BasePolicy):
     """Replayable staged search policy for expensive multi-fidelity funnels.
 
@@ -1612,6 +1735,7 @@ class HierarchicalFunnelSearchPolicy(_BasePolicy):
         self.maximize_metric_keys = tuple(str(key) for key in maximize_metric_keys)
         self.minimize_metric_keys = tuple(str(key) for key in minimize_metric_keys)
         self._feedback_bias: Dict[str, float] = {}
+        self._feedback_observations: List[Dict[str, Any]] = []
         self._enumeration_by_problem: Dict[str, Dict[str, Any]] = {}
 
     def observe(self, candidate_id: str, metrics: Mapping[str, Any]) -> None:
@@ -1641,6 +1765,30 @@ class HierarchicalFunnelSearchPolicy(_BasePolicy):
                 bias -= value
         key = _stable_parameter_key(record.parameters)
         self._feedback_bias[key] = self._feedback_bias.get(key, 0.0) + bias
+        if self._feedback_observation_can_generalize(metrics, bias):
+            self._feedback_observations.append({
+                "candidate_id": candidate_id,
+                "parameter_key": key,
+                "parameters": dict(record.parameters),
+                "bias": bias,
+                "metrics": dict(metrics),
+            })
+
+    def _feedback_observation_can_generalize(self, metrics: Mapping[str, Any], bias: float) -> bool:
+        if bias == 0.0:
+            return False
+        if isinstance(metrics.get("calibrated_score_delta"), (int, float)):
+            return True
+        if (
+            metrics.get("objective_metric_name")
+            and metrics.get("objective_direction")
+            and _coerce_float(metrics.get("objective_metric_value")) is not None
+        ):
+            return True
+        return metrics.get("step4_verdict") in {"trusted_pass", "passed", "promoted"} and (
+            isinstance(metrics.get("calibration_confidence"), (int, float))
+            or isinstance(metrics.get("step4_quality_score"), (int, float))
+        )
 
     def _constraint_blockers(self, problem: SearchProblem, parameters: Mapping[str, Any]) -> List[str]:
         constraints = dict(problem.constraints or {})
@@ -1660,6 +1808,13 @@ class HierarchicalFunnelSearchPolicy(_BasePolicy):
             for key, values in legal_values.items():
                 if key in parameters and parameters[key] not in set(values or ()):
                     blockers.append(f"illegal_value:{key}:{parameters[key]}")
+        cross_axis = constraints.get("cross_axis_constraints", ()) or ()
+        for rule in cross_axis:
+            if not isinstance(rule, Mapping):
+                continue
+            blocker = _cross_axis_constraint_blocker(parameters, rule)
+            if blocker:
+                blockers.append(blocker)
         return blockers
 
     def _release_lane_policy(self, problem: SearchProblem) -> Dict[str, Any]:
@@ -1733,14 +1888,123 @@ class HierarchicalFunnelSearchPolicy(_BasePolicy):
             stage_trace.append({"stage_id": stage_id, "status": status, "reasons": reasons})
         return stage_trace
 
+    def _proposal_only_before_model_promotion(self, problem: SearchProblem) -> bool:
+        return bool((problem.constraints or {}).get("proposal_only_before_model_promotion", False))
+
+    def _promotion_authority(
+        self,
+        problem: SearchProblem,
+        blockers: Sequence[str],
+    ) -> Dict[str, Any]:
+        proposal_only = self._proposal_only_before_model_promotion(problem)
+        return {
+            "proposal_only_before_model_promotion": proposal_only,
+            "step2_can_mark_formal_release_candidate": not bool(blockers),
+            "step2_can_promote_for_simulation": not proposal_only and not bool(blockers),
+            "promotion_owner": (
+                "downstream_model_screening_or_campaign_admission"
+                if proposal_only
+                else "search_policy_legacy_direct_admission"
+            ),
+        }
+
+    def _remember_problem_record(
+        self,
+        problem: SearchProblem,
+        record: SearchCandidateRecord,
+    ) -> SearchCandidateRecord:
+        remembered = self._remember_record(record)
+        if self._proposal_only_before_model_promotion(problem):
+            remembered.promotion_reasons = [
+                reason
+                for reason in remembered.promotion_reasons
+                if reason != "promoted_for_simulation"
+            ]
+        return remembered
+
     def _score(self, problem: SearchProblem, parameters: Mapping[str, Any]) -> float:
-        base = _score_candidate(parameters, problem.objective)
+        acquisition = _model_acquisition_summary(problem, parameters)
+        base = (
+            acquisition["score"]
+            if acquisition["status"] == "applied"
+            else _score_candidate(parameters, problem.objective)
+        )
         touched = sum(1 for key in self.bottleneck_keys if key in parameters)
-        return base + touched + self._feedback_bias.get(_stable_parameter_key(parameters), 0.0)
+        feedback = self._feedback_bias.get(_stable_parameter_key(parameters), 0.0)
+        generalized = self._feedback_generalization_summary(problem, parameters)["applied_bias"]
+        return base + touched + feedback + generalized
+
+    def _feedback_generalization_axes(self, problem: SearchProblem) -> List[str]:
+        raw_axes = (problem.constraints or {}).get("feedback_generalization_axes", ()) or ()
+        return [
+            str(axis)
+            for axis in raw_axes
+            if str(axis) in problem.parameters
+        ]
+
+    def _feedback_generalization_strength(self, problem: SearchProblem) -> float:
+        value = _coerce_float((problem.constraints or {}).get("feedback_generalization_strength"))
+        if value is None:
+            return 0.0
+        return max(0.0, min(1.0, value))
+
+    def _feedback_generalization_summary(
+        self,
+        problem: SearchProblem,
+        parameters: Mapping[str, Any],
+    ) -> Dict[str, Any]:
+        axes = self._feedback_generalization_axes(problem)
+        strength = self._feedback_generalization_strength(problem)
+        if not axes or strength <= 0.0 or not self._feedback_observations:
+            return {
+                "status": "disabled" if not axes or strength <= 0.0 else "no_feedback_observations",
+                "axes": axes,
+                "strength": strength,
+                "matched_observation_count": 0,
+                "matched_axis_count": 0,
+                "applied_bias": 0.0,
+                "source_candidate_ids": [],
+            }
+        parameter_key = _stable_parameter_key(parameters)
+        applied_bias = 0.0
+        matched_observation_count = 0
+        best_matched_axis_count = 0
+        source_candidate_ids: List[str] = []
+        for observation in self._feedback_observations:
+            if observation.get("parameter_key") == parameter_key:
+                continue
+            observed_parameters = _as_mapping(observation.get("parameters"))
+            matched_axes = [
+                axis
+                for axis in axes
+                if axis in parameters
+                and axis in observed_parameters
+                and parameters.get(axis) == observed_parameters.get(axis)
+            ]
+            if not matched_axes:
+                continue
+            bias_value = _coerce_float(observation.get("bias"))
+            if bias_value is None or bias_value == 0.0:
+                continue
+            matched_observation_count += 1
+            best_matched_axis_count = max(best_matched_axis_count, len(matched_axes))
+            applied_bias += bias_value * strength * (float(len(matched_axes)) / float(len(axes)))
+            source_candidate_id = str(observation.get("candidate_id") or "")
+            if source_candidate_id and source_candidate_id not in source_candidate_ids:
+                source_candidate_ids.append(source_candidate_id)
+        return {
+            "status": "applied" if matched_observation_count else "no_axis_match",
+            "axes": axes,
+            "strength": strength,
+            "matched_observation_count": matched_observation_count,
+            "matched_axis_count": best_matched_axis_count,
+            "applied_bias": applied_bias,
+            "source_candidate_ids": source_candidate_ids,
+        }
 
     def _max_candidate_enumeration(self, problem: SearchProblem) -> Optional[int]:
         raw_limit = (problem.constraints or {}).get("max_candidate_enumeration")
-        if raw_limit in (None, "", False):
+        if raw_limit is None or raw_limit == "":
             return None
         try:
             return max(0, int(raw_limit))
@@ -1755,7 +2019,8 @@ class HierarchicalFunnelSearchPolicy(_BasePolicy):
         raw.extend(problem.parameter_grid(limit=grid_limit))
         deduped: Dict[str, Mapping[str, Any]] = {}
         for params in raw:
-            deduped.setdefault(_stable_parameter_key(params), dict(params))
+            canonical = _canonical_design_parameters(problem, params)
+            deduped.setdefault(_stable_parameter_key(canonical), canonical)
         self._enumeration_by_problem[problem.problem_id] = {
             "schema_version": "dse.step2.search_space_enumeration.v1",
             "grid_candidate_count": grid_size,
@@ -1772,16 +2037,119 @@ class HierarchicalFunnelSearchPolicy(_BasePolicy):
         }
         return list(deduped.values())
 
-    def propose(self, problem: SearchProblem, budget: int) -> List[SearchCandidateRecord]:
-        if budget <= 0:
+    def _coverage_axis_values(self, problem: SearchProblem) -> Dict[str, Set[str]]:
+        raw_axes = (problem.constraints or {}).get("coverage_axes", ()) or ()
+        axes = [
+            str(axis)
+            for axis in raw_axes
+            if str(axis) in problem.parameters
+        ]
+        return {
+            axis: {_stable_parameter_key({"value": value}) for value in problem.parameters.get(axis, ())}
+            for axis in axes
+        }
+
+    def _coverage_representatives(
+        self,
+        problem: SearchProblem,
+        candidates: Sequence[Mapping[str, Any]],
+    ) -> List[Mapping[str, Any]]:
+        coverage_targets = self._coverage_axis_values(problem)
+        if not coverage_targets:
             return []
+        remaining_targets = {axis: set(values) for axis, values in coverage_targets.items()}
         ordered = sorted(
-            self._raw_candidates(problem, budget),
+            [dict(candidate) for candidate in candidates],
             key=lambda params: self._score(problem, params),
             reverse=True,
         )
+        representatives: List[Mapping[str, Any]] = []
+        selected_keys: Set[str] = set()
+        for params in ordered:
+            parameter_key = _stable_parameter_key(params)
+            if parameter_key in selected_keys:
+                continue
+            covered_axes: List[str] = []
+            for axis, target_values in remaining_targets.items():
+                value_key = _stable_parameter_key({"value": params.get(axis)})
+                if value_key in target_values:
+                    covered_axes.append(axis)
+            if not covered_axes:
+                continue
+            representatives.append(params)
+            selected_keys.add(parameter_key)
+            for axis in covered_axes:
+                remaining_targets[axis].discard(_stable_parameter_key({"value": params.get(axis)}))
+            if all(not target_values for target_values in remaining_targets.values()):
+                break
+        return representatives
+
+    def propose(self, problem: SearchProblem, budget: int) -> List[SearchCandidateRecord]:
+        if budget <= 0:
+            return []
+        raw_candidates = self._raw_candidates(problem, budget)
+        seed_keys = {
+            _stable_parameter_key(_canonical_design_parameters(problem, seed))
+            for seed in problem.seed_candidates
+            if isinstance(seed, Mapping)
+        }
+        fail_closed = bool((problem.constraints or {}).get("fail_closed_candidate_budget", False))
+        legal_candidates = [
+            dict(parameters)
+            for parameters in raw_candidates
+            if not self._constraint_blockers(problem, parameters)
+        ]
+        blocked_candidates = [
+            dict(parameters)
+            for parameters in raw_candidates
+            if self._constraint_blockers(problem, parameters)
+        ]
+        enumeration = self._enumeration_by_problem.get(problem.problem_id, {})
+        if isinstance(enumeration, dict):
+            enumeration["legal_candidate_count"] = len(legal_candidates)
+            enumeration["blocked_candidate_count"] = len(blocked_candidates)
+            enumeration["fail_closed_legality_filter"] = fail_closed
+        candidate_pool = legal_candidates if fail_closed and legal_candidates else list(raw_candidates)
+        def ordering_score(parameters: Mapping[str, Any]) -> Tuple[float, int, str]:
+            parameter_key = _stable_parameter_key(parameters)
+            seed_bonus = 1 if parameter_key in seed_keys else 0
+            return (
+                self._score(problem, parameters) + float(seed_bonus),
+                seed_bonus,
+                parameter_key,
+            )
+
+        score_ordered = sorted(
+            [dict(parameters) for parameters in candidate_pool],
+            key=ordering_score,
+            reverse=True,
+        )
+        feedback_keys = {
+            _stable_parameter_key(record.parameters)
+            for record in self._proposed.values()
+            if record.observed_metrics
+        }
+        feedback_ordered = [
+            parameters
+            for parameters in score_ordered
+            if _stable_parameter_key(parameters) in feedback_keys
+        ]
+        coverage_ordered = self._coverage_representatives(problem, score_ordered)
+        ordered = []
+        selected_order_keys: Set[str] = set()
+        for source in (feedback_ordered, coverage_ordered, score_ordered):
+            for parameters in source:
+                parameter_key = _stable_parameter_key(parameters)
+                if parameter_key in selected_order_keys:
+                    continue
+                ordered.append(dict(parameters))
+                selected_order_keys.add(parameter_key)
+                if len(ordered) >= budget:
+                    break
+            if len(ordered) >= budget:
+                break
         records: List[SearchCandidateRecord] = []
-        for index, parameters in enumerate(ordered[:budget]):
+        for index, parameters in enumerate(ordered):
             blockers = self._constraint_blockers(problem, parameters)
             stage_trace = self._stage_trace(problem, parameters, blockers)
             release_lane_policy = self._release_lane_policy(problem)
@@ -1801,10 +2169,22 @@ class HierarchicalFunnelSearchPolicy(_BasePolicy):
                 },
                 "search_space_enumeration": dict(self._enumeration_by_problem.get(problem.problem_id, {})),
             })
-            promotions = [] if blockers else [
-                "promoted_for_simulation",
-                "formal_release_pareto_eligible",
-            ]
+            promotion_authority = self._promotion_authority(problem, blockers)
+            provenance["promotion_authority"] = promotion_authority
+            model_acquisition = _model_acquisition_summary(problem, parameters)
+            if model_acquisition["status"] == "applied":
+                provenance["model_acquisition"] = model_acquisition
+            feedback_generalization = self._feedback_generalization_summary(problem, parameters)
+            if (
+                feedback_generalization["status"] != "disabled"
+                    or feedback_generalization["matched_observation_count"]
+            ):
+                provenance["feedback_generalization"] = feedback_generalization
+            promotions = []
+            if not blockers:
+                promotions.append("formal_release_pareto_eligible")
+                if promotion_authority["step2_can_promote_for_simulation"]:
+                    promotions.append("promoted_for_simulation")
             record = SearchCandidateRecord(
                 candidate_id=self._candidate_id_for_parameters(problem, parameters),
                 parameters=dict(parameters),
@@ -1815,7 +2195,7 @@ class HierarchicalFunnelSearchPolicy(_BasePolicy):
                 promotion_reasons=promotions,
                 blocker_reasons=list(blockers),
             )
-            records.append(self._remember_record(record))
+            records.append(self._remember_problem_record(problem, record))
         return records
 
 

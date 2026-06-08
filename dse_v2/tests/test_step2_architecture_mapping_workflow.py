@@ -25,6 +25,7 @@ from dse_v2.core.workload import (
     run_step1_workload_ingestion_workflow,
 )
 from dse_v2.mapping.domain_policy import Step2CandidateHints, Step2DomainPolicyRegistry
+from dse_v2.mapping.search_policy import build_search_iteration_plan
 from dse_v2.reference_workloads.dft_qe import QE_SCF_REQUIRED_COVERAGE, create_qe_reference_package
 from dse_v2.mapping.step2_workflow import (
     STEP2_CANDIDATE_QUEUE_ARTIFACTS,
@@ -488,6 +489,148 @@ def test_step2_search_policy_candidate_records_flow_into_canonical_artifacts_wit
     assert step3_queue["queue_mode"] == "selected-entry-only"
     assert step3_queue["entry_count"] == 1
     assert step3_queue["trusted_final_claim"] is False
+
+
+def test_step2_search_policy_problem_exposes_real_mapping_design_axes(tmp_path):
+    graph = _create_policy_hint_graph("design_axis_search_policy_bridge")
+    package = package_from_graph(graph, workload_family="ml_tensor", importer_id="generic_json")
+
+    result = run_step2_architecture_mapping_workflow(package, output_dir=tmp_path)
+    assert result.status == "ready_for_step3_simulation"
+
+    search_checkpoint = _load_json(tmp_path / "search_checkpoint.json")
+    problem = search_checkpoint["search_policy_problem"]
+    problem_parameters = problem["parameters"]
+    design_axes = {
+        "node_placement_signature",
+        "op_target_signature",
+        "accelerator_target_set",
+        "accelerated_node_count",
+        "host_node_count",
+        "data_movement_mb_bucket",
+        "latency_ms_bucket",
+        "energy_j_bucket",
+    }
+
+    assert design_axes.issubset(problem_parameters)
+    assert set(search_checkpoint["search_policy_design_axes"]) == design_axes
+    assert search_checkpoint["search_policy_parameters_are_design_axis_visible"] is True
+    assert problem["constraints"]["model_objectives"] == [
+        {"metric": "predicted_latency_ms", "direction": "minimize", "weight": 1.0, "scale": 1.0},
+        {"metric": "predicted_energy_j", "direction": "minimize", "weight": 0.35, "scale": 1.0},
+        {"metric": "predicted_data_movement_mb", "direction": "minimize", "weight": 0.15, "scale": 1.0},
+    ]
+    assert problem["constraints"]["uncertainty_metric"] == "model_uncertainty"
+    for axis in design_axes:
+        assert problem_parameters[axis], axis
+
+    candidate_parameters = [
+        candidate["parameters"]
+        for candidate in search_checkpoint["search_policy_candidates"]
+    ]
+    assert candidate_parameters
+    assert all(design_axes.issubset(parameters) for parameters in candidate_parameters)
+    assert any(parameters["accelerated_node_count"] > 0 for parameters in candidate_parameters)
+    assert any(parameters["host_node_count"] > 0 for parameters in candidate_parameters)
+    assert all(parameters["mapping_candidate_id"] for parameters in candidate_parameters)
+    assert all("unknown_op" not in parameters["op_target_signature"] for parameters in candidate_parameters)
+    assert any("gemm->" in parameters["op_target_signature"] for parameters in candidate_parameters)
+    assert any("reduction->" in parameters["op_target_signature"] for parameters in candidate_parameters)
+    assert all("predicted_latency_ms" in parameters for parameters in candidate_parameters)
+    assert all("predicted_energy_j" in parameters for parameters in candidate_parameters)
+    assert all("model_uncertainty" in parameters for parameters in candidate_parameters)
+    assert all(
+        candidate["provenance"]["model_acquisition"]["status"] == "applied"
+        for candidate in search_checkpoint["search_policy_candidates"]
+    )
+    assert all(
+        parameters["mapping_parameter_hash"].startswith("sha256:")
+        for parameters in candidate_parameters
+    )
+    assert all(
+        candidate["trusted_final_claim"] is False
+        for candidate in search_checkpoint["search_policy_candidates"]
+    )
+
+
+def test_step2_search_iteration_plan_uses_mapping_design_axes_for_feedback_generalization(tmp_path):
+    graph = _create_policy_hint_graph("design_axis_feedback_bridge")
+    package = package_from_graph(graph, workload_family="ml_tensor", importer_id="generic_json")
+
+    result = run_step2_architecture_mapping_workflow(package, output_dir=tmp_path)
+    assert result.status == "ready_for_step3_simulation"
+
+    search_checkpoint = _load_json(tmp_path / "search_checkpoint.json")
+    candidates = search_checkpoint["search_policy_candidates"]
+    observed = next(
+        candidate for candidate in candidates
+        if candidate["parameters"]["accelerated_node_count"] > 0
+    )
+    observed_params = observed["parameters"]
+    similar = [
+        candidate for candidate in candidates
+        if candidate["candidate_id"] != observed["candidate_id"]
+        and candidate["parameters"]["accelerated_node_count"] == observed_params["accelerated_node_count"]
+        and candidate["parameters"]["data_movement_mb_bucket"] == observed_params["data_movement_mb_bucket"]
+        and candidate["parameters"]["latency_ms_bucket"] == observed_params["latency_ms_bucket"]
+    ]
+    assert similar
+
+    feedback_update = {
+        "schema_version": "dse.contract.feedback_update.v1",
+        "campaign_id": "campaign",
+        "workload_run_id": search_checkpoint["workload_id"],
+        "trial_id": search_checkpoint["trial_id"],
+        "updates": [
+            {
+                "target": "search_policy",
+                "status": "available",
+                "candidate_refs": {
+                    "mapping_candidate_id": observed_params["mapping_candidate_id"],
+                    "mapping_parameter_hash": observed_params["mapping_parameter_hash"],
+                },
+                "metrics": {
+                    "trusted_sample": True,
+                    "step4_verdict": "trusted_pass",
+                    "calibrated_score_delta": 100.0,
+                    "objective_metric_name": "edp",
+                    "objective_metric_value": 1000.0,
+                    "objective_direction": "minimize",
+                    "objective_metric_weight": 0.0,
+                },
+                "source_artifacts": ["simulation_result.json"],
+            }
+        ],
+        "source_artifact_hashes": {},
+    }
+
+    plan = build_search_iteration_plan(
+        search_checkpoint=search_checkpoint,
+        feedback_update=feedback_update,
+        calibration_record={"confidence": 0.8, "error_metrics": {"max_abs_error": 0.0}},
+    )
+
+    generalized = [
+        candidate for candidate in plan["next_candidates"]
+        if candidate["candidate_id"] != observed["candidate_id"]
+        and candidate["provenance"].get("feedback_generalization", {}).get("status") == "applied"
+    ]
+    assert plan["applied_feedback_count"] == 1
+    assert plan["feedback_informed_proposal_ordering"] is True
+    assert plan["search_policy_problem"]["constraints"]["feedback_generalization_axes"] == [
+        "accelerator_target_set",
+        "accelerated_node_count",
+        "data_movement_mb_bucket",
+        "latency_ms_bucket",
+    ]
+    assert generalized
+    assert any(
+        candidate["parameters"]["accelerated_node_count"] == observed_params["accelerated_node_count"]
+        and candidate["parameters"]["data_movement_mb_bucket"] == observed_params["data_movement_mb_bucket"]
+        and candidate["parameters"]["latency_ms_bucket"] == observed_params["latency_ms_bucket"]
+        for candidate in generalized
+    )
+    assert all(candidate["execution_allowed"] is False for candidate in plan["next_candidates"])
 
 
 def test_step2_domain_policy_empty_registry_noops_for_generic_workload(tmp_path):

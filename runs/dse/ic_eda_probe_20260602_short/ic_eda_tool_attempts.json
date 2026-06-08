@@ -1,0 +1,80 @@
+[
+  {
+    "artifact_role": "tool_availability_only_not_kernel_ppa",
+    "availability_only_not_kernel_ppa": true,
+    "command": "ic <<'EOS'\nsource ~/.bashrc; which dc_shell || true; dc_shell -version\nexit\nEOS",
+    "environment": "local ic launcher",
+    "hardware_completion_eligible": false,
+    "kernel_ppa_evidence": false,
+    "returncode": 127,
+    "stderr": "local ic launcher not found on PATH; falling back to ssh ic-eda.",
+    "stdout": "",
+    "tool": "dc_shell",
+    "transport": "local_ic"
+  },
+  {
+    "artifact_role": "tool_availability_only_not_kernel_ppa",
+    "availability_only_not_kernel_ppa": true,
+    "command": "ic <<'EOS'\nsource ~/.bashrc; which vcs || true; vcs -ID\nexit\nEOS",
+    "environment": "local ic launcher",
+    "hardware_completion_eligible": false,
+    "kernel_ppa_evidence": false,
+    "returncode": 127,
+    "stderr": "local ic launcher not found on PATH; falling back to ssh ic-eda.",
+    "stdout": "",
+    "tool": "vcs",
+    "transport": "local_ic"
+  },
+  {
+    "artifact_role": "tool_availability_only_not_kernel_ppa",
+    "availability_only_not_kernel_ppa": true,
+    "command": "ic <<'EOS'\nsource ~/.bashrc; which vivado || true; LC_ALL=C LANG=C vivado -version\nexit\nEOS",
+    "environment": "local ic launcher",
+    "hardware_completion_eligible": false,
+    "kernel_ppa_evidence": false,
+    "returncode": 127,
+    "stderr": "local ic launcher not found on PATH; falling back to ssh ic-eda.",
+    "stdout": "",
+    "tool": "vivado",
+    "transport": "local_ic"
+  },
+  {
+    "artifact_role": "tool_availability_only_not_kernel_ppa",
+    "availability_only_not_kernel_ppa": true,
+    "command": "ssh -o BatchMode=yes -o ConnectTimeout=3 ic-eda source ~/.bashrc; which dc_shell || true; dc_shell -version",
+    "environment": "ssh ic-eda",
+    "hardware_completion_eligible": false,
+    "kernel_ppa_evidence": false,
+    "returncode": 124,
+    "stderr": "Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=3', 'ic-eda', 'source ~/.bashrc; which dc_shell || true; dc_shell -version']' timed out after 3 seconds",
+    "stdout": "",
+    "tool": "dc_shell",
+    "transport": "ssh"
+  },
+  {
+    "artifact_role": "tool_availability_only_not_kernel_ppa",
+    "availability_only_not_kernel_ppa": true,
+    "command": "ssh -o BatchMode=yes -o ConnectTimeout=3 ic-eda source ~/.bashrc; which vcs || true; vcs -ID",
+    "environment": "ssh ic-eda",
+    "hardware_completion_eligible": false,
+    "kernel_ppa_evidence": false,
+    "returncode": 124,
+    "stderr": "Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=3', 'ic-eda', 'source ~/.bashrc; which vcs || true; vcs -ID']' timed out after 3 seconds",
+    "stdout": "",
+    "tool": "vcs",
+    "transport": "ssh"
+  },
+  {
+    "artifact_role": "tool_availability_only_not_kernel_ppa",
+    "availability_only_not_kernel_ppa": true,
+    "command": "ssh -o BatchMode=yes -o ConnectTimeout=3 ic-eda source ~/.bashrc; which vivado || true; LC_ALL=C LANG=C vivado -version",
+    "environment": "ssh ic-eda",
+    "hardware_completion_eligible": false,
+    "kernel_ppa_evidence": false,
+    "returncode": 124,
+    "stderr": "Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=3', 'ic-eda', 'source ~/.bashrc; which vivado || true; LC_ALL=C LANG=C vivado -version']' timed out after 3 seconds",
+    "stdout": "",
+    "tool": "vivado",
+    "transport": "ssh"
+  }
+]
