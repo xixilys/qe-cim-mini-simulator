@@ -1513,6 +1513,225 @@ def materialize_integrated_vcs_sidecar_project(specs: Sequence[Mapping[str, Any]
     }
 
 
+def _integrated_vivado_impl_wrapper_source(
+    *,
+    hpsi_samples: int,
+    sum_band_grid_points: int,
+    sum_band_bands: int,
+    axpy_samples: int,
+) -> str:
+    sum_band_samples = sum_band_grid_points * sum_band_bands
+    total_samples = hpsi_samples + sum_band_samples + axpy_samples
+    return f"""module qeic_real_integrated_combined_sidecar_impl_top (
+    input  wire clk,
+    input  wire reset_n,
+    input  wire start,
+    output wire done,
+    output wire [47:0] checksum
+);
+    localparam integer HPSI_N = {hpsi_samples};
+    localparam integer SUM_GRID = {sum_band_grid_points};
+    localparam integer SUM_BANDS = {sum_band_bands};
+    localparam integer SUM_SAMPLES = {sum_band_samples};
+    localparam integer AXPY_N = {axpy_samples};
+    localparam integer TOTAL_SAMPLES = {total_samples};
+    localparam integer WIDTH = 18;
+    localparam integer ACC_WIDTH = 48;
+    localparam [1:0] MODE_HPSI = 2'd0;
+    localparam [1:0] MODE_SUM_BAND = 2'd1;
+    localparam [1:0] MODE_AXPY = 2'd2;
+
+    reg sidecar_start;
+    reg active;
+    reg sample_valid;
+    reg [1:0] mode;
+    reg band_first;
+    reg band_last;
+    reg signed [WIDTH-1:0] a_re;
+    reg signed [WIDTH-1:0] a_im;
+    reg signed [WIDTH-1:0] b_re;
+    reg signed [WIDTH-1:0] b_im;
+    reg signed [WIDTH-1:0] c_re;
+    reg signed [WIDTH-1:0] c_im;
+    reg signed [WIDTH-1:0] weight;
+    reg signed [WIDTH-1:0] y_re;
+    reg signed [WIDTH-1:0] y_im;
+    reg [15:0] sample_index;
+    reg [47:0] checksum_reg;
+    reg done_reg;
+
+    wire signed [ACC_WIDTH-1:0] out_re;
+    wire signed [ACC_WIDTH-1:0] out_im;
+    wire signed [ACC_WIDTH-1:0] rho_out;
+    wire valid;
+    wire sidecar_done;
+    wire [15:0] sum_phase = sample_index - 16'd{hpsi_samples};
+    wire [1:0] sum_band_mod = sum_phase[1:0];
+
+    assign checksum = checksum_reg;
+    assign done = done_reg | sidecar_done;
+
+    qeic_real_integrated_combined_sidecar_rtl #(
+        .TOTAL_SAMPLES(TOTAL_SAMPLES),
+        .WIDTH(WIDTH),
+        .ACC_WIDTH(ACC_WIDTH)
+    ) sidecar (
+        .clk(clk),
+        .reset_n(reset_n),
+        .start(sidecar_start),
+        .sample_valid(sample_valid),
+        .mode(mode),
+        .band_first(band_first),
+        .band_last(band_last),
+        .a_re(a_re),
+        .a_im(a_im),
+        .b_re(b_re),
+        .b_im(b_im),
+        .c_re(c_re),
+        .c_im(c_im),
+        .weight(weight),
+        .y_re(y_re),
+        .y_im(y_im),
+        .out_re(out_re),
+        .out_im(out_im),
+        .rho_out(rho_out),
+        .valid(valid),
+        .done(sidecar_done)
+    );
+
+    always @* begin
+        if (sample_index < HPSI_N) begin
+            mode = MODE_HPSI;
+        end else if (sample_index < HPSI_N + SUM_SAMPLES) begin
+            mode = MODE_SUM_BAND;
+        end else begin
+            mode = MODE_AXPY;
+        end
+        sample_valid = active;
+        band_first = active && mode == MODE_SUM_BAND && sum_band_mod == 2'd0;
+        band_last = active && mode == MODE_SUM_BAND && sum_band_mod == 2'd3;
+        a_re = 18'sd64 + $signed({{2'b00, sample_index}});
+        a_im = -18'sd51 - $signed({{2'b00, sample_index}});
+        b_re = 18'sd32 + $signed({{2'b00, sample_index[14:0], 1'b0}});
+        b_im = -18'sd21 - $signed({{2'b00, sample_index}});
+        c_re = 18'sd67 + $signed({{2'b00, sample_index}});
+        c_im = -18'sd47 - $signed({{2'b00, sample_index}});
+        weight = 18'sd64 + $signed({{12'b0, sample_index[5:0]}});
+        y_re = 18'sd7 + $signed({{15'b0, sample_index[2:0]}});
+        y_im = -18'sd5 - $signed({{15'b0, sample_index[2:0]}});
+    end
+
+    always @(posedge clk or negedge reset_n) begin
+        if (!reset_n) begin
+            sidecar_start <= 1'b0;
+            active <= 1'b0;
+            sample_index <= 16'd0;
+            checksum_reg <= 48'd0;
+            done_reg <= 1'b0;
+        end else begin
+            sidecar_start <= 1'b0;
+            if (start && !active) begin
+                sidecar_start <= 1'b1;
+                active <= 1'b1;
+                sample_index <= 16'd0;
+                checksum_reg <= 48'd0;
+                done_reg <= 1'b0;
+            end else if (active) begin
+                if (valid) begin
+                    checksum_reg <= checksum_reg + out_re[47:0] + out_im[47:0] + rho_out[47:0];
+                end
+                if (sample_index == 16'd{total_samples - 1}) begin
+                    active <= 1'b0;
+                    done_reg <= 1'b1;
+                end else begin
+                    sample_index <= sample_index + 16'd1;
+                end
+            end
+        end
+    end
+endmodule
+"""
+
+
+def _integrated_vivado_impl_tcl(*, fpga_part: str, clock_period_ns: float) -> str:
+    return f"""set_msg_config -id {{Common 17-55}} -new_severity {{INFO}}
+read_verilog -sv qeic_real_integrated_combined_sidecar_rtl.sv
+read_verilog -sv qeic_real_integrated_combined_sidecar_impl_top.sv
+read_xdc vivado_impl.xdc
+synth_design -top qeic_real_integrated_combined_sidecar_impl_top -part {fpga_part}
+opt_design
+place_design
+route_design
+report_utilization -file vivado_utilization.rpt
+report_timing_summary -file vivado_timing_summary.rpt
+write_checkpoint -force post_route.dcp
+"""
+
+
+def materialize_integrated_vivado_impl_project(
+    specs: Sequence[Mapping[str, Any]],
+    out_dir: Path,
+    *,
+    fpga_part: str = DEFAULT_FPGA_PART,
+    clock_period_ns: float = 10.0,
+) -> dict[str, Any]:
+    """Materialize a Vivado implementation project for the integrated RTL sidecar."""
+
+    by_id = {str(spec.get("architecture_id")): spec for spec in specs if spec.get("architecture_id")}
+    hpsi = by_id.get("hybrid_hpsi_local_potential_v1", {})
+    sum_band = by_id.get("hybrid_sum_band_density_accumulator_v1", {})
+    axpy = by_id.get("hybrid_tiled_complex_axpy_v1", {})
+    hpsi_samples = int(hpsi.get("golden_grid_points") or hpsi.get("golden_vector_length") or 96)
+    sum_grid = int(sum_band.get("golden_grid_points") or 32)
+    sum_bands = int(sum_band.get("golden_band_count") or 4)
+    axpy_samples = int(axpy.get("golden_vector_length") or 64)
+    component_samples = {
+        "hpsi": hpsi_samples,
+        "sum_band": sum_grid * sum_bands,
+        "axpy": axpy_samples,
+    }
+    project_dir = Path(out_dir) / _INTEGRATED_SIDECAR_ID / "vivado_impl"
+    project_dir.mkdir(parents=True, exist_ok=True)
+    rtl_source = _integrated_vcs_rtl_source()
+    wrapper_source = _integrated_vivado_impl_wrapper_source(
+        hpsi_samples=hpsi_samples,
+        sum_band_grid_points=sum_grid,
+        sum_band_bands=sum_bands,
+        axpy_samples=axpy_samples,
+    )
+    tcl_source = _integrated_vivado_impl_tcl(fpga_part=fpga_part, clock_period_ns=clock_period_ns)
+    xdc_source = f"""create_clock -period {clock_period_ns:.3f} -name clk [get_ports clk]
+set_false_path -from [get_ports reset_n]
+"""
+    rtl_sv = project_dir / "qeic_real_integrated_combined_sidecar_rtl.sv"
+    wrapper_sv = project_dir / "qeic_real_integrated_combined_sidecar_impl_top.sv"
+    vivado_impl_tcl = project_dir / "vivado_impl.tcl"
+    vivado_impl_xdc = project_dir / "vivado_impl.xdc"
+    rtl_sv.write_text(rtl_source, encoding="utf-8")
+    wrapper_sv.write_text(wrapper_source, encoding="utf-8")
+    vivado_impl_tcl.write_text(tcl_source, encoding="utf-8")
+    vivado_impl_xdc.write_text(xdc_source, encoding="utf-8")
+    return {
+        "architecture_id": _INTEGRATED_SIDECAR_ID,
+        "kernel_name": _INTEGRATED_SIDECAR_KERNEL,
+        "top_module": "qeic_real_integrated_combined_sidecar_impl_top",
+        "project_dir": str(project_dir),
+        "rtl_sv": str(rtl_sv),
+        "wrapper_sv": str(wrapper_sv),
+        "vivado_impl_tcl": str(vivado_impl_tcl),
+        "vivado_impl_xdc": str(vivado_impl_xdc),
+        "rtl_hash": _sha256_text(rtl_source),
+        "wrapper_hash": _sha256_text(wrapper_source),
+        "tcl_hash": _sha256_text(tcl_source),
+        "xdc_hash": _sha256_text(xdc_source),
+        "samples": sum(component_samples.values()),
+        "component_samples": component_samples,
+        "fpga_part": fpga_part,
+        "clock_period_ns": clock_period_ns,
+        "claim_boundary": "Integrated RTL sidecar Vivado implementation project covering h_psi, sum_band, and AXPY motifs; not full QE kernel integration or board measurement.",
+    }
+
+
 def materialize_vcs_rtl_project(spec: Mapping[str, Any], out_dir: Path) -> dict[str, Any]:
     """Materialize a non-HLS RTL/VCS project for a supported QE miniapp."""
 
@@ -1632,6 +1851,210 @@ def merge_vcs_rtl_evidence_into_summary(summary: Mapping[str, Any], vcs_result: 
         break
     if not matched:
         raise ValueError(f"no evidence row for VCS architecture {architecture_id}")
+    return merged
+
+
+def parse_vivado_impl_utilization_report(text: str) -> dict[str, Any]:
+    """Parse Vivado post-route utilization report resource totals."""
+
+    if not text:
+        return {
+            "status": "missing",
+            "resource": {},
+            "resource_available": {},
+            "resource_utilization_percent": {},
+            "resource_feasible": False,
+            "blockers": ["vivado_impl_utilization_report_missing"],
+        }
+    resource: dict[str, int] = {}
+    available: dict[str, int] = {}
+    utilization_percent: dict[str, float] = {}
+    resource_names = {
+        "slice luts": "lut",
+        "slice registers": "ff",
+        "block ram tile": "bram_tile",
+        "dsps": "dsp",
+    }
+    for line in text.splitlines():
+        columns = _table_columns(line)
+        if len(columns) < 4:
+            continue
+        name = columns[0].strip().lower()
+        key = resource_names.get(name)
+        if key is None:
+            continue
+        used = _parse_int_cell(columns[1])
+        capacity = _parse_int_cell(columns[3])
+        util = _parse_float(columns[4]) if len(columns) > 4 else None
+        if used is not None:
+            resource[key] = used
+        if capacity is not None:
+            available[key] = capacity
+        if util is not None:
+            utilization_percent[key] = util
+
+    expected = {"lut", "ff", "bram_tile", "dsp"}
+    missing = sorted(expected - set(resource))
+    blockers = [f"vivado_impl_{name}_utilization_missing" for name in missing]
+    resource_feasible = bool(resource) and not missing
+    for key, used in resource.items():
+        capacity = available.get(key)
+        if isinstance(capacity, int) and used > capacity:
+            resource_feasible = False
+            blockers.append(f"vivado_impl_{key}_resource_infeasible")
+    return {
+        "status": "parsed" if not blockers else "partial",
+        "resource": resource,
+        "resource_available": available,
+        "resource_utilization_percent": utilization_percent,
+        "resource_feasible": resource_feasible,
+        "blockers": blockers,
+    }
+
+
+def _next_numeric_line_values(lines: Sequence[str], start_index: int) -> list[float]:
+    for raw_line in lines[start_index + 1 :]:
+        line = raw_line.strip()
+        if not line or set(line) <= {"-", " "}:
+            continue
+        columns = _table_columns(line)
+        if columns:
+            values = [_parse_float(column) for column in columns]
+            parsed = [value for value in values if value is not None]
+        else:
+            parsed = [float(value) for value in re.findall(r"-?\d+(?:\.\d+)?", line)]
+        if parsed:
+            return parsed
+    return []
+
+
+def parse_vivado_impl_timing_summary_report(text: str) -> dict[str, Any]:
+    """Parse Vivado post-route timing summary status."""
+
+    if not text:
+        return {
+            "status": "missing",
+            "wns_ns": None,
+            "tns_ns": None,
+            "whs_ns": None,
+            "ths_ns": None,
+            "wpws_ns": None,
+            "tpws_ns": None,
+            "timing_met": False,
+            "blockers": ["vivado_impl_timing_summary_missing"],
+        }
+    lines = text.splitlines()
+    parsed: dict[str, Any] = {
+        "status": "parsed",
+        "wns_ns": None,
+        "tns_ns": None,
+        "whs_ns": None,
+        "ths_ns": None,
+        "wpws_ns": None,
+        "tpws_ns": None,
+        "timing_met": False,
+        "blockers": [],
+    }
+    found_design_summary = False
+    in_design_summary = False
+    for index, line in enumerate(lines):
+        lower = line.lower()
+        if "design timing summary" in lower:
+            in_design_summary = True
+            continue
+        if in_design_summary and ("clock summary" in lower or "intra clock table" in lower):
+            break
+        if not in_design_summary and (
+            lower.lstrip().startswith("from clock")
+            or lower.lstrip().startswith("path group")
+            or lower.lstrip().startswith("clock ")
+        ):
+            continue
+        if not in_design_summary and (parsed["wns_ns"] is not None or parsed["tns_ns"] is not None):
+            continue
+        if "wns(ns)" in lower and "tns(ns)" in lower:
+            values = _next_numeric_line_values(lines, index)
+            if len(values) < 2:
+                continue
+            parsed["wns_ns"] = values[0]
+            parsed["tns_ns"] = values[1]
+            if len(values) >= 6:
+                parsed["whs_ns"] = values[4]
+                parsed["ths_ns"] = values[5]
+            if len(values) >= 10:
+                parsed["wpws_ns"] = values[8]
+                parsed["tpws_ns"] = values[9]
+            found_design_summary = in_design_summary
+            if found_design_summary:
+                break
+        elif "whs(ns)" in lower and "ths(ns)" in lower:
+            values = _next_numeric_line_values(lines, index)
+            if len(values) >= 2:
+                parsed["whs_ns"] = values[0]
+                parsed["ths_ns"] = values[1]
+        elif "wpws(ns)" in lower and "tpws(ns)" in lower:
+            values = _next_numeric_line_values(lines, index)
+            if len(values) >= 2:
+                parsed["wpws_ns"] = values[0]
+                parsed["tpws_ns"] = values[1]
+
+    if parsed["wns_ns"] is None or parsed["tns_ns"] is None:
+        parsed["status"] = "partial"
+        parsed["blockers"].append("vivado_impl_setup_timing_missing")
+    else:
+        parsed["timing_met"] = float(parsed["wns_ns"]) >= 0.0 and float(parsed["tns_ns"]) >= 0.0
+        if not parsed["timing_met"]:
+            parsed["blockers"].append("vivado_impl_setup_timing_not_met")
+    if parsed["whs_ns"] is not None and float(parsed["whs_ns"]) < 0.0:
+        parsed["timing_met"] = False
+        parsed["blockers"].append("vivado_impl_hold_timing_not_met")
+    if parsed["wpws_ns"] is not None and float(parsed["wpws_ns"]) < 0.0:
+        parsed["timing_met"] = False
+        parsed["blockers"].append("vivado_impl_pulse_width_timing_not_met")
+    return parsed
+
+
+def merge_integrated_vivado_impl_evidence_into_summary(summary: Mapping[str, Any], vivado_result: Mapping[str, Any]) -> dict[str, Any]:
+    """Attach integrated Vivado implementation evidence while preserving claim boundaries."""
+
+    merged = json.loads(json.dumps(summary))
+    classification = merged.setdefault("classification", {})
+    if not isinstance(classification, dict):
+        raise ValueError("summary classification is not a JSON object")
+    util = vivado_result.get("vivado_impl_utilization_parsed") if isinstance(vivado_result.get("vivado_impl_utilization_parsed"), Mapping) else {}
+    timing = vivado_result.get("vivado_impl_timing_parsed") if isinstance(vivado_result.get("vivado_impl_timing_parsed"), Mapping) else {}
+    impl_passed = vivado_result.get("vivado_impl_passed") is True
+    resource_feasible = util.get("resource_feasible") is True
+    timing_met = timing.get("timing_met") is True
+
+    merged["integrated_vivado_impl_result"] = json.loads(json.dumps(vivado_result))
+    classification["integrated_vivado_impl_attempted"] = vivado_result.get("vivado_impl_attempted") is True
+    classification["integrated_vivado_impl_passed"] = impl_passed
+    classification["integrated_vivado_impl_resource_feasible"] = resource_feasible
+    classification["integrated_vivado_impl_timing_met"] = timing_met
+    classification["integrated_vivado_impl_resource"] = util.get("resource")
+    classification["integrated_vivado_impl_wns_ns"] = timing.get("wns_ns")
+    satisfied = set(str(item) for item in _as_list(classification.get("satisfied_preliminary_gates")))
+    if impl_passed:
+        satisfied.add("vivado_impl_executed")
+    if resource_feasible:
+        satisfied.add("vivado_impl_resource_feasible")
+    if timing_met:
+        satisfied.add("vivado_impl_timing_met")
+    classification["satisfied_preliminary_gates"] = sorted(satisfied)
+    blockers = set(str(item) for item in _as_list(classification.get("blockers")))
+    for blocker in _as_list(util.get("blockers")) + _as_list(timing.get("blockers")) + _as_list(vivado_result.get("blockers")):
+        if blocker:
+            blockers.add(str(blocker))
+    classification["blockers"] = sorted(blockers)
+    classification["final_claim_allowed"] = False
+    boundary = str(vivado_result.get("claim_boundary") or "")
+    if boundary:
+        merged["claim_boundary"] = boundary
+        classification["claim_boundary"] = (
+            boundary
+            + " Current conclusion remains bounded by full QE kernel integration and physical FPGA board measurement gates."
+        )
     return merged
 
 
@@ -2038,6 +2461,12 @@ def render_real_hybrid_hls_report(summary: Mapping[str, Any]) -> str:
         lines.append(f"- Best architecture: `{classification.get('best_architecture_id')}`")
     if classification.get("best_speedup_vs_gpu_mean") is not None:
         lines.append(f"- Best optimistic trace-replay speedup vs GPU: `{float(classification.get('best_speedup_vs_gpu_mean')):.6g}x`")
+    if classification.get("best_vivado_implemented_architecture_id"):
+        lines.append(f"- Best Vivado-implemented architecture: `{classification.get('best_vivado_implemented_architecture_id')}`")
+    if classification.get("best_vivado_implemented_speedup_vs_gpu_mean") is not None:
+        lines.append(
+            f"- Best Vivado-implemented trace-replay speedup vs GPU: `{float(classification.get('best_vivado_implemented_speedup_vs_gpu_mean')):.6g}x`"
+        )
     if classification.get("resource_infeasible_architecture_ids"):
         lines.append(
             "- Resource-infeasible architectures filtered: `"
@@ -2046,6 +2475,18 @@ def render_real_hybrid_hls_report(summary: Mapping[str, Any]) -> str:
         )
     if summary.get("claim_closure_path"):
         lines.append(f"- Claim closure audit: `{summary.get('claim_closure_path')}`")
+    impl_result = summary.get("integrated_vivado_impl_result") if isinstance(summary.get("integrated_vivado_impl_result"), Mapping) else {}
+    if impl_result:
+        impl_util = impl_result.get("vivado_impl_utilization_parsed") if isinstance(impl_result.get("vivado_impl_utilization_parsed"), Mapping) else {}
+        impl_timing = impl_result.get("vivado_impl_timing_parsed") if isinstance(impl_result.get("vivado_impl_timing_parsed"), Mapping) else {}
+        impl_resource = impl_util.get("resource") if isinstance(impl_util.get("resource"), Mapping) else {}
+        lines.append(
+            "- Integrated Vivado implementation: "
+            f"`{impl_result.get('vivado_impl_passed')}`, WNS `{impl_timing.get('wns_ns')}` ns, "
+            f"implemented clock `{impl_result.get('implemented_clock_ns')}` ns, "
+            f"LUT `{impl_resource.get('lut')}`, FF `{impl_resource.get('ff')}`, "
+            f"BRAM tile `{impl_resource.get('bram_tile')}`, DSP `{impl_resource.get('dsp')}`"
+        )
     lines.append("")
     lines.append("## Direct answer")
     lines.append("")
@@ -2102,6 +2543,26 @@ def render_real_hybrid_hls_report(summary: Mapping[str, Any]) -> str:
             )
     else:
         lines.append("No claimable case-matched workflow comparison rows survived the hard gates.")
+    if impl_result:
+        impl_util = impl_result.get("vivado_impl_utilization_parsed") if isinstance(impl_result.get("vivado_impl_utilization_parsed"), Mapping) else {}
+        impl_timing = impl_result.get("vivado_impl_timing_parsed") if isinstance(impl_result.get("vivado_impl_timing_parsed"), Mapping) else {}
+        impl_resource = impl_util.get("resource") if isinstance(impl_util.get("resource"), Mapping) else {}
+        lines.append("")
+        lines.append("## Integrated Vivado implementation evidence")
+        lines.append("")
+        lines.append(
+            "This is post-synthesis/place/route FPGA implementation evidence for the single integrated RTL sidecar. "
+            "It improves hardware feasibility evidence, but it is still not physical board measurement and not full QE kernel integration."
+        )
+        lines.append("")
+        lines.append(f"- Passed: `{impl_result.get('vivado_impl_passed')}`")
+        lines.append(f"- Timing met: `{impl_timing.get('timing_met')}`; WNS `{impl_timing.get('wns_ns')}` ns; TNS `{impl_timing.get('tns_ns')}` ns")
+        lines.append(
+            f"- Resource feasible: `{impl_util.get('resource_feasible')}`; LUT `{impl_resource.get('lut')}`, "
+            f"FF `{impl_resource.get('ff')}`, BRAM tile `{impl_resource.get('bram_tile')}`, DSP `{impl_resource.get('dsp')}`"
+        )
+        if impl_result.get("vivado_impl_evidence_json_path"):
+            lines.append(f"- Evidence JSON: `{impl_result.get('vivado_impl_evidence_json_path')}`")
     lines.append("")
     lines.append("## Claim boundary")
     lines.append("")
@@ -2448,9 +2909,15 @@ def build_integrated_vcs_sidecar_accounting(
     vcs = integrated_result.get("vcs_parsed") if isinstance(integrated_result.get("vcs_parsed"), Mapping) else {}
     latency = vcs.get("latency_cycles") if isinstance(vcs, Mapping) else None
     component_cycles = vcs.get("component_cycles") if isinstance(vcs.get("component_cycles"), Mapping) else {}
-    clock_ns = integrated_result.get("clock_ns")
+    clock_source = "vcs_project_default"
+    clock_ns = integrated_result.get("implemented_clock_ns")
+    if isinstance(clock_ns, (int, float)):
+        clock_source = str(integrated_result.get("implemented_clock_source") or "vivado_post_route_timing_met")
+    else:
+        clock_ns = integrated_result.get("clock_ns")
     if not isinstance(clock_ns, (int, float)):
         clock_ns = 8.75
+        clock_source = "default_unimplemented_clock"
     if not isinstance(latency, (int, float)):
         return []
     records = [record for record in _as_list(gpu_baseline.get("baseline_records")) if isinstance(record, Mapping)]
@@ -2563,6 +3030,7 @@ def build_integrated_vcs_sidecar_accounting(
                 "latency_source": "integrated_vcs_rtl",
                 "integrated_latency_cycles": int(latency),
                 "fpga_clock_ns": float(clock_ns),
+                "fpga_clock_source": clock_source,
                 "fpga_component_count": len(component_rows),
                 "fpga_components": component_rows,
                 "fpga_transaction_count_estimate": transaction_count_total,
@@ -2728,6 +3196,9 @@ def build_real_hybrid_claim_closure(
     workflow_accounted_architectures = sorted(
         {str(row.get("architecture_id")) for row in evidence_rows if row.get("architecture_id") and _workflow_accounting_is_claimable(row)}
     )
+    integrated_vivado_impl_passed = classification.get("integrated_vivado_impl_passed") is True
+    integrated_vivado_impl_timing_met = classification.get("integrated_vivado_impl_timing_met") is True
+    integrated_vivado_impl_resource_feasible = classification.get("integrated_vivado_impl_resource_feasible") is True
     full_qe_kernel_architectures = sorted(
         {
             str(row.get("architecture_id"))
@@ -2789,6 +3260,18 @@ def build_real_hybrid_claim_closure(
             "satisfied" if workflow_accounted_architectures else "missing",
             {"workflow_accounted_architecture_count": len(workflow_accounted_architectures), "architecture_ids": workflow_accounted_architectures},
             "preliminary_full_workflow_comparison",
+        ),
+        _gate(
+            "integrated_vivado_implementation",
+            "satisfied" if integrated_vivado_impl_passed and integrated_vivado_impl_timing_met and integrated_vivado_impl_resource_feasible else "missing",
+            {
+                "integrated_vivado_impl_passed": integrated_vivado_impl_passed,
+                "integrated_vivado_impl_timing_met": integrated_vivado_impl_timing_met,
+                "integrated_vivado_impl_resource_feasible": integrated_vivado_impl_resource_feasible,
+                "integrated_vivado_impl_resource": classification.get("integrated_vivado_impl_resource"),
+                "integrated_vivado_impl_wns_ns": classification.get("integrated_vivado_impl_wns_ns"),
+            },
+            "preliminary_fpga_implementation_feasibility",
         ),
         _gate(
             "full_qe_kernel_integration",
@@ -2956,14 +3439,18 @@ __all__ = [
     "build_trace_replay_workflow_accounting",
     "classify_real_hybrid_vs_gpu",
     "materialize_integrated_vcs_sidecar_project",
+    "materialize_integrated_vivado_impl_project",
     "materialize_hls_project",
     "materialize_vcs_rtl_project",
     "merge_combined_vcs_sidecar_comparisons",
     "merge_integrated_vcs_sidecar_comparisons",
+    "merge_integrated_vivado_impl_evidence_into_summary",
     "merge_vcs_rtl_evidence_into_summary",
     "parse_qe_timer_stdout",
     "parse_vcs_rtl_run_log",
     "render_real_hybrid_hls_report",
     "parse_vivado_hls_cosim_report",
     "parse_vivado_hls_csynth_report",
+    "parse_vivado_impl_timing_summary_report",
+    "parse_vivado_impl_utilization_report",
 ]

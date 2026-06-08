@@ -1350,3 +1350,515 @@ def test_merge_integrated_vcs_sidecar_comparisons_appends_integrated_candidate()
     assert merged["architecture_comparisons"][0]["workflow_accounting_status"] == "trace_replay_integrated_vcs_sidecar_sensitivity"
     assert "full_qe_kernel_integration_missing" in merged["blockers"]
     assert merged["final_claim_allowed"] is False
+
+
+def test_materialize_integrated_vivado_impl_project_contains_impl_tcl_and_rtl(tmp_path: Path):
+    from dse_v2.experiments.qe_ic_real_opportunity.real_hybrid_hls_evidence import (
+        materialize_integrated_vivado_impl_project,
+    )
+
+    project = materialize_integrated_vivado_impl_project(
+        build_real_hybrid_architecture_specs(), tmp_path, fpga_part="xc7z020clg400-1"
+    )
+
+    assert project["architecture_id"] == "hybrid_integrated_combined_sidecar_v1"
+    assert project["fpga_part"] == "xc7z020clg400-1"
+    assert project["top_module"] == "qeic_real_integrated_combined_sidecar_impl_top"
+    rtl = Path(project["rtl_sv"]).read_text()
+    tcl = Path(project["vivado_impl_tcl"]).read_text()
+    assert "module qeic_real_integrated_combined_sidecar_rtl" in rtl
+    assert "MODE_HPSI" in rtl and "MODE_SUM_BAND" in rtl and "MODE_AXPY" in rtl
+    wrapper = Path(project["wrapper_sv"]).read_text()
+    assert "module qeic_real_integrated_combined_sidecar_impl_top" in wrapper
+    assert "qeic_real_integrated_combined_sidecar_rtl" in wrapper
+    assert "checksum_reg" in wrapper
+    assert "read_verilog -sv qeic_real_integrated_combined_sidecar_rtl.sv" in tcl
+    assert "read_verilog -sv qeic_real_integrated_combined_sidecar_impl_top.sv" in tcl
+    assert "synth_design -top qeic_real_integrated_combined_sidecar_impl_top -part xc7z020clg400-1" in tcl
+    assert "place_design" in tcl
+    assert "route_design" in tcl
+    assert "report_utilization -file vivado_utilization.rpt" in tcl
+    assert "report_timing_summary -file vivado_timing_summary.rpt" in tcl
+    assert "stub" not in rtl.lower()
+
+
+def test_parse_vivado_impl_utilization_and_timing_reports():
+    from dse_v2.experiments.qe_ic_real_opportunity.real_hybrid_hls_evidence import (
+        parse_vivado_impl_timing_summary_report,
+        parse_vivado_impl_utilization_report,
+    )
+
+    utilization = """
++----------------------------+------+-------+-----------+-------+
+|          Site Type         | Used | Fixed | Available | Util% |
++----------------------------+------+-------+-----------+-------+
+| Slice LUTs                 | 1234 |     0 |     53200 |  2.32 |
+| Slice Registers            | 2345 |     0 |    106400 |  2.20 |
+| Block RAM Tile             |    4 |     0 |       140 |  2.86 |
+| DSPs                       |   12 |     0 |       220 |  5.45 |
++----------------------------+------+-------+-----------+-------+
+"""
+    timing = """
+Report Timing Summary
+Design Timing Summary
+---------------------
+WNS(ns)      TNS(ns)  TNS Failing Endpoints  TNS Total Endpoints
+0.872        0.000    0                      128
+WHS(ns)      THS(ns)  THS Failing Endpoints  THS Total Endpoints
+0.099        0.000    0                      128
+WPWS(ns)     TPWS(ns) TPWS Failing Endpoints TPWS Total Endpoints
+1.100        0.000    0                      128
+"""
+
+    util = parse_vivado_impl_utilization_report(utilization)
+    parsed_timing = parse_vivado_impl_timing_summary_report(timing)
+
+    assert util["status"] == "parsed"
+    assert util["resource"] == {"lut": 1234, "ff": 2345, "bram_tile": 4, "dsp": 12}
+    assert util["resource_available"] == {"lut": 53200, "ff": 106400, "bram_tile": 140, "dsp": 220}
+    assert util["resource_feasible"] is True
+    assert util["blockers"] == []
+    assert parsed_timing["status"] == "parsed"
+    assert parsed_timing["wns_ns"] == 0.872
+    assert parsed_timing["tns_ns"] == 0.0
+    assert parsed_timing["timing_met"] is True
+    assert parsed_timing["blockers"] == []
+
+
+def test_merge_integrated_vivado_impl_evidence_into_summary_and_claim_closure():
+    from dse_v2.experiments.qe_ic_real_opportunity.real_hybrid_hls_evidence import (
+        merge_integrated_vivado_impl_evidence_into_summary,
+    )
+
+    summary = {
+        "classification": {
+            "preliminary_label": "fpga_hybrid_weaker",
+            "confidence": "medium",
+            "final_claim_allowed": False,
+            "best_architecture_id": "hybrid_integrated_combined_sidecar_v1",
+            "best_speedup_vs_gpu_mean": 1.55,
+            "blockers": ["full_qe_kernel_integration_missing", "physical_fpga_board_measurement_missing"],
+            "architecture_comparisons": [],
+            "claim_boundary": "old boundary",
+        },
+        "evidence_rows": [],
+    }
+    vivado_result = {
+        "architecture_id": "hybrid_integrated_combined_sidecar_v1",
+        "vivado_impl_attempted": True,
+        "vivado_impl_passed": True,
+        "vivado_impl_utilization_parsed": {
+            "status": "parsed",
+            "resource": {"lut": 1234, "ff": 2345, "bram_tile": 4, "dsp": 12},
+            "resource_feasible": True,
+            "blockers": [],
+        },
+        "vivado_impl_timing_parsed": {"status": "parsed", "wns_ns": 0.872, "timing_met": True, "blockers": []},
+        "vivado_impl_evidence_json_path": "runs/hybrid/vivado_impl/real_hybrid_integrated_vivado_impl_evidence.json",
+        "vivado_impl_evidence_json_hash": "sha256:" + "2" * 64,
+        "claim_boundary": "Integrated Vivado implementation evidence; still not board measurement or full QE integration.",
+    }
+
+    merged = merge_integrated_vivado_impl_evidence_into_summary(summary, vivado_result)
+
+    assert merged["integrated_vivado_impl_result"]["vivado_impl_passed"] is True
+    assert merged["classification"]["integrated_vivado_impl_passed"] is True
+    assert merged["classification"]["integrated_vivado_impl_timing_met"] is True
+    assert "vivado_impl_resource_feasible" in merged["classification"]["satisfied_preliminary_gates"]
+    assert "full_qe_kernel_integration_missing" in merged["classification"]["blockers"]
+    assert "physical_fpga_board_measurement_missing" in merged["classification"]["blockers"]
+    assert merged["classification"]["final_claim_allowed"] is False
+    assert "not board measurement" in merged["claim_boundary"]
+
+
+def test_real_hybrid_vivado_impl_runner_merges_result_into_summary(tmp_path: Path, monkeypatch):
+    import argparse
+    import importlib.util
+
+    script_path = Path(__file__).resolve().parents[1] / "scripts" / "dse" / "run_qe_ic_real_hybrid_vivado_impl.py"
+    spec = importlib.util.spec_from_file_location("run_qe_ic_real_hybrid_vivado_impl", script_path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+    baseline_path = tmp_path / "baseline.json"
+    baseline_path.write_text(json.dumps({"measurements_are_real": True, "baseline_records": []}), encoding="utf-8")
+    summary_path = out_dir / "real_hybrid_hls_summary.json"
+    summary_path.write_text(
+        json.dumps(
+            {
+                "gpu_baseline_path": str(baseline_path),
+                "classification": {
+                    "preliminary_label": "fpga_hybrid_weaker",
+                    "confidence": "medium",
+                    "final_claim_allowed": False,
+                    "blockers": ["full_qe_kernel_integration_missing", "physical_fpga_board_measurement_missing"],
+                    "architecture_comparisons": [],
+                    "claim_boundary": "old boundary",
+                },
+                "evidence_rows": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    def fake_run(*, out_dir, fpga_part, clock_period_ns, timeout_seconds):
+        return {
+            "architecture_id": "hybrid_integrated_combined_sidecar_v1",
+            "vivado_impl_attempted": True,
+            "vivado_impl_passed": True,
+            "implemented_clock_ns": clock_period_ns,
+            "implemented_clock_source": "vivado_post_route_timing_met",
+            "vivado_impl_utilization_parsed": {
+                "status": "parsed",
+                "resource": {"lut": 1234, "ff": 2345, "bram_tile": 4, "dsp": 12},
+                "resource_feasible": True,
+                "blockers": [],
+            },
+            "vivado_impl_timing_parsed": {"status": "parsed", "wns_ns": 0.872, "timing_met": True, "blockers": []},
+            "vivado_impl_evidence_json_path": str(out_dir / "runs" / "hybrid_integrated_combined_sidecar_v1" / "vivado_impl" / "real_hybrid_integrated_vivado_impl_evidence.json"),
+            "vivado_impl_evidence_json_hash": "sha256:" + "3" * 64,
+            "blockers": [],
+            "claim_boundary": "Integrated Vivado implementation evidence; not board measurement or full QE integration.",
+        }
+
+    monkeypatch.setattr(module, "run_integrated_vivado_impl", fake_run)
+    args = argparse.Namespace(out=out_dir, summary=summary_path, fpga_part="xc7z020clg400-1", clock_period_ns=10.0, timeout_seconds=1)
+
+    status = module.run_campaign(args)
+    merged = json.loads(summary_path.read_text(encoding="utf-8"))
+    report = (out_dir / "real_hybrid_hls_report.md").read_text(encoding="utf-8")
+
+    assert status["status"] == "passed"
+    assert merged["integrated_vivado_impl_result"]["vivado_impl_passed"] is True
+    assert merged["classification"]["integrated_vivado_impl_timing_met"] is True
+    assert "vivado_impl_timing_met" in merged["classification"]["satisfied_preliminary_gates"]
+    assert "Integrated Vivado implementation" in report
+    assert "WNS" in report
+    assert "LUT" in report
+
+
+def test_parse_vivado_impl_timing_summary_uses_design_summary_not_later_empty_tables():
+    from dse_v2.experiments.qe_ic_real_opportunity.real_hybrid_hls_evidence import parse_vivado_impl_timing_summary_report
+
+    timing = """
+| Design Timing Summary
+| ---------------------
+    WNS(ns)      TNS(ns)  TNS Failing Endpoints  TNS Total Endpoints      WHS(ns)      THS(ns)  THS Failing Endpoints  THS Total Endpoints     WPWS(ns)     TPWS(ns)  TPWS Failing Endpoints  TPWS Total Endpoints
+    -------      -------  ---------------------  -------------------      -------      -------  ---------------------  -------------------     --------     --------  ----------------------  --------------------
+     -8.569     -960.241                    192                  604        0.263        0.000                      0                  604        4.500        0.000                       0                   306
+| Inter Clock Table
+| -----------------
+From Clock    To Clock          WNS(ns)      TNS(ns)  TNS Failing Endpoints  TNS Total Endpoints      WHS(ns)      THS(ns)  THS Failing Endpoints  THS Total Endpoints
+----------    --------          -------      -------  ---------------------  -------------------      -------      -------  ---------------------  -------------------
+Setup :          192  Failing Endpoints,  Worst Slack       -8.569ns,  Total Violation     -960.241ns
+"""
+
+    parsed = parse_vivado_impl_timing_summary_report(timing)
+
+    assert parsed["wns_ns"] == -8.569
+    assert parsed["tns_ns"] == -960.241
+    assert parsed["whs_ns"] == 0.263
+    assert parsed["ths_ns"] == 0.0
+    assert parsed["wpws_ns"] == 4.5
+    assert parsed["tpws_ns"] == 0.0
+    assert parsed["timing_met"] is False
+    assert "vivado_impl_setup_timing_not_met" in parsed["blockers"]
+
+
+def test_build_integrated_vcs_sidecar_accounting_uses_vivado_impl_clock_when_provided(tmp_path: Path):
+    run_dir = tmp_path / "runs" / "case-a" / "gpu_only_baseline"
+    run_dir.mkdir(parents=True)
+    (run_dir / "run_001.stdout.log").write_text(
+        """
+     h_psi        :      0.10s CPU      0.30s WALL (       4 calls)
+     sum_band     :      0.01s CPU      0.20s WALL (       5 calls)
+     mix_rho      :      0.02s CPU      0.10s WALL (       3 calls)
+     PWSCF        :      0.90s CPU      1.00s WALL
+""",
+        encoding="utf-8",
+    )
+    gpu_baseline = {"measurements_are_real": True, "baseline_records": [{"case_id": "case-a", "runtime_seconds_mean": 1.0}]}
+    integrated_result = {
+        "architecture_id": "hybrid_integrated_combined_sidecar_v1",
+        "vcs_passed": True,
+        "vcs_parsed": {
+            "status": "parsed",
+            "rtl_status": "Pass",
+            "latency_cycles": 288,
+            "samples": 288,
+            "component_cycles": {
+                "hpsi": {"samples": 96, "cycles": 96},
+                "sum_band": {"samples": 128, "cycles": 128},
+                "axpy": {"samples": 64, "cycles": 64},
+            },
+            "blockers": [],
+        },
+        "clock_ns": 8.75,
+        "implemented_clock_ns": 20.0,
+        "implemented_clock_source": "vivado_post_route_timing_met",
+    }
+
+    accounting = build_integrated_vcs_sidecar_accounting(gpu_baseline, tmp_path / "runs", integrated_result)
+
+    item = accounting[0]
+    assert item["fpga_clock_ns"] == 20.0
+    assert item["fpga_clock_source"] == "vivado_post_route_timing_met"
+    assert item["fpga_components"][0]["clock_ns"] == 20.0
+
+
+def test_vivado_impl_runner_accepts_clock_period_argument():
+    import importlib.util
+
+    script_path = Path(__file__).resolve().parents[1] / "scripts" / "dse" / "run_qe_ic_real_hybrid_vivado_impl.py"
+    spec = importlib.util.spec_from_file_location("run_qe_ic_real_hybrid_vivado_impl", script_path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    args = module.parse_args(["--clock-period-ns", "20.0"])
+
+    assert args.clock_period_ns == 20.0
+
+
+def test_real_hybrid_vivado_impl_runner_recomputes_integrated_trace_replay_with_implemented_clock(tmp_path: Path, monkeypatch):
+    import argparse
+    import importlib.util
+
+    script_path = Path(__file__).resolve().parents[1] / "scripts" / "dse" / "run_qe_ic_real_hybrid_vivado_impl.py"
+    spec = importlib.util.spec_from_file_location("run_qe_ic_real_hybrid_vivado_impl", script_path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+    baseline_path = tmp_path / "baseline.json"
+    baseline_path.write_text(
+        json.dumps({"measurements_are_real": True, "baseline_records": [{"case_id": "case-a", "runtime_seconds_mean": 1.0}]}),
+        encoding="utf-8",
+    )
+    runs_root = tmp_path / "runs"
+    run_dir = runs_root / "case-a" / "gpu_only_baseline"
+    run_dir.mkdir(parents=True)
+    (run_dir / "run_001.stdout.log").write_text(
+        """
+     h_psi        :      0.10s CPU      0.30s WALL (       4 calls)
+     sum_band     :      0.01s CPU      0.20s WALL (       5 calls)
+     mix_rho      :      0.02s CPU      0.10s WALL (       3 calls)
+     PWSCF        :      0.90s CPU      1.00s WALL
+""",
+        encoding="utf-8",
+    )
+    summary_path = out_dir / "real_hybrid_hls_summary.json"
+    summary_path.write_text(
+        json.dumps(
+            {
+                "gpu_baseline_path": str(baseline_path),
+                "gpu_runs_root": str(runs_root),
+                "classification": {
+                    "preliminary_label": "fpga_hybrid_weaker",
+                    "confidence": "medium",
+                    "final_claim_allowed": False,
+                    "blockers": ["full_qe_kernel_integration_missing", "physical_fpga_board_measurement_missing"],
+                    "architecture_comparisons": [],
+                    "claim_boundary": "old boundary",
+                },
+                "evidence_rows": [
+                    {
+                        "architecture_id": "hybrid_hpsi_local_potential_v1",
+                        "implementation_maturity": "real_hls_kernel",
+                        "csim_passed": True,
+                        "cosim_passed": True,
+                        "csynth_parsed": {"status": "parsed", "estimated_clock_ns": 8.75, "resource_feasible": True, "blockers": []},
+                        "cosim_parsed": {"status": "parsed", "latency_cycles_max": 96, "blockers": []},
+                        "workflow_accounting": [],
+                    },
+                    {
+                        "architecture_id": "hybrid_sum_band_density_accumulator_v1",
+                        "implementation_maturity": "real_hls_kernel",
+                        "csim_passed": True,
+                        "cosim_passed": True,
+                        "csynth_parsed": {"status": "parsed", "estimated_clock_ns": 8.75, "resource_feasible": True, "blockers": []},
+                        "cosim_parsed": {"status": "parsed", "latency_cycles_max": 128, "blockers": []},
+                        "workflow_accounting": [],
+                    },
+                ],
+                "integrated_vcs_sidecar_result": {
+                    "architecture_id": "hybrid_integrated_combined_sidecar_v1",
+                    "vcs_passed": True,
+                    "clock_ns": 8.75,
+                    "vcs_parsed": {
+                        "status": "parsed",
+                        "rtl_status": "Pass",
+                        "latency_cycles": 288,
+                        "samples": 288,
+                        "component_cycles": {
+                            "hpsi": {"samples": 96, "cycles": 96},
+                            "sum_band": {"samples": 128, "cycles": 128},
+                            "axpy": {"samples": 64, "cycles": 64},
+                        },
+                        "blockers": [],
+                    },
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    def fake_run(*, out_dir, fpga_part, clock_period_ns, timeout_seconds):
+        return {
+            "architecture_id": "hybrid_integrated_combined_sidecar_v1",
+            "vivado_impl_attempted": True,
+            "vivado_impl_passed": True,
+            "implemented_clock_ns": clock_period_ns,
+            "implemented_clock_source": "vivado_post_route_timing_met",
+            "vivado_impl_utilization_parsed": {"status": "parsed", "resource": {"lut": 1, "ff": 1, "bram_tile": 0, "dsp": 1}, "resource_feasible": True, "blockers": []},
+            "vivado_impl_timing_parsed": {"status": "parsed", "wns_ns": 1.0, "tns_ns": 0.0, "timing_met": True, "blockers": []},
+            "blockers": [],
+            "claim_boundary": "Integrated Vivado implementation evidence; not board measurement or full QE integration.",
+        }
+
+    monkeypatch.setattr(module, "run_integrated_vivado_impl", fake_run)
+    args = argparse.Namespace(out=out_dir, summary=summary_path, fpga_part="xc7z020clg400-1", clock_period_ns=20.0, timeout_seconds=1)
+
+    module.run_campaign(args)
+    merged = json.loads(summary_path.read_text(encoding="utf-8"))
+
+    clocks = {row["fpga_clock_ns"] for row in merged["integrated_vcs_sidecar_accounting"] if row["status"] == "trace_replay_integrated_vcs_sidecar_sensitivity"}
+    assert clocks == {20.0}
+    assert merged["integrated_vcs_sidecar_result"]["implemented_clock_ns"] == 20.0
+    assert merged["classification"]["integrated_vivado_impl_passed"] is True
+    integrated_comparisons = [row for row in merged["classification"]["architecture_comparisons"] if row["architecture_id"] == "hybrid_integrated_combined_sidecar_v1"]
+    assert integrated_comparisons
+    assert integrated_comparisons[0]["microkernel"]["fpga_components"][0]["clock_ns"] == 20.0
+
+
+def test_real_hybrid_vivado_impl_runner_drops_stale_synthetic_sidecar_comparisons(tmp_path: Path, monkeypatch):
+    import argparse
+    import importlib.util
+
+    script_path = Path(__file__).resolve().parents[1] / "scripts" / "dse" / "run_qe_ic_real_hybrid_vivado_impl.py"
+    spec = importlib.util.spec_from_file_location("run_qe_ic_real_hybrid_vivado_impl", script_path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+    baseline_path = tmp_path / "baseline.json"
+    baseline_path.write_text(json.dumps({"measurements_are_real": True, "baseline_records": [{"case_id": "case-a", "runtime_seconds_mean": 1.0}]}), encoding="utf-8")
+    runs_root = tmp_path / "runs"
+    run_dir = runs_root / "case-a" / "gpu_only_baseline"
+    run_dir.mkdir(parents=True)
+    (run_dir / "run_001.stdout.log").write_text(
+        """
+     h_psi        :      0.10s CPU      0.30s WALL (       4 calls)
+     sum_band     :      0.01s CPU      0.20s WALL (       5 calls)
+     mix_rho      :      0.02s CPU      0.10s WALL (       3 calls)
+     PWSCF        :      0.90s CPU      1.00s WALL
+""",
+        encoding="utf-8",
+    )
+    summary_path = out_dir / "real_hybrid_hls_summary.json"
+    summary_path.write_text(
+        json.dumps(
+            {
+                "gpu_baseline_path": str(baseline_path),
+                "gpu_runs_root": str(runs_root),
+                "classification": {
+                    "preliminary_label": "fpga_hybrid_weaker",
+                    "confidence": "medium",
+                    "final_claim_allowed": False,
+                    "blockers": ["full_qe_kernel_integration_missing", "physical_fpga_board_measurement_missing"],
+                    "architecture_comparisons": [
+                        {
+                            "architecture_id": "hybrid_integrated_combined_sidecar_v1",
+                            "case_id": "case-a",
+                            "latency_source": "integrated_vcs_rtl",
+                            "speedup_vs_gpu_mean": 999.0,
+                            "workflow_accounting_status": "trace_replay_integrated_vcs_sidecar_sensitivity",
+                            "microkernel": {"fpga_components": [{"clock_ns": 8.75}]},
+                        }
+                    ],
+                    "claim_boundary": "old boundary",
+                },
+                "evidence_rows": [],
+                "integrated_vcs_sidecar_result": {
+                    "architecture_id": "hybrid_integrated_combined_sidecar_v1",
+                    "vcs_passed": True,
+                    "clock_ns": 8.75,
+                    "vcs_parsed": {
+                        "status": "parsed",
+                        "rtl_status": "Pass",
+                        "latency_cycles": 288,
+                        "samples": 288,
+                        "component_cycles": {
+                            "hpsi": {"samples": 96, "cycles": 96},
+                            "sum_band": {"samples": 128, "cycles": 128},
+                            "axpy": {"samples": 64, "cycles": 64},
+                        },
+                        "blockers": [],
+                    },
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    def fake_run(*, out_dir, fpga_part, clock_period_ns, timeout_seconds):
+        return {
+            "architecture_id": "hybrid_integrated_combined_sidecar_v1",
+            "vivado_impl_attempted": True,
+            "vivado_impl_passed": True,
+            "implemented_clock_ns": clock_period_ns,
+            "implemented_clock_source": "vivado_post_route_timing_met",
+            "vivado_impl_utilization_parsed": {"status": "parsed", "resource": {"lut": 1, "ff": 1, "bram_tile": 0, "dsp": 1}, "resource_feasible": True, "blockers": []},
+            "vivado_impl_timing_parsed": {"status": "parsed", "wns_ns": 1.0, "tns_ns": 0.0, "timing_met": True, "blockers": []},
+            "blockers": [],
+            "claim_boundary": "Integrated Vivado implementation evidence; not board measurement or full QE integration.",
+        }
+
+    monkeypatch.setattr(module, "run_integrated_vivado_impl", fake_run)
+    args = argparse.Namespace(out=out_dir, summary=summary_path, fpga_part="xc7z020clg400-1", clock_period_ns=20.0, timeout_seconds=1)
+
+    module.run_campaign(args)
+    merged = json.loads(summary_path.read_text(encoding="utf-8"))
+    rows = [row for row in merged["classification"]["architecture_comparisons"] if row["architecture_id"] == "hybrid_integrated_combined_sidecar_v1"]
+
+    assert len(rows) == 1
+    assert rows[0]["speedup_vs_gpu_mean"] != 999.0
+    assert rows[0]["microkernel"]["fpga_components"][0]["clock_ns"] == 20.0
+    assert merged["classification"]["best_vivado_implemented_architecture_id"] == "hybrid_integrated_combined_sidecar_v1"
+
+
+def test_render_real_hybrid_hls_report_distinguishes_vivado_implemented_best_speedup():
+    summary = {
+        "classification": {
+            "preliminary_label": "fpga_hybrid_weaker",
+            "confidence": "medium",
+            "final_claim_allowed": False,
+            "best_architecture_id": "hybrid_combined_vcs_sidecar_v1",
+            "best_speedup_vs_gpu_mean": 1.5510985,
+            "best_vivado_implemented_architecture_id": "hybrid_integrated_combined_sidecar_v1",
+            "best_vivado_implemented_speedup_vs_gpu_mean": 1.5504687,
+            "blockers": ["full_qe_kernel_integration_missing"],
+            "architecture_comparisons": [],
+            "claim_boundary": "boundary",
+        },
+        "evidence_rows": [],
+        "integrated_vivado_impl_result": {
+            "vivado_impl_passed": True,
+            "implemented_clock_ns": 20.0,
+            "vivado_impl_timing_parsed": {"timing_met": True, "wns_ns": 1.183, "tns_ns": 0.0},
+            "vivado_impl_utilization_parsed": {"resource_feasible": True, "resource": {"lut": 731, "ff": 295, "bram_tile": 0, "dsp": 8}},
+        },
+    }
+
+    report = render_real_hybrid_hls_report(summary)
+
+    assert "Best Vivado-implemented architecture: `hybrid_integrated_combined_sidecar_v1`" in report
+    assert "Best Vivado-implemented trace-replay speedup vs GPU: `1.55047x`" in report
+    assert "implemented clock `20.0` ns" in report

@@ -3,10 +3,13 @@
 - Preliminary label: `fpga_hybrid_weaker`
 - Confidence: `medium`
 - Final hardware claim allowed: `False`
-- Best architecture: `hybrid_integrated_combined_sidecar_v1`
+- Best architecture: `hybrid_combined_vcs_sidecar_v1`
 - Best optimistic trace-replay speedup vs GPU: `1.5511x`
+- Best Vivado-implemented architecture: `hybrid_integrated_combined_sidecar_v1`
+- Best Vivado-implemented trace-replay speedup vs GPU: `1.55047x`
 - Resource-infeasible architectures filtered: `hybrid_fft_twiddle_stream_v1`
 - Claim closure audit: `artifacts/qe_ic_real_hybrid_hls/real_hybrid_claim_closure.json`
+- Integrated Vivado implementation: `True`, WNS `1.183` ns, implemented clock `20.0` ns, LUT `731`, FF `295`, BRAM tile `0`, DSP `8`
 
 ## Direct answer
 
@@ -85,18 +88,28 @@ Trace replay used measured QE full-SCF timer logs from `artifacts/qe_ic_7day_pre
 | `hybrid_combined_vcs_sidecar_v1` | `ic_sio2_dielectric_6atom_scf_v0` | `combined_vcs_rtl` | `calbec, h_psi, h_psi:calbec, mix_rho, sum_band` | 1.5511x | `trace_replay_combined_vcs_sidecar_sensitivity` | `combined_partial_sidecar_motif` |
 | `hybrid_combined_vcs_sidecar_v1` | `ic_al_interconnect_4atom_scf_v0` | `combined_vcs_rtl` | `calbec, h_psi, h_psi:calbec, mix_rho, sum_band` | 1.4036x | `trace_replay_combined_vcs_sidecar_sensitivity` | `combined_partial_sidecar_motif` |
 | `hybrid_combined_vcs_sidecar_v1` | `ic_si_bulk_2atom_scf_v0` | `combined_vcs_rtl` | `calbec, h_psi, h_psi:calbec, mix_rho, sum_band` | 1.3124x | `trace_replay_combined_vcs_sidecar_sensitivity` | `combined_partial_sidecar_motif` |
-| `hybrid_integrated_combined_sidecar_v1` | `ic_sio2_dielectric_6atom_scf_v0` | `integrated_vcs_rtl` | `calbec, h_psi, h_psi:calbec, mix_rho, sum_band` | 1.5511x | `trace_replay_integrated_vcs_sidecar_sensitivity` | `integrated_partial_sidecar_motif` |
-| `hybrid_integrated_combined_sidecar_v1` | `ic_al_interconnect_4atom_scf_v0` | `integrated_vcs_rtl` | `calbec, h_psi, h_psi:calbec, mix_rho, sum_band` | 1.4036x | `trace_replay_integrated_vcs_sidecar_sensitivity` | `integrated_partial_sidecar_motif` |
-| `hybrid_integrated_combined_sidecar_v1` | `ic_si_bulk_2atom_scf_v0` | `integrated_vcs_rtl` | `calbec, h_psi, h_psi:calbec, mix_rho, sum_band` | 1.3124x | `trace_replay_integrated_vcs_sidecar_sensitivity` | `integrated_partial_sidecar_motif` |
+| `hybrid_integrated_combined_sidecar_v1` | `ic_sio2_dielectric_6atom_scf_v0` | `integrated_vcs_rtl` | `calbec, h_psi, h_psi:calbec, mix_rho, sum_band` | 1.5505x | `trace_replay_integrated_vcs_sidecar_sensitivity` | `integrated_partial_sidecar_motif` |
+| `hybrid_integrated_combined_sidecar_v1` | `ic_al_interconnect_4atom_scf_v0` | `integrated_vcs_rtl` | `calbec, h_psi, h_psi:calbec, mix_rho, sum_band` | 1.4031x | `trace_replay_integrated_vcs_sidecar_sensitivity` | `integrated_partial_sidecar_motif` |
+| `hybrid_integrated_combined_sidecar_v1` | `ic_si_bulk_2atom_scf_v0` | `integrated_vcs_rtl` | `calbec, h_psi, h_psi:calbec, mix_rho, sum_band` | 1.3120x | `trace_replay_integrated_vcs_sidecar_sensitivity` | `integrated_partial_sidecar_motif` |
+
+## Integrated Vivado implementation evidence
+
+This is post-synthesis/place/route FPGA implementation evidence for the single integrated RTL sidecar. It improves hardware feasibility evidence, but it is still not physical board measurement and not full QE kernel integration.
+
+- Passed: `True`
+- Timing met: `True`; WNS `1.183` ns; TNS `0.0` ns
+- Resource feasible: `True`; LUT `731`, FF `295`, BRAM tile `0`, DSP `8`
+- Evidence JSON: `artifacts/qe_ic_real_hybrid_hls/runs/hybrid_integrated_combined_sidecar_v1/vivado_impl/real_hybrid_integrated_vivado_impl_evidence.json`
 
 ## Claim boundary
 
-Integrated VCS RTL sidecar trace replay improves hardware-integration evidence, but it remains a compact sidecar miniapp rather than full QE kernel integration; report current implementation as weaker/not superior.
+Integrated Vivado implementation evidence for the single RTL sidecar; not physical board measurement or full QE kernel integration. Current conclusion remains bounded by full QE kernel integration and physical FPGA board measurement gates.
 
 Blockers:
 - `full_qe_kernel_equivalent_missing`
 - `full_qe_kernel_integration_missing`
 - `hls_resource_infeasible_architectures_filtered`
 - `physical_fpga_board_measurement_missing`
+- `vivado_impl_setup_timing_not_met`
 
 Therefore this artifact improves the evidence chain beyond generated stubs/proxies and includes a QE-routine miniapp when present, but it still does not allow final hardware superiority or fundamental no-opportunity wording without full QE integration and board/implementation closure.
