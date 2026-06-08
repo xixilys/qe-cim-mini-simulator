@@ -1,0 +1,145 @@
+{
+  "baseline_records": [
+    {
+      "baseline_id": "gpu_baseline_ic_dielectric_oxide_scf_ic_sio2_dielectric_6atom_scf_v0",
+      "case_id": "ic_sio2_dielectric_6atom_scf_v0",
+      "communication_seconds": null,
+      "confidence_interval_95": {
+        "high": 2.2172402844313805,
+        "low": 1.6372444148858736
+      },
+      "evidence_status": "measured",
+      "gpu_memory_bandwidth_utilization_mean": null,
+      "gpu_utilization_mean": null,
+      "host_device_transfer_seconds": null,
+      "input_deck_hash": "sha256:21c1eab685215149cb71d9e11f105b1d40c2fff4a2ffd9e010f4a623fa2b5302",
+      "metric_availability": {
+        "communication_seconds": "unavailable",
+        "gpu_memory_bandwidth_utilization_mean": "unavailable",
+        "gpu_utilization_mean": "unavailable",
+        "host_device_transfer_seconds": "unavailable"
+      },
+      "precision": "fp64_mixed",
+      "profile_artifact_hash": "sha256:f05c030aaa7eb25a284050677c92a3f361f2c183c24534a81eecddc49bcbbd9c",
+      "program": "pw.x",
+      "runtime_seconds_mean": 1.927242349658627,
+      "runtime_seconds_runs": [
+        1.889035606989637,
+        1.834393129000091,
+        2.058298312986153
+      ],
+      "runtime_seconds_std": 0.1167398785462316,
+      "target_type": "gpu_only",
+      "workload_family_id": "ic_dielectric_oxide_scf"
+    },
+    {
+      "baseline_id": "gpu_baseline_ic_metal_interconnect_scf_ic_al_interconnect_4atom_scf_v0",
+      "case_id": "ic_al_interconnect_4atom_scf_v0",
+      "communication_seconds": null,
+      "confidence_interval_95": {
+        "high": 0.7754871261425844,
+        "low": 0.624235562533584
+      },
+      "evidence_status": "measured",
+      "gpu_memory_bandwidth_utilization_mean": null,
+      "gpu_utilization_mean": null,
+      "host_device_transfer_seconds": null,
+      "input_deck_hash": "sha256:575f3717ecfca149ce4dbc0be35ccc660df483c641704de645d3b51f04509d98",
+      "metric_availability": {
+        "communication_seconds": "unavailable",
+        "gpu_memory_bandwidth_utilization_mean": "unavailable",
+        "gpu_utilization_mean": "unavailable",
+        "host_device_transfer_seconds": "unavailable"
+      },
+      "precision": "fp64_mixed",
+      "profile_artifact_hash": "sha256:7f8e6b1eb465db788f99ab4ac6ab6f7934ae5f3856135cd329586174a1fc85a1",
+      "program": "pw.x",
+      "runtime_seconds_mean": 0.6998613443380842,
+      "runtime_seconds_runs": [
+        0.720149978005793,
+        0.7145783150044736,
+        0.6648557400039863
+      ],
+      "runtime_seconds_std": 0.030443473984527982,
+      "target_type": "gpu_only",
+      "workload_family_id": "ic_metal_interconnect_scf"
+    },
+    {
+      "baseline_id": "gpu_baseline_ic_semiconductor_bulk_scf_ic_si_bulk_2atom_scf_v0",
+      "case_id": "ic_si_bulk_2atom_scf_v0",
+      "communication_seconds": null,
+      "confidence_interval_95": {
+        "high": 0.7044335539720002,
+        "low": 0.4322277966968734
+      },
+      "evidence_status": "measured",
+      "gpu_memory_bandwidth_utilization_mean": null,
+      "gpu_utilization_mean": null,
+      "host_device_transfer_seconds": null,
+      "input_deck_hash": "sha256:78c7b2a0feba57c3a53be85535cf7f6fc0d96c9996a8b3c628a7bac53be30add",
+      "metric_availability": {
+        "communication_seconds": "unavailable",
+        "gpu_memory_bandwidth_utilization_mean": "unavailable",
+        "gpu_utilization_mean": "unavailable",
+        "host_device_transfer_seconds": "unavailable"
+      },
+      "precision": "fp64_mixed",
+      "profile_artifact_hash": "sha256:f9d0073fee3ed39d82f156bb66bb88d7992be3c4d666e444c73d20a85e535133",
+      "program": "pw.x",
+      "runtime_seconds_mean": 0.5683306753344368,
+      "runtime_seconds_runs": [
+        0.6139312989980681,
+        0.5835073030029889,
+        0.5075534240022535
+      ],
+      "runtime_seconds_std": 0.054788781631814804,
+      "target_type": "gpu_only",
+      "workload_family_id": "ic_semiconductor_bulk_scf"
+    }
+  ],
+  "case_results": [
+    {
+      "baseline_record_count": 1,
+      "blocker_reasons": [],
+      "case_id": "ic_si_bulk_2atom_scf_v0",
+      "evidence_status": "measured",
+      "measurements_are_real": true,
+      "run_record_count": 3,
+      "workload_family_id": "ic_semiconductor_bulk_scf"
+    },
+    {
+      "baseline_record_count": 1,
+      "blocker_reasons": [],
+      "case_id": "ic_sio2_dielectric_6atom_scf_v0",
+      "evidence_status": "measured",
+      "measurements_are_real": true,
+      "run_record_count": 3,
+      "workload_family_id": "ic_dielectric_oxide_scf"
+    },
+    {
+      "baseline_record_count": 1,
+      "blocker_reasons": [],
+      "case_id": "ic_al_interconnect_4atom_scf_v0",
+      "evidence_status": "measured",
+      "measurements_are_real": true,
+      "run_record_count": 3,
+      "workload_family_id": "ic_metal_interconnect_scf"
+    }
+  ],
+  "claim_boundary": "GPU baseline records are only real measurement evidence when measurements_are_real is true and evidence_status is measured.",
+  "evidence_status": "measured",
+  "failed_case_results": [],
+  "measurement_role": "gpu_only_baseline",
+  "measurements_are_real": true,
+  "platform": {
+    "cpu_name": "local_host",
+    "cuda_version": "13.2",
+    "driver_version": "596.36",
+    "gpu_name": "NVIDIA GeForce RTX 3070",
+    "memory": "8192",
+    "precision": "fp64_mixed",
+    "qe_version": "7.5"
+  },
+  "run_records": [],
+  "schema_version": "dse.qe_ic.gpu_baseline_measurements.v1"
+}

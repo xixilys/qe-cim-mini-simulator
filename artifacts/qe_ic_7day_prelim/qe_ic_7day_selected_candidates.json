@@ -1,0 +1,176 @@
+{
+  "schema_version": "dse.qe_ic.seven_day_selected_candidates.v1",
+  "selected_candidates": [
+    {
+      "candidate_id": "qeic_7day_ic_si_bulk_2atom_scf_v0_fpga_fft_transpose_pipeline",
+      "candidate_parameters": {
+        "board_measurement_available": false,
+        "device_role": "fpga_fft_transpose_pipeline",
+        "host_role": "scf_control_diagonalization_mixing_retained",
+        "template_family": "fpga_fft"
+      },
+      "case_id": "ic_si_bulk_2atom_scf_v0",
+      "implementation_maturity": "generated_stub",
+      "motif_id": "fft_transpose",
+      "selection_source": "generated_from_layer4_template_kind_for_7day_prelim",
+      "target_candidate_kind": "fpga_fft_transpose_pipeline",
+      "target_type": "fpga_only",
+      "template_family": "fpga_fft",
+      "template_id": "fpga_fft_transpose_engine",
+      "workflow_accounting_boundary": "full_scf_end_to_end_with_host_transfer_sync_control_diag_mixing_launch_overheads",
+      "workload_family_id": "ic_semiconductor_bulk_scf"
+    },
+    {
+      "candidate_id": "qeic_7day_ic_si_bulk_2atom_scf_v0_hybrid_reduction_sidecar",
+      "candidate_parameters": {
+        "board_measurement_available": false,
+        "device_role": "hybrid_reduction_sidecar",
+        "host_role": "scf_control_diagonalization_mixing_retained",
+        "template_family": "hybrid_sidecar"
+      },
+      "case_id": "ic_si_bulk_2atom_scf_v0",
+      "implementation_maturity": "generated_stub",
+      "motif_id": "reduction_collective",
+      "selection_source": "generated_from_layer4_template_kind_for_7day_prelim",
+      "target_candidate_kind": "hybrid_reduction_sidecar",
+      "target_type": "gpu_fpga_hybrid",
+      "template_family": "hybrid_sidecar",
+      "template_id": "hybrid_reduction_sidecar",
+      "workflow_accounting_boundary": "full_scf_end_to_end_with_host_transfer_sync_control_diag_mixing_launch_overheads",
+      "workload_family_id": "ic_semiconductor_bulk_scf"
+    },
+    {
+      "candidate_id": "qeic_7day_ic_si_bulk_2atom_scf_v0_hybrid_dma_or_memory_staging_sidecar",
+      "candidate_parameters": {
+        "board_measurement_available": false,
+        "device_role": "hybrid_dma_or_memory_staging_sidecar",
+        "host_role": "scf_control_diagonalization_mixing_retained",
+        "template_family": "hybrid_dma"
+      },
+      "case_id": "ic_si_bulk_2atom_scf_v0",
+      "implementation_maturity": "generated_stub",
+      "motif_id": "wavefunction_memory",
+      "selection_source": "generated_from_layer4_template_kind_for_7day_prelim",
+      "target_candidate_kind": "hybrid_dma_or_memory_staging_sidecar",
+      "target_type": "gpu_fpga_hybrid",
+      "template_family": "hybrid_dma",
+      "template_id": "hybrid_dma_overlap_sidecar",
+      "workflow_accounting_boundary": "full_scf_end_to_end_with_host_transfer_sync_control_diag_mixing_launch_overheads",
+      "workload_family_id": "ic_semiconductor_bulk_scf"
+    },
+    {
+      "candidate_id": "qeic_7day_ic_sio2_dielectric_6atom_scf_v0_fpga_fft_transpose_pipeline",
+      "candidate_parameters": {
+        "board_measurement_available": false,
+        "device_role": "fpga_fft_transpose_pipeline",
+        "host_role": "scf_control_diagonalization_mixing_retained",
+        "template_family": "fpga_fft"
+      },
+      "case_id": "ic_sio2_dielectric_6atom_scf_v0",
+      "implementation_maturity": "generated_stub",
+      "motif_id": "fft_transpose",
+      "selection_source": "generated_from_layer4_template_kind_for_7day_prelim",
+      "target_candidate_kind": "fpga_fft_transpose_pipeline",
+      "target_type": "fpga_only",
+      "template_family": "fpga_fft",
+      "template_id": "fpga_fft_transpose_engine",
+      "workflow_accounting_boundary": "full_scf_end_to_end_with_host_transfer_sync_control_diag_mixing_launch_overheads",
+      "workload_family_id": "ic_dielectric_oxide_scf"
+    },
+    {
+      "candidate_id": "qeic_7day_ic_sio2_dielectric_6atom_scf_v0_hybrid_reduction_sidecar",
+      "candidate_parameters": {
+        "board_measurement_available": false,
+        "device_role": "hybrid_reduction_sidecar",
+        "host_role": "scf_control_diagonalization_mixing_retained",
+        "template_family": "hybrid_sidecar"
+      },
+      "case_id": "ic_sio2_dielectric_6atom_scf_v0",
+      "implementation_maturity": "generated_stub",
+      "motif_id": "reduction_collective",
+      "selection_source": "generated_from_layer4_template_kind_for_7day_prelim",
+      "target_candidate_kind": "hybrid_reduction_sidecar",
+      "target_type": "gpu_fpga_hybrid",
+      "template_family": "hybrid_sidecar",
+      "template_id": "hybrid_reduction_sidecar",
+      "workflow_accounting_boundary": "full_scf_end_to_end_with_host_transfer_sync_control_diag_mixing_launch_overheads",
+      "workload_family_id": "ic_dielectric_oxide_scf"
+    },
+    {
+      "candidate_id": "qeic_7day_ic_sio2_dielectric_6atom_scf_v0_hybrid_dma_or_memory_staging_sidecar",
+      "candidate_parameters": {
+        "board_measurement_available": false,
+        "device_role": "hybrid_dma_or_memory_staging_sidecar",
+        "host_role": "scf_control_diagonalization_mixing_retained",
+        "template_family": "hybrid_dma"
+      },
+      "case_id": "ic_sio2_dielectric_6atom_scf_v0",
+      "implementation_maturity": "generated_stub",
+      "motif_id": "wavefunction_memory",
+      "selection_source": "generated_from_layer4_template_kind_for_7day_prelim",
+      "target_candidate_kind": "hybrid_dma_or_memory_staging_sidecar",
+      "target_type": "gpu_fpga_hybrid",
+      "template_family": "hybrid_dma",
+      "template_id": "hybrid_dma_overlap_sidecar",
+      "workflow_accounting_boundary": "full_scf_end_to_end_with_host_transfer_sync_control_diag_mixing_launch_overheads",
+      "workload_family_id": "ic_dielectric_oxide_scf"
+    },
+    {
+      "candidate_id": "qeic_7day_ic_al_interconnect_4atom_scf_v0_fpga_fft_transpose_pipeline",
+      "candidate_parameters": {
+        "board_measurement_available": false,
+        "device_role": "fpga_fft_transpose_pipeline",
+        "host_role": "scf_control_diagonalization_mixing_retained",
+        "template_family": "fpga_fft"
+      },
+      "case_id": "ic_al_interconnect_4atom_scf_v0",
+      "implementation_maturity": "generated_stub",
+      "motif_id": "fft_transpose",
+      "selection_source": "generated_from_layer4_template_kind_for_7day_prelim",
+      "target_candidate_kind": "fpga_fft_transpose_pipeline",
+      "target_type": "fpga_only",
+      "template_family": "fpga_fft",
+      "template_id": "fpga_fft_transpose_engine",
+      "workflow_accounting_boundary": "full_scf_end_to_end_with_host_transfer_sync_control_diag_mixing_launch_overheads",
+      "workload_family_id": "ic_metal_interconnect_scf"
+    },
+    {
+      "candidate_id": "qeic_7day_ic_al_interconnect_4atom_scf_v0_hybrid_reduction_sidecar",
+      "candidate_parameters": {
+        "board_measurement_available": false,
+        "device_role": "hybrid_reduction_sidecar",
+        "host_role": "scf_control_diagonalization_mixing_retained",
+        "template_family": "hybrid_sidecar"
+      },
+      "case_id": "ic_al_interconnect_4atom_scf_v0",
+      "implementation_maturity": "generated_stub",
+      "motif_id": "reduction_collective",
+      "selection_source": "generated_from_layer4_template_kind_for_7day_prelim",
+      "target_candidate_kind": "hybrid_reduction_sidecar",
+      "target_type": "gpu_fpga_hybrid",
+      "template_family": "hybrid_sidecar",
+      "template_id": "hybrid_reduction_sidecar",
+      "workflow_accounting_boundary": "full_scf_end_to_end_with_host_transfer_sync_control_diag_mixing_launch_overheads",
+      "workload_family_id": "ic_metal_interconnect_scf"
+    },
+    {
+      "candidate_id": "qeic_7day_ic_al_interconnect_4atom_scf_v0_hybrid_dma_or_memory_staging_sidecar",
+      "candidate_parameters": {
+        "board_measurement_available": false,
+        "device_role": "hybrid_dma_or_memory_staging_sidecar",
+        "host_role": "scf_control_diagonalization_mixing_retained",
+        "template_family": "hybrid_dma"
+      },
+      "case_id": "ic_al_interconnect_4atom_scf_v0",
+      "implementation_maturity": "generated_stub",
+      "motif_id": "wavefunction_memory",
+      "selection_source": "generated_from_layer4_template_kind_for_7day_prelim",
+      "target_candidate_kind": "hybrid_dma_or_memory_staging_sidecar",
+      "target_type": "gpu_fpga_hybrid",
+      "template_family": "hybrid_dma",
+      "template_id": "hybrid_dma_overlap_sidecar",
+      "workflow_accounting_boundary": "full_scf_end_to_end_with_host_transfer_sync_control_diag_mixing_launch_overheads",
+      "workload_family_id": "ic_metal_interconnect_scf"
+    }
+  ]
+}

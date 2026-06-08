@@ -1,0 +1,125 @@
+{
+  "cases": [
+    {
+      "case_id": "ic_si_bulk_2atom_scf_v0",
+      "case_origin": "generated_benchmark",
+      "case_status": "ready",
+      "description": "Two-atom silicon diamond primitive cell; IC substrate/channel proxy.",
+      "evidence_status": "generated_benchmark",
+      "input_deck_hash": "sha256:78c7b2a0feba57c3a53be85535cf7f6fc0d96c9996a8b3c628a7bac53be30add",
+      "input_deck_path": "artifacts/qe_ic_7day_prelim/generated_inputs/ic_si_bulk_2atom_scf_v0.in",
+      "motif_emphasis": [
+        "fft_transpose",
+        "hpsi",
+        "charge_density"
+      ],
+      "output_directory": "artifacts/qe_ic_7day_prelim/runs/ic_si_bulk_2atom_scf_v0",
+      "precision": "fp64_mixed",
+      "profile_command": "CUDA_VISIBLE_DEVICES=0 LD_LIBRARY_PATH=/usr/lib/wsl/drivers/nv_dispi.inf_amd64_67995ceab8993b08:/usr/lib/wsl/lib:/opt/nvidia/hpc_sdk/Linux_x86_64/26.1/compilers/lib:/opt/nvidia/hpc_sdk/Linux_x86_64/26.1/cuda/13.1/lib64:/opt/nvidia/hpc_sdk/Linux_x86_64/26.1/math_libs/13.1/lib64 nsys profile /home/xixilys/project/qe_gpu_build/q-e/build_gpu_serial_nvhpc_cuda_no_gomp/bin/pw.x -in artifacts/qe_ic_7day_prelim/generated_inputs/ic_si_bulk_2atom_scf_v0.in",
+      "program": "pw.x",
+      "pseudo_file_path": "/usr/share/espresso/pseudo/Si.pz-vbc.UPF",
+      "pseudo_files": {
+        "Si": {
+          "element": "Si",
+          "hash": "sha256:da7386b1345863effd34d47c07894a620d12e87069a009b5eaa2a88da7ea8105",
+          "path": "/usr/share/espresso/pseudo/Si.pz-vbc.UPF",
+          "status": "pseudo_available"
+        }
+      },
+      "pseudo_hash": "sha256:da7386b1345863effd34d47c07894a620d12e87069a009b5eaa2a88da7ea8105",
+      "pseudo_status": "pseudo_available",
+      "qe_executable_path": "/home/xixilys/project/qe_gpu_build/q-e/build_gpu_serial_nvhpc_cuda_no_gomp/bin/pw.x",
+      "run_command": "CUDA_VISIBLE_DEVICES=0 LD_LIBRARY_PATH=/usr/lib/wsl/drivers/nv_dispi.inf_amd64_67995ceab8993b08:/usr/lib/wsl/lib:/opt/nvidia/hpc_sdk/Linux_x86_64/26.1/compilers/lib:/opt/nvidia/hpc_sdk/Linux_x86_64/26.1/cuda/13.1/lib64:/opt/nvidia/hpc_sdk/Linux_x86_64/26.1/math_libs/13.1/lib64 /home/xixilys/project/qe_gpu_build/q-e/build_gpu_serial_nvhpc_cuda_no_gomp/bin/pw.x -in artifacts/qe_ic_7day_prelim/generated_inputs/ic_si_bulk_2atom_scf_v0.in",
+      "run_environment": {
+        "CUDA_VISIBLE_DEVICES": "0",
+        "LD_LIBRARY_PATH": "/usr/lib/wsl/drivers/nv_dispi.inf_amd64_67995ceab8993b08:/usr/lib/wsl/lib:/opt/nvidia/hpc_sdk/Linux_x86_64/26.1/compilers/lib:/opt/nvidia/hpc_sdk/Linux_x86_64/26.1/cuda/13.1/lib64:/opt/nvidia/hpc_sdk/Linux_x86_64/26.1/math_libs/13.1/lib64"
+      },
+      "scientific_claim_scope": "performance_benchmark_only",
+      "template_note": "Generated IC/EDA-relevant full-SCF benchmark; not a real device-physics claim.",
+      "workload_family_id": "ic_semiconductor_bulk_scf"
+    },
+    {
+      "case_id": "ic_sio2_dielectric_6atom_scf_v0",
+      "case_origin": "generated_benchmark",
+      "case_status": "ready",
+      "description": "Small Si/O dielectric proxy; gate-oxide/interlayer-dielectric style workload.",
+      "evidence_status": "generated_benchmark",
+      "input_deck_hash": "sha256:21c1eab685215149cb71d9e11f105b1d40c2fff4a2ffd9e010f4a623fa2b5302",
+      "input_deck_path": "artifacts/qe_ic_7day_prelim/generated_inputs/ic_sio2_dielectric_6atom_scf_v0.in",
+      "motif_emphasis": [
+        "fft_transpose",
+        "projector_nonlocal",
+        "charge_density"
+      ],
+      "output_directory": "artifacts/qe_ic_7day_prelim/runs/ic_sio2_dielectric_6atom_scf_v0",
+      "precision": "fp64_mixed",
+      "profile_command": "CUDA_VISIBLE_DEVICES=0 LD_LIBRARY_PATH=/usr/lib/wsl/drivers/nv_dispi.inf_amd64_67995ceab8993b08:/usr/lib/wsl/lib:/opt/nvidia/hpc_sdk/Linux_x86_64/26.1/compilers/lib:/opt/nvidia/hpc_sdk/Linux_x86_64/26.1/cuda/13.1/lib64:/opt/nvidia/hpc_sdk/Linux_x86_64/26.1/math_libs/13.1/lib64 nsys profile /home/xixilys/project/qe_gpu_build/q-e/build_gpu_serial_nvhpc_cuda_no_gomp/bin/pw.x -in artifacts/qe_ic_7day_prelim/generated_inputs/ic_sio2_dielectric_6atom_scf_v0.in",
+      "program": "pw.x",
+      "pseudo_file_path": "/usr/share/espresso/pseudo/Si.pz-vbc.UPF",
+      "pseudo_files": {
+        "O": {
+          "element": "O",
+          "hash": "sha256:03a207c38004c24700cefbf94095712773fe6637fa09e8b5e8098a185be652a0",
+          "path": "/usr/share/espresso/pseudo/O.pz-rrkjus.UPF",
+          "status": "pseudo_available"
+        },
+        "Si": {
+          "element": "Si",
+          "hash": "sha256:da7386b1345863effd34d47c07894a620d12e87069a009b5eaa2a88da7ea8105",
+          "path": "/usr/share/espresso/pseudo/Si.pz-vbc.UPF",
+          "status": "pseudo_available"
+        }
+      },
+      "pseudo_hash": "sha256:da7386b1345863effd34d47c07894a620d12e87069a009b5eaa2a88da7ea8105",
+      "pseudo_status": "pseudo_available",
+      "qe_executable_path": "/home/xixilys/project/qe_gpu_build/q-e/build_gpu_serial_nvhpc_cuda_no_gomp/bin/pw.x",
+      "run_command": "CUDA_VISIBLE_DEVICES=0 LD_LIBRARY_PATH=/usr/lib/wsl/drivers/nv_dispi.inf_amd64_67995ceab8993b08:/usr/lib/wsl/lib:/opt/nvidia/hpc_sdk/Linux_x86_64/26.1/compilers/lib:/opt/nvidia/hpc_sdk/Linux_x86_64/26.1/cuda/13.1/lib64:/opt/nvidia/hpc_sdk/Linux_x86_64/26.1/math_libs/13.1/lib64 /home/xixilys/project/qe_gpu_build/q-e/build_gpu_serial_nvhpc_cuda_no_gomp/bin/pw.x -in artifacts/qe_ic_7day_prelim/generated_inputs/ic_sio2_dielectric_6atom_scf_v0.in",
+      "run_environment": {
+        "CUDA_VISIBLE_DEVICES": "0",
+        "LD_LIBRARY_PATH": "/usr/lib/wsl/drivers/nv_dispi.inf_amd64_67995ceab8993b08:/usr/lib/wsl/lib:/opt/nvidia/hpc_sdk/Linux_x86_64/26.1/compilers/lib:/opt/nvidia/hpc_sdk/Linux_x86_64/26.1/cuda/13.1/lib64:/opt/nvidia/hpc_sdk/Linux_x86_64/26.1/math_libs/13.1/lib64"
+      },
+      "scientific_claim_scope": "performance_benchmark_only",
+      "template_note": "Generated IC/EDA-relevant full-SCF benchmark; not a real device-physics claim.",
+      "workload_family_id": "ic_dielectric_oxide_scf"
+    },
+    {
+      "case_id": "ic_al_interconnect_4atom_scf_v0",
+      "case_origin": "generated_benchmark",
+      "case_status": "ready",
+      "description": "Four-atom Al metallic interconnect proxy with smearing; stresses memory/FFT plus metallic SCF behavior.",
+      "evidence_status": "generated_benchmark",
+      "input_deck_hash": "sha256:575f3717ecfca149ce4dbc0be35ccc660df483c641704de645d3b51f04509d98",
+      "input_deck_path": "artifacts/qe_ic_7day_prelim/generated_inputs/ic_al_interconnect_4atom_scf_v0.in",
+      "motif_emphasis": [
+        "fft_transpose",
+        "reduction_collective",
+        "wavefunction_memory"
+      ],
+      "output_directory": "artifacts/qe_ic_7day_prelim/runs/ic_al_interconnect_4atom_scf_v0",
+      "precision": "fp64_mixed",
+      "profile_command": "CUDA_VISIBLE_DEVICES=0 LD_LIBRARY_PATH=/usr/lib/wsl/drivers/nv_dispi.inf_amd64_67995ceab8993b08:/usr/lib/wsl/lib:/opt/nvidia/hpc_sdk/Linux_x86_64/26.1/compilers/lib:/opt/nvidia/hpc_sdk/Linux_x86_64/26.1/cuda/13.1/lib64:/opt/nvidia/hpc_sdk/Linux_x86_64/26.1/math_libs/13.1/lib64 nsys profile /home/xixilys/project/qe_gpu_build/q-e/build_gpu_serial_nvhpc_cuda_no_gomp/bin/pw.x -in artifacts/qe_ic_7day_prelim/generated_inputs/ic_al_interconnect_4atom_scf_v0.in",
+      "program": "pw.x",
+      "pseudo_file_path": "/usr/share/espresso/pseudo/Al.pz-vbc.UPF",
+      "pseudo_files": {
+        "Al": {
+          "element": "Al",
+          "hash": "sha256:abdcda76be0d4b84660c341d65ef7f81e86120c55f204773f43716eaf7dd0597",
+          "path": "/usr/share/espresso/pseudo/Al.pz-vbc.UPF",
+          "status": "pseudo_available"
+        }
+      },
+      "pseudo_hash": "sha256:abdcda76be0d4b84660c341d65ef7f81e86120c55f204773f43716eaf7dd0597",
+      "pseudo_status": "pseudo_available",
+      "qe_executable_path": "/home/xixilys/project/qe_gpu_build/q-e/build_gpu_serial_nvhpc_cuda_no_gomp/bin/pw.x",
+      "run_command": "CUDA_VISIBLE_DEVICES=0 LD_LIBRARY_PATH=/usr/lib/wsl/drivers/nv_dispi.inf_amd64_67995ceab8993b08:/usr/lib/wsl/lib:/opt/nvidia/hpc_sdk/Linux_x86_64/26.1/compilers/lib:/opt/nvidia/hpc_sdk/Linux_x86_64/26.1/cuda/13.1/lib64:/opt/nvidia/hpc_sdk/Linux_x86_64/26.1/math_libs/13.1/lib64 /home/xixilys/project/qe_gpu_build/q-e/build_gpu_serial_nvhpc_cuda_no_gomp/bin/pw.x -in artifacts/qe_ic_7day_prelim/generated_inputs/ic_al_interconnect_4atom_scf_v0.in",
+      "run_environment": {
+        "CUDA_VISIBLE_DEVICES": "0",
+        "LD_LIBRARY_PATH": "/usr/lib/wsl/drivers/nv_dispi.inf_amd64_67995ceab8993b08:/usr/lib/wsl/lib:/opt/nvidia/hpc_sdk/Linux_x86_64/26.1/compilers/lib:/opt/nvidia/hpc_sdk/Linux_x86_64/26.1/cuda/13.1/lib64:/opt/nvidia/hpc_sdk/Linux_x86_64/26.1/math_libs/13.1/lib64"
+      },
+      "scientific_claim_scope": "performance_benchmark_only",
+      "template_note": "Generated IC/EDA-relevant full-SCF benchmark; not a real device-physics claim.",
+      "workload_family_id": "ic_metal_interconnect_scf"
+    }
+  ],
+  "schema_version": "dse.qe_ic.seven_day_cases.v1"
+}

@@ -1,0 +1,34 @@
+&control
+  calculation = 'scf'
+  prefix = 'ic_al_interconnect_4atom_scf_v0'
+  pseudo_dir = '/usr/share/espresso/pseudo'
+  outdir = 'artifacts/qe_ic_7day_prelim/qe_tmp/ic_al_interconnect_4atom_scf_v0'
+  verbosity = 'low'
+/
+&system
+  ibrav = 0
+  nat = 4
+  ntyp = 1
+  ecutwfc = 20.0
+  occupations = 'smearing'
+  smearing = 'mv'
+  degauss = 0.02
+/
+&electrons
+  conv_thr = 1.0d-6
+  mixing_beta = 0.3
+  electron_maxstep = 30
+/
+CELL_PARAMETERS angstrom
+  4.050000 0.000000 0.000000
+  0.000000 4.050000 0.000000
+  0.000000 0.000000 4.050000
+ATOMIC_SPECIES
+  Al 26.9815 Al.pz-vbc.UPF
+ATOMIC_POSITIONS crystal
+  Al 0.000000 0.000000 0.000000
+  Al 0.000000 0.500000 0.500000
+  Al 0.500000 0.000000 0.500000
+  Al 0.500000 0.500000 0.000000
+K_POINTS automatic
+  2 2 2 0 0 0

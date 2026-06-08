@@ -1,0 +1,636 @@
+{
+  "candidate_results": [
+    {
+      "architecture_summary": {
+        "architecture_family": "fpga_fft",
+        "architecture_id": "qeic_7day_ic_si_bulk_2atom_scf_v0_fpga_fft_transpose_pipeline",
+        "dataflow_summary": "generated case-bound candidate with conservative full-SCF accounting and remote EDA/HLS attempt provenance",
+        "fpga_role": "fpga_fft_transpose_pipeline",
+        "gpu_role": "baseline_reference",
+        "host_role": "scf_control_diagonalization_mixing_retained",
+        "memory_interface": "host_pcie_or_proxy_hbm_model",
+        "synchronization_model": "per_scf_kernel_launch_and_barrier_accounted"
+      },
+      "candidate_id": "qeic_7day_ic_si_bulk_2atom_scf_v0_fpga_fft_transpose_pipeline",
+      "case_id": "ic_si_bulk_2atom_scf_v0",
+      "claim_allowed": false,
+      "claim_blockers": [
+        "generated_stub_not_final_claim_gate_eligible",
+        "no_fpga_board_measurement",
+        "full_kernel_correctness_gate_not_closed"
+      ],
+      "claim_boundary": "This candidate result is not a real measured result unless results_are_real is true and evidence_status is measured or high_fidelity_estimate with explicit tool provenance.",
+      "claim_strength": "none",
+      "confidence_interval_95": {
+        "high": 0.6773364988635818,
+        "low": 0.663923894925689
+      },
+      "evidence_artifact_hash": "sha256:21af754265826e8ae3c4ca9fc0b80972b5cb2cc5fcbae5dcde03afb5f91fa08c",
+      "evidence_level": "vivado_resource_timing",
+      "evidence_status": "high_fidelity_estimate",
+      "failure_reasons": [
+        "current_generated_stub_estimate_slower_than_gpu",
+        "transfer_overhead_dominates",
+        "workflow_overhead_dominates"
+      ],
+      "implementation_maturity": "generated_stub",
+      "input_deck_hash": "sha256:78c7b2a0feba57c3a53be85535cf7f6fc0d96c9996a8b3c628a7bac53be30add",
+      "kernel_runtime_seconds_mean": 0.46944113782624475,
+      "motif_id": "fft_transpose",
+      "precision": "fp64_mixed",
+      "program": "pw.x",
+      "resource": {
+        "bram_utilization": 0.1,
+        "dsp_utilization": 0.22,
+        "ff_utilization": 0.12,
+        "fmax_mhz": 180.0,
+        "hbm_port_utilization": 0.18,
+        "lut_utilization": 0.18,
+        "resource_feasible": true,
+        "timing_feasible": true
+      },
+      "runtime_seconds_mean": 0.6706301968946354,
+      "runtime_seconds_runs": [
+        0.663923894925689,
+        0.6706301968946354,
+        0.6773364988635818
+      ],
+      "runtime_seconds_std": 0.006706301968946393,
+      "target_type": "fpga_only",
+      "tool_provenance": {
+        "config_hash": "sha256:081b84c6682ad7f551a3de43dbf839042271d95efd4f69b534c17244965bdc19",
+        "output_artifact_hash": "sha256:85bd67d374830075105af91751e1912c5fa74cf5c2939a35a8128355e1609a73",
+        "run_id": "fpga_fft_transpose_pipeline",
+        "tool": "vivado_hls+vcs",
+        "version": "2019.1"
+      },
+      "transfer_overhead_seconds": 0.08047562362735625,
+      "verdict": "fpga_or_hybrid_inconclusive",
+      "workflow_overhead_seconds": 0.05365041575157083,
+      "workflow_runtime_seconds_mean": 0.6706301968946354,
+      "workload_family_id": "ic_semiconductor_bulk_scf"
+    },
+    {
+      "architecture_summary": {
+        "architecture_family": "hybrid_sidecar",
+        "architecture_id": "qeic_7day_ic_si_bulk_2atom_scf_v0_hybrid_reduction_sidecar",
+        "dataflow_summary": "generated case-bound candidate with conservative full-SCF accounting and remote EDA/HLS attempt provenance",
+        "fpga_role": "hybrid_reduction_sidecar",
+        "gpu_role": "retained_dense_qe_work",
+        "host_role": "scf_control_diagonalization_mixing_retained",
+        "memory_interface": "host_pcie_or_proxy_hbm_model",
+        "synchronization_model": "per_scf_kernel_launch_and_barrier_accounted"
+      },
+      "candidate_id": "qeic_7day_ic_si_bulk_2atom_scf_v0_hybrid_reduction_sidecar",
+      "case_id": "ic_si_bulk_2atom_scf_v0",
+      "claim_allowed": false,
+      "claim_blockers": [
+        "generated_stub_not_final_claim_gate_eligible",
+        "no_fpga_board_measurement",
+        "full_kernel_correctness_gate_not_closed"
+      ],
+      "claim_boundary": "This candidate result is not a real measured result unless results_are_real is true and evidence_status is measured or high_fidelity_estimate with explicit tool provenance.",
+      "claim_strength": "none",
+      "confidence_interval_95": {
+        "high": 0.6371555201174373,
+        "low": 0.6245385791250126
+      },
+      "evidence_artifact_hash": "sha256:43140071b6fa603d1e27a5ec4366e2a159a50362d7a62b5fce801b1860eda374",
+      "evidence_level": "vivado_resource_timing",
+      "evidence_status": "high_fidelity_estimate",
+      "failure_reasons": [
+        "current_generated_stub_estimate_slower_than_gpu",
+        "transfer_overhead_dominates",
+        "workflow_overhead_dominates"
+      ],
+      "implementation_maturity": "generated_stub",
+      "input_deck_hash": "sha256:78c7b2a0feba57c3a53be85535cf7f6fc0d96c9996a8b3c628a7bac53be30add",
+      "kernel_runtime_seconds_mean": 0.44159293473485745,
+      "motif_id": "reduction_collective",
+      "precision": "fp64_mixed",
+      "program": "pw.x",
+      "resource": {
+        "bram_utilization": 0.05,
+        "dsp_utilization": 0.12,
+        "ff_utilization": 0.08,
+        "fmax_mhz": 210.0,
+        "hbm_port_utilization": 0.08,
+        "lut_utilization": 0.1,
+        "resource_feasible": true,
+        "timing_feasible": true
+      },
+      "runtime_seconds_mean": 0.630847049621225,
+      "runtime_seconds_runs": [
+        0.6245385791250126,
+        0.630847049621225,
+        0.6371555201174373
+      ],
+      "runtime_seconds_std": 0.006308470496212304,
+      "target_type": "gpu_fpga_hybrid",
+      "tool_provenance": {
+        "config_hash": "sha256:5b17e85af5fdfad14512afd01de9593a6873aa3b1264ddf4f230ed2ed0aa800b",
+        "output_artifact_hash": "sha256:f6c929a8360984820fa09f3878ee6bd60ff532db21a2f92c30912e1b3a07bd17",
+        "run_id": "hybrid_reduction_sidecar",
+        "tool": "vivado_hls+vcs",
+        "version": "2019.1"
+      },
+      "transfer_overhead_seconds": 0.075701645954547,
+      "verdict": "fpga_or_hybrid_inconclusive",
+      "workflow_overhead_seconds": 0.050467763969697994,
+      "workflow_runtime_seconds_mean": 0.630847049621225,
+      "workload_family_id": "ic_semiconductor_bulk_scf"
+    },
+    {
+      "architecture_summary": {
+        "architecture_family": "hybrid_dma",
+        "architecture_id": "qeic_7day_ic_si_bulk_2atom_scf_v0_hybrid_dma_or_memory_staging_sidecar",
+        "dataflow_summary": "generated case-bound candidate with conservative full-SCF accounting and remote EDA/HLS attempt provenance",
+        "fpga_role": "hybrid_dma_or_memory_staging_sidecar",
+        "gpu_role": "retained_dense_qe_work",
+        "host_role": "scf_control_diagonalization_mixing_retained",
+        "memory_interface": "host_pcie_or_proxy_hbm_model",
+        "synchronization_model": "per_scf_kernel_launch_and_barrier_accounted"
+      },
+      "candidate_id": "qeic_7day_ic_si_bulk_2atom_scf_v0_hybrid_dma_or_memory_staging_sidecar",
+      "case_id": "ic_si_bulk_2atom_scf_v0",
+      "claim_allowed": false,
+      "claim_blockers": [
+        "generated_stub_not_final_claim_gate_eligible",
+        "no_fpga_board_measurement",
+        "full_kernel_correctness_gate_not_closed"
+      ],
+      "claim_boundary": "This candidate result is not a real measured result unless results_are_real is true and evidence_status is measured or high_fidelity_estimate with explicit tool provenance.",
+      "claim_strength": "none",
+      "confidence_interval_95": {
+        "high": 0.6199351006548037,
+        "low": 0.6076591580675799
+      },
+      "evidence_artifact_hash": "sha256:51ce2c3c3753752369bfed949a15b2db0963744d8c2ea0a6506ba3811bc942f7",
+      "evidence_level": "vivado_resource_timing",
+      "evidence_status": "high_fidelity_estimate",
+      "failure_reasons": [
+        "current_generated_stub_estimate_slower_than_gpu",
+        "transfer_overhead_dominates",
+        "workflow_overhead_dominates"
+      ],
+      "implementation_maturity": "generated_stub",
+      "input_deck_hash": "sha256:78c7b2a0feba57c3a53be85535cf7f6fc0d96c9996a8b3c628a7bac53be30add",
+      "kernel_runtime_seconds_mean": 0.4296579905528342,
+      "motif_id": "wavefunction_memory",
+      "precision": "fp64_mixed",
+      "program": "pw.x",
+      "resource": {
+        "bram_utilization": 0.06,
+        "dsp_utilization": 0.1,
+        "ff_utilization": 0.1,
+        "fmax_mhz": 200.0,
+        "hbm_port_utilization": 0.25,
+        "lut_utilization": 0.12,
+        "resource_feasible": true,
+        "timing_feasible": true
+      },
+      "runtime_seconds_mean": 0.6137971293611918,
+      "runtime_seconds_runs": [
+        0.6076591580675799,
+        0.6137971293611918,
+        0.6199351006548037
+      ],
+      "runtime_seconds_std": 0.006137971293611932,
+      "target_type": "gpu_fpga_hybrid",
+      "tool_provenance": {
+        "config_hash": "sha256:f9a9c7ab6da1f61a161d370a8385fd8e919f639d281cb1e1597c71828e13e709",
+        "output_artifact_hash": "sha256:04a8f13eb703602f6c0fd644a70134f2fe7de533c37c06eb6af0e380dbc0df4c",
+        "run_id": "hybrid_dma_or_memory_staging_sidecar",
+        "tool": "vivado_hls+vcs",
+        "version": "2019.1"
+      },
+      "transfer_overhead_seconds": 0.07365565552334301,
+      "verdict": "fpga_or_hybrid_inconclusive",
+      "workflow_overhead_seconds": 0.04910377034889535,
+      "workflow_runtime_seconds_mean": 0.6137971293611918,
+      "workload_family_id": "ic_semiconductor_bulk_scf"
+    },
+    {
+      "architecture_summary": {
+        "architecture_family": "fpga_fft",
+        "architecture_id": "qeic_7day_ic_sio2_dielectric_6atom_scf_v0_fpga_fft_transpose_pipeline",
+        "dataflow_summary": "generated case-bound candidate with conservative full-SCF accounting and remote EDA/HLS attempt provenance",
+        "fpga_role": "fpga_fft_transpose_pipeline",
+        "gpu_role": "baseline_reference",
+        "host_role": "scf_control_diagonalization_mixing_retained",
+        "memory_interface": "host_pcie_or_proxy_hbm_model",
+        "synchronization_model": "per_scf_kernel_launch_and_barrier_accounted"
+      },
+      "candidate_id": "qeic_7day_ic_sio2_dielectric_6atom_scf_v0_fpga_fft_transpose_pipeline",
+      "case_id": "ic_sio2_dielectric_6atom_scf_v0",
+      "claim_allowed": false,
+      "claim_blockers": [
+        "generated_stub_not_final_claim_gate_eligible",
+        "no_fpga_board_measurement",
+        "full_kernel_correctness_gate_not_closed"
+      ],
+      "claim_boundary": "This candidate result is not a real measured result unless results_are_real is true and evidence_status is measured or high_fidelity_estimate with explicit tool provenance.",
+      "claim_strength": "none",
+      "confidence_interval_95": {
+        "high": 2.296887432323152,
+        "low": 2.251404512871208
+      },
+      "evidence_artifact_hash": "sha256:9b6fd585c2354c6c2d014d6d11b8e250dd94cb0ed317976f6d9e20349a33cba8",
+      "evidence_level": "vivado_resource_timing",
+      "evidence_status": "high_fidelity_estimate",
+      "failure_reasons": [
+        "current_generated_stub_estimate_slower_than_gpu",
+        "transfer_overhead_dominates",
+        "workflow_overhead_dominates"
+      ],
+      "implementation_maturity": "generated_stub",
+      "input_deck_hash": "sha256:21c1eab685215149cb71d9e11f105b1d40c2fff4a2ffd9e010f4a623fa2b5302",
+      "kernel_runtime_seconds_mean": 1.5919021808180258,
+      "motif_id": "fft_transpose",
+      "precision": "fp64_mixed",
+      "program": "pw.x",
+      "resource": {
+        "bram_utilization": 0.1,
+        "dsp_utilization": 0.22,
+        "ff_utilization": 0.12,
+        "fmax_mhz": 180.0,
+        "hbm_port_utilization": 0.18,
+        "lut_utilization": 0.18,
+        "resource_feasible": true,
+        "timing_feasible": true
+      },
+      "runtime_seconds_mean": 2.27414597259718,
+      "runtime_seconds_runs": [
+        2.251404512871208,
+        2.27414597259718,
+        2.296887432323152
+      ],
+      "runtime_seconds_std": 0.022741459725971858,
+      "target_type": "fpga_only",
+      "tool_provenance": {
+        "config_hash": "sha256:081b84c6682ad7f551a3de43dbf839042271d95efd4f69b534c17244965bdc19",
+        "output_artifact_hash": "sha256:85bd67d374830075105af91751e1912c5fa74cf5c2939a35a8128355e1609a73",
+        "run_id": "fpga_fft_transpose_pipeline",
+        "tool": "vivado_hls+vcs",
+        "version": "2019.1"
+      },
+      "transfer_overhead_seconds": 0.27289751671166157,
+      "verdict": "fpga_or_hybrid_inconclusive",
+      "workflow_overhead_seconds": 0.1819316778077744,
+      "workflow_runtime_seconds_mean": 2.27414597259718,
+      "workload_family_id": "ic_dielectric_oxide_scf"
+    },
+    {
+      "architecture_summary": {
+        "architecture_family": "hybrid_sidecar",
+        "architecture_id": "qeic_7day_ic_sio2_dielectric_6atom_scf_v0_hybrid_reduction_sidecar",
+        "dataflow_summary": "generated case-bound candidate with conservative full-SCF accounting and remote EDA/HLS attempt provenance",
+        "fpga_role": "hybrid_reduction_sidecar",
+        "gpu_role": "retained_dense_qe_work",
+        "host_role": "scf_control_diagonalization_mixing_retained",
+        "memory_interface": "host_pcie_or_proxy_hbm_model",
+        "synchronization_model": "per_scf_kernel_launch_and_barrier_accounted"
+      },
+      "candidate_id": "qeic_7day_ic_sio2_dielectric_6atom_scf_v0_hybrid_reduction_sidecar",
+      "case_id": "ic_sio2_dielectric_6atom_scf_v0",
+      "claim_allowed": false,
+      "claim_blockers": [
+        "generated_stub_not_final_claim_gate_eligible",
+        "no_fpga_board_measurement",
+        "full_kernel_correctness_gate_not_closed"
+      ],
+      "claim_boundary": "This candidate result is not a real measured result unless results_are_real is true and evidence_status is measured or high_fidelity_estimate with explicit tool provenance.",
+      "claim_strength": "none",
+      "confidence_interval_95": {
+        "high": 2.160631398202287,
+        "low": 2.117846618039865
+      },
+      "evidence_artifact_hash": "sha256:4f4798f101f25356227903399e0b85768d3a2bf82c7475963977a040a98cef99",
+      "evidence_level": "vivado_resource_timing",
+      "evidence_status": "high_fidelity_estimate",
+      "failure_reasons": [
+        "current_generated_stub_estimate_slower_than_gpu",
+        "transfer_overhead_dominates",
+        "workflow_overhead_dominates"
+      ],
+      "implementation_maturity": "generated_stub",
+      "input_deck_hash": "sha256:21c1eab685215149cb71d9e11f105b1d40c2fff4a2ffd9e010f4a623fa2b5302",
+      "kernel_runtime_seconds_mean": 1.4974673056847532,
+      "motif_id": "reduction_collective",
+      "precision": "fp64_mixed",
+      "program": "pw.x",
+      "resource": {
+        "bram_utilization": 0.05,
+        "dsp_utilization": 0.12,
+        "ff_utilization": 0.08,
+        "fmax_mhz": 210.0,
+        "hbm_port_utilization": 0.08,
+        "lut_utilization": 0.1,
+        "resource_feasible": true,
+        "timing_feasible": true
+      },
+      "runtime_seconds_mean": 2.139239008121076,
+      "runtime_seconds_runs": [
+        2.117846618039865,
+        2.139239008121076,
+        2.160631398202287
+      ],
+      "runtime_seconds_std": 0.021392390081210966,
+      "target_type": "gpu_fpga_hybrid",
+      "tool_provenance": {
+        "config_hash": "sha256:5b17e85af5fdfad14512afd01de9593a6873aa3b1264ddf4f230ed2ed0aa800b",
+        "output_artifact_hash": "sha256:f6c929a8360984820fa09f3878ee6bd60ff532db21a2f92c30912e1b3a07bd17",
+        "run_id": "hybrid_reduction_sidecar",
+        "tool": "vivado_hls+vcs",
+        "version": "2019.1"
+      },
+      "transfer_overhead_seconds": 0.25670868097452915,
+      "verdict": "fpga_or_hybrid_inconclusive",
+      "workflow_overhead_seconds": 0.1711391206496861,
+      "workflow_runtime_seconds_mean": 2.139239008121076,
+      "workload_family_id": "ic_dielectric_oxide_scf"
+    },
+    {
+      "architecture_summary": {
+        "architecture_family": "hybrid_dma",
+        "architecture_id": "qeic_7day_ic_sio2_dielectric_6atom_scf_v0_hybrid_dma_or_memory_staging_sidecar",
+        "dataflow_summary": "generated case-bound candidate with conservative full-SCF accounting and remote EDA/HLS attempt provenance",
+        "fpga_role": "hybrid_dma_or_memory_staging_sidecar",
+        "gpu_role": "retained_dense_qe_work",
+        "host_role": "scf_control_diagonalization_mixing_retained",
+        "memory_interface": "host_pcie_or_proxy_hbm_model",
+        "synchronization_model": "per_scf_kernel_launch_and_barrier_accounted"
+      },
+      "candidate_id": "qeic_7day_ic_sio2_dielectric_6atom_scf_v0_hybrid_dma_or_memory_staging_sidecar",
+      "case_id": "ic_sio2_dielectric_6atom_scf_v0",
+      "claim_allowed": false,
+      "claim_blockers": [
+        "generated_stub_not_final_claim_gate_eligible",
+        "no_fpga_board_measurement",
+        "full_kernel_correctness_gate_not_closed"
+      ],
+      "claim_boundary": "This candidate result is not a real measured result unless results_are_real is true and evidence_status is measured or high_fidelity_estimate with explicit tool provenance.",
+      "claim_strength": "none",
+      "confidence_interval_95": {
+        "high": 2.1022359550076306,
+        "low": 2.0606075202550045
+      },
+      "evidence_artifact_hash": "sha256:b1beb87f8a3fe810c7707a04a8df1d064f8683f4442ebadffe999d35519994c9",
+      "evidence_level": "vivado_resource_timing",
+      "evidence_status": "high_fidelity_estimate",
+      "failure_reasons": [
+        "current_generated_stub_estimate_slower_than_gpu",
+        "transfer_overhead_dominates",
+        "workflow_overhead_dominates"
+      ],
+      "implementation_maturity": "generated_stub",
+      "input_deck_hash": "sha256:21c1eab685215149cb71d9e11f105b1d40c2fff4a2ffd9e010f4a623fa2b5302",
+      "kernel_runtime_seconds_mean": 1.4569952163419222,
+      "motif_id": "wavefunction_memory",
+      "precision": "fp64_mixed",
+      "program": "pw.x",
+      "resource": {
+        "bram_utilization": 0.06,
+        "dsp_utilization": 0.1,
+        "ff_utilization": 0.1,
+        "fmax_mhz": 200.0,
+        "hbm_port_utilization": 0.25,
+        "lut_utilization": 0.12,
+        "resource_feasible": true,
+        "timing_feasible": true
+      },
+      "runtime_seconds_mean": 2.0814217376313175,
+      "runtime_seconds_runs": [
+        2.0606075202550045,
+        2.0814217376313175,
+        2.1022359550076306
+      ],
+      "runtime_seconds_std": 0.02081421737631306,
+      "target_type": "gpu_fpga_hybrid",
+      "tool_provenance": {
+        "config_hash": "sha256:f9a9c7ab6da1f61a161d370a8385fd8e919f639d281cb1e1597c71828e13e709",
+        "output_artifact_hash": "sha256:04a8f13eb703602f6c0fd644a70134f2fe7de533c37c06eb6af0e380dbc0df4c",
+        "run_id": "hybrid_dma_or_memory_staging_sidecar",
+        "tool": "vivado_hls+vcs",
+        "version": "2019.1"
+      },
+      "transfer_overhead_seconds": 0.2497706085157581,
+      "verdict": "fpga_or_hybrid_inconclusive",
+      "workflow_overhead_seconds": 0.1665137390105054,
+      "workflow_runtime_seconds_mean": 2.0814217376313175,
+      "workload_family_id": "ic_dielectric_oxide_scf"
+    },
+    {
+      "architecture_summary": {
+        "architecture_family": "fpga_fft",
+        "architecture_id": "qeic_7day_ic_al_interconnect_4atom_scf_v0_fpga_fft_transpose_pipeline",
+        "dataflow_summary": "generated case-bound candidate with conservative full-SCF accounting and remote EDA/HLS attempt provenance",
+        "fpga_role": "fpga_fft_transpose_pipeline",
+        "gpu_role": "baseline_reference",
+        "host_role": "scf_control_diagonalization_mixing_retained",
+        "memory_interface": "host_pcie_or_proxy_hbm_model",
+        "synchronization_model": "per_scf_kernel_launch_and_barrier_accounted"
+      },
+      "candidate_id": "qeic_7day_ic_al_interconnect_4atom_scf_v0_fpga_fft_transpose_pipeline",
+      "case_id": "ic_al_interconnect_4atom_scf_v0",
+      "claim_allowed": false,
+      "claim_blockers": [
+        "generated_stub_not_final_claim_gate_eligible",
+        "no_fpga_board_measurement",
+        "full_kernel_correctness_gate_not_closed"
+      ],
+      "claim_boundary": "This candidate result is not a real measured result unless results_are_real is true and evidence_status is measured or high_fidelity_estimate with explicit tool provenance.",
+      "claim_strength": "none",
+      "confidence_interval_95": {
+        "high": 0.8340947501821288,
+        "low": 0.8175780224557498
+      },
+      "evidence_artifact_hash": "sha256:8eef3b5df7427f8298ca9e8ce216fcf7cc3011057fc2070b1c830335b22dd932",
+      "evidence_level": "vivado_resource_timing",
+      "evidence_status": "high_fidelity_estimate",
+      "failure_reasons": [
+        "current_generated_stub_estimate_slower_than_gpu",
+        "transfer_overhead_dominates",
+        "workflow_overhead_dominates"
+      ],
+      "implementation_maturity": "generated_stub",
+      "input_deck_hash": "sha256:575f3717ecfca149ce4dbc0be35ccc660df483c641704de645d3b51f04509d98",
+      "kernel_runtime_seconds_mean": 0.5780854704232574,
+      "motif_id": "fft_transpose",
+      "precision": "fp64_mixed",
+      "program": "pw.x",
+      "resource": {
+        "bram_utilization": 0.1,
+        "dsp_utilization": 0.22,
+        "ff_utilization": 0.12,
+        "fmax_mhz": 180.0,
+        "hbm_port_utilization": 0.18,
+        "lut_utilization": 0.18,
+        "resource_feasible": true,
+        "timing_feasible": true
+      },
+      "runtime_seconds_mean": 0.8258363863189393,
+      "runtime_seconds_runs": [
+        0.8175780224557498,
+        0.8258363863189393,
+        0.8340947501821288
+      ],
+      "runtime_seconds_std": 0.008258363863189455,
+      "target_type": "fpga_only",
+      "tool_provenance": {
+        "config_hash": "sha256:081b84c6682ad7f551a3de43dbf839042271d95efd4f69b534c17244965bdc19",
+        "output_artifact_hash": "sha256:85bd67d374830075105af91751e1912c5fa74cf5c2939a35a8128355e1609a73",
+        "run_id": "fpga_fft_transpose_pipeline",
+        "tool": "vivado_hls+vcs",
+        "version": "2019.1"
+      },
+      "transfer_overhead_seconds": 0.09910036635827271,
+      "verdict": "fpga_or_hybrid_inconclusive",
+      "workflow_overhead_seconds": 0.06606691090551514,
+      "workflow_runtime_seconds_mean": 0.8258363863189393,
+      "workload_family_id": "ic_metal_interconnect_scf"
+    },
+    {
+      "architecture_summary": {
+        "architecture_family": "hybrid_sidecar",
+        "architecture_id": "qeic_7day_ic_al_interconnect_4atom_scf_v0_hybrid_reduction_sidecar",
+        "dataflow_summary": "generated case-bound candidate with conservative full-SCF accounting and remote EDA/HLS attempt provenance",
+        "fpga_role": "hybrid_reduction_sidecar",
+        "gpu_role": "retained_dense_qe_work",
+        "host_role": "scf_control_diagonalization_mixing_retained",
+        "memory_interface": "host_pcie_or_proxy_hbm_model",
+        "synchronization_model": "per_scf_kernel_launch_and_barrier_accounted"
+      },
+      "candidate_id": "qeic_7day_ic_al_interconnect_4atom_scf_v0_hybrid_reduction_sidecar",
+      "case_id": "ic_al_interconnect_4atom_scf_v0",
+      "claim_allowed": false,
+      "claim_blockers": [
+        "generated_stub_not_final_claim_gate_eligible",
+        "no_fpga_board_measurement",
+        "full_kernel_correctness_gate_not_closed"
+      ],
+      "claim_boundary": "This candidate result is not a real measured result unless results_are_real is true and evidence_status is measured or high_fidelity_estimate with explicit tool provenance.",
+      "claim_strength": "none",
+      "confidence_interval_95": {
+        "high": 0.7846145531374263,
+        "low": 0.7690776312931208
+      },
+      "evidence_artifact_hash": "sha256:f6b236b12e8601fb0c4f17f87c5ea7c3892a506ee6e5619a8adcde34783da45a",
+      "evidence_level": "vivado_resource_timing",
+      "evidence_status": "high_fidelity_estimate",
+      "failure_reasons": [
+        "current_generated_stub_estimate_slower_than_gpu",
+        "transfer_overhead_dominates",
+        "workflow_overhead_dominates"
+      ],
+      "implementation_maturity": "generated_stub",
+      "input_deck_hash": "sha256:575f3717ecfca149ce4dbc0be35ccc660df483c641704de645d3b51f04509d98",
+      "kernel_runtime_seconds_mean": 0.5437922645506914,
+      "motif_id": "reduction_collective",
+      "precision": "fp64_mixed",
+      "program": "pw.x",
+      "resource": {
+        "bram_utilization": 0.05,
+        "dsp_utilization": 0.12,
+        "ff_utilization": 0.08,
+        "fmax_mhz": 210.0,
+        "hbm_port_utilization": 0.08,
+        "lut_utilization": 0.1,
+        "resource_feasible": true,
+        "timing_feasible": true
+      },
+      "runtime_seconds_mean": 0.7768460922152736,
+      "runtime_seconds_runs": [
+        0.7690776312931208,
+        0.7768460922152736,
+        0.7846145531374263
+      ],
+      "runtime_seconds_std": 0.007768460922152776,
+      "target_type": "gpu_fpga_hybrid",
+      "tool_provenance": {
+        "config_hash": "sha256:5b17e85af5fdfad14512afd01de9593a6873aa3b1264ddf4f230ed2ed0aa800b",
+        "output_artifact_hash": "sha256:f6c929a8360984820fa09f3878ee6bd60ff532db21a2f92c30912e1b3a07bd17",
+        "run_id": "hybrid_reduction_sidecar",
+        "tool": "vivado_hls+vcs",
+        "version": "2019.1"
+      },
+      "transfer_overhead_seconds": 0.09322153106583282,
+      "verdict": "fpga_or_hybrid_inconclusive",
+      "workflow_overhead_seconds": 0.062147687377221886,
+      "workflow_runtime_seconds_mean": 0.7768460922152736,
+      "workload_family_id": "ic_metal_interconnect_scf"
+    },
+    {
+      "architecture_summary": {
+        "architecture_family": "hybrid_dma",
+        "architecture_id": "qeic_7day_ic_al_interconnect_4atom_scf_v0_hybrid_dma_or_memory_staging_sidecar",
+        "dataflow_summary": "generated case-bound candidate with conservative full-SCF accounting and remote EDA/HLS attempt provenance",
+        "fpga_role": "hybrid_dma_or_memory_staging_sidecar",
+        "gpu_role": "retained_dense_qe_work",
+        "host_role": "scf_control_diagonalization_mixing_retained",
+        "memory_interface": "host_pcie_or_proxy_hbm_model",
+        "synchronization_model": "per_scf_kernel_launch_and_barrier_accounted"
+      },
+      "candidate_id": "qeic_7day_ic_al_interconnect_4atom_scf_v0_hybrid_dma_or_memory_staging_sidecar",
+      "case_id": "ic_al_interconnect_4atom_scf_v0",
+      "claim_allowed": false,
+      "claim_blockers": [
+        "generated_stub_not_final_claim_gate_eligible",
+        "no_fpga_board_measurement",
+        "full_kernel_correctness_gate_not_closed"
+      ],
+      "claim_boundary": "This candidate result is not a real measured result unless results_are_real is true and evidence_status is measured or high_fidelity_estimate with explicit tool provenance.",
+      "claim_strength": "none",
+      "confidence_interval_95": {
+        "high": 0.7634087544039823,
+        "low": 0.7482917493662797
+      },
+      "evidence_artifact_hash": "sha256:eb64ddda6ee23289a700fd4c710dc7d0fdba86ff0771d786c95486491ffc0f4c",
+      "evidence_level": "vivado_resource_timing",
+      "evidence_status": "high_fidelity_estimate",
+      "failure_reasons": [
+        "current_generated_stub_estimate_slower_than_gpu",
+        "transfer_overhead_dominates",
+        "workflow_overhead_dominates"
+      ],
+      "implementation_maturity": "generated_stub",
+      "input_deck_hash": "sha256:575f3717ecfca149ce4dbc0be35ccc660df483c641704de645d3b51f04509d98",
+      "kernel_runtime_seconds_mean": 0.5290951763195917,
+      "motif_id": "wavefunction_memory",
+      "precision": "fp64_mixed",
+      "program": "pw.x",
+      "resource": {
+        "bram_utilization": 0.06,
+        "dsp_utilization": 0.1,
+        "ff_utilization": 0.1,
+        "fmax_mhz": 200.0,
+        "hbm_port_utilization": 0.25,
+        "lut_utilization": 0.12,
+        "resource_feasible": true,
+        "timing_feasible": true
+      },
+      "runtime_seconds_mean": 0.755850251885131,
+      "runtime_seconds_runs": [
+        0.7482917493662797,
+        0.755850251885131,
+        0.7634087544039823
+      ],
+      "runtime_seconds_std": 0.007558502518851262,
+      "target_type": "gpu_fpga_hybrid",
+      "tool_provenance": {
+        "config_hash": "sha256:f9a9c7ab6da1f61a161d370a8385fd8e919f639d281cb1e1597c71828e13e709",
+        "output_artifact_hash": "sha256:04a8f13eb703602f6c0fd644a70134f2fe7de533c37c06eb6af0e380dbc0df4c",
+        "run_id": "hybrid_dma_or_memory_staging_sidecar",
+        "tool": "vivado_hls+vcs",
+        "version": "2019.1"
+      },
+      "transfer_overhead_seconds": 0.09070203022621572,
+      "verdict": "fpga_or_hybrid_inconclusive",
+      "workflow_overhead_seconds": 0.06046802015081048,
+      "workflow_runtime_seconds_mean": 0.755850251885131,
+      "workload_family_id": "ic_metal_interconnect_scf"
+    }
+  ],
+  "results_are_real": true,
+  "schema_version": "dse.qe_ic.candidate_high_fidelity_results.v1"
+}

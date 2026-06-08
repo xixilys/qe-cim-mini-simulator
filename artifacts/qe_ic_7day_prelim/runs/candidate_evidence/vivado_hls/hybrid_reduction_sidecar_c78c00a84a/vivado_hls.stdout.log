@@ -1,0 +1,83 @@
+csynth.rpt
+kernel.cpp
+qe_ic_hls_probe
+run_hls.tcl
+tb.cpp
+vivado_hls.log
+vivado_hls.stderr.log
+vivado_hls.stdout.log
+
+****** Vivado(TM) HLS - High-Level Synthesis from C, C++ and SystemC v2019.1 (64-bit)
+  **** SW Build 2552052 on Fri May 24 14:47:09 MDT 2019
+  **** IP Build 2548770 on Fri May 24 18:01:18 MDT 2019
+    ** Copyright 1986-2019 Xilinx, Inc. All Rights Reserved.
+
+source /home/Xilinx/Vivado/2019.1/scripts/vivado_hls/hls.tcl -notrace
+INFO: [HLS 200-10] Running '/home/Xilinx/Vivado/2019.1/bin/unwrapped/lnx64.o/vivado_hls'
+INFO: [HLS 200-10] For user 'ICer' on host 'IC_EDA' (Linux_x86_64 version 3.10.0-1160.53.1.el7.x86_64) on Mon Jun 08 17:56:08 CST 2026
+INFO: [HLS 200-10] On os "CentOS Linux release 7.9.2009 (Core)"
+INFO: [HLS 200-10] In directory '/tmp/dse_qe_ic_7day_hls_hybrid_reduction_sidecar_c78c00a84a'
+Sourcing Tcl script 'run_hls.tcl'
+INFO: [HLS 200-10] Opening and resetting project '/tmp/dse_qe_ic_7day_hls_hybrid_reduction_sidecar_c78c00a84a/qe_ic_hls_probe'.
+INFO: [HLS 200-10] Adding design file 'kernel.cpp' to the project
+INFO: [HLS 200-10] Adding test bench file 'tb.cpp' to the project
+INFO: [HLS 200-10] Opening and resetting solution '/tmp/dse_qe_ic_7day_hls_hybrid_reduction_sidecar_c78c00a84a/qe_ic_hls_probe/sol1'.
+INFO: [HLS 200-10] Cleaning up the solution database.
+INFO: [HLS 200-10] Setting target device to 'xc7z020-clg400-1'
+INFO: [SYN 201-201] Setting up clock 'default' with a period of 10ns.
+INFO: [SIM 211-2] *************** CSIM start ***************
+INFO: [SIM 211-4] CSIM will launch GCC as the compiler.
+   Compiling ../../../../tb.cpp in debug mode
+   Compiling ../../../../kernel.cpp in debug mode
+   Generating csim.exe
+DSE_HLS_PROBE_OK
+INFO: [SIM 211-1] CSim done with 0 errors.
+INFO: [SIM 211-3] *************** CSIM finish ***************
+INFO: [SCHED 204-61] Option 'relax_ii_for_timing' is enabled, will increase II to preserve clock frequency constraints.
+INFO: [HLS 200-10] Analyzing design file 'kernel.cpp' ... 
+INFO: [HLS 200-111] Finished Linking Time (s): cpu = 00:00:03 ; elapsed = 00:00:03 . Memory (MB): peak = 815.234 ; gain = 128.000 ; free physical = 8795 ; free virtual = 23194
+INFO: [HLS 200-111] Finished Checking Pragmas Time (s): cpu = 00:00:03 ; elapsed = 00:00:03 . Memory (MB): peak = 815.234 ; gain = 128.000 ; free physical = 8795 ; free virtual = 23194
+INFO: [HLS 200-10] Starting code transformations ...
+INFO: [HLS 200-111] Finished Standard Transforms Time (s): cpu = 00:00:03 ; elapsed = 00:00:03 . Memory (MB): peak = 815.234 ; gain = 128.000 ; free physical = 8795 ; free virtual = 23195
+INFO: [HLS 200-10] Checking synthesizability ...
+INFO: [HLS 200-111] Finished Checking Synthesizability Time (s): cpu = 00:00:03 ; elapsed = 00:00:03 . Memory (MB): peak = 815.234 ; gain = 128.000 ; free physical = 8796 ; free virtual = 23195
+INFO: [HLS 200-111] Finished Pre-synthesis Time (s): cpu = 00:00:03 ; elapsed = 00:00:03 . Memory (MB): peak = 815.234 ; gain = 128.000 ; free physical = 8786 ; free virtual = 23185
+INFO: [HLS 200-444] Inferring multiple bus burst read of variable length on port 'gmem0' (kernel.cpp:11:2). These data requests might be further partitioned to multiple requests during RTL generation, based on max_read_burst_length or max_write_burst_length settings.
+INFO: [HLS 200-444] Inferring multiple bus burst write of variable length on port 'gmem1' (kernel.cpp:11:2). These data requests might be further partitioned to multiple requests during RTL generation, based on max_read_burst_length or max_write_burst_length settings.
+INFO: [HLS 200-111] Finished Architecture Synthesis Time (s): cpu = 00:00:03 ; elapsed = 00:00:03 . Memory (MB): peak = 815.234 ; gain = 128.000 ; free physical = 8784 ; free virtual = 23183
+INFO: [HLS 200-10] Starting hardware synthesis ...
+INFO: [HLS 200-10] Synthesizing 'hls_hybrid_reduction_sidecar' ...
+WARNING: [SYN 201-107] Renaming port name 'hls_hybrid_reduction_sidecar/in' to 'hls_hybrid_reduction_sidecar/in_r' to avoid the conflict with HDL keywords or other object names.
+WARNING: [SYN 201-107] Renaming port name 'hls_hybrid_reduction_sidecar/out' to 'hls_hybrid_reduction_sidecar/out_r' to avoid the conflict with HDL keywords or other object names.
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [HLS 200-42] -- Implementing module 'hls_hybrid_reduction_sidecar' 
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [SCHED 204-11] Starting scheduling ...
+INFO: [SCHED 204-61] Pipelining loop 'Loop 1'.
+INFO: [SCHED 204-61] Pipelining result : Target II = 1, Final II = 1, Depth = 9.
+INFO: [SCHED 204-11] Finished scheduling.
+INFO: [HLS 200-111]  Elapsed time: 3.49 seconds; current allocated memory: 92.069 MB.
+INFO: [BIND 205-100] Starting micro-architecture generation ...
+INFO: [BIND 205-101] Performing variable lifetime analysis.
+INFO: [BIND 205-101] Exploring resource sharing.
+INFO: [BIND 205-101] Binding ...
+INFO: [BIND 205-100] Finished micro-architecture generation.
+INFO: [HLS 200-111]  Elapsed time: 0.03 seconds; current allocated memory: 92.334 MB.
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [HLS 200-10] -- Generating RTL for module 'hls_hybrid_reduction_sidecar' 
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [RTGEN 206-500] Setting interface mode on port 'hls_hybrid_reduction_sidecar/gmem0' to 'm_axi'.
+INFO: [RTGEN 206-500] Setting interface mode on port 'hls_hybrid_reduction_sidecar/gmem1' to 'm_axi'.
+INFO: [RTGEN 206-500] Setting interface mode on port 'hls_hybrid_reduction_sidecar/in_r' to 's_axilite & ap_none'.
+INFO: [RTGEN 206-500] Setting interface mode on port 'hls_hybrid_reduction_sidecar/out_r' to 's_axilite & ap_none'.
+INFO: [RTGEN 206-500] Setting interface mode on port 'hls_hybrid_reduction_sidecar/n' to 's_axilite & ap_none'.
+INFO: [RTGEN 206-500] Setting interface mode on function 'hls_hybrid_reduction_sidecar' to 's_axilite & ap_ctrl_hs'.
+INFO: [RTGEN 206-100] Bundling port 'return', 'in_r', 'out_r' and 'n' to AXI-Lite port control.
+INFO: [RTGEN 206-100] Generating core module 'hls_hybrid_reduction_sidecar_dmul_64ns_64ns_64_6_max_dsp_1': 1 instance(s).
+INFO: [RTGEN 206-100] Finished creating RTL model for 'hls_hybrid_reduction_sidecar'.
+INFO: [HLS 200-111]  Elapsed time: 0.03 seconds; current allocated memory: 93.500 MB.
+INFO: [HLS 200-111] Finished generating all RTL models Time (s): cpu = 00:00:03 ; elapsed = 00:00:04 . Memory (MB): peak = 815.234 ; gain = 128.000 ; free physical = 8779 ; free virtual = 23181
+INFO: [VHDL 208-304] Generating VHDL RTL for hls_hybrid_reduction_sidecar.
+INFO: [VLOG 209-307] Generating Verilog RTL for hls_hybrid_reduction_sidecar.
+INFO: [HLS 200-112] Total elapsed time: 3.97 seconds; peak allocated memory: 93.500 MB.
+INFO: [Common 17-206] Exiting vivado_hls at Mon Jun  8 17:56:11 2026...

@@ -1,0 +1,34 @@
+&control
+  calculation = 'scf'
+  prefix = 'ic_sio2_dielectric_6atom_scf_v0'
+  pseudo_dir = '/usr/share/espresso/pseudo'
+  outdir = 'artifacts/qe_ic_7day_prelim/qe_tmp/ic_sio2_dielectric_6atom_scf_v0'
+  verbosity = 'low'
+/
+&system
+  ibrav = 0
+  nat = 6
+  ntyp = 2
+  ecutwfc = 14.0
+/
+&electrons
+  conv_thr = 1.0d-6
+  mixing_beta = 0.45
+  electron_maxstep = 30
+/
+CELL_PARAMETERS angstrom
+  5.400000 0.000000 0.000000
+  0.000000 5.400000 0.000000
+  0.000000 0.000000 5.400000
+ATOMIC_SPECIES
+  Si 28.0855 Si.pz-vbc.UPF
+  O  15.9990 O.pz-rrkjus.UPF
+ATOMIC_POSITIONS angstrom
+  Si 1.350000 1.350000 1.350000
+  Si 4.050000 4.050000 4.050000
+  O  1.350000 2.700000 2.700000
+  O  2.700000 1.350000 2.700000
+  O  4.050000 2.700000 4.050000
+  O  2.700000 4.050000 4.050000
+K_POINTS automatic
+  1 1 1 0 0 0

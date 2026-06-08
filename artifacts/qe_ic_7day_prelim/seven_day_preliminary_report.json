@@ -1,0 +1,831 @@
+{
+  "artifacts": {
+    "candidate_high_fidelity_results": "artifacts/qe_ic_7day_prelim/qe_ic_7day_candidate_high_fidelity_results.json",
+    "cases": "artifacts/qe_ic_7day_prelim/qe_ic_7day_cases.json",
+    "eda_stub_evidence": "artifacts/qe_ic_7day_prelim/qe_ic_7day_eda_stub_evidence.json",
+    "gpu_baseline": "artifacts/qe_ic_7day_prelim/qe_ic_7day_gpu_baseline.json",
+    "hls_attempts": "artifacts/qe_ic_7day_prelim/qe_ic_7day_hls_attempts.json",
+    "markdown_report": "artifacts/qe_ic_7day_prelim/seven_day_preliminary_report.md",
+    "selected_candidates": "artifacts/qe_ic_7day_prelim/qe_ic_7day_selected_candidates.json"
+  },
+  "candidate_evidence_summary": {
+    "blocker_reasons": [],
+    "candidate_result_count": 9,
+    "evidence_status": "measured_or_high_fidelity",
+    "proxy_evidence_generated": false,
+    "results_are_real": true
+  },
+  "cases": [
+    {
+      "case_id": "ic_si_bulk_2atom_scf_v0",
+      "case_origin": "generated_benchmark",
+      "case_status": "ready",
+      "description": "Two-atom silicon diamond primitive cell; IC substrate/channel proxy.",
+      "evidence_status": "generated_benchmark",
+      "input_deck_hash": "sha256:78c7b2a0feba57c3a53be85535cf7f6fc0d96c9996a8b3c628a7bac53be30add",
+      "input_deck_path": "artifacts/qe_ic_7day_prelim/generated_inputs/ic_si_bulk_2atom_scf_v0.in",
+      "motif_emphasis": [
+        "fft_transpose",
+        "hpsi",
+        "charge_density"
+      ],
+      "output_directory": "artifacts/qe_ic_7day_prelim/runs/ic_si_bulk_2atom_scf_v0",
+      "precision": "fp64_mixed",
+      "profile_command": "CUDA_VISIBLE_DEVICES=0 LD_LIBRARY_PATH=/usr/lib/wsl/drivers/nv_dispi.inf_amd64_67995ceab8993b08:/usr/lib/wsl/lib:/opt/nvidia/hpc_sdk/Linux_x86_64/26.1/compilers/lib:/opt/nvidia/hpc_sdk/Linux_x86_64/26.1/cuda/13.1/lib64:/opt/nvidia/hpc_sdk/Linux_x86_64/26.1/math_libs/13.1/lib64 nsys profile /home/xixilys/project/qe_gpu_build/q-e/build_gpu_serial_nvhpc_cuda_no_gomp/bin/pw.x -in artifacts/qe_ic_7day_prelim/generated_inputs/ic_si_bulk_2atom_scf_v0.in",
+      "program": "pw.x",
+      "pseudo_file_path": "/usr/share/espresso/pseudo/Si.pz-vbc.UPF",
+      "pseudo_files": {
+        "Si": {
+          "element": "Si",
+          "hash": "sha256:da7386b1345863effd34d47c07894a620d12e87069a009b5eaa2a88da7ea8105",
+          "path": "/usr/share/espresso/pseudo/Si.pz-vbc.UPF",
+          "status": "pseudo_available"
+        }
+      },
+      "pseudo_hash": "sha256:da7386b1345863effd34d47c07894a620d12e87069a009b5eaa2a88da7ea8105",
+      "pseudo_status": "pseudo_available",
+      "qe_executable_path": "/home/xixilys/project/qe_gpu_build/q-e/build_gpu_serial_nvhpc_cuda_no_gomp/bin/pw.x",
+      "run_command": "CUDA_VISIBLE_DEVICES=0 LD_LIBRARY_PATH=/usr/lib/wsl/drivers/nv_dispi.inf_amd64_67995ceab8993b08:/usr/lib/wsl/lib:/opt/nvidia/hpc_sdk/Linux_x86_64/26.1/compilers/lib:/opt/nvidia/hpc_sdk/Linux_x86_64/26.1/cuda/13.1/lib64:/opt/nvidia/hpc_sdk/Linux_x86_64/26.1/math_libs/13.1/lib64 /home/xixilys/project/qe_gpu_build/q-e/build_gpu_serial_nvhpc_cuda_no_gomp/bin/pw.x -in artifacts/qe_ic_7day_prelim/generated_inputs/ic_si_bulk_2atom_scf_v0.in",
+      "run_environment": {
+        "CUDA_VISIBLE_DEVICES": "0",
+        "LD_LIBRARY_PATH": "/usr/lib/wsl/drivers/nv_dispi.inf_amd64_67995ceab8993b08:/usr/lib/wsl/lib:/opt/nvidia/hpc_sdk/Linux_x86_64/26.1/compilers/lib:/opt/nvidia/hpc_sdk/Linux_x86_64/26.1/cuda/13.1/lib64:/opt/nvidia/hpc_sdk/Linux_x86_64/26.1/math_libs/13.1/lib64"
+      },
+      "scientific_claim_scope": "performance_benchmark_only",
+      "template_note": "Generated IC/EDA-relevant full-SCF benchmark; not a real device-physics claim.",
+      "workload_family_id": "ic_semiconductor_bulk_scf"
+    },
+    {
+      "case_id": "ic_sio2_dielectric_6atom_scf_v0",
+      "case_origin": "generated_benchmark",
+      "case_status": "ready",
+      "description": "Small Si/O dielectric proxy; gate-oxide/interlayer-dielectric style workload.",
+      "evidence_status": "generated_benchmark",
+      "input_deck_hash": "sha256:21c1eab685215149cb71d9e11f105b1d40c2fff4a2ffd9e010f4a623fa2b5302",
+      "input_deck_path": "artifacts/qe_ic_7day_prelim/generated_inputs/ic_sio2_dielectric_6atom_scf_v0.in",
+      "motif_emphasis": [
+        "fft_transpose",
+        "projector_nonlocal",
+        "charge_density"
+      ],
+      "output_directory": "artifacts/qe_ic_7day_prelim/runs/ic_sio2_dielectric_6atom_scf_v0",
+      "precision": "fp64_mixed",
+      "profile_command": "CUDA_VISIBLE_DEVICES=0 LD_LIBRARY_PATH=/usr/lib/wsl/drivers/nv_dispi.inf_amd64_67995ceab8993b08:/usr/lib/wsl/lib:/opt/nvidia/hpc_sdk/Linux_x86_64/26.1/compilers/lib:/opt/nvidia/hpc_sdk/Linux_x86_64/26.1/cuda/13.1/lib64:/opt/nvidia/hpc_sdk/Linux_x86_64/26.1/math_libs/13.1/lib64 nsys profile /home/xixilys/project/qe_gpu_build/q-e/build_gpu_serial_nvhpc_cuda_no_gomp/bin/pw.x -in artifacts/qe_ic_7day_prelim/generated_inputs/ic_sio2_dielectric_6atom_scf_v0.in",
+      "program": "pw.x",
+      "pseudo_file_path": "/usr/share/espresso/pseudo/Si.pz-vbc.UPF",
+      "pseudo_files": {
+        "O": {
+          "element": "O",
+          "hash": "sha256:03a207c38004c24700cefbf94095712773fe6637fa09e8b5e8098a185be652a0",
+          "path": "/usr/share/espresso/pseudo/O.pz-rrkjus.UPF",
+          "status": "pseudo_available"
+        },
+        "Si": {
+          "element": "Si",
+          "hash": "sha256:da7386b1345863effd34d47c07894a620d12e87069a009b5eaa2a88da7ea8105",
+          "path": "/usr/share/espresso/pseudo/Si.pz-vbc.UPF",
+          "status": "pseudo_available"
+        }
+      },
+      "pseudo_hash": "sha256:da7386b1345863effd34d47c07894a620d12e87069a009b5eaa2a88da7ea8105",
+      "pseudo_status": "pseudo_available",
+      "qe_executable_path": "/home/xixilys/project/qe_gpu_build/q-e/build_gpu_serial_nvhpc_cuda_no_gomp/bin/pw.x",
+      "run_command": "CUDA_VISIBLE_DEVICES=0 LD_LIBRARY_PATH=/usr/lib/wsl/drivers/nv_dispi.inf_amd64_67995ceab8993b08:/usr/lib/wsl/lib:/opt/nvidia/hpc_sdk/Linux_x86_64/26.1/compilers/lib:/opt/nvidia/hpc_sdk/Linux_x86_64/26.1/cuda/13.1/lib64:/opt/nvidia/hpc_sdk/Linux_x86_64/26.1/math_libs/13.1/lib64 /home/xixilys/project/qe_gpu_build/q-e/build_gpu_serial_nvhpc_cuda_no_gomp/bin/pw.x -in artifacts/qe_ic_7day_prelim/generated_inputs/ic_sio2_dielectric_6atom_scf_v0.in",
+      "run_environment": {
+        "CUDA_VISIBLE_DEVICES": "0",
+        "LD_LIBRARY_PATH": "/usr/lib/wsl/drivers/nv_dispi.inf_amd64_67995ceab8993b08:/usr/lib/wsl/lib:/opt/nvidia/hpc_sdk/Linux_x86_64/26.1/compilers/lib:/opt/nvidia/hpc_sdk/Linux_x86_64/26.1/cuda/13.1/lib64:/opt/nvidia/hpc_sdk/Linux_x86_64/26.1/math_libs/13.1/lib64"
+      },
+      "scientific_claim_scope": "performance_benchmark_only",
+      "template_note": "Generated IC/EDA-relevant full-SCF benchmark; not a real device-physics claim.",
+      "workload_family_id": "ic_dielectric_oxide_scf"
+    },
+    {
+      "case_id": "ic_al_interconnect_4atom_scf_v0",
+      "case_origin": "generated_benchmark",
+      "case_status": "ready",
+      "description": "Four-atom Al metallic interconnect proxy with smearing; stresses memory/FFT plus metallic SCF behavior.",
+      "evidence_status": "generated_benchmark",
+      "input_deck_hash": "sha256:575f3717ecfca149ce4dbc0be35ccc660df483c641704de645d3b51f04509d98",
+      "input_deck_path": "artifacts/qe_ic_7day_prelim/generated_inputs/ic_al_interconnect_4atom_scf_v0.in",
+      "motif_emphasis": [
+        "fft_transpose",
+        "reduction_collective",
+        "wavefunction_memory"
+      ],
+      "output_directory": "artifacts/qe_ic_7day_prelim/runs/ic_al_interconnect_4atom_scf_v0",
+      "precision": "fp64_mixed",
+      "profile_command": "CUDA_VISIBLE_DEVICES=0 LD_LIBRARY_PATH=/usr/lib/wsl/drivers/nv_dispi.inf_amd64_67995ceab8993b08:/usr/lib/wsl/lib:/opt/nvidia/hpc_sdk/Linux_x86_64/26.1/compilers/lib:/opt/nvidia/hpc_sdk/Linux_x86_64/26.1/cuda/13.1/lib64:/opt/nvidia/hpc_sdk/Linux_x86_64/26.1/math_libs/13.1/lib64 nsys profile /home/xixilys/project/qe_gpu_build/q-e/build_gpu_serial_nvhpc_cuda_no_gomp/bin/pw.x -in artifacts/qe_ic_7day_prelim/generated_inputs/ic_al_interconnect_4atom_scf_v0.in",
+      "program": "pw.x",
+      "pseudo_file_path": "/usr/share/espresso/pseudo/Al.pz-vbc.UPF",
+      "pseudo_files": {
+        "Al": {
+          "element": "Al",
+          "hash": "sha256:abdcda76be0d4b84660c341d65ef7f81e86120c55f204773f43716eaf7dd0597",
+          "path": "/usr/share/espresso/pseudo/Al.pz-vbc.UPF",
+          "status": "pseudo_available"
+        }
+      },
+      "pseudo_hash": "sha256:abdcda76be0d4b84660c341d65ef7f81e86120c55f204773f43716eaf7dd0597",
+      "pseudo_status": "pseudo_available",
+      "qe_executable_path": "/home/xixilys/project/qe_gpu_build/q-e/build_gpu_serial_nvhpc_cuda_no_gomp/bin/pw.x",
+      "run_command": "CUDA_VISIBLE_DEVICES=0 LD_LIBRARY_PATH=/usr/lib/wsl/drivers/nv_dispi.inf_amd64_67995ceab8993b08:/usr/lib/wsl/lib:/opt/nvidia/hpc_sdk/Linux_x86_64/26.1/compilers/lib:/opt/nvidia/hpc_sdk/Linux_x86_64/26.1/cuda/13.1/lib64:/opt/nvidia/hpc_sdk/Linux_x86_64/26.1/math_libs/13.1/lib64 /home/xixilys/project/qe_gpu_build/q-e/build_gpu_serial_nvhpc_cuda_no_gomp/bin/pw.x -in artifacts/qe_ic_7day_prelim/generated_inputs/ic_al_interconnect_4atom_scf_v0.in",
+      "run_environment": {
+        "CUDA_VISIBLE_DEVICES": "0",
+        "LD_LIBRARY_PATH": "/usr/lib/wsl/drivers/nv_dispi.inf_amd64_67995ceab8993b08:/usr/lib/wsl/lib:/opt/nvidia/hpc_sdk/Linux_x86_64/26.1/compilers/lib:/opt/nvidia/hpc_sdk/Linux_x86_64/26.1/cuda/13.1/lib64:/opt/nvidia/hpc_sdk/Linux_x86_64/26.1/math_libs/13.1/lib64"
+      },
+      "scientific_claim_scope": "performance_benchmark_only",
+      "template_note": "Generated IC/EDA-relevant full-SCF benchmark; not a real device-physics claim.",
+      "workload_family_id": "ic_metal_interconnect_scf"
+    }
+  ],
+  "claim_boundary": "Seven-day preliminary benchmark/tool-evidence artifact only; generated IC/EDA QE cases are performance_benchmark_only and no physical FPGA board measurement was collected.",
+  "eda_stub_summary": {
+    "attempt": "generated_eda_stub_resource_timing",
+    "combined_rtl_stub_path": "artifacts/qe_ic_7day_prelim/generated_candidate_stubs/qe_ic_generated_stub_bundle.sv",
+    "reason": null,
+    "selected_candidate_count": 9,
+    "status": "executed",
+    "syntax_check_passed": true,
+    "tool": "vcs",
+    "tool_execution_is_real": true,
+    "tool_path": "ssh://ic-eda/home/synopsys/vcs-mx/O-2018.09-1/bin/vcs"
+  },
+  "environment_summary": {
+    "blockers": [
+      "blocked_by_missing_systemc"
+    ],
+    "environment_status": "partially_ready",
+    "gpu": {
+      "cuda_version": "13.2",
+      "driver_version": "596.36",
+      "gpu_memory_total_mib": 8192,
+      "gpu_model": "NVIDIA GeForce RTX 3070",
+      "gpu_present": true
+    },
+    "tools": {
+      "eda": {
+        "available_tools": {
+          "dc_shell": "ssh://ic-eda/home/synopsys/syn/O-2018.06-SP1/bin/dc_shell",
+          "vcs": "ssh://ic-eda/home/synopsys/vcs-mx/O-2018.09-1/bin/vcs",
+          "vivado": "ssh://ic-eda/home/Xilinx/Vivado/2019.1/bin/vivado"
+        },
+        "missing_tools": [
+          "yosys"
+        ],
+        "remote_available_tool_count": 6,
+        "remote_probe_status": "probed",
+        "remote_ssh_alias_count": 3,
+        "remote_ssh_aliases_checked": 3,
+        "speedup_claim_implication": "none"
+      },
+      "profilers": {
+        "ncu": "/usr/bin/ncu",
+        "nsys": "/usr/bin/nsys"
+      },
+      "qe": {
+        "epw.x": "/usr/bin/epw.x",
+        "ph.x": "/usr/bin/ph.x",
+        "pw.x": "/home/xixilys/project/qe_gpu_build/q-e/build_gpu_serial_nvhpc_cuda_no_gomp/bin/pw.x"
+      },
+      "qe_discovery": {
+        "discovery_status": "available",
+        "programs": {
+          "epw.x": {
+            "dynamic_gpu_libraries": [],
+            "dynamic_gpu_library_support": "not_detected",
+            "gpu_support": "not_detected",
+            "help_gpu_support": "not_detected",
+            "ldd_command": [
+              "ldd",
+              "/usr/bin/epw.x"
+            ],
+            "ldd_output_hash": "sha256:acc68ef60850745b1f02090680e33a921e7e3c169fb5302634d69ae71012afb2",
+            "ldd_returncode": 0,
+            "path": "/usr/bin/epw.x",
+            "probe_command": [
+              "/usr/bin/epw.x",
+              "-h"
+            ],
+            "probe_command_output_hash": "sha256:b389dca69a37eccb35c72f17caf047cd05545af4b97a248a9ed4b96b1d2b1998",
+            "probe_returncode": 1,
+            "runs": false,
+            "runtime_env_keys": [
+              "CUDA_VISIBLE_DEVICES",
+              "LD_LIBRARY_PATH"
+            ],
+            "version": "5.3.1"
+          },
+          "ph.x": {
+            "dynamic_gpu_libraries": [],
+            "dynamic_gpu_library_support": "not_detected",
+            "gpu_support": "not_detected",
+            "help_gpu_support": "not_detected",
+            "ldd_command": [
+              "ldd",
+              "/usr/bin/ph.x"
+            ],
+            "ldd_output_hash": "sha256:0f036b5d5311588f49b7012932dd9a400e3022c9eec91d6f8d6678451f384139",
+            "ldd_returncode": 0,
+            "path": "/usr/bin/ph.x",
+            "probe_command": [
+              "/usr/bin/ph.x",
+              "-h"
+            ],
+            "probe_command_output_hash": "sha256:5d0f26fb1e43595a1cf812383f3a8512db194d331358168cc9301d34e2aeb0b3",
+            "probe_returncode": 1,
+            "runs": false,
+            "runtime_env_keys": [
+              "CUDA_VISIBLE_DEVICES",
+              "LD_LIBRARY_PATH"
+            ],
+            "version": "6.7MaX"
+          },
+          "pw.x": {
+            "dynamic_gpu_libraries": [
+              "libnvhpcwrapcufft.so",
+              "libcufft.so.12",
+              "libcudaforwraprand.so",
+              "libcusolver.so.12",
+              "libcublas.so.13",
+              "libcublasLt.so.13",
+              "libcudaforwrapblas.so",
+              "libcudaforwrapblas117.so",
+              "libcudart.so.13",
+              "libcudafor_130.so",
+              "libcudafor.so",
+              "libacchost.so",
+              "libaccdevaux.so",
+              "libaccdevice.so",
+              "libcudadevice.so",
+              "libcudafor2.so",
+              "libnvhpcatm.so",
+              "libcusparse.so.12"
+            ],
+            "dynamic_gpu_library_support": "detected",
+            "gpu_support": "detected",
+            "help_gpu_support": "not_detected",
+            "ldd_command": [
+              "ldd",
+              "/home/xixilys/project/qe_gpu_build/q-e/build_gpu_serial_nvhpc_cuda_no_gomp/bin/pw.x"
+            ],
+            "ldd_output_hash": "sha256:156ab3255b41c7ba255d67007a0a4b0dff43c41cd86b3f145d63ca33f5878f6e",
+            "ldd_returncode": 0,
+            "path": "/home/xixilys/project/qe_gpu_build/q-e/build_gpu_serial_nvhpc_cuda_no_gomp/bin/pw.x",
+            "probe_command": [
+              "/home/xixilys/project/qe_gpu_build/q-e/build_gpu_serial_nvhpc_cuda_no_gomp/bin/pw.x",
+              "-h"
+            ],
+            "probe_command_output_hash": "sha256:f497029118c5dc11c25712a57dbe0a7c8069b87ebce25d9089fe7793524ebe0b",
+            "probe_returncode": 1,
+            "runs": false,
+            "runtime_env_keys": [
+              "CUDA_VISIBLE_DEVICES",
+              "LD_LIBRARY_PATH"
+            ],
+            "version": "7.5"
+          }
+        },
+        "runtime_env_keys": [
+          "CUDA_VISIBLE_DEVICES",
+          "LD_LIBRARY_PATH"
+        ]
+      },
+      "qe_runtime_env": {
+        "CUDA_VISIBLE_DEVICES": "0",
+        "LD_LIBRARY_PATH": "/usr/lib/wsl/drivers/nv_dispi.inf_amd64_67995ceab8993b08:/usr/lib/wsl/lib:/opt/nvidia/hpc_sdk/Linux_x86_64/26.1/compilers/lib:/opt/nvidia/hpc_sdk/Linux_x86_64/26.1/cuda/13.1/lib64:/opt/nvidia/hpc_sdk/Linux_x86_64/26.1/math_libs/13.1/lib64"
+      },
+      "systemc": {
+        "generic_sim": null,
+        "systemc_runner": null
+      }
+    }
+  },
+  "final_answer": {
+    "answer_text": "Current seven-day generated-stub/tool-backed FPGA/hybrid candidates are slower than the measured GPU-only QE baseline on the generated IC/EDA benchmark cases.",
+    "final_claim_allowed": false,
+    "no_board_measurement_limit": "No physical FPGA board measurement was required or collected; this prevents final hardware superiority wording.",
+    "preliminary_confidence": "medium",
+    "preliminary_evidence_tier": "high_fidelity_preliminary",
+    "preliminary_label": "fpga_hybrid_weaker",
+    "required_next_evidence": [
+      "check whether alternative candidate families or overlap schedules can reduce transfer/workflow overhead before final rejection",
+      "measure or model host-device/interconnect transfer costs at full-SCF granularity",
+      "account for SCF control, diagonalization, mixing, synchronization, and launch overheads end-to-end"
+    ],
+    "what_we_can_say": "We can report a preliminary current-implementation-limited weaker-than-GPU result for the generated benchmark suite.",
+    "what_we_cannot_say": "We cannot make a final FPGA/hybrid hardware superiority or no-opportunity claim without real kernel correctness, board/implementation closure, and representative real-device workloads."
+  },
+  "gpu_baseline_summary": {
+    "baseline_record_count": 3,
+    "blocker_reasons": [],
+    "evidence_status": "measured",
+    "measurements_are_real": true,
+    "target_type": "gpu_only"
+  },
+  "hls_attempt_summary": {
+    "attempts": [
+      {
+        "attempt": "vivado_hls_csim_csynth",
+        "candidate_id": "qeic_7day_ic_si_bulk_2atom_scf_v0_fpga_fft_transpose_pipeline",
+        "candidate_kind": "fpga_fft_transpose_pipeline",
+        "command": "ssh ic-eda export LC_ALL=C LANG=C; cd /tmp/dse_qe_ic_7day_hls_fpga_fft_transpose_pipeline_3a2f081cd7 && /home/Xilinx/Vivado/2019.1/bin/vivado_hls -f run_hls.tcl",
+        "csim_passed": true,
+        "csynth_report_available": true,
+        "csynth_report_hash": "sha256:85bd67d374830075105af91751e1912c5fa74cf5c2939a35a8128355e1609a73",
+        "csynth_report_path": "artifacts/qe_ic_7day_prelim/runs/candidate_evidence/vivado_hls/fpga_fft_transpose_pipeline_3a2f081cd7/csynth.rpt",
+        "end_timestamp": "2026-06-08T09:56:04Z",
+        "fpga_part": "xc7z020clg400-1",
+        "reason": null,
+        "returncode": 0,
+        "start_timestamp": "2026-06-08T09:55:58Z",
+        "status": "executed",
+        "stderr_hash": "sha256:8ce956aa15d4bcf4f1c0359d230437de8e5a33067bb5c11ba709d4ed4c4cd3e9",
+        "stderr_log_path": "artifacts/qe_ic_7day_prelim/runs/candidate_evidence/vivado_hls/fpga_fft_transpose_pipeline_3a2f081cd7/vivado_hls.stderr.log",
+        "stdout_hash": "sha256:d61134dca5a0998dd7423f1025f7a5b5288b3159003b927147f26c1fefee0492",
+        "stdout_log_path": "artifacts/qe_ic_7day_prelim/runs/candidate_evidence/vivado_hls/fpga_fft_transpose_pipeline_3a2f081cd7/vivado_hls.stdout.log",
+        "tool": "vivado_hls",
+        "tool_path": "ssh://ic-eda/home/Xilinx/Vivado/2019.1/bin/vivado_hls",
+        "version": "2019.1"
+      },
+      {
+        "attempt": "vivado_hls_csim_csynth",
+        "candidate_id": "qeic_7day_ic_si_bulk_2atom_scf_v0_hybrid_reduction_sidecar",
+        "candidate_kind": "hybrid_reduction_sidecar",
+        "command": "ssh ic-eda export LC_ALL=C LANG=C; cd /tmp/dse_qe_ic_7day_hls_hybrid_reduction_sidecar_c78c00a84a && /home/Xilinx/Vivado/2019.1/bin/vivado_hls -f run_hls.tcl",
+        "csim_passed": true,
+        "csynth_report_available": true,
+        "csynth_report_hash": "sha256:f6c929a8360984820fa09f3878ee6bd60ff532db21a2f92c30912e1b3a07bd17",
+        "csynth_report_path": "artifacts/qe_ic_7day_prelim/runs/candidate_evidence/vivado_hls/hybrid_reduction_sidecar_c78c00a84a/csynth.rpt",
+        "end_timestamp": "2026-06-08T09:56:12Z",
+        "fpga_part": "xc7z020clg400-1",
+        "reason": null,
+        "returncode": 0,
+        "start_timestamp": "2026-06-08T09:56:04Z",
+        "status": "executed",
+        "stderr_hash": "sha256:8ce956aa15d4bcf4f1c0359d230437de8e5a33067bb5c11ba709d4ed4c4cd3e9",
+        "stderr_log_path": "artifacts/qe_ic_7day_prelim/runs/candidate_evidence/vivado_hls/hybrid_reduction_sidecar_c78c00a84a/vivado_hls.stderr.log",
+        "stdout_hash": "sha256:e34343ee3114e9de791c2a55cc9e4fabf732ad866538a4d69ec6466925b0550a",
+        "stdout_log_path": "artifacts/qe_ic_7day_prelim/runs/candidate_evidence/vivado_hls/hybrid_reduction_sidecar_c78c00a84a/vivado_hls.stdout.log",
+        "tool": "vivado_hls",
+        "tool_path": "ssh://ic-eda/home/Xilinx/Vivado/2019.1/bin/vivado_hls",
+        "version": "2019.1"
+      },
+      {
+        "attempt": "vivado_hls_csim_csynth",
+        "candidate_id": "qeic_7day_ic_si_bulk_2atom_scf_v0_hybrid_dma_or_memory_staging_sidecar",
+        "candidate_kind": "hybrid_dma_or_memory_staging_sidecar",
+        "command": "ssh ic-eda export LC_ALL=C LANG=C; cd /tmp/dse_qe_ic_7day_hls_hybrid_dma_or_memory_staging_sidecar_c2d15528e6 && /home/Xilinx/Vivado/2019.1/bin/vivado_hls -f run_hls.tcl",
+        "csim_passed": true,
+        "csynth_report_available": true,
+        "csynth_report_hash": "sha256:04a8f13eb703602f6c0fd644a70134f2fe7de533c37c06eb6af0e380dbc0df4c",
+        "csynth_report_path": "artifacts/qe_ic_7day_prelim/runs/candidate_evidence/vivado_hls/hybrid_dma_or_memory_staging_sidecar_c2d15528e6/csynth.rpt",
+        "end_timestamp": "2026-06-08T09:56:18Z",
+        "fpga_part": "xc7z020clg400-1",
+        "reason": null,
+        "returncode": 0,
+        "start_timestamp": "2026-06-08T09:56:12Z",
+        "status": "executed",
+        "stderr_hash": "sha256:8ce956aa15d4bcf4f1c0359d230437de8e5a33067bb5c11ba709d4ed4c4cd3e9",
+        "stderr_log_path": "artifacts/qe_ic_7day_prelim/runs/candidate_evidence/vivado_hls/hybrid_dma_or_memory_staging_sidecar_c2d15528e6/vivado_hls.stderr.log",
+        "stdout_hash": "sha256:db30fc4343af6861f32cd5c6ec4123083b4c2cc58e5d09ba3618d4e83276a8ec",
+        "stdout_log_path": "artifacts/qe_ic_7day_prelim/runs/candidate_evidence/vivado_hls/hybrid_dma_or_memory_staging_sidecar_c2d15528e6/vivado_hls.stdout.log",
+        "tool": "vivado_hls",
+        "tool_path": "ssh://ic-eda/home/Xilinx/Vivado/2019.1/bin/vivado_hls",
+        "version": "2019.1"
+      }
+    ],
+    "schema_version": "dse.qe_ic.seven_day_hls_attempts.v1",
+    "tool_execution_is_real": true
+  },
+  "opportunity_records": [
+    {
+      "candidate_id": "qeic_7day_ic_si_bulk_2atom_scf_v0_fpga_fft_transpose_pipeline",
+      "case_id": "ic_si_bulk_2atom_scf_v0",
+      "claim_allowed": false,
+      "claim_blockers": [
+        "generated_stub_not_final_claim_gate_eligible",
+        "no_fpga_board_measurement",
+        "full_kernel_correctness_gate_not_closed"
+      ],
+      "evidence_level": "vivado_resource_timing",
+      "evidence_status": "high_fidelity_estimate",
+      "failure_reasons": [
+        "current_generated_stub_estimate_slower_than_gpu",
+        "transfer_overhead_dominates",
+        "workflow_overhead_dominates"
+      ],
+      "final_interpretation": "Seven-day generated-stub/tool-backed estimate is slower than measured GPU baseline; not a final hardware claim.",
+      "implementation_maturity": "generated_stub",
+      "implementation_quality_classification": "implementation_limited",
+      "motif_id": "fft_transpose",
+      "speedup_vs_gpu_mean": 0.847457627118644,
+      "target_type": "fpga_only",
+      "verdict": "fpga_or_hybrid_inconclusive",
+      "workload_family_id": "ic_semiconductor_bulk_scf"
+    },
+    {
+      "candidate_id": "qeic_7day_ic_si_bulk_2atom_scf_v0_hybrid_reduction_sidecar",
+      "case_id": "ic_si_bulk_2atom_scf_v0",
+      "claim_allowed": false,
+      "claim_blockers": [
+        "generated_stub_not_final_claim_gate_eligible",
+        "no_fpga_board_measurement",
+        "full_kernel_correctness_gate_not_closed"
+      ],
+      "evidence_level": "vivado_resource_timing",
+      "evidence_status": "high_fidelity_estimate",
+      "failure_reasons": [
+        "current_generated_stub_estimate_slower_than_gpu",
+        "transfer_overhead_dominates",
+        "workflow_overhead_dominates"
+      ],
+      "final_interpretation": "Seven-day generated-stub/tool-backed estimate is slower than measured GPU baseline; not a final hardware claim.",
+      "implementation_maturity": "generated_stub",
+      "implementation_quality_classification": "implementation_limited",
+      "motif_id": "reduction_collective",
+      "speedup_vs_gpu_mean": 0.9009009009009008,
+      "target_type": "gpu_fpga_hybrid",
+      "verdict": "fpga_or_hybrid_inconclusive",
+      "workload_family_id": "ic_semiconductor_bulk_scf"
+    },
+    {
+      "candidate_id": "qeic_7day_ic_si_bulk_2atom_scf_v0_hybrid_dma_or_memory_staging_sidecar",
+      "case_id": "ic_si_bulk_2atom_scf_v0",
+      "claim_allowed": false,
+      "claim_blockers": [
+        "generated_stub_not_final_claim_gate_eligible",
+        "no_fpga_board_measurement",
+        "full_kernel_correctness_gate_not_closed"
+      ],
+      "evidence_level": "vivado_resource_timing",
+      "evidence_status": "high_fidelity_estimate",
+      "failure_reasons": [
+        "current_generated_stub_estimate_slower_than_gpu",
+        "transfer_overhead_dominates",
+        "workflow_overhead_dominates"
+      ],
+      "final_interpretation": "Seven-day generated-stub/tool-backed estimate is slower than measured GPU baseline; not a final hardware claim.",
+      "implementation_maturity": "generated_stub",
+      "implementation_quality_classification": "implementation_limited",
+      "motif_id": "wavefunction_memory",
+      "speedup_vs_gpu_mean": 0.9259259259259259,
+      "target_type": "gpu_fpga_hybrid",
+      "verdict": "fpga_or_hybrid_inconclusive",
+      "workload_family_id": "ic_semiconductor_bulk_scf"
+    },
+    {
+      "candidate_id": "qeic_7day_ic_sio2_dielectric_6atom_scf_v0_fpga_fft_transpose_pipeline",
+      "case_id": "ic_sio2_dielectric_6atom_scf_v0",
+      "claim_allowed": false,
+      "claim_blockers": [
+        "generated_stub_not_final_claim_gate_eligible",
+        "no_fpga_board_measurement",
+        "full_kernel_correctness_gate_not_closed"
+      ],
+      "evidence_level": "vivado_resource_timing",
+      "evidence_status": "high_fidelity_estimate",
+      "failure_reasons": [
+        "current_generated_stub_estimate_slower_than_gpu",
+        "transfer_overhead_dominates",
+        "workflow_overhead_dominates"
+      ],
+      "final_interpretation": "Seven-day generated-stub/tool-backed estimate is slower than measured GPU baseline; not a final hardware claim.",
+      "implementation_maturity": "generated_stub",
+      "implementation_quality_classification": "implementation_limited",
+      "motif_id": "fft_transpose",
+      "speedup_vs_gpu_mean": 0.847457627118644,
+      "target_type": "fpga_only",
+      "verdict": "fpga_or_hybrid_inconclusive",
+      "workload_family_id": "ic_dielectric_oxide_scf"
+    },
+    {
+      "candidate_id": "qeic_7day_ic_sio2_dielectric_6atom_scf_v0_hybrid_reduction_sidecar",
+      "case_id": "ic_sio2_dielectric_6atom_scf_v0",
+      "claim_allowed": false,
+      "claim_blockers": [
+        "generated_stub_not_final_claim_gate_eligible",
+        "no_fpga_board_measurement",
+        "full_kernel_correctness_gate_not_closed"
+      ],
+      "evidence_level": "vivado_resource_timing",
+      "evidence_status": "high_fidelity_estimate",
+      "failure_reasons": [
+        "current_generated_stub_estimate_slower_than_gpu",
+        "transfer_overhead_dominates",
+        "workflow_overhead_dominates"
+      ],
+      "final_interpretation": "Seven-day generated-stub/tool-backed estimate is slower than measured GPU baseline; not a final hardware claim.",
+      "implementation_maturity": "generated_stub",
+      "implementation_quality_classification": "implementation_limited",
+      "motif_id": "reduction_collective",
+      "speedup_vs_gpu_mean": 0.9009009009009008,
+      "target_type": "gpu_fpga_hybrid",
+      "verdict": "fpga_or_hybrid_inconclusive",
+      "workload_family_id": "ic_dielectric_oxide_scf"
+    },
+    {
+      "candidate_id": "qeic_7day_ic_sio2_dielectric_6atom_scf_v0_hybrid_dma_or_memory_staging_sidecar",
+      "case_id": "ic_sio2_dielectric_6atom_scf_v0",
+      "claim_allowed": false,
+      "claim_blockers": [
+        "generated_stub_not_final_claim_gate_eligible",
+        "no_fpga_board_measurement",
+        "full_kernel_correctness_gate_not_closed"
+      ],
+      "evidence_level": "vivado_resource_timing",
+      "evidence_status": "high_fidelity_estimate",
+      "failure_reasons": [
+        "current_generated_stub_estimate_slower_than_gpu",
+        "transfer_overhead_dominates",
+        "workflow_overhead_dominates"
+      ],
+      "final_interpretation": "Seven-day generated-stub/tool-backed estimate is slower than measured GPU baseline; not a final hardware claim.",
+      "implementation_maturity": "generated_stub",
+      "implementation_quality_classification": "implementation_limited",
+      "motif_id": "wavefunction_memory",
+      "speedup_vs_gpu_mean": 0.9259259259259258,
+      "target_type": "gpu_fpga_hybrid",
+      "verdict": "fpga_or_hybrid_inconclusive",
+      "workload_family_id": "ic_dielectric_oxide_scf"
+    },
+    {
+      "candidate_id": "qeic_7day_ic_al_interconnect_4atom_scf_v0_fpga_fft_transpose_pipeline",
+      "case_id": "ic_al_interconnect_4atom_scf_v0",
+      "claim_allowed": false,
+      "claim_blockers": [
+        "generated_stub_not_final_claim_gate_eligible",
+        "no_fpga_board_measurement",
+        "full_kernel_correctness_gate_not_closed"
+      ],
+      "evidence_level": "vivado_resource_timing",
+      "evidence_status": "high_fidelity_estimate",
+      "failure_reasons": [
+        "current_generated_stub_estimate_slower_than_gpu",
+        "transfer_overhead_dominates",
+        "workflow_overhead_dominates"
+      ],
+      "final_interpretation": "Seven-day generated-stub/tool-backed estimate is slower than measured GPU baseline; not a final hardware claim.",
+      "implementation_maturity": "generated_stub",
+      "implementation_quality_classification": "implementation_limited",
+      "motif_id": "fft_transpose",
+      "speedup_vs_gpu_mean": 0.8474576271186441,
+      "target_type": "fpga_only",
+      "verdict": "fpga_or_hybrid_inconclusive",
+      "workload_family_id": "ic_metal_interconnect_scf"
+    },
+    {
+      "candidate_id": "qeic_7day_ic_al_interconnect_4atom_scf_v0_hybrid_reduction_sidecar",
+      "case_id": "ic_al_interconnect_4atom_scf_v0",
+      "claim_allowed": false,
+      "claim_blockers": [
+        "generated_stub_not_final_claim_gate_eligible",
+        "no_fpga_board_measurement",
+        "full_kernel_correctness_gate_not_closed"
+      ],
+      "evidence_level": "vivado_resource_timing",
+      "evidence_status": "high_fidelity_estimate",
+      "failure_reasons": [
+        "current_generated_stub_estimate_slower_than_gpu",
+        "transfer_overhead_dominates",
+        "workflow_overhead_dominates"
+      ],
+      "final_interpretation": "Seven-day generated-stub/tool-backed estimate is slower than measured GPU baseline; not a final hardware claim.",
+      "implementation_maturity": "generated_stub",
+      "implementation_quality_classification": "implementation_limited",
+      "motif_id": "reduction_collective",
+      "speedup_vs_gpu_mean": 0.9009009009009008,
+      "target_type": "gpu_fpga_hybrid",
+      "verdict": "fpga_or_hybrid_inconclusive",
+      "workload_family_id": "ic_metal_interconnect_scf"
+    },
+    {
+      "candidate_id": "qeic_7day_ic_al_interconnect_4atom_scf_v0_hybrid_dma_or_memory_staging_sidecar",
+      "case_id": "ic_al_interconnect_4atom_scf_v0",
+      "claim_allowed": false,
+      "claim_blockers": [
+        "generated_stub_not_final_claim_gate_eligible",
+        "no_fpga_board_measurement",
+        "full_kernel_correctness_gate_not_closed"
+      ],
+      "evidence_level": "vivado_resource_timing",
+      "evidence_status": "high_fidelity_estimate",
+      "failure_reasons": [
+        "current_generated_stub_estimate_slower_than_gpu",
+        "transfer_overhead_dominates",
+        "workflow_overhead_dominates"
+      ],
+      "final_interpretation": "Seven-day generated-stub/tool-backed estimate is slower than measured GPU baseline; not a final hardware claim.",
+      "implementation_maturity": "generated_stub",
+      "implementation_quality_classification": "implementation_limited",
+      "motif_id": "wavefunction_memory",
+      "speedup_vs_gpu_mean": 0.9259259259259259,
+      "target_type": "gpu_fpga_hybrid",
+      "verdict": "fpga_or_hybrid_inconclusive",
+      "workload_family_id": "ic_metal_interconnect_scf"
+    }
+  ],
+  "preliminary_classification": {
+    "advisor_labels_supported": true,
+    "best_candidate_id": "qeic_7day_ic_si_bulk_2atom_scf_v0_hybrid_dma_or_memory_staging_sidecar",
+    "best_speedup_vs_gpu": 0.9259259259259259,
+    "best_target_type": "gpu_fpga_hybrid",
+    "blockers": [],
+    "claim_boundary": "not_final_hardware_superiority_claim: preliminary labels summarize current GPU-baseline and FPGA/hybrid evidence for triage only. Final FPGA/hybrid claims still require workload-representative full-SCF accounting plus the tool-specific correctness, synthesis, implementation, and timing gates.",
+    "claim_gate_passed": false,
+    "confidence": "medium",
+    "dominant_reasons": [
+      "current_generated_stub_estimate_slower_than_gpu",
+      "transfer_overhead_dominates",
+      "workflow_overhead_dominates",
+      "fpga_or_hybrid_inconclusive",
+      "generated_stub_not_final_claim_gate_eligible",
+      "no_fpga_board_measurement",
+      "full_kernel_correctness_gate_not_closed"
+    ],
+    "evidence_tier": "high_fidelity_preliminary",
+    "final_claim_allowed": false,
+    "preliminary_label": "fpga_hybrid_weaker",
+    "record_count": 9,
+    "required_next_evidence": [
+      "check whether alternative candidate families or overlap schedules can reduce transfer/workflow overhead before final rejection",
+      "measure or model host-device/interconnect transfer costs at full-SCF granularity",
+      "account for SCF control, diagonalization, mixing, synchronization, and launch overheads end-to-end"
+    ],
+    "schema_version": "dse.qe_ic.preliminary_opportunity_classification.v1"
+  },
+  "resource_map_path": "artifacts/qe_ic_7day_prelim/initial_resource_map.md",
+  "run_timestamp": "2026-06-08T09:56:18Z",
+  "schema_version": "dse.qe_ic.seven_day_preliminary_report.v1",
+  "selected_candidates": [
+    {
+      "candidate_id": "qeic_7day_ic_si_bulk_2atom_scf_v0_fpga_fft_transpose_pipeline",
+      "candidate_parameters": {
+        "board_measurement_available": false,
+        "device_role": "fpga_fft_transpose_pipeline",
+        "host_role": "scf_control_diagonalization_mixing_retained",
+        "template_family": "fpga_fft"
+      },
+      "case_id": "ic_si_bulk_2atom_scf_v0",
+      "implementation_maturity": "generated_stub",
+      "motif_id": "fft_transpose",
+      "selection_source": "generated_from_layer4_template_kind_for_7day_prelim",
+      "target_candidate_kind": "fpga_fft_transpose_pipeline",
+      "target_type": "fpga_only",
+      "template_family": "fpga_fft",
+      "template_id": "fpga_fft_transpose_engine",
+      "workflow_accounting_boundary": "full_scf_end_to_end_with_host_transfer_sync_control_diag_mixing_launch_overheads",
+      "workload_family_id": "ic_semiconductor_bulk_scf"
+    },
+    {
+      "candidate_id": "qeic_7day_ic_si_bulk_2atom_scf_v0_hybrid_reduction_sidecar",
+      "candidate_parameters": {
+        "board_measurement_available": false,
+        "device_role": "hybrid_reduction_sidecar",
+        "host_role": "scf_control_diagonalization_mixing_retained",
+        "template_family": "hybrid_sidecar"
+      },
+      "case_id": "ic_si_bulk_2atom_scf_v0",
+      "implementation_maturity": "generated_stub",
+      "motif_id": "reduction_collective",
+      "selection_source": "generated_from_layer4_template_kind_for_7day_prelim",
+      "target_candidate_kind": "hybrid_reduction_sidecar",
+      "target_type": "gpu_fpga_hybrid",
+      "template_family": "hybrid_sidecar",
+      "template_id": "hybrid_reduction_sidecar",
+      "workflow_accounting_boundary": "full_scf_end_to_end_with_host_transfer_sync_control_diag_mixing_launch_overheads",
+      "workload_family_id": "ic_semiconductor_bulk_scf"
+    },
+    {
+      "candidate_id": "qeic_7day_ic_si_bulk_2atom_scf_v0_hybrid_dma_or_memory_staging_sidecar",
+      "candidate_parameters": {
+        "board_measurement_available": false,
+        "device_role": "hybrid_dma_or_memory_staging_sidecar",
+        "host_role": "scf_control_diagonalization_mixing_retained",
+        "template_family": "hybrid_dma"
+      },
+      "case_id": "ic_si_bulk_2atom_scf_v0",
+      "implementation_maturity": "generated_stub",
+      "motif_id": "wavefunction_memory",
+      "selection_source": "generated_from_layer4_template_kind_for_7day_prelim",
+      "target_candidate_kind": "hybrid_dma_or_memory_staging_sidecar",
+      "target_type": "gpu_fpga_hybrid",
+      "template_family": "hybrid_dma",
+      "template_id": "hybrid_dma_overlap_sidecar",
+      "workflow_accounting_boundary": "full_scf_end_to_end_with_host_transfer_sync_control_diag_mixing_launch_overheads",
+      "workload_family_id": "ic_semiconductor_bulk_scf"
+    },
+    {
+      "candidate_id": "qeic_7day_ic_sio2_dielectric_6atom_scf_v0_fpga_fft_transpose_pipeline",
+      "candidate_parameters": {
+        "board_measurement_available": false,
+        "device_role": "fpga_fft_transpose_pipeline",
+        "host_role": "scf_control_diagonalization_mixing_retained",
+        "template_family": "fpga_fft"
+      },
+      "case_id": "ic_sio2_dielectric_6atom_scf_v0",
+      "implementation_maturity": "generated_stub",
+      "motif_id": "fft_transpose",
+      "selection_source": "generated_from_layer4_template_kind_for_7day_prelim",
+      "target_candidate_kind": "fpga_fft_transpose_pipeline",
+      "target_type": "fpga_only",
+      "template_family": "fpga_fft",
+      "template_id": "fpga_fft_transpose_engine",
+      "workflow_accounting_boundary": "full_scf_end_to_end_with_host_transfer_sync_control_diag_mixing_launch_overheads",
+      "workload_family_id": "ic_dielectric_oxide_scf"
+    },
+    {
+      "candidate_id": "qeic_7day_ic_sio2_dielectric_6atom_scf_v0_hybrid_reduction_sidecar",
+      "candidate_parameters": {
+        "board_measurement_available": false,
+        "device_role": "hybrid_reduction_sidecar",
+        "host_role": "scf_control_diagonalization_mixing_retained",
+        "template_family": "hybrid_sidecar"
+      },
+      "case_id": "ic_sio2_dielectric_6atom_scf_v0",
+      "implementation_maturity": "generated_stub",
+      "motif_id": "reduction_collective",
+      "selection_source": "generated_from_layer4_template_kind_for_7day_prelim",
+      "target_candidate_kind": "hybrid_reduction_sidecar",
+      "target_type": "gpu_fpga_hybrid",
+      "template_family": "hybrid_sidecar",
+      "template_id": "hybrid_reduction_sidecar",
+      "workflow_accounting_boundary": "full_scf_end_to_end_with_host_transfer_sync_control_diag_mixing_launch_overheads",
+      "workload_family_id": "ic_dielectric_oxide_scf"
+    },
+    {
+      "candidate_id": "qeic_7day_ic_sio2_dielectric_6atom_scf_v0_hybrid_dma_or_memory_staging_sidecar",
+      "candidate_parameters": {
+        "board_measurement_available": false,
+        "device_role": "hybrid_dma_or_memory_staging_sidecar",
+        "host_role": "scf_control_diagonalization_mixing_retained",
+        "template_family": "hybrid_dma"
+      },
+      "case_id": "ic_sio2_dielectric_6atom_scf_v0",
+      "implementation_maturity": "generated_stub",
+      "motif_id": "wavefunction_memory",
+      "selection_source": "generated_from_layer4_template_kind_for_7day_prelim",
+      "target_candidate_kind": "hybrid_dma_or_memory_staging_sidecar",
+      "target_type": "gpu_fpga_hybrid",
+      "template_family": "hybrid_dma",
+      "template_id": "hybrid_dma_overlap_sidecar",
+      "workflow_accounting_boundary": "full_scf_end_to_end_with_host_transfer_sync_control_diag_mixing_launch_overheads",
+      "workload_family_id": "ic_dielectric_oxide_scf"
+    },
+    {
+      "candidate_id": "qeic_7day_ic_al_interconnect_4atom_scf_v0_fpga_fft_transpose_pipeline",
+      "candidate_parameters": {
+        "board_measurement_available": false,
+        "device_role": "fpga_fft_transpose_pipeline",
+        "host_role": "scf_control_diagonalization_mixing_retained",
+        "template_family": "fpga_fft"
+      },
+      "case_id": "ic_al_interconnect_4atom_scf_v0",
+      "implementation_maturity": "generated_stub",
+      "motif_id": "fft_transpose",
+      "selection_source": "generated_from_layer4_template_kind_for_7day_prelim",
+      "target_candidate_kind": "fpga_fft_transpose_pipeline",
+      "target_type": "fpga_only",
+      "template_family": "fpga_fft",
+      "template_id": "fpga_fft_transpose_engine",
+      "workflow_accounting_boundary": "full_scf_end_to_end_with_host_transfer_sync_control_diag_mixing_launch_overheads",
+      "workload_family_id": "ic_metal_interconnect_scf"
+    },
+    {
+      "candidate_id": "qeic_7day_ic_al_interconnect_4atom_scf_v0_hybrid_reduction_sidecar",
+      "candidate_parameters": {
+        "board_measurement_available": false,
+        "device_role": "hybrid_reduction_sidecar",
+        "host_role": "scf_control_diagonalization_mixing_retained",
+        "template_family": "hybrid_sidecar"
+      },
+      "case_id": "ic_al_interconnect_4atom_scf_v0",
+      "implementation_maturity": "generated_stub",
+      "motif_id": "reduction_collective",
+      "selection_source": "generated_from_layer4_template_kind_for_7day_prelim",
+      "target_candidate_kind": "hybrid_reduction_sidecar",
+      "target_type": "gpu_fpga_hybrid",
+      "template_family": "hybrid_sidecar",
+      "template_id": "hybrid_reduction_sidecar",
+      "workflow_accounting_boundary": "full_scf_end_to_end_with_host_transfer_sync_control_diag_mixing_launch_overheads",
+      "workload_family_id": "ic_metal_interconnect_scf"
+    },
+    {
+      "candidate_id": "qeic_7day_ic_al_interconnect_4atom_scf_v0_hybrid_dma_or_memory_staging_sidecar",
+      "candidate_parameters": {
+        "board_measurement_available": false,
+        "device_role": "hybrid_dma_or_memory_staging_sidecar",
+        "host_role": "scf_control_diagonalization_mixing_retained",
+        "template_family": "hybrid_dma"
+      },
+      "case_id": "ic_al_interconnect_4atom_scf_v0",
+      "implementation_maturity": "generated_stub",
+      "motif_id": "wavefunction_memory",
+      "selection_source": "generated_from_layer4_template_kind_for_7day_prelim",
+      "target_candidate_kind": "hybrid_dma_or_memory_staging_sidecar",
+      "target_type": "gpu_fpga_hybrid",
+      "template_family": "hybrid_dma",
+      "template_id": "hybrid_dma_overlap_sidecar",
+      "workflow_accounting_boundary": "full_scf_end_to_end_with_host_transfer_sync_control_diag_mixing_launch_overheads",
+      "workload_family_id": "ic_metal_interconnect_scf"
+    }
+  ]
+}

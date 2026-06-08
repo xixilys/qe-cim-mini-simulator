@@ -1,0 +1,126 @@
+bash: warning: setlocale: LC_ALL: cannot change locale (C.UTF-8)
+/bin/sh: warning: setlocale: LC_ALL: cannot change locale (C.UTF-8)
+bash: warning: setlocale: LC_ALL: cannot change locale (C.UTF-8)
+WORK=/tmp/dse_qe_ic_eda_probe_20260608172945_100520
+
+## versions
+
+$ /home/Xilinx/Vivado/2019.1/bin/vivado -version
+Vivado v2019.1 (64-bit)
+SW Build 2552052 on Fri May 24 14:47:09 MDT 2019
+IP Build 2548770 on Fri May 24 18:01:18 MDT 2019
+Copyright 1986-2019 Xilinx, Inc. All Rights Reserved.
+rc=0
+
+$ /home/Xilinx/Vivado/2019.1/bin/vivado_hls -version
+Vivado(TM) HLS - High-Level Synthesis from C, C++ and SystemC v2019.1 (64-bit)
+SW Build 2552052 on Fri May 24 14:47:09 MDT 2019
+IP Build 2548770 on Fri May 24 18:01:18 MDT 2019
+Copyright 1986-2019 Xilinx, Inc. All Rights Reserved.
+rc=0
+
+$ /home/synopsys/vcs-mx/O-2018.09-1/bin/vcs -ID
+vcs script version : O-2018.09
+machine name = IC_EDA 
+machine type = linux 
+machine os = Linux 3.10.0-1160.53.1.el7.x86_64  
+The FLEXlm host ID of this machine is "000c299c3ce0"
+Compiler version = VCS-MX O-2018.09-1
+VCS Build Date = Oct 12 2018 23:44:22
+If you need to renew your license, please email this information to your
+Account Manager. To obtain contact information for your Account Manager
+please email pass@synopsys.com
+rc=0
+
+$ /home/synopsys/syn/O-2018.06-SP1/bin/dc_shell -version
+
+dc_shell version    -  O-2018.06-SP1
+dc_shell build date -  Jul 19, 2018
+Site Identification Number: 000
+Local Administrator: ICer
+Contact: ICer@(none)
+rc=0
+
+## vcs minimal compile/sim
+VCS_COMPILE_RC=0
+                         Chronologic VCS (TM)
+        Version O-2018.09-1_Full64 -- Mon Jun  8 17:29:46 2026
+               Copyright (c) 1991-2018 by Synopsys Inc.
+                         ALL RIGHTS RESERVED
+
+This program is proprietary and confidential information of Synopsys Inc.
+and may be used and disclosed only as authorized in a license agreement
+controlling such use and disclosure.
+
+Parsing design file 'tb.sv'
+Top Level Modules:
+       tb
+No TimeScale specified
+Starting vcs inline pass...
+
+1 module and 0 UDP read.
+recompiling module tb
+rm -f _csrc*.so pre_vcsobj_*.so share_vcsobj_*.so
+if [ -x ../simv ]; then chmod -x ../simv; fi
+g++  -o ../simv    -Wl,-rpath-link=./ -Wl,-rpath='$ORIGIN'/simv.daidir/ -Wl,-rpath=./simv.daidir/ -Wl,-rpath='$ORIGIN'/simv.daidir//scsim.db.dir  -rdynamic  -Wl,-rpath=/home/synopsys/vcs-mx/O-2018.09-1/linux64/lib -L/home/synopsys/vcs-mx/O-2018.09-1/linux64/lib   objs/amcQw_d.o   _101125_archive_1.so  SIM_l.o       rmapats_mop.o rmapats.o rmar.o rmar_nd.o  rmar_llvm_0_1.o rmar_llvm_0_0.o          -lzerosoft_rt_stubs -lvirsim -lerrorinf -lsnpsmalloc -lvfs    -lvcsnew -lsimprofile -luclinative /home/synopsys/vcs-mx/O-2018.09-1/linux64/lib/vcs_tls.o   -Wl,-whole-archive -lvcsucli -Wl,-no-whole-archive          /home/synopsys/vcs-mx/O-2018.09-1/linux64/lib/vcs_save_restore_new.o -ldl  -lc -lm -lpthread -ldl 
+../simv up to date
+CPU time: .097 seconds to compile + .084 seconds to elab + .090 seconds to link
+VCS_SIM_RC=0
+Chronologic VCS simulator copyright 1991-2018
+Contains Synopsys proprietary information.
+Compiler version O-2018.09-1_Full64; Runtime version O-2018.09-1_Full64;  Jun  8 17:29 2026
+DSE_IC_EDA_PROBE_OK
+$finish called from file "tb.sv", line 4.
+$finish at simulation time                    0
+           V C S   S i m u l a t i o n   R e p o r t 
+Time: 0
+CPU Time:      0.250 seconds;       Data structure size:   0.0Mb
+Mon Jun  8 17:29:47 2026
+
+## vivado batch minimal
+VIVADO_RC=0
+
+****** Vivado v2019.1 (64-bit)
+  **** SW Build 2552052 on Fri May 24 14:47:09 MDT 2019
+  **** IP Build 2548770 on Fri May 24 18:01:18 MDT 2019
+    ** Copyright 1986-2019 Xilinx, Inc. All Rights Reserved.
+
+source vivado_probe.tcl -notrace
+DSE_VIVADO_PROBE_OK
+INFO: [Common 17-206] Exiting Vivado at Mon Jun  8 17:30:04 2026...
+
+## dc_shell minimal
+DC_RC=0
+
+                           Design Compiler Graphical 
+                                 DC Ultra (TM)
+                                  DFTMAX (TM)
+                              Power Compiler (TM)
+                                 DesignWare (R)
+                                 DC Expert (TM)
+                               Design Vision (TM)
+                               HDL Compiler (TM)
+                               VHDL Compiler (TM)
+                                  DFT Compiler
+                               Design Compiler(R)
+
+               Version O-2018.06-SP1 for linux64 - Jul 19, 2018 
+
+                    Copyright (c) 1988 - 2018 Synopsys, Inc.
+   This software and the associated documentation are proprietary to Synopsys,
+ Inc. This software may only be used in accordance with the terms and conditions
+ of a written license agreement with Synopsys, Inc. All other use, reproduction,
+            or distribution of this software is strictly prohibited.
+Initializing...
+Initializing gui preferences from file  /home/ICer/.synopsys_dv_prefs.tcl
+puts "DSE_DC_PROBE_OK"
+DSE_DC_PROBE_OK
+exit
+
+Memory usage for main task 50 Mbytes.
+Memory usage for this session 50 Mbytes.
+CPU usage for this session 0 seconds ( 0.00 hours ).
+
+Thank you...
+
+SUMMARY VCS_COMPILE_RC=0 VCS_SIM_RC=0 VIVADO_RC=0 DC_RC=0
