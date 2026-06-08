@@ -521,6 +521,289 @@ def materialize_hls_project(spec: Mapping[str, Any], out_dir: Path, *, fpga_part
     }
 
 
+def _hpsi_vcs_rtl_source() -> str:
+    return r"""module qeic_real_hpsi_local_potential_rtl #(
+    parameter integer N = 96,
+    parameter integer WIDTH = 18,
+    parameter integer ACC_WIDTH = 40
+) (
+    input  wire clk,
+    input  wire reset_n,
+    input  wire start,
+    input  wire sample_valid,
+    input  wire signed [WIDTH-1:0] psi_re_left,
+    input  wire signed [WIDTH-1:0] psi_re_center,
+    input  wire signed [WIDTH-1:0] psi_re_right,
+    input  wire signed [WIDTH-1:0] psi_im_left,
+    input  wire signed [WIDTH-1:0] psi_im_center,
+    input  wire signed [WIDTH-1:0] psi_im_right,
+    input  wire signed [WIDTH-1:0] vloc_center,
+    output wire signed [ACC_WIDTH-1:0] out_re,
+    output wire signed [ACC_WIDTH-1:0] out_im,
+    output wire valid,
+    output reg  done
+);
+    reg active;
+    integer sample_count;
+    wire signed [ACC_WIDTH-1:0] lap_re =
+        {{(ACC_WIDTH-WIDTH){psi_re_left[WIDTH-1]}}, psi_re_left}
+        - ({{(ACC_WIDTH-WIDTH){psi_re_center[WIDTH-1]}}, psi_re_center} <<< 1)
+        + {{(ACC_WIDTH-WIDTH){psi_re_right[WIDTH-1]}}, psi_re_right};
+    wire signed [ACC_WIDTH-1:0] lap_im =
+        {{(ACC_WIDTH-WIDTH){psi_im_left[WIDTH-1]}}, psi_im_left}
+        - ({{(ACC_WIDTH-WIDTH){psi_im_center[WIDTH-1]}}, psi_im_center} <<< 1)
+        + {{(ACC_WIDTH-WIDTH){psi_im_right[WIDTH-1]}}, psi_im_right};
+    wire signed [(2*WIDTH)-1:0] pot_re = vloc_center * psi_re_center;
+    wire signed [(2*WIDTH)-1:0] pot_im = vloc_center * psi_im_center;
+    wire signed [ACC_WIDTH-1:0] pot_re_ext = {{(ACC_WIDTH-(2*WIDTH)){pot_re[(2*WIDTH)-1]}}, pot_re};
+    wire signed [ACC_WIDTH-1:0] pot_im_ext = {{(ACC_WIDTH-(2*WIDTH)){pot_im[(2*WIDTH)-1]}}, pot_im};
+
+    assign out_re = -(lap_re >>> 1) + (pot_re_ext >>> 8);
+    assign out_im = -(lap_im >>> 1) + (pot_im_ext >>> 8);
+    assign valid = sample_valid;
+
+    always @(posedge clk or negedge reset_n) begin
+        if (!reset_n) begin
+            active <= 1'b0;
+            sample_count <= 0;
+            done <= 1'b0;
+        end else begin
+            if (start) begin
+                active <= 1'b1;
+                sample_count <= 0;
+                done <= 1'b0;
+            end else if (active && sample_valid) begin
+                if (sample_count == N - 1) begin
+                    active <= 1'b0;
+                    done <= 1'b1;
+                end
+                sample_count <= sample_count + 1;
+            end
+        end
+    end
+endmodule
+"""
+
+
+def _hpsi_vcs_tb_source(samples: int) -> str:
+    return f"""module tb_qeic_real_hpsi_local_potential_rtl;
+    localparam integer N = {samples};
+    localparam integer WIDTH = 18;
+    localparam integer ACC_WIDTH = 40;
+    reg clk;
+    reg reset_n;
+    reg start;
+    reg sample_valid;
+    reg signed [WIDTH-1:0] psi_re [0:N-1];
+    reg signed [WIDTH-1:0] psi_im [0:N-1];
+    reg signed [WIDTH-1:0] vloc [0:N-1];
+    reg signed [WIDTH-1:0] psi_re_left;
+    reg signed [WIDTH-1:0] psi_re_center;
+    reg signed [WIDTH-1:0] psi_re_right;
+    reg signed [WIDTH-1:0] psi_im_left;
+    reg signed [WIDTH-1:0] psi_im_center;
+    reg signed [WIDTH-1:0] psi_im_right;
+    reg signed [WIDTH-1:0] vloc_center;
+    wire signed [ACC_WIDTH-1:0] out_re;
+    wire signed [ACC_WIDTH-1:0] out_im;
+    wire valid;
+    wire done;
+    reg signed [ACC_WIDTH-1:0] expected_re [0:N-1];
+    reg signed [ACC_WIDTH-1:0] expected_im [0:N-1];
+    integer g;
+    integer left;
+    integer right;
+    integer valid_count;
+    integer latency_cycles;
+    reg signed [ACC_WIDTH-1:0] lap_re;
+    reg signed [ACC_WIDTH-1:0] lap_im;
+
+    qeic_real_hpsi_local_potential_rtl #(.N(N), .WIDTH(WIDTH), .ACC_WIDTH(ACC_WIDTH)) dut (
+        .clk(clk),
+        .reset_n(reset_n),
+        .start(start),
+        .sample_valid(sample_valid),
+        .psi_re_left(psi_re_left),
+        .psi_re_center(psi_re_center),
+        .psi_re_right(psi_re_right),
+        .psi_im_left(psi_im_left),
+        .psi_im_center(psi_im_center),
+        .psi_im_right(psi_im_right),
+        .vloc_center(vloc_center),
+        .out_re(out_re),
+        .out_im(out_im),
+        .valid(valid),
+        .done(done)
+    );
+
+    initial begin
+        clk = 1'b0;
+        forever #5 clk = ~clk;
+    end
+
+    initial begin
+        reset_n = 1'b0;
+        start = 1'b0;
+        sample_valid = 1'b0;
+        psi_re_left = 0;
+        psi_re_center = 0;
+        psi_re_right = 0;
+        psi_im_left = 0;
+        psi_im_center = 0;
+        psi_im_right = 0;
+        vloc_center = 0;
+        valid_count = 0;
+        latency_cycles = 0;
+        for (g = 0; g < N; g = g + 1) begin
+            psi_re[g] = 18'sd64 + g * 18'sd3;
+            psi_im[g] = -18'sd51 - g * 18'sd2;
+            vloc[g] = 18'sd128 + ((g * 17) & 31);
+        end
+        for (g = 0; g < N; g = g + 1) begin
+            left = (g == 0) ? 0 : g - 1;
+            right = (g == N - 1) ? N - 1 : g + 1;
+            lap_re = psi_re[left] - (psi_re[g] <<< 1) + psi_re[right];
+            lap_im = psi_im[left] - (psi_im[g] <<< 1) + psi_im[right];
+            expected_re[g] = -(lap_re >>> 1) + ((vloc[g] * psi_re[g]) >>> 8);
+            expected_im[g] = -(lap_im >>> 1) + ((vloc[g] * psi_im[g]) >>> 8);
+        end
+        repeat (3) @(posedge clk);
+        reset_n = 1'b1;
+        @(posedge clk);
+        start = 1'b1;
+        @(posedge clk);
+        start = 1'b0;
+        for (g = 0; g < N; g = g + 1) begin
+            left = (g == 0) ? 0 : g - 1;
+            right = (g == N - 1) ? N - 1 : g + 1;
+            psi_re_left = psi_re[left];
+            psi_re_center = psi_re[g];
+            psi_re_right = psi_re[right];
+            psi_im_left = psi_im[left];
+            psi_im_center = psi_im[g];
+            psi_im_right = psi_im[right];
+            vloc_center = vloc[g];
+            sample_valid = 1'b1;
+            @(posedge clk);
+            #1;
+            latency_cycles = latency_cycles + 1;
+            if (valid !== 1'b1 || out_re !== expected_re[g] || out_im !== expected_im[g]) begin
+                $display("DSE_REAL_RTL_FAIL sample=%0d expected=%0d,%0d got=%0d,%0d valid=%0d", g, expected_re[g], expected_im[g], out_re, out_im, valid);
+                $finish(1);
+            end
+            valid_count = valid_count + 1;
+        end
+        sample_valid = 1'b0;
+        #1;
+        if (done !== 1'b1 || valid_count != N) begin
+            $display("DSE_REAL_RTL_FAIL done=%0d valid_count=%0d", done, valid_count);
+            $finish(1);
+        end
+        $display("DSE_REAL_RTL_PASS qeic_real_hpsi_local_potential_rtl samples=%0d", valid_count);
+        $display("DSE_REAL_RTL_LATENCY_CYCLES %0d", latency_cycles);
+        $finish(0);
+    end
+endmodule
+"""
+
+
+def materialize_vcs_rtl_project(spec: Mapping[str, Any], out_dir: Path) -> dict[str, Any]:
+    """Materialize a non-HLS RTL/VCS project for the h_psi miniapp."""
+
+    architecture_id = str(spec["architecture_id"])
+    if "hpsi" not in architecture_id:
+        raise ValueError(f"VCS RTL materialization currently supports hpsi miniapp only, got {architecture_id}")
+    project_dir = Path(out_dir) / _safe_name(architecture_id) / "vcs_rtl"
+    project_dir.mkdir(parents=True, exist_ok=True)
+    samples = int(spec.get("golden_grid_points") or spec.get("golden_vector_length") or 96)
+    rtl_source = _hpsi_vcs_rtl_source()
+    tb_source = _hpsi_vcs_tb_source(samples)
+    rtl_sv = project_dir / "qeic_real_hpsi_local_potential_rtl.sv"
+    tb_sv = project_dir / "tb_qeic_real_hpsi_local_potential_rtl.sv"
+    rtl_sv.write_text(rtl_source, encoding="utf-8")
+    tb_sv.write_text(tb_source, encoding="utf-8")
+    return {
+        "architecture_id": architecture_id,
+        "project_dir": str(project_dir),
+        "rtl_sv": str(rtl_sv),
+        "tb_sv": str(tb_sv),
+        "rtl_hash": _sha256_text(rtl_source),
+        "testbench_hash": _sha256_text(tb_source),
+        "samples": samples,
+    }
+
+
+def parse_vcs_rtl_run_log(text: str) -> dict[str, Any]:
+    """Parse the deterministic RTL/VCS run log emitted by the miniapp testbench."""
+
+    if not text:
+        return {"status": "missing", "rtl_status": None, "latency_cycles": None, "samples": None, "blockers": ["vcs_run_log_missing"]}
+    pass_match = re.search(r"DSE_REAL_RTL_PASS\s+\S+\s+samples=(\d+)", text)
+    fail_match = re.search(r"DSE_REAL_RTL_FAIL[^\n]*", text)
+    latency_match = re.search(r"DSE_REAL_RTL_LATENCY_CYCLES\s+(\d+)", text)
+    if pass_match and latency_match:
+        return {
+            "status": "parsed",
+            "rtl_status": "Pass",
+            "latency_cycles": int(latency_match.group(1)),
+            "samples": int(pass_match.group(1)),
+            "blockers": [],
+        }
+    blockers: list[str] = []
+    if fail_match:
+        blockers.append("vcs_rtl_testbench_failed")
+    if not pass_match:
+        blockers.append("vcs_rtl_pass_marker_missing")
+    if not latency_match:
+        blockers.append("vcs_rtl_latency_missing")
+    return {
+        "status": "failed" if fail_match else "partial",
+        "rtl_status": "Fail" if fail_match else None,
+        "latency_cycles": int(latency_match.group(1)) if latency_match else None,
+        "samples": int(pass_match.group(1)) if pass_match else None,
+        "blockers": blockers,
+    }
+
+
+def merge_vcs_rtl_evidence_into_summary(summary: Mapping[str, Any], vcs_result: Mapping[str, Any]) -> dict[str, Any]:
+    """Return a summary copy with VCS RTL evidence attached to the matching row."""
+
+    merged = json.loads(json.dumps(summary))
+    architecture_id = str(vcs_result.get("architecture_id") or "")
+    evidence_rows = merged.get("evidence_rows")
+    if not isinstance(evidence_rows, list):
+        raise ValueError("summary does not contain evidence_rows list")
+    matched = False
+    for row in evidence_rows:
+        if not isinstance(row, dict) or str(row.get("architecture_id") or "") != architecture_id:
+            continue
+        for key in (
+            "vcs_attempted",
+            "vcs_passed",
+            "vcs_parsed",
+            "vcs_command",
+            "vcs_returncode",
+            "vcs_compile_log_path",
+            "vcs_run_log_path",
+            "vcs_stdout_log_path",
+            "vcs_stderr_log_path",
+            "vcs_compile_log_hash",
+            "vcs_run_log_hash",
+            "vcs_stdout_log_hash",
+            "vcs_stderr_log_hash",
+            "vcs_evidence_json_path",
+            "vcs_evidence_json_hash",
+            "vcs_rtl_project",
+        ):
+            if key in vcs_result:
+                row[key] = vcs_result[key]
+        matched = True
+        break
+    if not matched:
+        raise ValueError(f"no evidence row for VCS architecture {architecture_id}")
+    return merged
+
+
 def _first_ints(line: str) -> list[int]:
     return [int(value) for value in re.findall(r"(?<![A-Za-z0-9_])-?\d+(?![A-Za-z0-9_])", line)]
 
@@ -918,6 +1201,11 @@ def render_real_hybrid_hls_report(summary: Mapping[str, Any]) -> str:
             f"  - C-synth parsed: `{parsed.get('status')}`, latency `{parsed.get('latency_cycles_max')}` cycles, estimated clock `{parsed.get('estimated_clock_ns')}` ns"
         )
         lines.append(f"  - Verilog C/RTL cosim: `{row.get('cosim_passed')}`, latency `{cosim.get('latency_cycles_max')}` cycles")
+        if row.get("vcs_attempted") or row.get("vcs_passed"):
+            vcs = row.get("vcs_parsed") if isinstance(row.get("vcs_parsed"), Mapping) else {}
+            lines.append(
+                f"  - VCS RTL sim: `{row.get('vcs_passed')}`, latency `{vcs.get('latency_cycles')}` cycles, samples `{vcs.get('samples')}`"
+            )
         lines.append(f"  - Performance latency source: `{perf_source}`, latency `{perf_latency}` cycles")
         lines.append(
             f"  - Resource feasible on target: `{parsed.get('resource_feasible')}`; BRAM18K `{resource.get('bram_18k')}`, DSP `{resource.get('dsp48e')}`, FF `{resource.get('ff')}`, LUT `{resource.get('lut')}`, URAM `{resource.get('uram')}`"
@@ -1257,7 +1545,10 @@ __all__ = [
     "build_trace_replay_workflow_accounting",
     "classify_real_hybrid_vs_gpu",
     "materialize_hls_project",
+    "materialize_vcs_rtl_project",
+    "merge_vcs_rtl_evidence_into_summary",
     "parse_qe_timer_stdout",
+    "parse_vcs_rtl_run_log",
     "render_real_hybrid_hls_report",
     "parse_vivado_hls_cosim_report",
     "parse_vivado_hls_csynth_report",

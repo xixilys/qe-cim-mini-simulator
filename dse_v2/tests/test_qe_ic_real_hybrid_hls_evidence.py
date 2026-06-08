@@ -11,7 +11,10 @@ from dse_v2.experiments.qe_ic_real_opportunity.real_hybrid_hls_evidence import (
     build_trace_replay_workflow_accounting,
     classify_real_hybrid_vs_gpu,
     materialize_hls_project,
+    materialize_vcs_rtl_project,
+    merge_vcs_rtl_evidence_into_summary,
     parse_qe_timer_stdout,
+    parse_vcs_rtl_run_log,
     render_real_hybrid_hls_report,
     parse_vivado_hls_cosim_report,
     parse_vivado_hls_csynth_report,
@@ -577,6 +580,123 @@ def test_classify_trace_replay_partial_sidecars_reports_current_weaker_not_super
     assert "full_qe_kernel_equivalent_missing" in result["blockers"]
     assert result["best_speedup_vs_gpu_mean"] > 1.0
     assert result["final_claim_allowed"] is False
+
+
+def test_materialize_vcs_rtl_project_for_hpsi_contains_non_stub_stencil_and_latency_counter(tmp_path: Path):
+    spec = next(
+        item
+        for item in build_real_hybrid_architecture_specs()
+        if item["architecture_id"] == "hybrid_hpsi_local_potential_v1"
+    )
+
+    project = materialize_vcs_rtl_project(spec, tmp_path)
+
+    rtl = Path(project["rtl_sv"]).read_text()
+    tb = Path(project["tb_sv"]).read_text()
+    assert "module qeic_real_hpsi_local_potential_rtl" in rtl
+    assert "psi_re_left" in rtl
+    assert "lap_re" in rtl
+    assert "vloc_center" in rtl
+    assert "assign out_re" in rtl
+    assert "stub" not in rtl.lower()
+    assert "DSE_REAL_RTL_PASS" in tb
+    assert "DSE_REAL_RTL_LATENCY_CYCLES" in tb
+    assert "expected_re" in tb
+
+
+def test_parse_vcs_rtl_run_log_extracts_pass_and_latency():
+    log = """
+DSE_REAL_RTL_PASS qeic_real_hpsi_local_potential_rtl samples=96
+DSE_REAL_RTL_LATENCY_CYCLES 192
+"""
+
+    parsed = parse_vcs_rtl_run_log(log)
+
+    assert parsed == {
+        "status": "parsed",
+        "rtl_status": "Pass",
+        "latency_cycles": 192,
+        "samples": 96,
+        "blockers": [],
+    }
+
+
+
+def test_merge_vcs_rtl_evidence_into_summary_updates_matching_architecture_row():
+    summary = {
+        "classification": {"preliminary_label": "fpga_hybrid_weaker", "blockers": []},
+        "evidence_rows": [
+            {
+                "architecture_id": "hybrid_hpsi_local_potential_v1",
+                "vcs_attempted": False,
+                "vcs_passed": False,
+                "csynth_parsed": {},
+                "cosim_parsed": {},
+            }
+        ],
+    }
+    vcs_result = {
+        "architecture_id": "hybrid_hpsi_local_potential_v1",
+        "vcs_attempted": True,
+        "vcs_passed": True,
+        "vcs_parsed": {"status": "parsed", "rtl_status": "Pass", "latency_cycles": 192, "samples": 96, "blockers": []},
+        "vcs_run_log_path": "runs/hpsi/vcs_rtl/vcs_run.log",
+        "vcs_evidence_json_path": "runs/hpsi/vcs_rtl/real_hybrid_vcs_rtl_evidence.json",
+        "vcs_evidence_json_hash": "sha256:" + "1" * 64,
+    }
+
+    merged = merge_vcs_rtl_evidence_into_summary(summary, vcs_result)
+
+    row = merged["evidence_rows"][0]
+    assert row["vcs_attempted"] is True
+    assert row["vcs_passed"] is True
+    assert row["vcs_parsed"]["latency_cycles"] == 192
+    assert row["vcs_run_log_path"].endswith("vcs_run.log")
+    assert row["vcs_evidence_json_path"].endswith("real_hybrid_vcs_rtl_evidence.json")
+    assert row["vcs_evidence_json_hash"].startswith("sha256:")
+
+def test_render_real_hybrid_hls_report_includes_vcs_rtl_evidence():
+    summary = {
+        "classification": {
+            "preliminary_label": "fpga_hybrid_weaker",
+            "confidence": "medium",
+            "final_claim_allowed": False,
+            "best_architecture_id": "hybrid_hpsi_local_potential_v1",
+            "best_speedup_vs_gpu_mean": 1.01,
+            "blockers": ["full_qe_kernel_integration_missing"],
+            "claim_boundary": "boundary",
+            "architecture_comparisons": [],
+        },
+        "evidence_rows": [
+            {
+                "architecture_id": "hybrid_hpsi_local_potential_v1",
+                "implementation_coverage": "qe_routine_equivalent_miniapp",
+                "mapped_qe_timer_names": ["h_psi"],
+                "csim_passed": True,
+                "cosim_passed": True,
+                "performance_latency_source": "vivado_hls_cosim",
+                "performance_latency_cycles_max": 664,
+                "vcs_attempted": True,
+                "vcs_passed": True,
+                "vcs_parsed": {"status": "parsed", "rtl_status": "Pass", "latency_cycles": 192, "samples": 96, "blockers": []},
+                "csynth_parsed": {
+                    "status": "parsed",
+                    "estimated_clock_ns": 8.75,
+                    "latency_cycles_max": 664,
+                    "resource_feasible": True,
+                    "resource": {"bram_18k": 34, "dsp48e": 28, "ff": 6561, "lut": 8762, "uram": 0},
+                    "blockers": [],
+                },
+                "cosim_parsed": {"latency_cycles_max": 664},
+            }
+        ],
+    }
+
+    report = render_real_hybrid_hls_report(summary)
+
+    assert "VCS RTL sim" in report
+    assert "DSE_REAL_RTL" not in report
+    assert "latency `192` cycles" in report
 
 def test_parse_vivado_hls_cosim_report_extracts_verilog_pass_latency():
     report = """

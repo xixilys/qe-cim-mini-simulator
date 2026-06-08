@@ -50,7 +50,7 @@
   "csynth_report_hash": "sha256:801af6f46793b1e497913bc44bcb43b5129a61b5cbd6a0d4fb87d2a1cc3cc834",
   "csynth_report_path": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_hpsi_local_potential_v1/hybrid_hpsi_local_potential_v1/csynth.rpt",
   "end_timestamp": "2026-06-08T11:09:27Z",
-  "evidence_json_hash": "sha256:3284f3d3bf3abbcd3f486b178c3e66b4644c00cb8005f6f06c8728ad60ff7763",
+  "evidence_json_hash": "sha256:504d6c4ffbb78527987bc0d332690154adecb2c20940e352ab8046d5b3389b3b",
   "evidence_json_path": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_hpsi_local_potential_v1/hybrid_hpsi_local_potential_v1/real_hybrid_hls_evidence.json",
   "evidence_level": "vivado_hls_csim_csynth_cosim_attempt",
   "fpga_part": "xc7z020clg400-1",
@@ -89,8 +89,34 @@
   "tool": "vivado_hls",
   "tool_path": "ssh://ic-eda/home/Xilinx/Vivado/2019.1/bin/vivado_hls",
   "transfer_overhead_seconds": 5e-05,
-  "vcs_attempted": false,
-  "vcs_passed": false,
+  "vcs_attempted": true,
+  "vcs_compile_log_hash": "sha256:a1107c0f79a366fc8422c78ebc44a6097ff67682fa885bb46f7c547de1e7a6e8",
+  "vcs_compile_log_path": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_hpsi_local_potential_v1/vcs_rtl/vcs_compile.log",
+  "vcs_evidence_json_hash": "sha256:afbe71717212106e6204102ee82f32e5f508bb2d12f6ed0d1b2cf6a73011a5aa",
+  "vcs_evidence_json_path": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_hpsi_local_potential_v1/vcs_rtl/real_hybrid_vcs_rtl_evidence.json",
+  "vcs_parsed": {
+    "blockers": [],
+    "latency_cycles": 96,
+    "rtl_status": "Pass",
+    "samples": 96,
+    "status": "parsed"
+  },
+  "vcs_passed": true,
+  "vcs_rtl_project": {
+    "architecture_id": "hybrid_hpsi_local_potential_v1",
+    "project_dir": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_hpsi_local_potential_v1/vcs_rtl",
+    "rtl_hash": "sha256:2b049813c512fe93b03c478334ea963047a426f7fa8d2fabb1af6f5ad0c7137b",
+    "rtl_sv": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_hpsi_local_potential_v1/vcs_rtl/qeic_real_hpsi_local_potential_rtl.sv",
+    "samples": 96,
+    "tb_sv": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_hpsi_local_potential_v1/vcs_rtl/tb_qeic_real_hpsi_local_potential_rtl.sv",
+    "testbench_hash": "sha256:0bae498ca4fc8e6f898831f4f4fe82889f775333bcb39f1ff456e90a7bb0af27"
+  },
+  "vcs_run_log_hash": "sha256:411ce6f8456f96e1440f173fbd405f6dbbcad839ef7992dfd68ed873748d73b1",
+  "vcs_run_log_path": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_hpsi_local_potential_v1/vcs_rtl/vcs_run.log",
+  "vcs_stderr_log_hash": "sha256:913221ef02bbf14a2fad766f6c60a155b6f067196e1fe5c725001ac9831689b0",
+  "vcs_stderr_log_path": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_hpsi_local_potential_v1/vcs_rtl/vcs.stderr.log",
+  "vcs_stdout_log_hash": "sha256:d3559c22c40659117662da5405d09e9acd8121592cf996e41dda9259c8d3b7ef",
+  "vcs_stdout_log_path": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_hpsi_local_potential_v1/vcs_rtl/vcs.stdout.log",
   "workflow_accounting": [
     {
       "blockers": [
