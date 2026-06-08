@@ -2900,3 +2900,166 @@ def test_real_hybrid_hls_campaign_preserves_existing_vcs_and_vivado_evidence(tmp
     assert summary["classification"]["best_architecture_id"] == "hybrid_integrated_streaming_pipeline_sidecar_v3"
     assert summary["classification"]["integrated_vivado_impl_passed"] is True
     assert summary["classification"]["integrated_vivado_impl_timing_met"] is True
+
+
+
+def test_qe_full_scf_hook_coverage_audit_passes_only_for_strict_runtime_replacement(tmp_path: Path):
+    from dse_v2.codesign.dft_hardware_evidence import MAJOR_SCF_KERNEL_IDS
+    from dse_v2.reference_workloads.qe_full_scf_hook_coverage import build_qe_full_scf_hook_coverage_audit
+
+    kernel_rows = []
+    events = []
+    for kernel_id in MAJOR_SCF_KERNEL_IDS:
+        kernel_rows.append(
+            {
+                "major_kernel_id": kernel_id,
+                "kernel_id": kernel_id,
+                "full_kernel_recomputed": True,
+                "qe_mainflow_integrated": True,
+                "accelerated_results_consumed_by_qe": True,
+                "software_fallback_on_critical_path": False,
+                "qe_software_kernel_execution_skipped": True,
+                "qe_kernel_work_replaced_on_critical_path": True,
+                "accelerated_result_materialized_in_qe_memory": True,
+                "accelerated_output_written_to_qe_buffer": True,
+                "qe_consumed_accelerator_output_buffer": True,
+                "absolute_error": 0.0,
+                "relative_error": 0.0,
+                "timing_only": False,
+                "proxy_runtime_only": False,
+                "proxy_runtime_smoke_only": False,
+                "qe_callsite_gated_proxy_only": False,
+            }
+        )
+        events.append(
+            {
+                "category": "accelerated_kernel",
+                "kernel_id": kernel_id,
+                "duration_s": 1.0e-6,
+                "measurement_source": "qe_offload_runtime_trace",
+            }
+        )
+    kernel_path = tmp_path / "kernel_evidence.json"
+    kernel_path.write_text(json.dumps(kernel_rows), encoding="utf-8")
+    provenance_path = tmp_path / "offload_provenance.json"
+    provenance_path.write_text(
+        json.dumps(
+            {
+                "qe_mainflow_integrated": True,
+                "accelerated_results_consumed_by_qe": True,
+                "software_fallback_on_critical_path": False,
+                "qe_software_kernel_execution_skipped": True,
+                "qe_kernel_work_replaced_on_critical_path": True,
+                "accelerated_result_materialized_in_qe_memory": True,
+                "accelerated_output_written_to_qe_buffer": True,
+                "qe_consumed_accelerator_output_buffer": True,
+                "runtime_execution_proof": {"passed": True},
+                "proxy_runtime_only": False,
+                "proxy_runtime_smoke_only": False,
+                "qe_callsite_gated_proxy_only": False,
+            }
+        ),
+        encoding="utf-8",
+    )
+    runtime_trace_path = tmp_path / "full_scf_runtime_trace.json"
+    runtime_trace_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "dse.dft.numerical.full_scf_runtime_trace.v1",
+                "trusted_runtime_trace": True,
+                "runtime_trace_source": "qe_offload_runtime_trace",
+                "comparison_scope": "full_scf_host_accelerator_end_to_end",
+                "runtime_execution_proof": {"passed": True},
+                "events": events,
+            }
+        ),
+        encoding="utf-8",
+    )
+    runtime_proof_path = tmp_path / "runtime_execution_proof.json"
+    runtime_proof_path.write_text(json.dumps({"passed": True}), encoding="utf-8")
+
+    audit = build_qe_full_scf_hook_coverage_audit(
+        callsite_counts={kernel_id: 1 for kernel_id in MAJOR_SCF_KERNEL_IDS},
+        kernel_evidence_path=kernel_path,
+        offload_provenance_path=provenance_path,
+        runtime_trace_path=runtime_trace_path,
+        runtime_execution_proof_path=runtime_proof_path,
+        candidate_id="candidate-a",
+        workload_case_id="case-a",
+    )
+
+    assert audit["passed"] is True
+    assert audit["status"] == "passed"
+    assert audit["runtime_hook_contract_passed_count"] == len(MAJOR_SCF_KERNEL_IDS)
+    assert audit["trusted_replacement_evidence_count"] == len(MAJOR_SCF_KERNEL_IDS)
+    assert audit["accelerated_results_consumed_by_qe_count"] == len(MAJOR_SCF_KERNEL_IDS)
+    assert audit["trusted_runtime_cost_event_count"] == len(MAJOR_SCF_KERNEL_IDS)
+    assert audit["blockers"] == []
+
+
+def test_qe_full_scf_hook_coverage_audit_stays_blocked_for_proxy_runtime_markers(tmp_path: Path):
+    from dse_v2.codesign.dft_hardware_evidence import MAJOR_SCF_KERNEL_IDS
+    from dse_v2.reference_workloads.qe_full_scf_hook_coverage import build_qe_full_scf_hook_coverage_audit
+
+    kernel_id = MAJOR_SCF_KERNEL_IDS[0]
+    kernel_path = tmp_path / "kernel_evidence.json"
+    kernel_path.write_text(
+        json.dumps(
+            [
+                {
+                    "major_kernel_id": kernel_id,
+                    "kernel_id": kernel_id,
+                    "full_kernel_recomputed": True,
+                    "qe_mainflow_integrated": True,
+                    "accelerated_results_consumed_by_qe": True,
+                    "software_fallback_on_critical_path": False,
+                    "qe_software_kernel_execution_skipped": True,
+                    "qe_kernel_work_replaced_on_critical_path": True,
+                    "accelerated_result_materialized_in_qe_memory": True,
+                    "accelerated_output_written_to_qe_buffer": True,
+                    "qe_consumed_accelerator_output_buffer": True,
+                    "absolute_error": 0.0,
+                    "relative_error": 0.0,
+                    "proxy_runtime_only": True,
+                }
+            ]
+        ),
+        encoding="utf-8",
+    )
+    provenance_path = tmp_path / "offload_provenance.json"
+    provenance_path.write_text(json.dumps({"qe_mainflow_integrated": True, "accelerated_results_consumed_by_qe": True, "proxy_runtime_only": True}), encoding="utf-8")
+    runtime_trace_path = tmp_path / "full_scf_runtime_trace.json"
+    runtime_trace_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "dse.dft.numerical.full_scf_runtime_trace.v1",
+                "trusted_runtime_trace": True,
+                "runtime_trace_source": "qe_offload_runtime_trace",
+                "comparison_scope": "full_scf_host_accelerator_end_to_end",
+                "runtime_execution_proof": {"passed": True},
+                "events": [
+                    {
+                        "category": "accelerated_kernel",
+                        "kernel_id": kernel_id,
+                        "duration_s": 1.0e-6,
+                        "measurement_source": "qe_offload_runtime_trace",
+                        "proxy_runtime_only": True,
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    audit = build_qe_full_scf_hook_coverage_audit(
+        callsite_counts={kernel_id: 1},
+        kernel_evidence_path=kernel_path,
+        offload_provenance_path=provenance_path,
+        runtime_trace_path=runtime_trace_path,
+        candidate_id="candidate-a",
+        workload_case_id="case-a",
+    )
+
+    assert audit["passed"] is False
+    assert audit["status"] == "blocked_temporary"
+    assert any("proxy_runtime_only_forbidden" in blocker for blocker in audit["blockers"])

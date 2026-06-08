@@ -352,15 +352,6 @@ def build_qe_full_scf_hook_coverage_audit(
         composite_hooks = COMPOSITE_MAJOR_KERNEL_HOOKS.get(kernel_id, ())
         direct_observed = _observed_hooks(counts, direct_hooks)
         composite_observed = _observed_hooks(counts, composite_hooks)
-        if direct_observed:
-            status = "observed_diagnostic_only"
-            blockers.append(f"kernel_hook_observed_without_replacement_evidence::{kernel_id}")
-        elif composite_observed:
-            status = "observed_composite_diagnostic_only"
-            blockers.append(f"kernel_hook_composite_only::{kernel_id}")
-        else:
-            status = "missing_hook_observation"
-            blockers.append(f"kernel_hook_missing::{kernel_id}")
         matching_kernel_rows = [
             row for row in kernel_rows if _kernel_id_from_row(row) == kernel_id
         ]
@@ -369,15 +360,31 @@ def build_qe_full_scf_hook_coverage_audit(
         ]
         runtime_events = _runtime_event_records(runtime_trace_payload, kernel_id)
         runtime_event_blockers = _runtime_event_blockers(runtime_events)
-        if kernel_id in MISSING_DIRECT_HOOK_KERNELS and not direct_observed:
+        strict_runtime_replacement_observed = bool(trusted_kernel_rows) and bool(runtime_events)
+
+        observation_blockers: list[str] = []
+        if strict_runtime_replacement_observed:
+            status = "strict_runtime_replacement_observed"
+        elif direct_observed:
+            status = "observed_diagnostic_only"
+            observation_blockers.append(f"kernel_hook_observed_without_replacement_evidence::{kernel_id}")
+        elif composite_observed:
+            status = "observed_composite_diagnostic_only"
+            observation_blockers.append(f"kernel_hook_composite_only::{kernel_id}")
+        else:
+            status = "missing_hook_observation"
+            observation_blockers.append(f"kernel_hook_missing::{kernel_id}")
+        if kernel_id in MISSING_DIRECT_HOOK_KERNELS and not direct_observed and not strict_runtime_replacement_observed:
             if kernel_id in RUNTIME_PRIMARY_OBSERVATION_KERNELS:
                 if not runtime_events:
-                    blockers.append(f"kernel_runtime_movement_hook_missing::{kernel_id}")
+                    observation_blockers.append(f"kernel_runtime_movement_hook_missing::{kernel_id}")
             else:
-                blockers.append(f"kernel_direct_qe_hook_missing::{kernel_id}")
+                observation_blockers.append(f"kernel_direct_qe_hook_missing::{kernel_id}")
+
         runtime_hook_contract_blockers = sorted(
             dict.fromkeys(
                 [
+                    *observation_blockers,
                     *([] if trusted_kernel_rows else [f"kernel_replacement_evidence_missing_or_untrusted::{kernel_id}"]),
                     *[f"kernel_replacement_evidence::{kernel_id}::{item}" for row in matching_kernel_rows for item in _kernel_replacement_blockers(row)],
                     *[f"offload_provenance::{kernel_id}::{item}" for item in provenance_blockers],
@@ -432,28 +439,49 @@ def build_qe_full_scf_hook_coverage_audit(
             }
         )
 
-    passed = False
+    artifact_blockers = sorted(
+        dict.fromkeys(
+            [
+                *[f"kernel_evidence::{item}" for item in kernel_evidence_artifact_blockers],
+                *[f"offload_provenance::{item}" for item in offload_provenance_artifact_blockers],
+                *[f"runtime_trace::{item}" for item in runtime_trace_artifact_blockers],
+                *[f"runtime_execution_proof::{item}" for item in runtime_proof_artifact_blockers],
+            ]
+        )
+    )
+    all_blockers = sorted(dict.fromkeys([*blockers, *artifact_blockers]))
+    runtime_hook_contract_passed_count = sum(
+        1 for record in kernel_records if record["runtime_hook_contract_passed"]
+    )
+    trusted_replacement_evidence_count = sum(
+        1 for record in kernel_records if record["trusted_replacement_evidence_present"]
+    )
+    accelerated_results_consumed_by_qe_count = sum(
+        1 for record in kernel_records if record["accelerated_results_consumed_by_qe"]
+    )
+    trusted_runtime_cost_event_count = sum(
+        1 for record in kernel_records if record["trusted_runtime_cost_event_present"]
+    )
+    required_major_kernel_count = len(MAJOR_SCF_KERNEL_IDS)
+    passed = (
+        not all_blockers
+        and runtime_hook_contract_passed_count == required_major_kernel_count
+        and trusted_replacement_evidence_count == required_major_kernel_count
+        and accelerated_results_consumed_by_qe_count == required_major_kernel_count
+        and trusted_runtime_cost_event_count == required_major_kernel_count
+    )
     return {
         "schema_version": QE_FULL_SCF_HOOK_COVERAGE_AUDIT_SCHEMA,
         "candidate_id": candidate_id,
         "workload_case_id": workload_case_id,
-        "status": "blocked_temporary",
+        "status": "passed" if passed else "blocked_temporary",
         "passed": passed,
         "callsite_trace": _artifact_ref(callsite_trace_path),
         "kernel_evidence": _artifact_ref(kernel_evidence_path),
         "offload_provenance": _artifact_ref(offload_provenance_path),
         "runtime_trace": _artifact_ref(runtime_trace_path),
         "runtime_execution_proof": _artifact_ref(runtime_execution_proof_path),
-        "artifact_read_blockers": sorted(
-            dict.fromkeys(
-                [
-                    *[f"kernel_evidence::{item}" for item in kernel_evidence_artifact_blockers],
-                    *[f"offload_provenance::{item}" for item in offload_provenance_artifact_blockers],
-                    *[f"runtime_trace::{item}" for item in runtime_trace_artifact_blockers],
-                    *[f"runtime_execution_proof::{item}" for item in runtime_proof_artifact_blockers],
-                ]
-            )
-        ),
+        "artifact_read_blockers": artifact_blockers,
         "callsite_counts": dict(sorted(counts.items())),
         "sample": sample,
         "major_kernel_records": kernel_records,
@@ -461,31 +489,13 @@ def build_qe_full_scf_hook_coverage_audit(
         "covered_major_kernel_count_diagnostic": sum(
             1 for record in kernel_records if record["status"] != "missing_hook_observation"
         ),
-        "required_major_kernel_count": len(MAJOR_SCF_KERNEL_IDS),
-        "trusted_runtime_cost_event_count": sum(
-            1 for record in kernel_records if record["trusted_runtime_cost_event_present"]
-        ),
-        "runtime_hook_contract_passed_count": sum(
-            1 for record in kernel_records if record["runtime_hook_contract_passed"]
-        ),
-        "trusted_replacement_evidence_count": sum(
-            1 for record in kernel_records if record["trusted_replacement_evidence_present"]
-        ),
-        "accelerated_results_consumed_by_qe_count": sum(
-            1 for record in kernel_records if record["accelerated_results_consumed_by_qe"]
-        ),
+        "required_major_kernel_count": required_major_kernel_count,
+        "trusted_runtime_cost_event_count": trusted_runtime_cost_event_count,
+        "runtime_hook_contract_passed_count": runtime_hook_contract_passed_count,
+        "trusted_replacement_evidence_count": trusted_replacement_evidence_count,
+        "accelerated_results_consumed_by_qe_count": accelerated_results_consumed_by_qe_count,
         "forbidden_closure_shortcuts": list(FORBIDDEN_CLOSURE_SHORTCUTS),
-        "blockers": sorted(
-            dict.fromkeys(
-                [
-                    *blockers,
-                    *[f"kernel_evidence::{item}" for item in kernel_evidence_artifact_blockers],
-                    *[f"offload_provenance::{item}" for item in offload_provenance_artifact_blockers],
-                    *[f"runtime_trace::{item}" for item in runtime_trace_artifact_blockers],
-                    *[f"runtime_execution_proof::{item}" for item in runtime_proof_artifact_blockers],
-                ]
-            )
-        ),
+        "blockers": all_blockers,
         "required_next_evidence": (
             "Replace diagnostic QE callsite observations with per-major-kernel runtime "
             "hooks that emit trusted kernel_evidence.json, offload_provenance.json, "
