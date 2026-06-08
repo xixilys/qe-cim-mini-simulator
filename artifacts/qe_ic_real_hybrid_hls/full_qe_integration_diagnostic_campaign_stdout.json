@@ -1,0 +1,29 @@
+{
+  "artifact": "artifacts/qe_ic_real_hybrid_hls/full_qe_integration_diagnostic_campaign_audit.json",
+  "blocked_row_count": 1,
+  "passed": false,
+  "row_count": 1,
+  "status": "blocked_temporary",
+  "top_blockers": [
+    {
+      "blocker": "kernel_direct_qe_hook_missing::transpose_layout_conversion",
+      "count": 1
+    },
+    {
+      "blocker": "kernel_hook_missing::complex_gemm_gemv_tile",
+      "count": 1
+    },
+    {
+      "blocker": "kernel_hook_missing::dma_hbm_movement_engine",
+      "count": 1
+    },
+    {
+      "blocker": "kernel_hook_missing::fft_ifft_ffft",
+      "count": 1
+    },
+    {
+      "blocker": "kernel_hook_missing::hpsi_local_potential",
+      "count": 1
+    }
+  ]
+}

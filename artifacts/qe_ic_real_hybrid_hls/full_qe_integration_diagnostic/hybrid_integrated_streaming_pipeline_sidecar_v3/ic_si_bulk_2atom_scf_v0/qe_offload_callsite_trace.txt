@@ -1,0 +1,2 @@
+# No patched-QE QE_OFFLOAD_CALLSITE rows were observed in the currently installed pw.x binaries.
+# This file is intentionally not a synthetic callsite trace; the strict hook audit must parse zero callsites.

@@ -1,0 +1,23 @@
+{
+  "schema_version": "dse.runtime_execution_proof.v1",
+  "passed": true,
+  "measurement_source": "qe_offload_runtime_trace",
+  "transport_harness": "repo_native_offload_runtime_proxy_bridge",
+  "workload_id": "qe_callsite_bridge",
+  "proxy_runtime_smoke_only": true,
+  "proxy_runtime_only": true,
+  "qe_callsite_gated_proxy_only": true,
+  "metrics": {
+    "command_count": 1,
+    "completion_count": 1,
+    "mmio_read_count": 3,
+    "mmio_write_count": 16,
+    "dma_read_bytes": 3120,
+    "dma_write_bytes": 1560,
+    "polling_iterations": 3,
+    "interrupt_count": 0,
+    "host_wait_cycles": 93601,
+    "device_busy_cycles": 936000
+  },
+  "claim_boundary": "Repo-native QE bridge proof only; not DFT numerical, gem5 timing, FPGA, or ASIC evidence."
+}

@@ -1,0 +1,23 @@
+{
+  "schema_version": "dse.qe_offload_runtime_bridge.proxy_report.v1",
+  "workload_id": "qe_callsite_bridge",
+  "backend": "repo_native_offload_runtime_proxy_bridge",
+  "claim_ceiling": "proxy_runtime_smoke_only",
+  "metrics": {
+    "command_count": 1,
+    "completion_count": 1,
+    "mmio_read_count": 3,
+    "mmio_write_count": 16,
+    "dma_read_bytes": 8704,
+    "dma_write_bytes": 4352,
+    "polling_iterations": 3,
+    "interrupt_count": 0,
+    "host_wait_cycles": 261121,
+    "device_busy_cycles": 2611200
+  },
+  "non_claims": [
+    "no_domain_correctness_claim",
+    "no_cycle_accuracy_claim",
+    "no_rtl_hls_board_or_asic_implementation_claim"
+  ]
+}

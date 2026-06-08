@@ -1,0 +1,26 @@
+{
+  "bridge_record_count": 17,
+  "claim_boundary": "Repo-native proxy runtime executed inside a patched-QE bridge call. This proves bridge invocation and runtime plumbing only; it is not DFT kernel numerical correctness, all-major-kernel replacement, Vivado FPGA implementation, or DC ASIC signoff evidence.",
+  "elapsed_s": 0.007452983991242945,
+  "measurement_source": "qe_offload_runtime_trace",
+  "metrics": {
+    "command_count": 1,
+    "completion_count": 1,
+    "device_busy_cycles": 5017600,
+    "dma_read_bytes": 12544,
+    "dma_write_bytes": 6272,
+    "host_wait_cycles": 501761,
+    "interrupt_count": 0,
+    "mmio_read_count": 3,
+    "mmio_write_count": 16,
+    "polling_iterations": 3
+  },
+  "passed": true,
+  "passed_bridge_record_count": 17,
+  "proxy_runtime_only": true,
+  "proxy_runtime_smoke_only": true,
+  "qe_callsite_gated_proxy_only": true,
+  "schema_version": "dse.runtime_execution_proof.v1",
+  "transport_harness": "repo_native_offload_runtime_proxy_bridge",
+  "workload_id": "qe_callsite_bridge"
+}
