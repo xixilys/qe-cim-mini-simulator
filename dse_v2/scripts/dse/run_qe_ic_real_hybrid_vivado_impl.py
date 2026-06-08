@@ -27,9 +27,11 @@ from dse_v2.experiments.qe_ic_real_opportunity.real_hybrid_hls_evidence import (
     materialize_integrated_pipelined_vivado_impl_project,
     materialize_integrated_streaming_vivado_impl_project,
     materialize_integrated_vivado_impl_project,
+    materialize_single_architecture_vivado_impl_project,
     merge_combined_vcs_sidecar_comparisons,
     merge_integrated_vcs_sidecar_comparisons,
     merge_integrated_vivado_impl_evidence_into_summary,
+    merge_single_architecture_vivado_impl_evidence_into_summary,
     parse_vivado_impl_timing_summary_report,
     parse_vivado_impl_utilization_report,
     render_real_hybrid_hls_report,
@@ -154,6 +156,43 @@ def _annotate_best_vivado_implemented_comparison(classification: Mapping[str, An
     return annotated
 
 
+def _preserve_single_architecture_vivado_impl_summary(
+    classification: Mapping[str, Any],
+    rows: Sequence[Mapping[str, Any]],
+    prior_results: Sequence[Mapping[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Carry single-miniapp post-route evidence through classification rebuilds."""
+
+    annotated = json.loads(json.dumps(classification))
+    passed_ids = {
+        str(row.get("architecture_id"))
+        for row in rows
+        if row.get("architecture_id")
+        and row.get("vivado_impl_passed") is True
+        and row.get("vivado_impl_timing_met") is True
+        and row.get("vivado_impl_resource_feasible") is True
+    }
+    for result in prior_results or []:
+        if (
+            isinstance(result, Mapping)
+            and result.get("architecture_id")
+            and result.get("vivado_impl_passed") is True
+            and isinstance(result.get("vivado_impl_timing_parsed"), Mapping)
+            and result["vivado_impl_timing_parsed"].get("timing_met") is True
+            and isinstance(result.get("vivado_impl_utilization_parsed"), Mapping)
+            and result["vivado_impl_utilization_parsed"].get("resource_feasible") is True
+        ):
+            passed_ids.add(str(result["architecture_id"]))
+    if passed_ids:
+        annotated["single_architecture_vivado_impl_passed_ids"] = sorted(passed_ids)
+        annotated["single_architecture_vivado_impl_count"] = len(passed_ids)
+        gates = list(annotated.get("satisfied_preliminary_gates") or [])
+        if "single_architecture_vivado_impl_passed" not in gates:
+            gates.append("single_architecture_vivado_impl_passed")
+        annotated["satisfied_preliminary_gates"] = gates
+    return annotated
+
+
 def _fetch_remote_file(remote_path: str, local_path: Path, *, timeout_seconds: int = 60) -> bool:
     result = subprocess.run(
         ["ssh", REMOTE_ALIAS, f"cat {shlex.quote(remote_path)} 2>/dev/null"],
@@ -177,7 +216,17 @@ def run_integrated_vivado_impl(
 ) -> dict[str, Any]:
     """Run remote Vivado synth/place/route for the integrated sidecar."""
 
-    if architecture_id == "hybrid_integrated_streaming_pipeline_sidecar_v3":
+    if architecture_id == "hybrid_nonlocal_projector_accumulator_v1":
+        specs_by_id = {str(spec.get("architecture_id")): spec for spec in build_real_hybrid_architecture_specs()}
+        project = materialize_single_architecture_vivado_impl_project(
+            specs_by_id[architecture_id],
+            out_dir / "runs",
+            fpga_part=fpga_part,
+            clock_period_ns=clock_period_ns,
+        )
+        evidence_name = "real_hybrid_single_architecture_vivado_impl_evidence.json"
+        boundary = "Single QE nonlocal-projector RTL miniapp Vivado implementation evidence; not physical board measurement or full QE kernel integration."
+    elif architecture_id == "hybrid_integrated_streaming_pipeline_sidecar_v3":
         project = materialize_integrated_streaming_vivado_impl_project(
             build_real_hybrid_architecture_specs(),
             out_dir / "runs",
@@ -330,8 +379,12 @@ def run_campaign(args: argparse.Namespace) -> dict[str, Any]:
         timeout_seconds=args.timeout_seconds,
         architecture_id=architecture_id,
     )
-    merged = merge_integrated_vivado_impl_evidence_into_summary(summary, result)
-    merged[INTEGRATED_VIVADO_RESULT_KEYS.get(architecture_id, "integrated_vivado_impl_result")] = result
+    is_integrated_architecture = architecture_id in INTEGRATED_VIVADO_RESULT_KEYS
+    if is_integrated_architecture:
+        merged = merge_integrated_vivado_impl_evidence_into_summary(summary, result)
+        merged[INTEGRATED_VIVADO_RESULT_KEYS.get(architecture_id, "integrated_vivado_impl_result")] = result
+    else:
+        merged = merge_single_architecture_vivado_impl_evidence_into_summary(summary, result)
 
     baseline_path = Path(str(merged.get("gpu_baseline_path") or "artifacts/qe_ic_7day_prelim/qe_ic_7day_gpu_baseline.json"))
     baseline = _load_gpu_baseline(baseline_path)
@@ -341,24 +394,37 @@ def run_campaign(args: argparse.Namespace) -> dict[str, Any]:
         classification = _drop_stale_synthetic_sidecar_comparisons(merged["classification"])
         combined_vcs_sidecar_accounting = build_combined_vcs_sidecar_accounting(baseline, gpu_runs_root, rows)
         classification = merge_combined_vcs_sidecar_comparisons(baseline, classification, combined_vcs_sidecar_accounting)
-        if architecture_id == "hybrid_integrated_streaming_pipeline_sidecar_v3":
-            integrated_key = "integrated_streaming_vcs_sidecar_result"
-        elif architecture_id == "hybrid_integrated_pipelined_sidecar_v2":
-            integrated_key = "integrated_pipelined_vcs_sidecar_result"
-        else:
-            integrated_key = "integrated_vcs_sidecar_result"
-        integrated_result = merged.get(integrated_key)
-        if isinstance(integrated_result, dict) and result.get("vivado_impl_passed") is True and isinstance(result.get("implemented_clock_ns"), (int, float)):
-            integrated_result["implemented_clock_ns"] = result["implemented_clock_ns"]
-            integrated_result["implemented_clock_source"] = result.get("implemented_clock_source") or "vivado_post_route_timing_met"
-            merged[integrated_key] = integrated_result
+        if is_integrated_architecture:
+            if architecture_id == "hybrid_integrated_streaming_pipeline_sidecar_v3":
+                integrated_key = "integrated_streaming_vcs_sidecar_result"
+            elif architecture_id == "hybrid_integrated_pipelined_sidecar_v2":
+                integrated_key = "integrated_pipelined_vcs_sidecar_result"
+            else:
+                integrated_key = "integrated_vcs_sidecar_result"
+            integrated_result = merged.get(integrated_key)
+            if isinstance(integrated_result, dict) and result.get("vivado_impl_passed") is True and isinstance(result.get("implemented_clock_ns"), (int, float)):
+                integrated_result["implemented_clock_ns"] = result["implemented_clock_ns"]
+                integrated_result["implemented_clock_source"] = result.get("implemented_clock_source") or "vivado_post_route_timing_met"
+                merged[integrated_key] = integrated_result
         integrated_vcs_sidecar_accounting = []
         for key in INTEGRATED_VCS_RESULT_KEYS:
             integrated_candidate = merged.get(key)
             integrated_vcs_sidecar_accounting.extend(build_integrated_vcs_sidecar_accounting(baseline, gpu_runs_root, integrated_candidate))
         classification = merge_integrated_vcs_sidecar_comparisons(baseline, classification, integrated_vcs_sidecar_accounting)
-        classification = merge_integrated_vivado_impl_evidence_into_summary({"classification": classification, "evidence_rows": rows}, result)["classification"]
-        classification = _annotate_best_vivado_implemented_comparison(classification)
+        if is_integrated_architecture:
+            classification = merge_integrated_vivado_impl_evidence_into_summary({"classification": classification, "evidence_rows": rows}, result)["classification"]
+            classification = _annotate_best_vivado_implemented_comparison(classification)
+        else:
+            single_merged = merge_single_architecture_vivado_impl_evidence_into_summary(
+                {"classification": classification, "evidence_rows": rows, "single_architecture_vivado_impl_results": merged.get("single_architecture_vivado_impl_results", [])},
+                result,
+            )
+            classification = single_merged["classification"]
+        classification = _preserve_single_architecture_vivado_impl_summary(
+            classification,
+            rows,
+            [item for item in merged.get("single_architecture_vivado_impl_results", []) if isinstance(item, Mapping)],
+        )
         merged["combined_vcs_sidecar_accounting"] = combined_vcs_sidecar_accounting
         merged["integrated_vcs_sidecar_accounting"] = integrated_vcs_sidecar_accounting
         merged["classification"] = classification

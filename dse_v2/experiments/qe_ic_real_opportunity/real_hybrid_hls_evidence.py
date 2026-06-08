@@ -107,6 +107,20 @@ def build_real_hybrid_architecture_specs() -> list[dict[str, Any]]:
             "algorithm_description": "Miniapp for QE h_psi-style local potential plus nearest-neighbor kinetic stencil over a wavefunction grid.",
             "fpga_role": "apply vloc*psi and a compact finite-difference kinetic stencil to complex wavefunction samples",
         },
+        {
+            **common,
+            "architecture_id": "hybrid_nonlocal_projector_accumulator_v1",
+            "kernel_name": "qeic_real_nonlocal_projector_accumulator",
+            "motif_id": "nonlocal_projector_accumulation",
+            "golden_vector_length": 256,
+            "golden_grid_points": 16,
+            "golden_band_count": 4,
+            "golden_projector_count": 4,
+            "implementation_coverage": "qe_routine_equivalent_miniapp",
+            "mapped_qe_timer_names": ["h_psi", "h_psi:calbec", "calbec"],
+            "algorithm_description": "Miniapp for QE nonlocal-projector accumulation: per-projector/per-band complex dot products of beta projectors with wavefunction samples.",
+            "fpga_role": "stream beta projector and wavefunction tiles and emit complex projection coefficients for the nonlocal h_psi path",
+        },
     ]
 
 
@@ -118,6 +132,8 @@ def build_evidence_row_static_metadata(spec: Mapping[str, Any]) -> dict[str, Any
         shape["grid_points"] = int(spec["golden_grid_points"])
     if isinstance(spec.get("golden_band_count"), int):
         shape["band_count"] = int(spec["golden_band_count"])
+    if isinstance(spec.get("golden_projector_count"), int):
+        shape["projector_count"] = int(spec["golden_projector_count"])
     if isinstance(spec.get("golden_stencil_radius"), int):
         shape["stencil_radius"] = int(spec["golden_stencil_radius"])
     if not shape and isinstance(spec.get("golden_vector_length"), int):
@@ -273,8 +289,51 @@ def _hpsi_local_potential_kernel(spec: Mapping[str, Any]) -> str:
 }}
 """
 
+
+def _nonlocal_projector_kernel(spec: Mapping[str, Any]) -> str:
+    fn = str(spec["kernel_name"])
+    return f"""extern "C" void {fn}(const double *beta_re, const double *beta_im, const double *psi_re, const double *psi_im, double *proj_re, double *proj_im, int ngrid, int nbands, int nproj) {{
+#pragma HLS INTERFACE m_axi port=beta_re depth=64 offset=slave bundle=gmem0
+#pragma HLS INTERFACE m_axi port=beta_im depth=64 offset=slave bundle=gmem1
+#pragma HLS INTERFACE m_axi port=psi_re depth=64 offset=slave bundle=gmem2
+#pragma HLS INTERFACE m_axi port=psi_im depth=64 offset=slave bundle=gmem3
+#pragma HLS INTERFACE m_axi port=proj_re depth=16 offset=slave bundle=gmem4
+#pragma HLS INTERFACE m_axi port=proj_im depth=16 offset=slave bundle=gmem5
+#pragma HLS INTERFACE s_axilite port=beta_re bundle=control
+#pragma HLS INTERFACE s_axilite port=beta_im bundle=control
+#pragma HLS INTERFACE s_axilite port=psi_re bundle=control
+#pragma HLS INTERFACE s_axilite port=psi_im bundle=control
+#pragma HLS INTERFACE s_axilite port=proj_re bundle=control
+#pragma HLS INTERFACE s_axilite port=proj_im bundle=control
+#pragma HLS INTERFACE s_axilite port=ngrid bundle=control
+#pragma HLS INTERFACE s_axilite port=nbands bundle=control
+#pragma HLS INTERFACE s_axilite port=nproj bundle=control
+#pragma HLS INTERFACE s_axilite port=return bundle=control
+    for (int p = 0; p < nproj; ++p) {{
+        for (int b = 0; b < nbands; ++b) {{
+            double acc_re = 0.0;
+            double acc_im = 0.0;
+            for (int g = 0; g < ngrid; ++g) {{
+#pragma HLS PIPELINE II=1
+                int pg = p * ngrid + g;
+                int bg = b * ngrid + g;
+                double pr = psi_re[bg];
+                double pi = psi_im[bg];
+                acc_re += beta_re[pg] * pr + beta_im[pg] * pi;
+                acc_im += beta_re[pg] * pi - beta_im[pg] * pr;
+            }}
+            int idx = p * nbands + b;
+            proj_re[idx] = acc_re;
+            proj_im[idx] = acc_im;
+        }}
+    }}
+}}
+"""
+
 def _kernel_source(spec: Mapping[str, Any]) -> str:
     architecture_id = str(spec["architecture_id"])
+    if "nonlocal_projector" in architecture_id:
+        return _nonlocal_projector_kernel(spec)
     if "sum_band" in architecture_id:
         return _sum_band_density_kernel(spec)
     if "hpsi" in architecture_id:
@@ -466,8 +525,72 @@ int main() {{
 }}
 """
 
+
+def _nonlocal_projector_tb(spec: Mapping[str, Any]) -> str:
+    fn = str(spec["kernel_name"])
+    ngrid = int(spec.get("golden_grid_points") or 16)
+    nbands = int(spec.get("golden_band_count") or 4)
+    nproj = int(spec.get("golden_projector_count") or 4)
+    beta_n = nproj * ngrid
+    psi_n = nbands * ngrid
+    out_n = nproj * nbands
+    return f"""#include <math.h>
+#include <stdio.h>
+extern "C" void {fn}(const double *beta_re, const double *beta_im, const double *psi_re, const double *psi_im, double *proj_re, double *proj_im, int ngrid, int nbands, int nproj);
+int main() {{
+    const int ngrid = {ngrid};
+    const int nbands = {nbands};
+    const int nproj = {nproj};
+    const int beta_n = {beta_n};
+    const int psi_n = {psi_n};
+    const int out_n = {out_n};
+    double beta_re[beta_n], beta_im[beta_n], psi_re[psi_n], psi_im[psi_n];
+    double proj_re[out_n], proj_im[out_n], expected_re[out_n], expected_im[out_n];
+    for (int p = 0; p < nproj; ++p) {{
+        for (int g = 0; g < ngrid; ++g) {{
+            int pg = p * ngrid + g;
+            beta_re[pg] = 0.003 * (double)(pg + 1) + 0.00025 * (double)(p + 1);
+            beta_im[pg] = -0.002 * (double)(pg + 2) + 0.000125 * (double)(g & 3);
+        }}
+    }}
+    for (int b = 0; b < nbands; ++b) {{
+        for (int g = 0; g < ngrid; ++g) {{
+            int bg = b * ngrid + g;
+            psi_re[bg] = 0.011 * (double)(bg + 1) + 0.0005 * (double)(b & 3);
+            psi_im[bg] = -0.007 * (double)(bg + 3) + 0.00025 * (double)(g & 7);
+        }}
+    }}
+    for (int p = 0; p < nproj; ++p) {{
+        for (int b = 0; b < nbands; ++b) {{
+            int idx = p * nbands + b;
+            expected_re[idx] = 0.0;
+            expected_im[idx] = 0.0;
+            proj_re[idx] = 0.0;
+            proj_im[idx] = 0.0;
+            for (int g = 0; g < ngrid; ++g) {{
+                int pg = p * ngrid + g;
+                int bg = b * ngrid + g;
+                expected_re[idx] += beta_re[pg] * psi_re[bg] + beta_im[pg] * psi_im[bg];
+                expected_im[idx] += beta_re[pg] * psi_im[bg] - beta_im[pg] * psi_re[bg];
+            }}
+        }}
+    }}
+    {fn}(beta_re, beta_im, psi_re, psi_im, proj_re, proj_im, ngrid, nbands, nproj);
+    for (int idx = 0; idx < out_n; ++idx) {{
+        if (fabs(proj_re[idx] - expected_re[idx]) > 1.0e-8 || fabs(proj_im[idx] - expected_im[idx]) > 1.0e-8) {{
+            printf("DSE_REAL_HLS_FAIL %d expected %.12f %.12f got %.12f %.12f\\n", idx, expected_re[idx], expected_im[idx], proj_re[idx], proj_im[idx]);
+            return 1;
+        }}
+    }}
+    printf("DSE_REAL_HLS_PASS {fn} %d %d %d\\n", ngrid, nbands, nproj);
+    return 0;
+}}
+"""
+
 def _tb_source(spec: Mapping[str, Any]) -> str:
     architecture_id = str(spec["architecture_id"])
+    if "nonlocal_projector" in architecture_id:
+        return _nonlocal_projector_tb(spec)
     if "sum_band" in architecture_id:
         return _sum_band_density_tb(spec)
     if "hpsi" in architecture_id:
@@ -896,6 +1019,250 @@ def _sum_band_vcs_tb_source(ngrid: int, nbands: int) -> str:
             $finish(1);
         end
         $display("DSE_REAL_RTL_PASS qeic_real_sum_band_density_accumulator_rtl samples=%0d", SAMPLES);
+        $display("DSE_REAL_RTL_LATENCY_CYCLES %0d", latency_cycles);
+        $finish(0);
+    end
+endmodule
+"""
+
+
+def _nonlocal_projector_vcs_rtl_source() -> str:
+    return r"""module qeic_real_nonlocal_projector_accumulator_rtl #(
+    parameter integer SAMPLES = 256,
+    parameter integer WIDTH = 18,
+    parameter integer ACC_WIDTH = 56
+) (
+    input  wire clk,
+    input  wire reset_n,
+    input  wire start,
+    input  wire sample_valid,
+    input  wire sample_first,
+    input  wire sample_last,
+    input  wire signed [WIDTH-1:0] beta_re,
+    input  wire signed [WIDTH-1:0] beta_im,
+    input  wire signed [WIDTH-1:0] psi_re,
+    input  wire signed [WIDTH-1:0] psi_im,
+    output reg  signed [ACC_WIDTH-1:0] proj_re,
+    output reg  signed [ACC_WIDTH-1:0] proj_im,
+    output reg  valid,
+    output reg  done
+);
+    reg active;
+    integer sample_count;
+    reg signed [ACC_WIDTH-1:0] acc_re;
+    reg signed [ACC_WIDTH-1:0] acc_im;
+    wire signed [(2*WIDTH)-1:0] beta_psi_rr = beta_re * psi_re;
+    wire signed [(2*WIDTH)-1:0] beta_psi_ii = beta_im * psi_im;
+    wire signed [(2*WIDTH)-1:0] beta_psi_ri = beta_re * psi_im;
+    wire signed [(2*WIDTH)-1:0] beta_psi_ir = beta_im * psi_re;
+    wire signed [ACC_WIDTH-1:0] prod_re =
+        {{(ACC_WIDTH-(2*WIDTH)){beta_psi_rr[(2*WIDTH)-1]}}, beta_psi_rr}
+        + {{(ACC_WIDTH-(2*WIDTH)){beta_psi_ii[(2*WIDTH)-1]}}, beta_psi_ii};
+    wire signed [ACC_WIDTH-1:0] prod_im =
+        {{(ACC_WIDTH-(2*WIDTH)){beta_psi_ri[(2*WIDTH)-1]}}, beta_psi_ri}
+        - {{(ACC_WIDTH-(2*WIDTH)){beta_psi_ir[(2*WIDTH)-1]}}, beta_psi_ir};
+    wire signed [ACC_WIDTH-1:0] base_re = sample_first ? {ACC_WIDTH{1'b0}} : acc_re;
+    wire signed [ACC_WIDTH-1:0] base_im = sample_first ? {ACC_WIDTH{1'b0}} : acc_im;
+    wire signed [ACC_WIDTH-1:0] next_re = base_re + prod_re;
+    wire signed [ACC_WIDTH-1:0] next_im = base_im + prod_im;
+
+    always @(posedge clk or negedge reset_n) begin
+        if (!reset_n) begin
+            active <= 1'b0;
+            sample_count <= 0;
+            acc_re <= 0;
+            acc_im <= 0;
+            proj_re <= 0;
+            proj_im <= 0;
+            valid <= 1'b0;
+            done <= 1'b0;
+        end else begin
+            valid <= 1'b0;
+            if (start) begin
+                active <= 1'b1;
+                sample_count <= 0;
+                acc_re <= 0;
+                acc_im <= 0;
+                proj_re <= 0;
+                proj_im <= 0;
+                done <= 1'b0;
+            end else if (active && sample_valid) begin
+                if (sample_last) begin
+                    proj_re <= next_re;
+                    proj_im <= next_im;
+                    valid <= 1'b1;
+                    acc_re <= 0;
+                    acc_im <= 0;
+                end else begin
+                    acc_re <= next_re;
+                    acc_im <= next_im;
+                end
+                if (sample_count == SAMPLES - 1) begin
+                    active <= 1'b0;
+                    done <= 1'b1;
+                end
+                sample_count <= sample_count + 1;
+            end
+        end
+    end
+endmodule
+"""
+
+
+def _nonlocal_projector_vcs_tb_source(ngrid: int, nbands: int, nproj: int) -> str:
+    samples = ngrid * nbands * nproj
+    outputs = nbands * nproj
+    return f"""module tb_qeic_real_nonlocal_projector_accumulator_rtl;
+    localparam integer NGRID = {ngrid};
+    localparam integer NBANDS = {nbands};
+    localparam integer NPROJ = {nproj};
+    localparam integer SAMPLES = {samples};
+    localparam integer OUTPUTS = {outputs};
+    localparam integer WIDTH = 18;
+    localparam integer ACC_WIDTH = 56;
+    reg clk;
+    reg reset_n;
+    reg start;
+    reg sample_valid;
+    reg sample_first;
+    reg sample_last;
+    reg signed [WIDTH-1:0] beta_re_mem [0:(NPROJ*NGRID)-1];
+    reg signed [WIDTH-1:0] beta_im_mem [0:(NPROJ*NGRID)-1];
+    reg signed [WIDTH-1:0] psi_re_mem [0:(NBANDS*NGRID)-1];
+    reg signed [WIDTH-1:0] psi_im_mem [0:(NBANDS*NGRID)-1];
+    reg signed [WIDTH-1:0] beta_re;
+    reg signed [WIDTH-1:0] beta_im;
+    reg signed [WIDTH-1:0] psi_re;
+    reg signed [WIDTH-1:0] psi_im;
+    wire signed [ACC_WIDTH-1:0] proj_re;
+    wire signed [ACC_WIDTH-1:0] proj_im;
+    wire valid;
+    wire done;
+    reg signed [ACC_WIDTH-1:0] expected_re [0:OUTPUTS-1];
+    reg signed [ACC_WIDTH-1:0] expected_im [0:OUTPUTS-1];
+    reg signed [(2*WIDTH)-1:0] rr;
+    reg signed [(2*WIDTH)-1:0] ii;
+    reg signed [(2*WIDTH)-1:0] ri;
+    reg signed [(2*WIDTH)-1:0] ir;
+    integer p;
+    integer b;
+    integer g;
+    integer pg;
+    integer bg;
+    integer idx;
+    integer output_idx;
+    integer valid_count;
+    integer latency_cycles;
+
+    qeic_real_nonlocal_projector_accumulator_rtl #(.SAMPLES(SAMPLES), .WIDTH(WIDTH), .ACC_WIDTH(ACC_WIDTH)) dut (
+        .clk(clk),
+        .reset_n(reset_n),
+        .start(start),
+        .sample_valid(sample_valid),
+        .sample_first(sample_first),
+        .sample_last(sample_last),
+        .beta_re(beta_re),
+        .beta_im(beta_im),
+        .psi_re(psi_re),
+        .psi_im(psi_im),
+        .proj_re(proj_re),
+        .proj_im(proj_im),
+        .valid(valid),
+        .done(done)
+    );
+
+    initial begin
+        clk = 1'b0;
+        forever #5 clk = ~clk;
+    end
+
+    initial begin
+        reset_n = 1'b0;
+        start = 1'b0;
+        sample_valid = 1'b0;
+        sample_first = 1'b0;
+        sample_last = 1'b0;
+        beta_re = 0;
+        beta_im = 0;
+        psi_re = 0;
+        psi_im = 0;
+        valid_count = 0;
+        latency_cycles = 0;
+        for (p = 0; p < NPROJ; p = p + 1) begin
+            for (g = 0; g < NGRID; g = g + 1) begin
+                pg = p * NGRID + g;
+                beta_re_mem[pg] = 18'sd9 + p * 18'sd3 + g;
+                beta_im_mem[pg] = -18'sd7 - p * 18'sd2 + (g & 3);
+            end
+        end
+        for (b = 0; b < NBANDS; b = b + 1) begin
+            for (g = 0; g < NGRID; g = g + 1) begin
+                bg = b * NGRID + g;
+                psi_re_mem[bg] = 18'sd21 + b * 18'sd5 + g * 18'sd2;
+                psi_im_mem[bg] = -18'sd13 - b * 18'sd4 - g;
+            end
+        end
+        for (p = 0; p < NPROJ; p = p + 1) begin
+            for (b = 0; b < NBANDS; b = b + 1) begin
+                idx = p * NBANDS + b;
+                expected_re[idx] = 0;
+                expected_im[idx] = 0;
+                for (g = 0; g < NGRID; g = g + 1) begin
+                    pg = p * NGRID + g;
+                    bg = b * NGRID + g;
+                    rr = beta_re_mem[pg] * psi_re_mem[bg];
+                    ii = beta_im_mem[pg] * psi_im_mem[bg];
+                    ri = beta_re_mem[pg] * psi_im_mem[bg];
+                    ir = beta_im_mem[pg] * psi_re_mem[bg];
+                    expected_re[idx] = expected_re[idx] + rr + ii;
+                    expected_im[idx] = expected_im[idx] + ri - ir;
+                end
+            end
+        end
+        repeat (3) @(posedge clk);
+        reset_n = 1'b1;
+        @(posedge clk);
+        start = 1'b1;
+        @(posedge clk);
+        start = 1'b0;
+        output_idx = 0;
+        for (p = 0; p < NPROJ; p = p + 1) begin
+            for (b = 0; b < NBANDS; b = b + 1) begin
+                for (g = 0; g < NGRID; g = g + 1) begin
+                    @(negedge clk);
+                    pg = p * NGRID + g;
+                    bg = b * NGRID + g;
+                    beta_re = beta_re_mem[pg];
+                    beta_im = beta_im_mem[pg];
+                    psi_re = psi_re_mem[bg];
+                    psi_im = psi_im_mem[bg];
+                    sample_first = (g == 0);
+                    sample_last = (g == NGRID - 1);
+                    sample_valid = 1'b1;
+                    @(posedge clk);
+                    #1;
+                    latency_cycles = latency_cycles + 1;
+                    if (sample_last) begin
+                        if (valid !== 1'b1 || proj_re !== expected_re[output_idx] || proj_im !== expected_im[output_idx]) begin
+                            $display("DSE_REAL_RTL_FAIL p=%0d b=%0d expected=%0d,%0d got=%0d,%0d valid=%0d", p, b, expected_re[output_idx], expected_im[output_idx], proj_re, proj_im, valid);
+                            $finish(1);
+                        end
+                        output_idx = output_idx + 1;
+                        valid_count = valid_count + 1;
+                    end
+                end
+            end
+        end
+        @(negedge clk);
+        sample_valid = 1'b0;
+        sample_first = 1'b0;
+        sample_last = 1'b0;
+        #1;
+        if (done !== 1'b1 || valid_count != OUTPUTS) begin
+            $display("DSE_REAL_RTL_FAIL done=%0d valid_count=%0d", done, valid_count);
+            $finish(1);
+        end
+        $display("DSE_REAL_RTL_PASS qeic_real_nonlocal_projector_accumulator_rtl samples=%0d", SAMPLES);
         $display("DSE_REAL_RTL_LATENCY_CYCLES %0d", latency_cycles);
         $finish(0);
     end
@@ -3047,6 +3414,156 @@ set_false_path -from [get_ports reset_n]
     }
 
 
+def _single_architecture_vivado_impl_wrapper_source(spec: Mapping[str, Any]) -> str:
+    architecture_id = str(spec["architecture_id"])
+    if architecture_id != "hybrid_nonlocal_projector_accumulator_v1":
+        raise ValueError(f"single-architecture Vivado implementation does not support {architecture_id}")
+    ngrid = int(spec.get("golden_grid_points") or 16)
+    nbands = int(spec.get("golden_band_count") or 4)
+    nproj = int(spec.get("golden_projector_count") or 4)
+    samples = ngrid * nbands * nproj
+    return f"""module qeic_real_nonlocal_projector_accumulator_impl_top (
+    input wire clk,
+    input wire reset_n,
+    input wire start,
+    output wire done,
+    output wire valid
+);
+    localparam integer WIDTH = 18;
+    localparam integer ACC_WIDTH = 56;
+    localparam integer NGRID = {ngrid};
+    localparam integer NBANDS = {nbands};
+    localparam integer NPROJ = {nproj};
+    localparam integer SAMPLES = {samples};
+    reg sample_valid;
+    reg sample_first;
+    reg sample_last;
+    reg signed [WIDTH-1:0] beta_re;
+    reg signed [WIDTH-1:0] beta_im;
+    reg signed [WIDTH-1:0] psi_re;
+    reg signed [WIDTH-1:0] psi_im;
+    reg [15:0] sample_idx;
+    wire signed [ACC_WIDTH-1:0] proj_re;
+    wire signed [ACC_WIDTH-1:0] proj_im;
+
+    qeic_real_nonlocal_projector_accumulator_rtl #(.SAMPLES(SAMPLES), .WIDTH(WIDTH), .ACC_WIDTH(ACC_WIDTH)) dut (
+        .clk(clk),
+        .reset_n(reset_n),
+        .start(start),
+        .sample_valid(sample_valid),
+        .sample_first(sample_first),
+        .sample_last(sample_last),
+        .beta_re(beta_re),
+        .beta_im(beta_im),
+        .psi_re(psi_re),
+        .psi_im(psi_im),
+        .proj_re(proj_re),
+        .proj_im(proj_im),
+        .valid(valid),
+        .done(done)
+    );
+
+    always @(posedge clk or negedge reset_n) begin
+        if (!reset_n) begin
+            sample_idx <= 0;
+            sample_valid <= 1'b0;
+            sample_first <= 1'b0;
+            sample_last <= 1'b0;
+            beta_re <= 0;
+            beta_im <= 0;
+            psi_re <= 0;
+            psi_im <= 0;
+        end else begin
+            if (start) begin
+                sample_idx <= 0;
+                sample_valid <= 1'b1;
+            end else if (sample_valid) begin
+                if (sample_idx == SAMPLES - 1) begin
+                    sample_valid <= 1'b0;
+                end
+                sample_idx <= sample_idx + 1'b1;
+            end
+            sample_first <= sample_valid && ((sample_idx % NGRID) == 0);
+            sample_last <= sample_valid && ((sample_idx % NGRID) == NGRID - 1);
+            beta_re <= 18'sd9 + {{2'b0, sample_idx[7:0]}};
+            beta_im <= -18'sd7 - {{3'b0, sample_idx[6:0]}};
+            psi_re <= 18'sd21 + {{3'b0, sample_idx[6:0]}};
+            psi_im <= -18'sd13 - {{4'b0, sample_idx[5:0]}};
+        end
+    end
+endmodule
+"""
+
+
+def _single_architecture_vivado_impl_tcl(*, fpga_part: str, top_module: str) -> str:
+    return f"""set_msg_config -id {{Common 17-55}} -new_severity {{INFO}}
+read_verilog -sv qeic_real_nonlocal_projector_accumulator_rtl.sv
+read_verilog -sv {top_module}.sv
+read_xdc vivado_impl.xdc
+synth_design -top {top_module} -part {fpga_part}
+opt_design
+place_design
+route_design
+report_utilization -file vivado_utilization.rpt
+report_timing_summary -file vivado_timing_summary.rpt
+write_checkpoint -force post_route.dcp
+"""
+
+
+def materialize_single_architecture_vivado_impl_project(
+    spec: Mapping[str, Any],
+    out_dir: Path,
+    *,
+    fpga_part: str = DEFAULT_FPGA_PART,
+    clock_period_ns: float = 10.0,
+) -> dict[str, Any]:
+    """Materialize a Vivado implementation project for one handwritten RTL miniapp."""
+
+    architecture_id = str(spec["architecture_id"])
+    if architecture_id != "hybrid_nonlocal_projector_accumulator_v1":
+        raise ValueError(f"single-architecture Vivado implementation does not support {architecture_id}")
+    ngrid = int(spec.get("golden_grid_points") or 16)
+    nbands = int(spec.get("golden_band_count") or 4)
+    nproj = int(spec.get("golden_projector_count") or 4)
+    samples = ngrid * nbands * nproj
+    project_dir = Path(out_dir) / _safe_name(architecture_id) / "vivado_impl"
+    project_dir.mkdir(parents=True, exist_ok=True)
+    top_module = "qeic_real_nonlocal_projector_accumulator_impl_top"
+    rtl_source = _nonlocal_projector_vcs_rtl_source()
+    wrapper_source = _single_architecture_vivado_impl_wrapper_source(spec)
+    tcl_source = _single_architecture_vivado_impl_tcl(fpga_part=fpga_part, top_module=top_module)
+    xdc_source = f"""create_clock -period {clock_period_ns:.3f} -name clk [get_ports clk]
+set_false_path -from [get_ports reset_n]
+"""
+    rtl_sv = project_dir / "qeic_real_nonlocal_projector_accumulator_rtl.sv"
+    wrapper_sv = project_dir / f"{top_module}.sv"
+    vivado_impl_tcl = project_dir / "vivado_impl.tcl"
+    vivado_impl_xdc = project_dir / "vivado_impl.xdc"
+    rtl_sv.write_text(rtl_source, encoding="utf-8")
+    wrapper_sv.write_text(wrapper_source, encoding="utf-8")
+    vivado_impl_tcl.write_text(tcl_source, encoding="utf-8")
+    vivado_impl_xdc.write_text(xdc_source, encoding="utf-8")
+    return {
+        "architecture_id": architecture_id,
+        "kernel_name": spec.get("kernel_name"),
+        "top_module": top_module,
+        "project_dir": str(project_dir),
+        "rtl_sv": str(rtl_sv),
+        "wrapper_sv": str(wrapper_sv),
+        "vivado_impl_tcl": str(vivado_impl_tcl),
+        "vivado_impl_xdc": str(vivado_impl_xdc),
+        "rtl_hash": _sha256_text(rtl_source),
+        "wrapper_hash": _sha256_text(wrapper_source),
+        "tcl_hash": _sha256_text(tcl_source),
+        "xdc_hash": _sha256_text(xdc_source),
+        "samples": samples,
+        "component_samples": {"nonlocal_projector": samples},
+        "fpga_part": fpga_part,
+        "clock_period_ns": clock_period_ns,
+        "claim_boundary": "Single QE nonlocal-projector RTL miniapp Vivado implementation project; not full QE kernel integration or board measurement.",
+    }
+
+
 def materialize_vcs_rtl_project(spec: Mapping[str, Any], out_dir: Path) -> dict[str, Any]:
     """Materialize a non-HLS RTL/VCS project for a supported QE miniapp."""
 
@@ -3059,6 +3576,15 @@ def materialize_vcs_rtl_project(spec: Mapping[str, Any], out_dir: Path) -> dict[
         tb_source = _hpsi_vcs_tb_source(samples)
         rtl_name = "qeic_real_hpsi_local_potential_rtl.sv"
         tb_name = "tb_qeic_real_hpsi_local_potential_rtl.sv"
+    elif "nonlocal_projector" in architecture_id:
+        ngrid = int(spec.get("golden_grid_points") or 16)
+        nbands = int(spec.get("golden_band_count") or 4)
+        nproj = int(spec.get("golden_projector_count") or 4)
+        samples = ngrid * nbands * nproj
+        rtl_source = _nonlocal_projector_vcs_rtl_source()
+        tb_source = _nonlocal_projector_vcs_tb_source(ngrid, nbands, nproj)
+        rtl_name = "qeic_real_nonlocal_projector_accumulator_rtl.sv"
+        tb_name = "tb_qeic_real_nonlocal_projector_accumulator_rtl.sv"
     elif "sum_band" in architecture_id:
         ngrid = int(spec.get("golden_grid_points") or 32)
         nbands = int(spec.get("golden_band_count") or 4)
@@ -3166,6 +3692,85 @@ def merge_vcs_rtl_evidence_into_summary(summary: Mapping[str, Any], vcs_result: 
         break
     if not matched:
         raise ValueError(f"no evidence row for VCS architecture {architecture_id}")
+    return merged
+
+
+def merge_single_architecture_vivado_impl_evidence_into_summary(
+    summary: Mapping[str, Any],
+    vivado_result: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Attach a single miniapp Vivado implementation result to its evidence row."""
+
+    merged = json.loads(json.dumps(summary))
+    architecture_id = str(vivado_result.get("architecture_id") or "")
+    evidence_rows = merged.get("evidence_rows")
+    if not isinstance(evidence_rows, list):
+        raise ValueError("summary does not contain evidence_rows list")
+    utilization = vivado_result.get("vivado_impl_utilization_parsed")
+    timing = vivado_result.get("vivado_impl_timing_parsed")
+    resource = utilization.get("resource") if isinstance(utilization, Mapping) else {}
+    resource_feasible = utilization.get("resource_feasible") is True if isinstance(utilization, Mapping) else False
+    timing_met = timing.get("timing_met") is True if isinstance(timing, Mapping) else False
+    matched = False
+    for row in evidence_rows:
+        if not isinstance(row, dict) or str(row.get("architecture_id") or "") != architecture_id:
+            continue
+        for key in (
+            "vivado_impl_attempted",
+            "vivado_impl_passed",
+            "vivado_impl_returncode",
+            "vivado_impl_command",
+            "vivado_impl_project",
+            "vivado_impl_utilization_parsed",
+            "vivado_impl_timing_parsed",
+            "vivado_impl_evidence_json_path",
+            "vivado_impl_evidence_json_hash",
+            "vivado_stdout_log_path",
+            "vivado_stderr_log_path",
+            "vivado_utilization_report_path",
+            "vivado_timing_summary_report_path",
+            "vivado_stdout_log_hash",
+            "vivado_stderr_log_hash",
+            "vivado_utilization_report_hash",
+            "vivado_timing_summary_report_hash",
+        ):
+            if key in vivado_result:
+                row[key] = vivado_result[key]
+        row["vivado_impl_timing_met"] = timing_met
+        row["vivado_impl_resource_feasible"] = resource_feasible
+        row["vivado_impl_resource"] = dict(resource) if isinstance(resource, Mapping) else {}
+        if "claim_boundary" in vivado_result:
+            row["vivado_impl_claim_boundary"] = vivado_result["claim_boundary"]
+        matched = True
+        break
+    if not matched:
+        raise ValueError(f"no evidence row for Vivado implementation architecture {architecture_id}")
+
+    results = [item for item in _as_list(merged.get("single_architecture_vivado_impl_results")) if isinstance(item, Mapping)]
+    results = [item for item in results if str(item.get("architecture_id") or "") != architecture_id]
+    results.append(json.loads(json.dumps(vivado_result)))
+    merged["single_architecture_vivado_impl_results"] = results
+
+    passed_ids = sorted(
+        {
+            str(item.get("architecture_id"))
+            for item in results
+            if item.get("vivado_impl_passed") is True
+            and isinstance(item.get("vivado_impl_utilization_parsed"), Mapping)
+            and item["vivado_impl_utilization_parsed"].get("resource_feasible") is True
+            and isinstance(item.get("vivado_impl_timing_parsed"), Mapping)
+            and item["vivado_impl_timing_parsed"].get("timing_met") is True
+            and item.get("architecture_id")
+        }
+    )
+    classification = merged.setdefault("classification", {})
+    if isinstance(classification, dict):
+        classification["single_architecture_vivado_impl_passed_ids"] = passed_ids
+        classification["single_architecture_vivado_impl_count"] = len(passed_ids)
+        gates = list(classification.get("satisfied_preliminary_gates") or [])
+        if passed_ids and "single_architecture_vivado_impl_passed" not in gates:
+            gates.append("single_architecture_vivado_impl_passed")
+        classification["satisfied_preliminary_gates"] = gates
     return merged
 
 
@@ -3695,6 +4300,7 @@ _MOTIF_TIMER_MAP: dict[str, list[str]] = {
     "reduction_collective": ["sum_band"],
     "sum_band_density_accumulation": ["sum_band"],
     "h_psi_local_potential": ["h_psi"],
+    "nonlocal_projector_accumulation": ["h_psi", "h_psi:calbec", "calbec"],
     "wavefunction_memory": ["mix_rho", "h_psi:calbec", "calbec"],
     "fft_transpose": ["fft", "ffts", "fftw"],
 }
@@ -5117,10 +5723,12 @@ __all__ = [
     "materialize_integrated_vcs_sidecar_project",
     "materialize_integrated_vivado_impl_project",
     "materialize_hls_project",
+    "materialize_single_architecture_vivado_impl_project",
     "materialize_vcs_rtl_project",
     "merge_combined_vcs_sidecar_comparisons",
     "merge_integrated_vcs_sidecar_comparisons",
     "merge_integrated_vivado_impl_evidence_into_summary",
+    "merge_single_architecture_vivado_impl_evidence_into_summary",
     "merge_vcs_rtl_evidence_into_summary",
     "parse_qe_timer_stdout",
     "parse_vcs_rtl_run_log",

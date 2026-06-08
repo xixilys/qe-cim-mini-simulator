@@ -2355,3 +2355,548 @@ def test_full_qe_kernel_integration_readiness_runner_writes_fail_closed_artifact
     assert audit["admission_status"] == "not_admitted"
     assert audit["available_sidecar_evidence"]["vivado_passed_architecture_ids"] == ["hybrid_integrated_streaming_pipeline_sidecar_v3"]
     assert "qe_runtime_replacement_contract_not_passed" in audit["blockers"]
+
+
+def test_real_hybrid_specs_include_nonlocal_projector_candidate():
+    specs = build_real_hybrid_architecture_specs()
+    by_id = {spec["architecture_id"]: spec for spec in specs}
+
+    spec = by_id["hybrid_nonlocal_projector_accumulator_v1"]
+
+    assert spec["motif_id"] == "nonlocal_projector_accumulation"
+    assert spec["implementation_coverage"] == "qe_routine_equivalent_miniapp"
+    assert spec["mapped_qe_timer_names"] == ["h_psi", "h_psi:calbec", "calbec"]
+    assert spec["golden_projector_count"] >= 4
+    assert spec["golden_band_count"] >= 4
+    assert spec["golden_grid_points"] >= 16
+
+
+def test_hls_project_materialization_for_nonlocal_projector_uses_beta_projection(tmp_path: Path):
+    spec = next(
+        item
+        for item in build_real_hybrid_architecture_specs()
+        if item["architecture_id"] == "hybrid_nonlocal_projector_accumulator_v1"
+    )
+
+    project = materialize_hls_project(spec, tmp_path, fpga_part="xc7z020clg400-1")
+
+    kernel_cpp = Path(project["kernel_cpp"]).read_text()
+    tb_cpp = Path(project["tb_cpp"]).read_text()
+    assert "beta_re" in kernel_cpp
+    assert "psi_re" in kernel_cpp
+    assert "proj_re" in kernel_cpp
+    assert "for (int p = 0" in kernel_cpp
+    assert "for (int b = 0" in kernel_cpp
+    assert "for (int g = 0" in kernel_cpp
+    assert "beta_re[pg] * pr + beta_im[pg] * pi" in kernel_cpp
+    assert "DSE_REAL_HLS_PASS" in tb_cpp
+    assert "expected_re[idx]" in tb_cpp
+
+
+def test_vcs_project_materialization_for_nonlocal_projector_contains_rtl_latency_markers(tmp_path: Path):
+    spec = next(
+        item
+        for item in build_real_hybrid_architecture_specs()
+        if item["architecture_id"] == "hybrid_nonlocal_projector_accumulator_v1"
+    )
+
+    project = materialize_vcs_rtl_project(spec, tmp_path)
+
+    rtl_sv = Path(project["rtl_sv"]).read_text()
+    tb_sv = Path(project["tb_sv"]).read_text()
+    assert "qeic_real_nonlocal_projector_accumulator_rtl" in rtl_sv
+    assert "DSE_REAL_RTL_PASS" in tb_sv
+    assert "DSE_REAL_RTL_LATENCY_CYCLES" in tb_sv
+    assert project["samples"] == spec["golden_projector_count"] * spec["golden_band_count"] * spec["golden_grid_points"]
+
+
+def test_materialize_nonlocal_projector_vivado_impl_project_uses_projector_rtl(tmp_path: Path):
+    from dse_v2.experiments.qe_ic_real_opportunity.real_hybrid_hls_evidence import (
+        materialize_single_architecture_vivado_impl_project,
+    )
+
+    spec = next(
+        item
+        for item in build_real_hybrid_architecture_specs()
+        if item["architecture_id"] == "hybrid_nonlocal_projector_accumulator_v1"
+    )
+
+    project = materialize_single_architecture_vivado_impl_project(
+        spec, tmp_path, fpga_part="xc7z020clg400-1", clock_period_ns=12.0
+    )
+
+    assert project["architecture_id"] == "hybrid_nonlocal_projector_accumulator_v1"
+    assert project["top_module"] == "qeic_real_nonlocal_projector_accumulator_impl_top"
+    assert project["samples"] == 256
+    rtl = Path(project["rtl_sv"]).read_text()
+    wrapper = Path(project["wrapper_sv"]).read_text()
+    tcl = Path(project["vivado_impl_tcl"]).read_text()
+    xdc = Path(project["vivado_impl_xdc"]).read_text()
+    assert "module qeic_real_nonlocal_projector_accumulator_rtl" in rtl
+    assert "module qeic_real_nonlocal_projector_accumulator_impl_top" in wrapper
+    assert "qeic_real_nonlocal_projector_accumulator_rtl" in wrapper
+    assert "synth_design -top qeic_real_nonlocal_projector_accumulator_impl_top -part xc7z020clg400-1" in tcl
+    assert "report_timing_summary -file vivado_timing_summary.rpt" in tcl
+    assert "create_clock -period 12.000" in xdc
+
+
+def test_merge_single_architecture_vivado_impl_evidence_updates_matching_row():
+    from dse_v2.experiments.qe_ic_real_opportunity.real_hybrid_hls_evidence import (
+        merge_single_architecture_vivado_impl_evidence_into_summary,
+    )
+
+    summary = {
+        "classification": {
+            "preliminary_label": "fpga_hybrid_weaker",
+            "confidence": "medium",
+            "blockers": ["full_qe_kernel_integration_missing", "physical_fpga_board_measurement_missing"],
+            "architecture_comparisons": [],
+        },
+        "evidence_rows": [
+            {
+                "architecture_id": "hybrid_nonlocal_projector_accumulator_v1",
+                "kernel_name": "qeic_real_nonlocal_projector_accumulator",
+                "status": "executed",
+            }
+        ],
+    }
+    vivado_result = {
+        "architecture_id": "hybrid_nonlocal_projector_accumulator_v1",
+        "vivado_impl_attempted": True,
+        "vivado_impl_passed": True,
+        "vivado_impl_utilization_parsed": {
+            "status": "parsed",
+            "resource": {"lut": 999, "ff": 888, "bram_tile": 0, "dsp": 26},
+            "resource_feasible": True,
+            "blockers": [],
+        },
+        "vivado_impl_timing_parsed": {"status": "parsed", "wns_ns": 0.5, "timing_met": True, "blockers": []},
+        "vivado_impl_evidence_json_path": "runs/nonlocal/vivado_impl/evidence.json",
+        "vivado_impl_evidence_json_hash": "sha256:" + "4" * 64,
+        "claim_boundary": "Single architecture Vivado implementation evidence; not full QE integration or board measurement.",
+    }
+
+    merged = merge_single_architecture_vivado_impl_evidence_into_summary(summary, vivado_result)
+    row = merged["evidence_rows"][0]
+
+    assert row["vivado_impl_passed"] is True
+    assert row["vivado_impl_timing_met"] is True
+    assert row["vivado_impl_resource_feasible"] is True
+    assert row["vivado_impl_resource"] == {"lut": 999, "ff": 888, "bram_tile": 0, "dsp": 26}
+    assert merged["classification"]["single_architecture_vivado_impl_passed_ids"] == [
+        "hybrid_nonlocal_projector_accumulator_v1"
+    ]
+    assert merged["classification"]["single_architecture_vivado_impl_count"] == 1
+    assert merged["single_architecture_vivado_impl_results"][0]["architecture_id"] == "hybrid_nonlocal_projector_accumulator_v1"
+
+
+def test_real_hybrid_vivado_impl_runner_merges_single_architecture_result(tmp_path: Path, monkeypatch):
+    import argparse
+    import importlib.util
+
+    script_path = Path(__file__).resolve().parents[1] / "scripts" / "dse" / "run_qe_ic_real_hybrid_vivado_impl.py"
+    spec = importlib.util.spec_from_file_location("run_qe_ic_real_hybrid_vivado_impl_single", script_path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+    baseline_path = tmp_path / "baseline.json"
+    baseline_path.write_text(
+        json.dumps({"measurements_are_real": True, "baseline_records": [{"case_id": "case-a", "runtime_seconds_mean": 1.0}]}),
+        encoding="utf-8",
+    )
+    summary_path = out_dir / "real_hybrid_hls_summary.json"
+    summary_path.write_text(
+        json.dumps(
+            {
+                "gpu_baseline_path": str(baseline_path),
+                "classification": {
+                    "preliminary_label": "fpga_hybrid_weaker",
+                    "confidence": "medium",
+                    "final_claim_allowed": False,
+                    "blockers": ["full_qe_kernel_integration_missing", "physical_fpga_board_measurement_missing"],
+                    "architecture_comparisons": [],
+                },
+                "evidence_rows": [
+                    {
+                        "architecture_id": "hybrid_nonlocal_projector_accumulator_v1",
+                        "kernel_name": "qeic_real_nonlocal_projector_accumulator",
+                        "status": "executed",
+                        "csim_passed": True,
+                        "cosim_passed": True,
+                        "csynth_parsed": {"resource_feasible": True, "blockers": []},
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    def fake_run(*, out_dir, fpga_part, clock_period_ns, timeout_seconds, architecture_id="hybrid_integrated_combined_sidecar_v1"):
+        return {
+            "architecture_id": architecture_id,
+            "vivado_impl_attempted": True,
+            "vivado_impl_passed": True,
+            "implemented_clock_ns": clock_period_ns,
+            "implemented_clock_source": "vivado_post_route_timing_met",
+            "vivado_impl_utilization_parsed": {
+                "status": "parsed",
+                "resource": {"lut": 999, "ff": 888, "bram_tile": 0, "dsp": 26},
+                "resource_feasible": True,
+                "blockers": [],
+            },
+            "vivado_impl_timing_parsed": {"status": "parsed", "wns_ns": 0.5, "timing_met": True, "blockers": []},
+            "vivado_impl_evidence_json_path": str(out_dir / "runs" / architecture_id / "vivado_impl" / "evidence.json"),
+            "vivado_impl_evidence_json_hash": "sha256:" + "5" * 64,
+            "blockers": [],
+            "claim_boundary": "Single architecture Vivado implementation evidence; not full QE integration or board measurement.",
+        }
+
+    monkeypatch.setattr(module, "run_integrated_vivado_impl", fake_run)
+    args = argparse.Namespace(
+        out=out_dir,
+        summary=summary_path,
+        architecture_id="hybrid_nonlocal_projector_accumulator_v1",
+        fpga_part="xc7z020clg400-1",
+        clock_period_ns=12.0,
+        timeout_seconds=1,
+    )
+
+    status = module.run_campaign(args)
+    merged = json.loads(summary_path.read_text(encoding="utf-8"))
+    row = merged["evidence_rows"][0]
+
+    assert status["status"] == "passed"
+    assert row["vivado_impl_passed"] is True
+    assert row["vivado_impl_resource"] == {"lut": 999, "ff": 888, "bram_tile": 0, "dsp": 26}
+    assert merged["classification"]["single_architecture_vivado_impl_passed_ids"] == [
+        "hybrid_nonlocal_projector_accumulator_v1"
+    ]
+
+
+def test_real_hybrid_vivado_impl_runner_preserves_single_architecture_impl_when_integrated_reruns(tmp_path: Path, monkeypatch):
+    import argparse
+    import importlib.util
+
+    script_path = Path(__file__).resolve().parents[1] / "scripts" / "dse" / "run_qe_ic_real_hybrid_vivado_impl.py"
+    spec = importlib.util.spec_from_file_location("run_qe_ic_real_hybrid_vivado_impl_preserve_single", script_path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+    baseline_path = tmp_path / "baseline.json"
+    baseline_path.write_text(
+        json.dumps({"measurements_are_real": True, "baseline_records": [{"case_id": "case-a", "runtime_seconds_mean": 1.0}]}),
+        encoding="utf-8",
+    )
+    summary_path = out_dir / "real_hybrid_hls_summary.json"
+    single_result = {
+        "architecture_id": "hybrid_nonlocal_projector_accumulator_v1",
+        "vivado_impl_attempted": True,
+        "vivado_impl_passed": True,
+        "vivado_impl_utilization_parsed": {
+            "status": "parsed",
+            "resource": {"lut": 64, "ff": 53, "bram_tile": 0, "dsp": 0},
+            "resource_feasible": True,
+            "blockers": [],
+        },
+        "vivado_impl_timing_parsed": {"status": "parsed", "wns_ns": 8.554, "timing_met": True, "blockers": []},
+        "vivado_impl_evidence_json_path": "runs/nonlocal/vivado_impl/evidence.json",
+        "vivado_impl_evidence_json_hash": "sha256:" + "6" * 64,
+        "claim_boundary": "Single architecture Vivado implementation evidence; not full QE integration or board measurement.",
+    }
+    summary_path.write_text(
+        json.dumps(
+            {
+                "gpu_baseline_path": str(baseline_path),
+                "classification": {
+                    "preliminary_label": "fpga_hybrid_weaker",
+                    "confidence": "medium",
+                    "final_claim_allowed": False,
+                    "blockers": ["full_qe_kernel_integration_missing", "physical_fpga_board_measurement_missing"],
+                    "architecture_comparisons": [],
+                    "single_architecture_vivado_impl_passed_ids": ["hybrid_nonlocal_projector_accumulator_v1"],
+                    "single_architecture_vivado_impl_count": 1,
+                },
+                "single_architecture_vivado_impl_results": [single_result],
+                "evidence_rows": [
+                    {
+                        "architecture_id": "hybrid_nonlocal_projector_accumulator_v1",
+                        "kernel_name": "qeic_real_nonlocal_projector_accumulator",
+                        "status": "executed",
+                        "csim_passed": True,
+                        "cosim_passed": True,
+                        "csynth_parsed": {"resource_feasible": True, "blockers": []},
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    def fake_run(*, out_dir, fpga_part, clock_period_ns, timeout_seconds, architecture_id="hybrid_integrated_combined_sidecar_v1"):
+        return {
+            "architecture_id": architecture_id,
+            "vivado_impl_attempted": True,
+            "vivado_impl_passed": True,
+            "implemented_clock_ns": clock_period_ns,
+            "implemented_clock_source": "vivado_post_route_timing_met",
+            "vivado_impl_utilization_parsed": {
+                "status": "parsed",
+                "resource": {"lut": 848, "ff": 736, "bram_tile": 0, "dsp": 8},
+                "resource_feasible": True,
+                "blockers": [],
+            },
+            "vivado_impl_timing_parsed": {"status": "parsed", "wns_ns": 0.962, "timing_met": True, "blockers": []},
+            "vivado_impl_evidence_json_path": str(out_dir / "runs" / architecture_id / "vivado_impl" / "evidence.json"),
+            "vivado_impl_evidence_json_hash": "sha256:" + "7" * 64,
+            "blockers": [],
+            "claim_boundary": "Integrated Vivado implementation evidence; not full QE integration or board measurement.",
+        }
+
+    monkeypatch.setattr(module, "run_integrated_vivado_impl", fake_run)
+    args = argparse.Namespace(
+        out=out_dir,
+        summary=summary_path,
+        architecture_id="hybrid_integrated_streaming_pipeline_sidecar_v3",
+        fpga_part="xc7z020clg400-1",
+        clock_period_ns=12.0,
+        timeout_seconds=1,
+    )
+
+    module.run_campaign(args)
+    merged = json.loads(summary_path.read_text(encoding="utf-8"))
+
+    assert merged["classification"]["single_architecture_vivado_impl_passed_ids"] == [
+        "hybrid_nonlocal_projector_accumulator_v1"
+    ]
+    assert merged["classification"]["single_architecture_vivado_impl_count"] == 1
+    assert merged["classification"]["integrated_vivado_impl_passed"] is True
+
+
+def test_real_hybrid_vivado_impl_runner_derives_single_architecture_impl_from_rows(tmp_path: Path, monkeypatch):
+    import argparse
+    import importlib.util
+
+    script_path = Path(__file__).resolve().parents[1] / "scripts" / "dse" / "run_qe_ic_real_hybrid_vivado_impl.py"
+    spec = importlib.util.spec_from_file_location("run_qe_ic_real_hybrid_vivado_impl_derive_single", script_path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+    baseline_path = tmp_path / "baseline.json"
+    baseline_path.write_text(
+        json.dumps({"measurements_are_real": True, "baseline_records": [{"case_id": "case-a", "runtime_seconds_mean": 1.0}]}),
+        encoding="utf-8",
+    )
+    summary_path = out_dir / "real_hybrid_hls_summary.json"
+    summary_path.write_text(
+        json.dumps(
+            {
+                "gpu_baseline_path": str(baseline_path),
+                "classification": {
+                    "preliminary_label": "fpga_hybrid_weaker",
+                    "confidence": "medium",
+                    "final_claim_allowed": False,
+                    "blockers": ["full_qe_kernel_integration_missing", "physical_fpga_board_measurement_missing"],
+                    "architecture_comparisons": [],
+                },
+                "evidence_rows": [
+                    {
+                        "architecture_id": "hybrid_nonlocal_projector_accumulator_v1",
+                        "kernel_name": "qeic_real_nonlocal_projector_accumulator",
+                        "status": "executed",
+                        "csim_passed": True,
+                        "cosim_passed": True,
+                        "csynth_parsed": {"resource_feasible": True, "blockers": []},
+                        "vivado_impl_passed": True,
+                        "vivado_impl_timing_met": True,
+                        "vivado_impl_resource_feasible": True,
+                        "vivado_impl_resource": {"lut": 64, "ff": 53, "bram_tile": 0, "dsp": 0},
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    def fake_run(*, out_dir, fpga_part, clock_period_ns, timeout_seconds, architecture_id="hybrid_integrated_combined_sidecar_v1"):
+        return {
+            "architecture_id": architecture_id,
+            "vivado_impl_attempted": True,
+            "vivado_impl_passed": True,
+            "implemented_clock_ns": clock_period_ns,
+            "implemented_clock_source": "vivado_post_route_timing_met",
+            "vivado_impl_utilization_parsed": {
+                "status": "parsed",
+                "resource": {"lut": 848, "ff": 736, "bram_tile": 0, "dsp": 8},
+                "resource_feasible": True,
+                "blockers": [],
+            },
+            "vivado_impl_timing_parsed": {"status": "parsed", "wns_ns": 0.962, "timing_met": True, "blockers": []},
+            "vivado_impl_evidence_json_path": str(out_dir / "runs" / architecture_id / "vivado_impl" / "evidence.json"),
+            "vivado_impl_evidence_json_hash": "sha256:" + "8" * 64,
+            "blockers": [],
+            "claim_boundary": "Integrated Vivado implementation evidence; not full QE integration or board measurement.",
+        }
+
+    monkeypatch.setattr(module, "run_integrated_vivado_impl", fake_run)
+    args = argparse.Namespace(
+        out=out_dir,
+        summary=summary_path,
+        architecture_id="hybrid_integrated_streaming_pipeline_sidecar_v3",
+        fpga_part="xc7z020clg400-1",
+        clock_period_ns=12.0,
+        timeout_seconds=1,
+    )
+
+    module.run_campaign(args)
+    merged = json.loads(summary_path.read_text(encoding="utf-8"))
+
+    assert merged["classification"]["single_architecture_vivado_impl_passed_ids"] == [
+        "hybrid_nonlocal_projector_accumulator_v1"
+    ]
+    assert merged["classification"]["single_architecture_vivado_impl_count"] == 1
+
+
+def test_real_hybrid_hls_campaign_preserves_existing_vcs_and_vivado_evidence(tmp_path: Path, monkeypatch):
+    import argparse
+    import importlib.util
+
+    script_path = Path(__file__).resolve().parents[1] / "scripts" / "dse" / "run_qe_ic_real_hybrid_hls_campaign.py"
+    spec = importlib.util.spec_from_file_location("run_qe_ic_real_hybrid_hls_campaign_preserve_evidence", script_path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+    baseline_path = tmp_path / "baseline.json"
+    baseline_path.write_text(
+        json.dumps(
+            {
+                "measurements_are_real": True,
+                "baseline_records": [{"case_id": "case-a", "runtime_seconds_mean": 1.0}],
+            }
+        ),
+        encoding="utf-8",
+    )
+    gpu_runs_root = baseline_path.parent / "runs"
+    gpu_run_dir = gpu_runs_root / "case-a" / "gpu_only_baseline"
+    gpu_run_dir.mkdir(parents=True)
+    (gpu_run_dir / "run_001.stdout.log").write_text(
+        """
+     h_psi        :      0.10s CPU      0.30s WALL (       4 calls)
+     sum_band     :      0.01s CPU      0.20s WALL (       5 calls)
+     mix_rho      :      0.02s CPU      0.10s WALL (       3 calls)
+     h_psi:calbec :      0.01s CPU      0.04s WALL (       3 calls)
+     calbec       :      0.01s CPU      0.03s WALL (       3 calls)
+     PWSCF        :      0.90s CPU      1.00s WALL
+""",
+        encoding="utf-8",
+    )
+    summary_path = out_dir / "real_hybrid_hls_summary.json"
+    summary_path.write_text(
+        json.dumps(
+            {
+                "evidence_rows": [
+                    {
+                        "architecture_id": "hybrid_nonlocal_projector_accumulator_v1",
+                        "vcs_attempted": True,
+                        "vcs_passed": True,
+                        "vcs_parsed": {"status": "parsed", "rtl_status": "Pass", "latency_cycles": 256},
+                        "vcs_evidence_json_path": "runs/nonlocal/vcs/evidence.json",
+                        "vivado_impl_attempted": True,
+                        "vivado_impl_passed": True,
+                        "vivado_impl_timing_met": True,
+                        "vivado_impl_resource_feasible": True,
+                        "vivado_impl_resource": {"lut": 64, "ff": 53, "bram_tile": 0, "dsp": 0},
+                    }
+                ],
+                "integrated_streaming_vcs_sidecar_result": {
+                    "architecture_id": "hybrid_integrated_streaming_pipeline_sidecar_v3",
+                    "vcs_passed": True,
+                    "vcs_parsed": {
+                        "status": "parsed",
+                        "rtl_status": "Pass",
+                        "latency_cycles": 291,
+                        "component_cycles": {
+                            "hpsi": {"cycles": 99, "samples": 96},
+                            "sum_band": {"cycles": 131, "samples": 128},
+                            "axpy": {"cycles": 67, "samples": 64},
+                        },
+                    },
+                    "implemented_clock_ns": 12.0,
+                    "implemented_clock_source": "vivado_post_route_timing_met",
+                },
+                "integrated_streaming_vivado_impl_result": {
+                    "architecture_id": "hybrid_integrated_streaming_pipeline_sidecar_v3",
+                    "vivado_impl_attempted": True,
+                    "vivado_impl_passed": True,
+                    "vivado_impl_timing_parsed": {"timing_met": True, "wns_ns": 0.962},
+                    "vivado_impl_utilization_parsed": {
+                        "resource_feasible": True,
+                        "resource": {"lut": 848, "ff": 736, "bram_tile": 0, "dsp": 8},
+                    },
+                    "claim_boundary": "Integrated Vivado implementation evidence; not full QE integration or board measurement.",
+                },
+                "single_architecture_vivado_impl_results": [
+                    {
+                        "architecture_id": "hybrid_nonlocal_projector_accumulator_v1",
+                        "vivado_impl_passed": True,
+                        "vivado_impl_timing_parsed": {"timing_met": True},
+                        "vivado_impl_utilization_parsed": {"resource_feasible": True},
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    def fake_run_one(spec, *, out_dir, fpga_part, timeout_seconds):
+        return {
+            "architecture_id": spec["architecture_id"],
+            "kernel_name": spec["kernel_name"],
+            "status": "executed",
+            "csim_passed": True,
+            "cosim_passed": True,
+            "performance_latency_cycles_max": 4105,
+            "performance_latency_source": "vivado_hls_cosim",
+            "csynth_parsed": {"resource_feasible": True, "blockers": []},
+            "vcs_attempted": False,
+            "vcs_passed": False,
+            "evidence_json_path": str(out_dir / "runs" / spec["architecture_id"] / "real_hybrid_hls_evidence.json"),
+        }
+
+    monkeypatch.setattr(module, "run_one_architecture", fake_run_one)
+    args = argparse.Namespace(
+        out=out_dir,
+        summary=summary_path,
+        gpu_baseline=baseline_path,
+        max_architectures=len(module.build_real_hybrid_architecture_specs()),
+        fpga_part="xc7z020clg400-1",
+        gpu_runs_root=gpu_runs_root,
+        timeout_seconds=1,
+    )
+
+    summary = module.run_campaign(args)
+    rows = {row["architecture_id"]: row for row in summary["evidence_rows"]}
+    row = rows["hybrid_nonlocal_projector_accumulator_v1"]
+
+    assert row["vcs_attempted"] is True
+    assert row["vcs_passed"] is True
+    assert row["vcs_parsed"]["latency_cycles"] == 256
+    assert row["vivado_impl_passed"] is True
+    assert row["vivado_impl_resource"] == {"lut": 64, "ff": 53, "bram_tile": 0, "dsp": 0}
+    assert summary["integrated_streaming_vcs_sidecar_result"]["vcs_passed"] is True
+    assert summary["single_architecture_vivado_impl_results"][0]["architecture_id"] == "hybrid_nonlocal_projector_accumulator_v1"
+    assert summary["integrated_vcs_sidecar_accounting"]
+    assert summary["classification"]["best_architecture_id"] == "hybrid_integrated_streaming_pipeline_sidecar_v3"
+    assert summary["classification"]["integrated_vivado_impl_passed"] is True
+    assert summary["classification"]["integrated_vivado_impl_timing_met"] is True

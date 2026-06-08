@@ -3,10 +3,9 @@
     "full_qe_kernel_equivalent_missing",
     "full_qe_kernel_integration_missing",
     "hls_resource_infeasible_architectures_filtered",
-    "physical_fpga_board_measurement_missing",
-    "vivado_impl_setup_timing_not_met"
+    "physical_fpga_board_measurement_missing"
   ],
-  "claim_boundary": "Integrated VCS RTL sidecar trace replay improves hardware-integration evidence, but it remains a compact sidecar miniapp rather than full QE kernel integration; report current implementation as weaker/not superior.",
+  "claim_boundary": "Integrated Vivado implementation evidence for the II=1 streaming RTL sidecar; not physical board measurement or full QE kernel integration. Current conclusion remains bounded by full QE kernel integration and physical FPGA board measurement gates.",
   "claim_verdict": "not_superior_current_evidence",
   "final_claim_allowed": false,
   "gates": [
@@ -21,15 +20,16 @@
     },
     {
       "evidence": {
-        "architecture_count": 5,
+        "architecture_count": 6,
         "architecture_ids": [
           "hybrid_fft_twiddle_stream_v1",
           "hybrid_hpsi_local_potential_v1",
+          "hybrid_nonlocal_projector_accumulator_v1",
           "hybrid_streaming_reduction_accumulator_v1",
           "hybrid_sum_band_density_accumulator_v1",
           "hybrid_tiled_complex_axpy_v1"
         ],
-        "real_kernel_architecture_count": 5
+        "real_kernel_architecture_count": 6
       },
       "gate_id": "multiple_real_architectures",
       "required_for": "preliminary_multi_architecture_screening",
@@ -39,11 +39,12 @@
       "evidence": {
         "architecture_ids": [
           "hybrid_hpsi_local_potential_v1",
+          "hybrid_nonlocal_projector_accumulator_v1",
           "hybrid_streaming_reduction_accumulator_v1",
           "hybrid_sum_band_density_accumulator_v1",
           "hybrid_tiled_complex_axpy_v1"
         ],
-        "resource_feasible_architecture_count": 4
+        "resource_feasible_architecture_count": 5
       },
       "gate_id": "resource_feasible_hls",
       "required_for": "preliminary_fpga_feasibility",
@@ -51,8 +52,8 @@
     },
     {
       "evidence": {
-        "csim_passed_count": 5,
-        "row_count": 5
+        "csim_passed_count": 6,
+        "row_count": 6
       },
       "gate_id": "golden_csim",
       "required_for": "correctness_before_performance",
@@ -60,19 +61,18 @@
     },
     {
       "evidence": {
-        "cosim_passed_architecture_count": 5,
+        "cosim_passed_architecture_count": 6,
         "cosim_passed_architecture_ids": [
           "hybrid_fft_twiddle_stream_v1",
           "hybrid_hpsi_local_potential_v1",
+          "hybrid_nonlocal_projector_accumulator_v1",
           "hybrid_streaming_reduction_accumulator_v1",
           "hybrid_sum_band_density_accumulator_v1",
           "hybrid_tiled_complex_axpy_v1"
         ],
-        "vcs_passed_architecture_count": 3,
+        "vcs_passed_architecture_count": 1,
         "vcs_passed_architecture_ids": [
-          "hybrid_hpsi_local_potential_v1",
-          "hybrid_sum_band_density_accumulator_v1",
-          "hybrid_tiled_complex_axpy_v1"
+          "hybrid_nonlocal_projector_accumulator_v1"
         ]
       },
       "gate_id": "vcs_or_cosim_performance",
@@ -84,11 +84,12 @@
         "architecture_ids": [
           "hybrid_fft_twiddle_stream_v1",
           "hybrid_hpsi_local_potential_v1",
+          "hybrid_nonlocal_projector_accumulator_v1",
           "hybrid_streaming_reduction_accumulator_v1",
           "hybrid_sum_band_density_accumulator_v1",
           "hybrid_tiled_complex_axpy_v1"
         ],
-        "workflow_accounted_architecture_count": 5
+        "workflow_accounted_architecture_count": 6
       },
       "gate_id": "full_scf_workflow_accounting",
       "required_for": "preliminary_full_workflow_comparison",

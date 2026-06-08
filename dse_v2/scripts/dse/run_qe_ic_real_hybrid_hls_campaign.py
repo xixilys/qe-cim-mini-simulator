@@ -21,6 +21,7 @@ if str(REPO_ROOT) not in sys.path:
 from dse_v2.experiments.qe_ic_real_opportunity.real_hybrid_hls_evidence import (  # noqa: E402
     DEFAULT_FPGA_PART,
     build_combined_vcs_sidecar_accounting,
+    build_integrated_vcs_sidecar_accounting,
     build_real_hybrid_architecture_specs,
     build_evidence_row_static_metadata,
     build_real_hybrid_claim_closure,
@@ -28,6 +29,8 @@ from dse_v2.experiments.qe_ic_real_opportunity.real_hybrid_hls_evidence import (
     classify_real_hybrid_vs_gpu,
     materialize_hls_project,
     merge_combined_vcs_sidecar_comparisons,
+    merge_integrated_vcs_sidecar_comparisons,
+    merge_integrated_vivado_impl_evidence_into_summary,
     parse_vivado_hls_cosim_report,
     parse_vivado_hls_csynth_report,
     render_real_hybrid_hls_report,
@@ -201,15 +204,93 @@ def run_one_architecture(
     return row
 
 
+
+def _preserved_existing_row_fields(row: Mapping[str, Any]) -> dict[str, Any]:
+    """Return non-HLS evidence that a fresh HLS rerun must not erase."""
+
+    preserved: dict[str, Any] = {}
+    for key in (
+        "vcs_attempted",
+        "vcs_passed",
+        "vcs_parsed",
+        "vcs_command",
+        "vcs_returncode",
+        "vcs_compile_log_path",
+        "vcs_run_log_path",
+        "vcs_stdout_log_path",
+        "vcs_stderr_log_path",
+        "vcs_compile_log_hash",
+        "vcs_run_log_hash",
+        "vcs_stdout_log_hash",
+        "vcs_stderr_log_hash",
+        "vcs_evidence_json_path",
+        "vcs_evidence_json_hash",
+        "vcs_rtl_project",
+        "vivado_impl_attempted",
+        "vivado_impl_passed",
+        "vivado_impl_returncode",
+        "vivado_impl_command",
+        "vivado_impl_project",
+        "vivado_impl_utilization_parsed",
+        "vivado_impl_timing_parsed",
+        "vivado_impl_timing_met",
+        "vivado_impl_resource_feasible",
+        "vivado_impl_resource",
+        "vivado_impl_evidence_json_path",
+        "vivado_impl_evidence_json_hash",
+        "vivado_impl_claim_boundary",
+        "vivado_stdout_log_path",
+        "vivado_stderr_log_path",
+        "vivado_utilization_report_path",
+        "vivado_timing_summary_report_path",
+        "vivado_stdout_log_hash",
+        "vivado_stderr_log_hash",
+        "vivado_utilization_report_hash",
+        "vivado_timing_summary_report_hash",
+    ):
+        if key in row:
+            preserved[key] = row[key]
+    if row.get("claim_boundary") and row.get("vcs_passed") is True:
+        preserved["claim_boundary"] = row["claim_boundary"]
+    return preserved
+
+
+def _merge_preserved_non_hls_evidence(
+    fresh_rows: Sequence[Mapping[str, Any]],
+    existing_rows: Sequence[Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    """Merge fresh HLS rows with prior VCS/Vivado evidence by architecture id."""
+
+    existing_by_id = {str(row.get("architecture_id") or ""): row for row in existing_rows if row.get("architecture_id")}
+    merged_rows: list[dict[str, Any]] = []
+    for fresh in fresh_rows:
+        row = json.loads(json.dumps(fresh))
+        existing = existing_by_id.get(str(row.get("architecture_id") or ""))
+        if existing is not None:
+            row.update(_preserved_existing_row_fields(existing))
+        merged_rows.append(row)
+    return merged_rows
+
+
 def run_campaign(args: argparse.Namespace) -> dict[str, Any]:
     out_dir: Path = args.out
     out_dir.mkdir(parents=True, exist_ok=True)
     baseline = _load_gpu_baseline(args.gpu_baseline)
     specs = build_real_hybrid_architecture_specs()[: args.max_architectures]
-    rows = [
+    summary_path = getattr(args, "summary", None) or out_dir / "real_hybrid_hls_summary.json"
+    existing_summary: dict[str, Any] = {}
+    if summary_path.exists():
+        loaded = json.loads(summary_path.read_text(encoding="utf-8"))
+        if isinstance(loaded, dict):
+            existing_summary = loaded
+    fresh_rows = [
         run_one_architecture(spec, out_dir=out_dir, fpga_part=args.fpga_part, timeout_seconds=args.timeout_seconds)
         for spec in specs
     ]
+    rows = _merge_preserved_non_hls_evidence(
+        fresh_rows,
+        [row for row in existing_summary.get("evidence_rows", []) if isinstance(row, Mapping)],
+    )
     gpu_runs_root = args.gpu_runs_root or args.gpu_baseline.parent / "runs"
     for row in rows:
         row["workflow_accounting"] = build_trace_replay_workflow_accounting(baseline, gpu_runs_root, row)
@@ -221,6 +302,27 @@ def run_campaign(args: argparse.Namespace) -> dict[str, Any]:
     classification = classify_real_hybrid_vs_gpu(baseline, rows)
     combined_vcs_sidecar_accounting = build_combined_vcs_sidecar_accounting(baseline, gpu_runs_root, rows)
     classification = merge_combined_vcs_sidecar_comparisons(baseline, classification, combined_vcs_sidecar_accounting)
+    integrated_vcs_sidecar_accounting = []
+    for key in (
+        "integrated_vcs_sidecar_result",
+        "integrated_pipelined_vcs_sidecar_result",
+        "integrated_streaming_vcs_sidecar_result",
+    ):
+        integrated_vcs_sidecar_accounting.extend(
+            build_integrated_vcs_sidecar_accounting(baseline, gpu_runs_root, existing_summary.get(key))
+        )
+    classification = merge_integrated_vcs_sidecar_comparisons(baseline, classification, integrated_vcs_sidecar_accounting)
+    for key in (
+        "integrated_vivado_impl_result",
+        "integrated_pipelined_vivado_impl_result",
+        "integrated_streaming_vivado_impl_result",
+    ):
+        result = existing_summary.get(key)
+        if isinstance(result, Mapping):
+            classification = merge_integrated_vivado_impl_evidence_into_summary(
+                {"classification": classification, "evidence_rows": rows},
+                result,
+            )["classification"]
     claim_closure = build_real_hybrid_claim_closure(baseline, rows, classification)
     claim_closure_path = out_dir / "real_hybrid_claim_closure.json"
     summary = {
@@ -231,12 +333,24 @@ def run_campaign(args: argparse.Namespace) -> dict[str, Any]:
         "architecture_specs": specs,
         "evidence_rows": rows,
         "combined_vcs_sidecar_accounting": combined_vcs_sidecar_accounting,
+        "integrated_vcs_sidecar_accounting": integrated_vcs_sidecar_accounting,
         "classification": classification,
         "claim_closure_path": str(claim_closure_path),
         "claim_boundary": "Non-stub HLS kernels with real Vivado-HLS attempts; final hardware superiority still requires full QE integration and board/implementation closure.",
     }
+    for key in (
+        "integrated_vcs_sidecar_result",
+        "integrated_pipelined_vcs_sidecar_result",
+        "integrated_streaming_vcs_sidecar_result",
+        "integrated_vivado_impl_result",
+        "integrated_pipelined_vivado_impl_result",
+        "integrated_streaming_vivado_impl_result",
+        "single_architecture_vivado_impl_results",
+    ):
+        if key in existing_summary and key not in summary:
+            summary[key] = existing_summary[key]
     _write_json(claim_closure_path, claim_closure)
-    _write_json(out_dir / "real_hybrid_hls_summary.json", summary)
+    _write_json(summary_path, summary)
     (out_dir / "real_hybrid_hls_report.md").write_text(render_real_hybrid_hls_report(summary), encoding="utf-8")
     return summary
 
@@ -245,6 +359,7 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--gpu-baseline", type=Path, default=Path("artifacts/qe_ic_7day_prelim/qe_ic_7day_gpu_baseline.json"))
     parser.add_argument("--out", type=Path, default=Path("artifacts/qe_ic_real_hybrid_hls"))
+    parser.add_argument("--summary", type=Path, default=None, help="Existing summary to preserve VCS/Vivado evidence while rerunning HLS")
     parser.add_argument("--max-architectures", type=int, default=len(build_real_hybrid_architecture_specs()))
     parser.add_argument("--fpga-part", default=DEFAULT_FPGA_PART)
     parser.add_argument("--gpu-runs-root", type=Path, default=None, help="Root containing <case_id>/gpu_only_baseline/run_*.stdout.log timer traces")
@@ -257,7 +372,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     summary = run_campaign(args)
     print(json.dumps({
         "status": "passed",
-        "summary": str(args.out / "real_hybrid_hls_summary.json"),
+        "summary": str(getattr(args, "summary", None) or args.out / "real_hybrid_hls_summary.json"),
         "preliminary_label": summary["classification"].get("preliminary_label"),
         "architectures": len(summary["evidence_rows"]),
     }, indent=2, sort_keys=True))

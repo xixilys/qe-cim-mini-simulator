@@ -1,0 +1,90 @@
+{
+  "architecture_id": "hybrid_nonlocal_projector_accumulator_v1",
+  "blockers": [],
+  "claim_boundary": "Single QE nonlocal-projector RTL miniapp Vivado implementation evidence; not physical board measurement or full QE kernel integration.",
+  "clock_period_ns": 12.0,
+  "command": "ssh ic-eda source ~/.bashrc; export LC_ALL=C LANG=C; cd /tmp/dse_real_hybrid_vivado_impl_hybrid_nonlocal_projector_accumulator_v1_25ac52e6 && /home/Xilinx/Vivado/2019.1/bin/vivado -mode batch -source vivado_impl.tcl",
+  "end_timestamp": "2026-06-08T15:01:50Z",
+  "fpga_part": "xc7z020clg400-1",
+  "implemented_clock_ns": 12.0,
+  "implemented_clock_source": "vivado_post_route_timing_met",
+  "kernel_name": "qeic_real_nonlocal_projector_accumulator",
+  "reason": null,
+  "returncode": 0,
+  "schema_version": "dse.qe_ic.real_hybrid_vivado_impl_evidence.v1",
+  "start_timestamp": "2026-06-08T15:01:12Z",
+  "status": "executed",
+  "tool": "vivado",
+  "tool_path": "ssh://ic-eda/home/Xilinx/Vivado/2019.1/bin/vivado",
+  "vivado_impl_attempted": true,
+  "vivado_impl_command": "ssh ic-eda source ~/.bashrc; export LC_ALL=C LANG=C; cd /tmp/dse_real_hybrid_vivado_impl_hybrid_nonlocal_projector_accumulator_v1_25ac52e6 && /home/Xilinx/Vivado/2019.1/bin/vivado -mode batch -source vivado_impl.tcl",
+  "vivado_impl_evidence_json_hash": "sha256:7049235067151c4c164b423d08ab521721bf8530863a1b4ae0478881b05ca59e",
+  "vivado_impl_evidence_json_path": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_nonlocal_projector_accumulator_v1/vivado_impl/real_hybrid_single_architecture_vivado_impl_evidence.json",
+  "vivado_impl_passed": true,
+  "vivado_impl_project": {
+    "architecture_id": "hybrid_nonlocal_projector_accumulator_v1",
+    "claim_boundary": "Single QE nonlocal-projector RTL miniapp Vivado implementation project; not full QE kernel integration or board measurement.",
+    "clock_period_ns": 12.0,
+    "component_samples": {
+      "nonlocal_projector": 256
+    },
+    "fpga_part": "xc7z020clg400-1",
+    "kernel_name": "qeic_real_nonlocal_projector_accumulator",
+    "project_dir": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_nonlocal_projector_accumulator_v1/vivado_impl",
+    "rtl_hash": "sha256:4d41937e6f1d65544b08f0ad87f673b57b3459372a3bf3c7f8906528080457de",
+    "rtl_sv": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_nonlocal_projector_accumulator_v1/vivado_impl/qeic_real_nonlocal_projector_accumulator_rtl.sv",
+    "samples": 256,
+    "tcl_hash": "sha256:7af8c2fcc2d040dad5fdbe37a94ff3cb745a3186b7552683abe983f4148dc692",
+    "top_module": "qeic_real_nonlocal_projector_accumulator_impl_top",
+    "vivado_impl_tcl": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_nonlocal_projector_accumulator_v1/vivado_impl/vivado_impl.tcl",
+    "vivado_impl_xdc": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_nonlocal_projector_accumulator_v1/vivado_impl/vivado_impl.xdc",
+    "wrapper_hash": "sha256:c84451378f69451e874ca11b02732af2093a2ec9788cdf0fdd03ead912b69947",
+    "wrapper_sv": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_nonlocal_projector_accumulator_v1/vivado_impl/qeic_real_nonlocal_projector_accumulator_impl_top.sv",
+    "xdc_hash": "sha256:0fa03be2db97fbf5da06f2bb1698a4232cc6021401583e6a0b185089e5fe1fb3"
+  },
+  "vivado_impl_returncode": 0,
+  "vivado_impl_timing_parsed": {
+    "blockers": [],
+    "status": "parsed",
+    "ths_ns": 0.0,
+    "timing_met": true,
+    "tns_ns": 0.0,
+    "tpws_ns": 0.0,
+    "whs_ns": 0.19,
+    "wns_ns": 8.554,
+    "wpws_ns": 5.5
+  },
+  "vivado_impl_timing_report_available": true,
+  "vivado_impl_utilization_parsed": {
+    "blockers": [],
+    "resource": {
+      "bram_tile": 0,
+      "dsp": 0,
+      "ff": 53,
+      "lut": 64
+    },
+    "resource_available": {
+      "bram_tile": 140,
+      "dsp": 220,
+      "ff": 106400,
+      "lut": 53200
+    },
+    "resource_feasible": true,
+    "resource_utilization_percent": {
+      "bram_tile": 0.0,
+      "dsp": 0.0,
+      "ff": 0.05,
+      "lut": 0.12
+    },
+    "status": "parsed"
+  },
+  "vivado_impl_utilization_report_available": true,
+  "vivado_stderr_log_hash": "sha256:913221ef02bbf14a2fad766f6c60a155b6f067196e1fe5c725001ac9831689b0",
+  "vivado_stderr_log_path": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_nonlocal_projector_accumulator_v1/vivado_impl/vivado.stderr.log",
+  "vivado_stdout_log_hash": "sha256:829cc86aaad2ac9d3d41fee7077709087cbb2abe1501c1f11d7eb703513a1a6e",
+  "vivado_stdout_log_path": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_nonlocal_projector_accumulator_v1/vivado_impl/vivado.stdout.log",
+  "vivado_timing_summary_report_hash": "sha256:a8fe8d1339eff5234e7a9941718eca0c7c5672c411f80ec2f74cce1cac350c86",
+  "vivado_timing_summary_report_path": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_nonlocal_projector_accumulator_v1/vivado_impl/vivado_timing_summary.rpt",
+  "vivado_utilization_report_hash": "sha256:7b97acb0916ac1e2682b3580fcecc95634da289ca69f276d1e9f1aaf9f27a278",
+  "vivado_utilization_report_path": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_nonlocal_projector_accumulator_v1/vivado_impl/vivado_utilization.rpt"
+}

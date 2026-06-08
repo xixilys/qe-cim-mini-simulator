@@ -1,0 +1,42 @@
+{
+  "architecture_id": "hybrid_nonlocal_projector_accumulator_v1",
+  "blockers": [],
+  "claim_boundary": "Standalone handwritten RTL/VCS miniapp evidence for qeic_real_nonlocal_projector_accumulator; not full-QE integration, board measurement, or final FPGA superiority evidence.",
+  "command": "ssh ic-eda source ~/.bashrc; export LC_ALL=C LANG=C; cd /tmp/dse_real_hybrid_vcs_rtl_hybrid_nonlocal_projector_accumulator_v1_f0c42396 && vcs -full64 -sverilog qeic_real_nonlocal_projector_accumulator_rtl.sv tb_qeic_real_nonlocal_projector_accumulator_rtl.sv -o simv > vcs_compile.log 2>&1 && ./simv > vcs_run.log 2>&1",
+  "end_timestamp": "2026-06-08T14:56:16Z",
+  "kernel_name": "qeic_real_nonlocal_projector_accumulator",
+  "reason": null,
+  "returncode": 0,
+  "schema_version": "dse.qe_ic.real_hybrid_vcs_rtl_evidence.v1",
+  "start_timestamp": "2026-06-08T14:56:13Z",
+  "status": "executed",
+  "tool": "vcs",
+  "vcs_attempted": true,
+  "vcs_command": "ssh ic-eda source ~/.bashrc; export LC_ALL=C LANG=C; cd /tmp/dse_real_hybrid_vcs_rtl_hybrid_nonlocal_projector_accumulator_v1_f0c42396 && vcs -full64 -sverilog qeic_real_nonlocal_projector_accumulator_rtl.sv tb_qeic_real_nonlocal_projector_accumulator_rtl.sv -o simv > vcs_compile.log 2>&1 && ./simv > vcs_run.log 2>&1",
+  "vcs_compile_log_hash": "sha256:2af8b176cf5f4606acf603250138006d2de7ba97e19a6aa2ef12fddefd842d30",
+  "vcs_compile_log_path": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_nonlocal_projector_accumulator_v1/vcs_rtl/vcs_compile.log",
+  "vcs_parsed": {
+    "blockers": [],
+    "latency_cycles": 256,
+    "rtl_status": "Pass",
+    "samples": 256,
+    "status": "parsed"
+  },
+  "vcs_passed": true,
+  "vcs_returncode": 0,
+  "vcs_rtl_project": {
+    "architecture_id": "hybrid_nonlocal_projector_accumulator_v1",
+    "project_dir": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_nonlocal_projector_accumulator_v1/vcs_rtl",
+    "rtl_hash": "sha256:4d41937e6f1d65544b08f0ad87f673b57b3459372a3bf3c7f8906528080457de",
+    "rtl_sv": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_nonlocal_projector_accumulator_v1/vcs_rtl/qeic_real_nonlocal_projector_accumulator_rtl.sv",
+    "samples": 256,
+    "tb_sv": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_nonlocal_projector_accumulator_v1/vcs_rtl/tb_qeic_real_nonlocal_projector_accumulator_rtl.sv",
+    "testbench_hash": "sha256:4ff531bceed73e2871cdf6c85227af4b377ae7c7fdbcbf0dee38290651d1da3c"
+  },
+  "vcs_run_log_hash": "sha256:620f90c0acbaca85f51b6f3afaff4fb234c55b2d521401682e78aa785c390156",
+  "vcs_run_log_path": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_nonlocal_projector_accumulator_v1/vcs_rtl/vcs_run.log",
+  "vcs_stderr_log_hash": "sha256:913221ef02bbf14a2fad766f6c60a155b6f067196e1fe5c725001ac9831689b0",
+  "vcs_stderr_log_path": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_nonlocal_projector_accumulator_v1/vcs_rtl/vcs.stderr.log",
+  "vcs_stdout_log_hash": "sha256:8528dc161c6b1afdc47791a4073f613fce6d6b9eab7ae4dac2b04b7c7a8e4bfd",
+  "vcs_stdout_log_path": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_nonlocal_projector_accumulator_v1/vcs_rtl/vcs.stdout.log"
+}
