@@ -35,6 +35,9 @@ from dse_v2.reference_workloads.qe_accelerated_evidence import (  # noqa: E402
     QE_ACCELERATED_NUMERIC_EVIDENCE_SCHEMA,
     build_evidence_from_files,
 )
+from dse_v2.reference_workloads.qe_consumption_proof import (  # noqa: E402
+    merge_qe_consumption_proof_artifacts,
+)
 
 
 PRODUCER_INDEX_SCHEMA = "dse.qe_accelerated_numeric_producer_index.v1"
@@ -187,6 +190,16 @@ def _required_output(row: Mapping[str, Any], key: str) -> Path | None:
     if not isinstance(required_outputs, Mapping):
         return None
     return _resolve_repo_path(required_outputs.get(key))
+
+
+def _target_kernel_from_row(row: Mapping[str, Any]) -> str | None:
+    requirements = row.get("target_kernel_evidence_requirements", {})
+    if isinstance(requirements, Mapping):
+        target = str(requirements.get("target_kernel") or "").strip()
+        if target and not target.startswith("<"):
+            return target
+    target = str(row.get("target_kernel") or row.get("kernel_id") or "").strip()
+    return target or None
 
 
 def _blocked_evidence(
@@ -446,6 +459,10 @@ def _run_row(
     provenance = _required_output(row, "offload_provenance_json")
     kernel_boundary_snapshot = _required_output(row, "kernel_boundary_snapshot_json")
     kernel_boundary_arrays = _required_output(row, "kernel_boundary_arrays_json")
+    consumption_proof = _required_output(row, "consumption_proof_json")
+    full_scf_runtime_events = _required_output(row, "full_scf_runtime_events_jsonl")
+    accelerated_output_json = _required_output(row, "accelerated_output_json")
+    accelerated_output_data = _required_output(row, "accelerated_output_data")
     row_dir = accelerated_stdout.parent if accelerated_stdout is not None else REPO_ROOT / "runs" / "dse" / "accelerated_numeric_inputs" / _safe_path_component(candidate_id) / _safe_path_component(workload_case_id)
     run_dir = row_dir / "accelerated_run"
     hpsi_sidecar_result_txt = row_dir / "hpsi_component_sidecar_result.txt"
@@ -481,6 +498,7 @@ def _run_row(
         provenance,
         kernel_boundary_snapshot,
         kernel_boundary_arrays,
+        full_scf_runtime_events,
         hpsi_sidecar_result_txt,
         hpsi_sidecar_summary,
     ]:
@@ -605,6 +623,30 @@ def _run_row(
         blockers.append(f"accelerated_runtime_did_not_emit_kernel_evidence:{kernel_evidence}")
     if provenance is None or not provenance.exists():
         blockers.append(f"accelerated_runtime_did_not_emit_offload_provenance:{provenance}")
+
+    consumption_proof_merge: Dict[str, Any] | None = None
+    if consumption_proof is not None:
+        if not consumption_proof.exists():
+            blockers.append(f"accelerated_runtime_did_not_emit_consumption_proof:{consumption_proof}")
+        elif kernel_evidence is not None and kernel_evidence.exists() and provenance is not None and provenance.exists():
+            consumption_proof_merge = merge_qe_consumption_proof_artifacts(
+                consumption_proof_path=consumption_proof,
+                kernel_evidence_path=kernel_evidence,
+                offload_provenance_path=provenance,
+                accelerated_output_json_path=accelerated_output_json,
+                accelerated_output_data_path=accelerated_output_data,
+                runtime_events_path=full_scf_runtime_events,
+                candidate_id=candidate_id,
+                workload_case_id=workload_case_id,
+                target_kernel=_target_kernel_from_row(row),
+            )
+            if consumption_proof_merge.get("passed") is not True:
+                blockers.extend(
+                    f"consumption_proof_merge::{item}"
+                    for item in consumption_proof_merge.get("blockers", [])
+                )
+        else:
+            blockers.append("consumption_proof_merge_requires_kernel_evidence_and_provenance")
     if enable_hpsi_component_sidecar:
         _merge_hpsi_sidecar_transport_proof(
             provenance_path=provenance,
@@ -649,10 +691,15 @@ def _run_row(
             "offload_provenance_json": str(provenance) if provenance else None,
             "kernel_boundary_snapshot_json": str(kernel_boundary_snapshot) if kernel_boundary_snapshot else None,
             "kernel_boundary_arrays_json": str(kernel_boundary_arrays) if kernel_boundary_arrays else None,
+            "accelerated_output_json": str(accelerated_output_json) if accelerated_output_json else None,
+            "accelerated_output_data": str(accelerated_output_data) if accelerated_output_data else None,
+            "consumption_proof_json": str(consumption_proof) if consumption_proof else None,
+            "full_scf_runtime_events_jsonl": str(full_scf_runtime_events) if full_scf_runtime_events else None,
             "hpsi_component_sidecar_result_txt": str(hpsi_sidecar_result_txt) if enable_hpsi_component_sidecar else None,
             "hpsi_component_sidecar_summary_json": str(hpsi_sidecar_summary) if enable_hpsi_component_sidecar else None,
             "evidence_output": str(_resolve_repo_path(row.get("evidence_output"))) if row.get("evidence_output") else None,
         },
+        "consumption_proof_merge": consumption_proof_merge,
         "trusted_accelerated_numeric_source": evidence.get("trusted_accelerated_numeric_source"),
         "evidence_blockers": evidence.get("blockers", []),
         "blockers": sorted(dict.fromkeys(blockers)),

@@ -1653,3 +1653,57 @@ A DC run without a real ASIC target library remains `blocked` and must not be
 reported as ASIC timing/area/PPA.  These are progress evidence lanes for
 individual major kernels only; they do not satisfy full-SCF completion, all
 major-kernel closure, or all-candidate DSE closure.
+
+### QE post-bridge consumption proof contract
+
+The accelerated QE producer now has an explicit fail-closed handoff between a
+row-local bridge payload and strict full-SCF replacement evidence.  A bridge may
+materialize `accelerated_output.json` / `accelerated_output.bin`, but that is
+only a buffer materialization proof.  It is not QE consumption proof.
+
+A patched QE run must emit `qe_consumption_proof.json` after the bridge returns
+and after QE has either consumed or rejected the returned buffer.  The proof uses
+schema `dse.qe_offload_consumption_proof.v1` and must carry, at minimum:
+
+- row identity: `candidate_id`, `workload_case_id`, `target_kernel`, and the
+  major-kernel ID when the target name is ambiguous;
+- strict replacement booleans: `full_kernel_recomputed=true`,
+  `qe_mainflow_integrated=true`, `accelerated_results_consumed_by_qe=true`,
+  `software_fallback_on_critical_path=false`,
+  `qe_software_kernel_execution_skipped=true`,
+  `qe_kernel_work_replaced_on_critical_path=true`,
+  `accelerated_result_materialized_in_qe_memory=true`,
+  `accelerated_output_written_to_qe_buffer=true`, and
+  `qe_consumed_accelerator_output_buffer=true`;
+- numeric check fields such as `absolute_error` and `relative_error`;
+- `consumed_output_buffer_sha256` matching the bridge output buffer hash;
+- a measured event cost such as `duration_s`.
+
+The merge tool is:
+
+```bash
+python3 dse_v2/scripts/dse/merge_qe_consumption_proof.py \
+  --consumption-proof <row>/qe_consumption_proof.json \
+  --kernel-evidence <row>/kernel_evidence.json \
+  --offload-provenance <row>/offload_provenance.json \
+  --accelerated-output-json <row>/accelerated_output.json \
+  --accelerated-output-data <row>/accelerated_output.bin \
+  --runtime-events <row>/full_scf_runtime_events.jsonl \
+  --candidate-id <candidate_id> \
+  --workload-case-id <workload_case_id> \
+  --target-kernel <selected_offload_kernel> \
+  --fail-on-blocked
+```
+
+`run_qe_accelerated_numeric_producer.py` will run this merge automatically when
+the requirements row includes `required_outputs.consumption_proof_json`.  On any
+identity mismatch, missing strict field, forbidden proxy/timing/fixture marker,
+or output-hash mismatch, the merge returns `blocked` and leaves the original
+kernel/provenance/runtime artifacts unchanged.  This prevents a domain-correct
+software bridge payload or proxy runtime event from being silently upgraded into
+trusted full-QE replacement evidence.
+
+This contract advances only the runtime replacement/consumption gate for the
+specific kernel row.  A strong FPGA/hybrid-vs-GPU claim still requires all major
+SCF kernels covered where claimed, trusted full-SCF end-to-end accounting, the
+full-SCF comparison artifact, and the applicable VCS/Vivado/board or DC gates.

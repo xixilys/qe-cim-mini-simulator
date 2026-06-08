@@ -414,6 +414,16 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         help="Row-local QE call-site input buffer values emitted by patched QE.",
     )
     parser.add_argument(
+        "--consumption-proof",
+        type=Path,
+        default=_resolve_path(os.environ.get("QE_OFFLOAD_CONSUMPTION_PROOF_JSON")),
+        help=(
+            "Row-local post-bridge QE consumption proof path. The bridge never writes "
+            "this proof itself; patched QE must write it after consuming the returned "
+            "accelerator output buffer."
+        ),
+    )
+    parser.add_argument(
         "--enable-domain-correct-fft-payload",
         action="store_true",
         default=str(os.environ.get("QE_OFFLOAD_ENABLE_DOMAIN_CORRECT_FFT_PAYLOAD", "")).strip()
@@ -725,6 +735,8 @@ def run(argv: Sequence[str] | None = None) -> int:
         "runtime_execution_proof": str(args.runtime_execution_proof) if args.runtime_execution_proof else None,
         "offload_provenance": str(provenance_path) if provenance_path else None,
         "kernel_evidence": str(args.kernel_evidence) if args.emit_kernel_evidence and args.kernel_evidence else None,
+        "consumption_proof": str(args.consumption_proof) if args.consumption_proof else None,
+        "consumption_proof_required_for_qe_consumed_accelerator_output": args.consumption_proof is not None,
         "blockers": sorted(dict.fromkeys(blockers)),
         "proxy_runtime_smoke_only": domain_fft_payload is None,
         "proxy_runtime_only": domain_fft_payload is None,
