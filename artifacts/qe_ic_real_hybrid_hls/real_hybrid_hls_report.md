@@ -3,8 +3,8 @@
 - Preliminary label: `fpga_hybrid_weaker`
 - Confidence: `medium`
 - Final hardware claim allowed: `False`
-- Best architecture: `hybrid_streaming_reduction_accumulator_v1`
-- Best optimistic trace-replay speedup vs GPU: `1.15046x`
+- Best architecture: `hybrid_hpsi_local_potential_v1`
+- Best optimistic trace-replay speedup vs GPU: `1.1856x`
 - Resource-infeasible architectures filtered: `hybrid_fft_twiddle_stream_v1`
 
 ## Direct answer
@@ -43,6 +43,13 @@ The current non-stub hybrid FPGA/HLS evidence supports **FPGA/hybrid weaker / no
   - Performance latency source: `vivado_hls_cosim`, latency `5068` cycles
   - Resource feasible on target: `True`; BRAM18K `16`, DSP `25`, FF `4652`, LUT `6465`, URAM `0`
   - HLS blockers: `hls_latency_summary_missing`
+- `hybrid_hpsi_local_potential_v1`
+  - Coverage: `qe_routine_equivalent_miniapp`; mapped timers: `h_psi`
+  - C-sim golden: `True`
+  - C-synth parsed: `parsed`, latency `326` cycles, estimated clock `8.75` ns
+  - Verilog C/RTL cosim: `True`, latency `664` cycles
+  - Performance latency source: `vivado_hls_cosim`, latency `664` cycles
+  - Resource feasible on target: `True`; BRAM18K `34`, DSP `28`, FF `6561`, LUT `8762`, URAM `0`
 
 ## Workflow accounting result
 
@@ -59,6 +66,9 @@ Trace replay used measured QE full-SCF timer logs from `artifacts/qe_ic_7day_pre
 | `hybrid_sum_band_density_accumulator_v1` | `ic_sio2_dielectric_6atom_scf_v0` | `sum_band` | 1.1496x | `qe_routine_equivalent_miniapp` |
 | `hybrid_sum_band_density_accumulator_v1` | `ic_al_interconnect_4atom_scf_v0` | `sum_band` | 1.0482x | `qe_routine_equivalent_miniapp` |
 | `hybrid_sum_band_density_accumulator_v1` | `ic_si_bulk_2atom_scf_v0` | `sum_band` | 1.0222x | `qe_routine_equivalent_miniapp` |
+| `hybrid_hpsi_local_potential_v1` | `ic_sio2_dielectric_6atom_scf_v0` | `h_psi` | 1.1163x | `qe_routine_equivalent_miniapp` |
+| `hybrid_hpsi_local_potential_v1` | `ic_al_interconnect_4atom_scf_v0` | `h_psi` | 1.1856x | `qe_routine_equivalent_miniapp` |
+| `hybrid_hpsi_local_potential_v1` | `ic_si_bulk_2atom_scf_v0` | `h_psi` | 1.1250x | `qe_routine_equivalent_miniapp` |
 
 ## Claim boundary
 

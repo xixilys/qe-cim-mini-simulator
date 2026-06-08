@@ -53,6 +53,57 @@ def test_real_hybrid_specs_include_qe_routine_equivalent_candidate():
     assert spec["golden_band_count"] >= 4
 
 
+
+def test_real_hybrid_specs_include_h_psi_local_potential_candidate():
+    specs = build_real_hybrid_architecture_specs()
+    by_id = {spec["architecture_id"]: spec for spec in specs}
+
+    spec = by_id["hybrid_hpsi_local_potential_v1"]
+
+    assert spec["motif_id"] == "h_psi_local_potential"
+    assert spec["implementation_coverage"] == "qe_routine_equivalent_miniapp"
+    assert spec["mapped_qe_timer_names"] == ["h_psi"]
+    assert spec["golden_grid_points"] >= 32
+    assert spec["golden_stencil_radius"] == 1
+
+
+
+def test_hpsi_local_potential_testbench_escapes_printf_newlines(tmp_path: Path):
+    spec = next(
+        item
+        for item in build_real_hybrid_architecture_specs()
+        if item["architecture_id"] == "hybrid_hpsi_local_potential_v1"
+    )
+
+    project = materialize_hls_project(spec, tmp_path, fpga_part="xc7z020clg400-1")
+
+    tb_cpp = Path(project["tb_cpp"]).read_text()
+    assert '%.12f\\n", g,' in tb_cpp
+    assert '%d\\n", ngrid);' in tb_cpp
+    assert ('%.12f' + chr(10) + '", g,') not in tb_cpp
+    assert ('%d' + chr(10) + '", ngrid);') not in tb_cpp
+
+def test_hls_project_materialization_for_h_psi_local_potential_uses_neighbor_stencil(tmp_path: Path):
+    spec = next(
+        item
+        for item in build_real_hybrid_architecture_specs()
+        if item["architecture_id"] == "hybrid_hpsi_local_potential_v1"
+    )
+
+    project = materialize_hls_project(spec, tmp_path, fpga_part="xc7z020clg400-1")
+
+    kernel_cpp = Path(project["kernel_cpp"]).read_text()
+    tb_cpp = Path(project["tb_cpp"]).read_text()
+    assert "vloc" in kernel_cpp
+    assert "psi_re" in kernel_cpp
+    assert "out_re" in kernel_cpp
+    assert "left =" in kernel_cpp
+    assert "right =" in kernel_cpp
+    assert "lap_re" in kernel_cpp
+    assert "vloc[g] * psi_re[g]" in kernel_cpp
+    assert "DSE_REAL_HLS_PASS" in tb_cpp
+    assert "expected_re[g]" in tb_cpp
+
 def test_hls_project_materialization_for_sum_band_density_uses_nested_accumulation(tmp_path: Path):
     spec = next(
         item
@@ -73,6 +124,19 @@ def test_hls_project_materialization_for_sum_band_density_uses_nested_accumulati
     assert "expected[g]" in tb_cpp
 
 
+
+
+def test_sum_band_density_kernel_declares_band_grid_index_once(tmp_path: Path):
+    spec = next(
+        item
+        for item in build_real_hybrid_architecture_specs()
+        if item["architecture_id"] == "hybrid_sum_band_density_accumulator_v1"
+    )
+
+    project = materialize_hls_project(spec, tmp_path, fpga_part="xc7z020clg400-1")
+
+    kernel_cpp = Path(project["kernel_cpp"]).read_text()
+    assert kernel_cpp.count("int idx = b * ngrid + g;") == 1
 
 def test_real_hybrid_campaign_default_includes_all_current_architectures():
     import importlib.util
@@ -116,9 +180,12 @@ def test_hls_project_materialization_declares_axi_depths_for_cosim(tmp_path: Pat
         kernel_cpp = Path(project["kernel_cpp"]).read_text()
         m_axi_lines = [line for line in kernel_cpp.splitlines() if "INTERFACE m_axi" in line]
 
+        depths = [int(line.split("depth=", 1)[1].split()[0]) for line in m_axi_lines if "depth=" in line]
+        required_depth = min(64, int(spec.get("golden_vector_length") or 64))
+
         assert m_axi_lines, spec["architecture_id"]
-        assert all("depth=" in line for line in m_axi_lines), spec["architecture_id"]
-        assert any("depth=64" in line for line in m_axi_lines), spec["architecture_id"]
+        assert len(depths) == len(m_axi_lines), spec["architecture_id"]
+        assert max(depths) >= required_depth, spec["architecture_id"]
 
 
 def test_parse_real_vivado_2019_loop_detail_report_with_unknown_top_latency():

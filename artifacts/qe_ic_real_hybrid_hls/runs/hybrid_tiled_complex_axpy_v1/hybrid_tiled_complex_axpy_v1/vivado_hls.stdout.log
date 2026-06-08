@@ -9,14 +9,14 @@ tb.cpp
 
 source /home/Xilinx/Vivado/2019.1/scripts/vivado_hls/hls.tcl -notrace
 INFO: [HLS 200-10] Running '/home/Xilinx/Vivado/2019.1/bin/unwrapped/lnx64.o/vivado_hls'
-INFO: [HLS 200-10] For user 'ICer' on host 'IC_EDA' (Linux_x86_64 version 3.10.0-1160.53.1.el7.x86_64) on Mon Jun 08 18:41:26 CST 2026
+INFO: [HLS 200-10] For user 'ICer' on host 'IC_EDA' (Linux_x86_64 version 3.10.0-1160.53.1.el7.x86_64) on Mon Jun 08 19:07:08 CST 2026
 INFO: [HLS 200-10] On os "CentOS Linux release 7.9.2009 (Core)"
-INFO: [HLS 200-10] In directory '/tmp/dse_real_hybrid_hls_hybrid_tiled_complex_axpy_v1_19c28e32'
+INFO: [HLS 200-10] In directory '/tmp/dse_real_hybrid_hls_hybrid_tiled_complex_axpy_v1_fbcfe577'
 Sourcing Tcl script 'run_hls.tcl'
-INFO: [HLS 200-10] Creating and opening project '/tmp/dse_real_hybrid_hls_hybrid_tiled_complex_axpy_v1_19c28e32/real_hybrid_hls'.
+INFO: [HLS 200-10] Creating and opening project '/tmp/dse_real_hybrid_hls_hybrid_tiled_complex_axpy_v1_fbcfe577/real_hybrid_hls'.
 INFO: [HLS 200-10] Adding design file 'kernel.cpp' to the project
 INFO: [HLS 200-10] Adding test bench file 'tb.cpp' to the project
-INFO: [HLS 200-10] Creating and opening solution '/tmp/dse_real_hybrid_hls_hybrid_tiled_complex_axpy_v1_19c28e32/real_hybrid_hls/sol1'.
+INFO: [HLS 200-10] Creating and opening solution '/tmp/dse_real_hybrid_hls_hybrid_tiled_complex_axpy_v1_fbcfe577/real_hybrid_hls/sol1'.
 INFO: [HLS 200-10] Cleaning up the solution database.
 INFO: [HLS 200-10] Setting target device to 'xc7z020-clg400-1'
 INFO: [SYN 201-201] Setting up clock 'default' with a period of 10ns.
@@ -30,20 +30,20 @@ INFO: [SIM 211-1] CSim done with 0 errors.
 INFO: [SIM 211-3] *************** CSIM finish ***************
 INFO: [SCHED 204-61] Option 'relax_ii_for_timing' is enabled, will increase II to preserve clock frequency constraints.
 INFO: [HLS 200-10] Analyzing design file 'kernel.cpp' ... 
-INFO: [HLS 200-111] Finished Linking Time (s): cpu = 00:00:03 ; elapsed = 00:00:03 . Memory (MB): peak = 815.234 ; gain = 128.000 ; free physical = 7614 ; free virtual = 23142
-INFO: [HLS 200-111] Finished Checking Pragmas Time (s): cpu = 00:00:03 ; elapsed = 00:00:03 . Memory (MB): peak = 815.234 ; gain = 128.000 ; free physical = 7614 ; free virtual = 23142
+INFO: [HLS 200-111] Finished Linking Time (s): cpu = 00:00:03 ; elapsed = 00:00:03 . Memory (MB): peak = 815.234 ; gain = 128.000 ; free physical = 6922 ; free virtual = 23105
+INFO: [HLS 200-111] Finished Checking Pragmas Time (s): cpu = 00:00:03 ; elapsed = 00:00:03 . Memory (MB): peak = 815.234 ; gain = 128.000 ; free physical = 6922 ; free virtual = 23105
 INFO: [HLS 200-10] Starting code transformations ...
-INFO: [HLS 200-111] Finished Standard Transforms Time (s): cpu = 00:00:03 ; elapsed = 00:00:03 . Memory (MB): peak = 815.234 ; gain = 128.000 ; free physical = 7614 ; free virtual = 23142
+INFO: [HLS 200-111] Finished Standard Transforms Time (s): cpu = 00:00:03 ; elapsed = 00:00:03 . Memory (MB): peak = 815.234 ; gain = 128.000 ; free physical = 6922 ; free virtual = 23104
 INFO: [HLS 200-10] Checking synthesizability ...
-INFO: [HLS 200-111] Finished Checking Synthesizability Time (s): cpu = 00:00:03 ; elapsed = 00:00:03 . Memory (MB): peak = 815.234 ; gain = 128.000 ; free physical = 7614 ; free virtual = 23142
-INFO: [HLS 200-111] Finished Pre-synthesis Time (s): cpu = 00:00:03 ; elapsed = 00:00:03 . Memory (MB): peak = 815.234 ; gain = 128.000 ; free physical = 7602 ; free virtual = 23130
+INFO: [HLS 200-111] Finished Checking Synthesizability Time (s): cpu = 00:00:03 ; elapsed = 00:00:03 . Memory (MB): peak = 815.234 ; gain = 128.000 ; free physical = 6922 ; free virtual = 23104
+INFO: [HLS 200-111] Finished Pre-synthesis Time (s): cpu = 00:00:03 ; elapsed = 00:00:03 . Memory (MB): peak = 815.234 ; gain = 128.000 ; free physical = 6913 ; free virtual = 23095
 INFO: [HLS 200-444] Inferring multiple bus burst read of variable length on port 'gmem0' (kernel.cpp:20:21). These data requests might be further partitioned to multiple requests during RTL generation, based on max_read_burst_length or max_write_burst_length settings.
 INFO: [HLS 200-444] Inferring multiple bus burst read of variable length on port 'gmem1' (kernel.cpp:21:28). These data requests might be further partitioned to multiple requests during RTL generation, based on max_read_burst_length or max_write_burst_length settings.
 INFO: [HLS 200-444] Inferring multiple bus burst read of variable length on port 'gmem2' (kernel.cpp:22:9). These data requests might be further partitioned to multiple requests during RTL generation, based on max_read_burst_length or max_write_burst_length settings.
 INFO: [HLS 200-444] Inferring multiple bus burst read of variable length on port 'gmem3' (kernel.cpp:23:9). These data requests might be further partitioned to multiple requests during RTL generation, based on max_read_burst_length or max_write_burst_length settings.
 INFO: [HLS 200-444] Inferring multiple bus burst write of variable length on port 'gmem4' (kernel.cpp:22:9). These data requests might be further partitioned to multiple requests during RTL generation, based on max_read_burst_length or max_write_burst_length settings.
 INFO: [HLS 200-444] Inferring multiple bus burst write of variable length on port 'gmem5' (kernel.cpp:23:9). These data requests might be further partitioned to multiple requests during RTL generation, based on max_read_burst_length or max_write_burst_length settings.
-INFO: [HLS 200-111] Finished Architecture Synthesis Time (s): cpu = 00:00:03 ; elapsed = 00:00:03 . Memory (MB): peak = 815.234 ; gain = 128.000 ; free physical = 7600 ; free virtual = 23128
+INFO: [HLS 200-111] Finished Architecture Synthesis Time (s): cpu = 00:00:03 ; elapsed = 00:00:04 . Memory (MB): peak = 815.234 ; gain = 128.000 ; free physical = 6911 ; free virtual = 23093
 INFO: [HLS 200-10] Starting hardware synthesis ...
 INFO: [HLS 200-10] Synthesizing 'qeic_real_tiled_complex_axpy' ...
 INFO: [HLS 200-10] ----------------------------------------------------------------
@@ -53,7 +53,7 @@ INFO: [SCHED 204-11] Starting scheduling ...
 INFO: [SCHED 204-61] Pipelining loop 'Loop 1'.
 INFO: [SCHED 204-61] Pipelining result : Target II = 1, Final II = 1, Depth = 19.
 INFO: [SCHED 204-11] Finished scheduling.
-INFO: [HLS 200-111]  Elapsed time: 3.55 seconds; current allocated memory: 92.606 MB.
+INFO: [HLS 200-111]  Elapsed time: 3.6 seconds; current allocated memory: 92.606 MB.
 INFO: [BIND 205-100] Starting micro-architecture generation ...
 INFO: [BIND 205-101] Performing variable lifetime analysis.
 INFO: [BIND 205-101] Exploring resource sharing.
@@ -82,8 +82,8 @@ INFO: [RTGEN 206-100] Generating core module 'qeic_real_tiled_complex_axpy_dadd_
 INFO: [RTGEN 206-100] Generating core module 'qeic_real_tiled_complex_axpy_dmul_64ns_64ns_64_6_max_dsp_1': 4 instance(s).
 INFO: [RTGEN 206-100] Generating core module 'qeic_real_tiled_complex_axpy_dsub_64ns_64ns_64_5_full_dsp_1': 1 instance(s).
 INFO: [RTGEN 206-100] Finished creating RTL model for 'qeic_real_tiled_complex_axpy'.
-INFO: [HLS 200-111]  Elapsed time: 0.08 seconds; current allocated memory: 95.969 MB.
-INFO: [HLS 200-111] Finished generating all RTL models Time (s): cpu = 00:00:04 ; elapsed = 00:00:05 . Memory (MB): peak = 815.234 ; gain = 128.000 ; free physical = 7586 ; free virtual = 23119
+INFO: [HLS 200-111]  Elapsed time: 0.09 seconds; current allocated memory: 95.969 MB.
+INFO: [HLS 200-111] Finished generating all RTL models Time (s): cpu = 00:00:04 ; elapsed = 00:00:05 . Memory (MB): peak = 815.234 ; gain = 128.000 ; free physical = 6897 ; free virtual = 23085
 INFO: [VHDL 208-304] Generating VHDL RTL for qeic_real_tiled_complex_axpy.
 INFO: [VLOG 209-307] Generating Verilog RTL for qeic_real_tiled_complex_axpy.
 INFO: [COSIM 212-47] Using XSIM for RTL simulation.
@@ -112,35 +112,35 @@ Copyright 1986-1999, 2001-2019 Xilinx, Inc. All Rights Reserved.
 Running: /home/Xilinx/Vivado/2019.1/bin/unwrapped/lnx64.o/xelab xil_defaultlib.apatb_qeic_real_tiled_complex_axpy_top glbl -prj qeic_real_tiled_complex_axpy.prj -L smartconnect_v1_0 -L axi_protocol_checker_v1_1_12 -L axi_protocol_checker_v1_1_13 -L axis_protocol_checker_v1_1_11 -L axis_protocol_checker_v1_1_12 -L xil_defaultlib -L unisims_ver -L xpm --initfile /home/Xilinx/Vivado/2019.1/data/xsim/ip/xsim_ip.ini --lib ieee_proposed=./ieee_proposed -s qeic_real_tiled_complex_axpy 
 Multi-threading is on. Using 14 slave threads.
 Determining compilation order of HDL files.
-INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_tiled_complex_axpy_v1_19c28e32/real_hybrid_hls/sol1/sim/verilog/glbl.v" into library work
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_tiled_complex_axpy_v1_fbcfe577/real_hybrid_hls/sol1/sim/verilog/glbl.v" into library work
 INFO: [VRFC 10-311] analyzing module glbl
-INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_tiled_complex_axpy_v1_19c28e32/real_hybrid_hls/sol1/sim/verilog/qeic_real_tiled_complex_axpy.autotb.v" into library xil_defaultlib
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_tiled_complex_axpy_v1_fbcfe577/real_hybrid_hls/sol1/sim/verilog/qeic_real_tiled_complex_axpy.autotb.v" into library xil_defaultlib
 INFO: [VRFC 10-311] analyzing module apatb_qeic_real_tiled_complex_axpy_top
-INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_tiled_complex_axpy_v1_19c28e32/real_hybrid_hls/sol1/sim/verilog/AESL_axi_master_gmem0.v" into library xil_defaultlib
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_tiled_complex_axpy_v1_fbcfe577/real_hybrid_hls/sol1/sim/verilog/AESL_axi_master_gmem0.v" into library xil_defaultlib
 INFO: [VRFC 10-311] analyzing module AESL_axi_master_gmem0
-INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_tiled_complex_axpy_v1_19c28e32/real_hybrid_hls/sol1/sim/verilog/AESL_axi_master_gmem1.v" into library xil_defaultlib
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_tiled_complex_axpy_v1_fbcfe577/real_hybrid_hls/sol1/sim/verilog/AESL_axi_master_gmem1.v" into library xil_defaultlib
 INFO: [VRFC 10-311] analyzing module AESL_axi_master_gmem1
-INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_tiled_complex_axpy_v1_19c28e32/real_hybrid_hls/sol1/sim/verilog/AESL_axi_master_gmem2.v" into library xil_defaultlib
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_tiled_complex_axpy_v1_fbcfe577/real_hybrid_hls/sol1/sim/verilog/AESL_axi_master_gmem2.v" into library xil_defaultlib
 INFO: [VRFC 10-311] analyzing module AESL_axi_master_gmem2
-INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_tiled_complex_axpy_v1_19c28e32/real_hybrid_hls/sol1/sim/verilog/AESL_axi_master_gmem3.v" into library xil_defaultlib
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_tiled_complex_axpy_v1_fbcfe577/real_hybrid_hls/sol1/sim/verilog/AESL_axi_master_gmem3.v" into library xil_defaultlib
 INFO: [VRFC 10-311] analyzing module AESL_axi_master_gmem3
-INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_tiled_complex_axpy_v1_19c28e32/real_hybrid_hls/sol1/sim/verilog/AESL_axi_master_gmem4.v" into library xil_defaultlib
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_tiled_complex_axpy_v1_fbcfe577/real_hybrid_hls/sol1/sim/verilog/AESL_axi_master_gmem4.v" into library xil_defaultlib
 INFO: [VRFC 10-311] analyzing module AESL_axi_master_gmem4
-INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_tiled_complex_axpy_v1_19c28e32/real_hybrid_hls/sol1/sim/verilog/AESL_axi_master_gmem5.v" into library xil_defaultlib
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_tiled_complex_axpy_v1_fbcfe577/real_hybrid_hls/sol1/sim/verilog/AESL_axi_master_gmem5.v" into library xil_defaultlib
 INFO: [VRFC 10-311] analyzing module AESL_axi_master_gmem5
-INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_tiled_complex_axpy_v1_19c28e32/real_hybrid_hls/sol1/sim/verilog/AESL_axi_slave_control.v" into library xil_defaultlib
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_tiled_complex_axpy_v1_fbcfe577/real_hybrid_hls/sol1/sim/verilog/AESL_axi_slave_control.v" into library xil_defaultlib
 INFO: [VRFC 10-311] analyzing module AESL_axi_slave_control
-INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_tiled_complex_axpy_v1_19c28e32/real_hybrid_hls/sol1/sim/verilog/qeic_real_tiled_complex_axpy.v" into library xil_defaultlib
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_tiled_complex_axpy_v1_fbcfe577/real_hybrid_hls/sol1/sim/verilog/qeic_real_tiled_complex_axpy.v" into library xil_defaultlib
 INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy
-INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_tiled_complex_axpy_v1_19c28e32/real_hybrid_hls/sol1/sim/verilog/qeic_real_tiled_complex_axpy_dadd_64ns_64ns_64_5_full_dsp_1.v" into library xil_defaultlib
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_tiled_complex_axpy_v1_fbcfe577/real_hybrid_hls/sol1/sim/verilog/qeic_real_tiled_complex_axpy_dadd_64ns_64ns_64_5_full_dsp_1.v" into library xil_defaultlib
 INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_dadd_64ns_64ns_64_5_full_dsp_1
-INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_tiled_complex_axpy_v1_19c28e32/real_hybrid_hls/sol1/sim/verilog/qeic_real_tiled_complex_axpy_dsub_64ns_64ns_64_5_full_dsp_1.v" into library xil_defaultlib
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_tiled_complex_axpy_v1_fbcfe577/real_hybrid_hls/sol1/sim/verilog/qeic_real_tiled_complex_axpy_dsub_64ns_64ns_64_5_full_dsp_1.v" into library xil_defaultlib
 INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_dsub_64ns_64ns_64_5_full_dsp_1
-INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_tiled_complex_axpy_v1_19c28e32/real_hybrid_hls/sol1/sim/verilog/qeic_real_tiled_complex_axpy_dmul_64ns_64ns_64_6_max_dsp_1.v" into library xil_defaultlib
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_tiled_complex_axpy_v1_fbcfe577/real_hybrid_hls/sol1/sim/verilog/qeic_real_tiled_complex_axpy_dmul_64ns_64ns_64_6_max_dsp_1.v" into library xil_defaultlib
 INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_dmul_64ns_64ns_64_6_max_dsp_1
-INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_tiled_complex_axpy_v1_19c28e32/real_hybrid_hls/sol1/sim/verilog/qeic_real_tiled_complex_axpy_control_s_axi.v" into library xil_defaultlib
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_tiled_complex_axpy_v1_fbcfe577/real_hybrid_hls/sol1/sim/verilog/qeic_real_tiled_complex_axpy_control_s_axi.v" into library xil_defaultlib
 INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_control_s_axi
-INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_tiled_complex_axpy_v1_19c28e32/real_hybrid_hls/sol1/sim/verilog/qeic_real_tiled_complex_axpy_gmem0_m_axi.v" into library xil_defaultlib
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_tiled_complex_axpy_v1_fbcfe577/real_hybrid_hls/sol1/sim/verilog/qeic_real_tiled_complex_axpy_gmem0_m_axi.v" into library xil_defaultlib
 INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_gmem0_m_axi
 INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_gmem0_m_axi_reg_slice
 INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_gmem0_m_axi_fifo
@@ -149,7 +149,7 @@ INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_gmem0_m_axi_de
 INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_gmem0_m_axi_throttl
 INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_gmem0_m_axi_read
 INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_gmem0_m_axi_write
-INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_tiled_complex_axpy_v1_19c28e32/real_hybrid_hls/sol1/sim/verilog/qeic_real_tiled_complex_axpy_gmem1_m_axi.v" into library xil_defaultlib
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_tiled_complex_axpy_v1_fbcfe577/real_hybrid_hls/sol1/sim/verilog/qeic_real_tiled_complex_axpy_gmem1_m_axi.v" into library xil_defaultlib
 INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_gmem1_m_axi
 INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_gmem1_m_axi_reg_slice
 INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_gmem1_m_axi_fifo
@@ -158,7 +158,7 @@ INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_gmem1_m_axi_de
 INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_gmem1_m_axi_throttl
 INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_gmem1_m_axi_read
 INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_gmem1_m_axi_write
-INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_tiled_complex_axpy_v1_19c28e32/real_hybrid_hls/sol1/sim/verilog/qeic_real_tiled_complex_axpy_gmem2_m_axi.v" into library xil_defaultlib
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_tiled_complex_axpy_v1_fbcfe577/real_hybrid_hls/sol1/sim/verilog/qeic_real_tiled_complex_axpy_gmem2_m_axi.v" into library xil_defaultlib
 INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_gmem2_m_axi
 INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_gmem2_m_axi_reg_slice
 INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_gmem2_m_axi_fifo
@@ -167,7 +167,7 @@ INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_gmem2_m_axi_de
 INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_gmem2_m_axi_throttl
 INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_gmem2_m_axi_read
 INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_gmem2_m_axi_write
-INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_tiled_complex_axpy_v1_19c28e32/real_hybrid_hls/sol1/sim/verilog/qeic_real_tiled_complex_axpy_gmem3_m_axi.v" into library xil_defaultlib
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_tiled_complex_axpy_v1_fbcfe577/real_hybrid_hls/sol1/sim/verilog/qeic_real_tiled_complex_axpy_gmem3_m_axi.v" into library xil_defaultlib
 INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_gmem3_m_axi
 INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_gmem3_m_axi_reg_slice
 INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_gmem3_m_axi_fifo
@@ -176,7 +176,7 @@ INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_gmem3_m_axi_de
 INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_gmem3_m_axi_throttl
 INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_gmem3_m_axi_read
 INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_gmem3_m_axi_write
-INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_tiled_complex_axpy_v1_19c28e32/real_hybrid_hls/sol1/sim/verilog/qeic_real_tiled_complex_axpy_gmem4_m_axi.v" into library xil_defaultlib
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_tiled_complex_axpy_v1_fbcfe577/real_hybrid_hls/sol1/sim/verilog/qeic_real_tiled_complex_axpy_gmem4_m_axi.v" into library xil_defaultlib
 INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_gmem4_m_axi
 INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_gmem4_m_axi_reg_slice
 INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_gmem4_m_axi_fifo
@@ -185,7 +185,7 @@ INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_gmem4_m_axi_de
 INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_gmem4_m_axi_throttl
 INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_gmem4_m_axi_read
 INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_gmem4_m_axi_write
-INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_tiled_complex_axpy_v1_19c28e32/real_hybrid_hls/sol1/sim/verilog/qeic_real_tiled_complex_axpy_gmem5_m_axi.v" into library xil_defaultlib
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_tiled_complex_axpy_v1_fbcfe577/real_hybrid_hls/sol1/sim/verilog/qeic_real_tiled_complex_axpy_gmem5_m_axi.v" into library xil_defaultlib
 INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_gmem5_m_axi
 INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_gmem5_m_axi_reg_slice
 INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_gmem5_m_axi_fifo
@@ -194,11 +194,11 @@ INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_gmem5_m_axi_de
 INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_gmem5_m_axi_throttl
 INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_gmem5_m_axi_read
 INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_gmem5_m_axi_write
-INFO: [VRFC 10-163] Analyzing VHDL file "/tmp/dse_real_hybrid_hls_hybrid_tiled_complex_axpy_v1_19c28e32/real_hybrid_hls/sol1/sim/verilog/ip/xil_defaultlib/qeic_real_tiled_complex_axpy_ap_dadd_3_full_dsp_64.vhd" into library xil_defaultlib
+INFO: [VRFC 10-163] Analyzing VHDL file "/tmp/dse_real_hybrid_hls_hybrid_tiled_complex_axpy_v1_fbcfe577/real_hybrid_hls/sol1/sim/verilog/ip/xil_defaultlib/qeic_real_tiled_complex_axpy_ap_dadd_3_full_dsp_64.vhd" into library xil_defaultlib
 INFO: [VRFC 10-3107] analyzing entity 'qeic_real_tiled_complex_axpy_ap_dadd_3_full_dsp_64'
-INFO: [VRFC 10-163] Analyzing VHDL file "/tmp/dse_real_hybrid_hls_hybrid_tiled_complex_axpy_v1_19c28e32/real_hybrid_hls/sol1/sim/verilog/ip/xil_defaultlib/qeic_real_tiled_complex_axpy_ap_dsub_3_full_dsp_64.vhd" into library xil_defaultlib
+INFO: [VRFC 10-163] Analyzing VHDL file "/tmp/dse_real_hybrid_hls_hybrid_tiled_complex_axpy_v1_fbcfe577/real_hybrid_hls/sol1/sim/verilog/ip/xil_defaultlib/qeic_real_tiled_complex_axpy_ap_dsub_3_full_dsp_64.vhd" into library xil_defaultlib
 INFO: [VRFC 10-3107] analyzing entity 'qeic_real_tiled_complex_axpy_ap_dsub_3_full_dsp_64'
-INFO: [VRFC 10-163] Analyzing VHDL file "/tmp/dse_real_hybrid_hls_hybrid_tiled_complex_axpy_v1_19c28e32/real_hybrid_hls/sol1/sim/verilog/ip/xil_defaultlib/qeic_real_tiled_complex_axpy_ap_dmul_4_max_dsp_64.vhd" into library xil_defaultlib
+INFO: [VRFC 10-163] Analyzing VHDL file "/tmp/dse_real_hybrid_hls_hybrid_tiled_complex_axpy_v1_fbcfe577/real_hybrid_hls/sol1/sim/verilog/ip/xil_defaultlib/qeic_real_tiled_complex_axpy_ap_dmul_4_max_dsp_64.vhd" into library xil_defaultlib
 INFO: [VRFC 10-3107] analyzing entity 'qeic_real_tiled_complex_axpy_ap_dmul_4_max_dsp_64'
 Starting static elaboration
 WARNING: [VRFC 10-3499] library name 'floating_point_v7_1_8' of instantiated unit conflicts with visible identifier [ip/xil_defaultlib/qeic_real_tiled_complex_axpy_ap_dadd_3_full_dsp_64.vhd:201]
@@ -513,8 +513,8 @@ Built simulation snapshot qeic_real_tiled_complex_axpy
   **** IP Build 2548770 on Fri May 24 18:01:18 MDT 2019
     ** Copyright 1986-2019 Xilinx, Inc. All Rights Reserved.
 
-source /tmp/dse_real_hybrid_hls_hybrid_tiled_complex_axpy_v1_19c28e32/real_hybrid_hls/sol1/sim/verilog/xsim.dir/qeic_real_tiled_complex_axpy/webtalk/xsim_webtalk.tcl -notrace
-INFO: [Common 17-206] Exiting Webtalk at Mon Jun  8 18:41:51 2026...
+source /tmp/dse_real_hybrid_hls_hybrid_tiled_complex_axpy_v1_fbcfe577/real_hybrid_hls/sol1/sim/verilog/xsim.dir/qeic_real_tiled_complex_axpy/webtalk/xsim_webtalk.tcl -notrace
+INFO: [Common 17-206] Exiting Webtalk at Mon Jun  8 19:07:34 2026...
 
 ****** xsim v2019.1 (64-bit)
   **** SW Build 2552052 on Fri May 24 14:47:09 MDT 2019
@@ -552,12 +552,12 @@ Warning: OPMODE Input Warning : The OPMODE 011XX11 with CARRYINSEL  000 to DSP48
 Time: 925100 ps  Iteration: 10  Process: /apatb_qeic_real_tiled_complex_axpy_top/AESL_inst_qeic_real_tiled_complex_axpy/qeic_real_tiled_complex_axpy_dmul_64ns_64ns_64_6_max_dsp_1_U8/qeic_real_tiled_complex_axpy_ap_dmul_4_max_dsp_64_u/U0/i_synth/mult/OP/i_non_prim/R_AND_R/logic/R_AND_R/dsp48_e1/dsp48e1_add/DSP48E1_ADD/DSP/prcs_opmode_drc  File: /home/Xilinx/Vivado/2019.1/data/vhdl/src/unisims/primitive/DSP48E1.vhd
 // RTL Simulation : 1 / 1 [n/a] @ "1895000"
 ////////////////////////////////////////////////////////////////////////////////////
-$finish called at time : 1935 ns : File "/tmp/dse_real_hybrid_hls_hybrid_tiled_complex_axpy_v1_19c28e32/real_hybrid_hls/sol1/sim/verilog/qeic_real_tiled_complex_axpy.autotb.v" Line 1219
+$finish called at time : 1935 ns : File "/tmp/dse_real_hybrid_hls_hybrid_tiled_complex_axpy_v1_fbcfe577/real_hybrid_hls/sol1/sim/verilog/qeic_real_tiled_complex_axpy.autotb.v" Line 1219
 ## quit
-INFO: [Common 17-206] Exiting xsim at Mon Jun  8 18:41:56 2026...
+INFO: [Common 17-206] Exiting xsim at Mon Jun  8 19:07:39 2026...
 INFO: [COSIM 212-316] Starting C post checking ...
 DSE_REAL_HLS_PASS qeic_real_tiled_complex_axpy 64
 INFO: [COSIM 212-1000] *** C/RTL co-simulation finished: PASS ***
 INFO: [COSIM 212-211] II is measurable only when transaction number is greater than 1 in RTL simulation. Otherwise, they will be marked as all NA. If user wants to calculate them, please make sure there are at least 2 transactions in RTL simulation.
-INFO: [HLS 200-112] Total elapsed time: 29.84 seconds; peak allocated memory: 99.086 MB.
-INFO: [Common 17-206] Exiting vivado_hls at Mon Jun  8 18:41:56 2026...
+INFO: [HLS 200-112] Total elapsed time: 31.36 seconds; peak allocated memory: 99.085 MB.
+INFO: [Common 17-206] Exiting vivado_hls at Mon Jun  8 19:07:39 2026...

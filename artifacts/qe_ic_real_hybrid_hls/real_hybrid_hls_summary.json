@@ -69,6 +69,28 @@
       "motif_id": "sum_band_density_accumulation",
       "target_type": "gpu_fpga_hybrid",
       "why_real_kernel": "deterministic arithmetic kernel with golden numerical testbench and latency-bearing loops"
+    },
+    {
+      "algorithm_description": "Miniapp for QE h_psi-style local potential plus nearest-neighbor kinetic stencil over a wavefunction grid.",
+      "architecture_id": "hybrid_hpsi_local_potential_v1",
+      "claim_strength": "none_until_golden_cosim_synth_and_workflow_gate_pass",
+      "evidence_level": "vivado_hls_csim_csynth_cosim_attempt",
+      "fpga_role": "apply vloc*psi and a compact finite-difference kinetic stencil to complex wavefunction samples",
+      "golden_grid_points": 96,
+      "golden_stencil_radius": 1,
+      "golden_vector_length": 96,
+      "gpu_role": "retain full QE dense kernels and SCF orchestration",
+      "host_role": "SCF control, diagonalization, mixing, launch and accounting retained",
+      "implementation_coverage": "qe_routine_equivalent_miniapp",
+      "implementation_maturity": "real_hls_kernel",
+      "kernel_name": "qeic_real_hpsi_local_potential",
+      "mapped_qe_timer_names": [
+        "h_psi"
+      ],
+      "memory_interface": "AXI master streams with explicit transfer accounting",
+      "motif_id": "h_psi_local_potential",
+      "target_type": "gpu_fpga_hybrid",
+      "why_real_kernel": "deterministic arithmetic kernel with golden numerical testbench and latency-bearing loops"
     }
   ],
   "claim_boundary": "Non-stub HLS kernels with real Vivado-HLS attempts; final hardware superiority still requires full QE integration and board/implementation closure.",
@@ -394,10 +416,115 @@
         "replaceable_seconds_mean": 0.013333333333333334,
         "speedup_vs_gpu_mean": 1.022234345518559,
         "workflow_accounting_status": "trace_replay_optimistic"
+      },
+      {
+        "architecture_id": "hybrid_hpsi_local_potential_v1",
+        "case_id": "ic_sio2_dielectric_6atom_scf_v0",
+        "gpu_runtime_seconds_mean": 1.927242349658627,
+        "hybrid_workflow_runtime_seconds": 1.7264401429919605,
+        "implementation_coverage": "qe_routine_equivalent_miniapp",
+        "mapped_timer_names": [
+          "h_psi"
+        ],
+        "microkernel": {
+          "architecture_id": "hybrid_hpsi_local_potential_v1",
+          "csynth_latency_cycles_max": 326,
+          "estimated_clock_ns": 8.75,
+          "microkernel_seconds": 5.81e-06,
+          "resource": {
+            "bram_18k": 34,
+            "dsp48e": 28,
+            "ff": 6561,
+            "lut": 8762,
+            "uram": 0
+          },
+          "resource_available": {
+            "bram_18k": 280,
+            "dsp48e": 220,
+            "ff": 106400,
+            "lut": 53200,
+            "uram": 0
+          },
+          "resource_feasible": true,
+          "rtl_cosim_latency_cycles_max": 664
+        },
+        "replaceable_seconds_mean": 0.22666666666666668,
+        "speedup_vs_gpu_mean": 1.1163099731443176,
+        "workflow_accounting_status": "trace_replay_optimistic"
+      },
+      {
+        "architecture_id": "hybrid_hpsi_local_potential_v1",
+        "case_id": "ic_al_interconnect_4atom_scf_v0",
+        "gpu_runtime_seconds_mean": 0.6998613443380842,
+        "hybrid_workflow_runtime_seconds": 0.5903006143380841,
+        "implementation_coverage": "qe_routine_equivalent_miniapp",
+        "mapped_timer_names": [
+          "h_psi"
+        ],
+        "microkernel": {
+          "architecture_id": "hybrid_hpsi_local_potential_v1",
+          "csynth_latency_cycles_max": 326,
+          "estimated_clock_ns": 8.75,
+          "microkernel_seconds": 5.81e-06,
+          "resource": {
+            "bram_18k": 34,
+            "dsp48e": 28,
+            "ff": 6561,
+            "lut": 8762,
+            "uram": 0
+          },
+          "resource_available": {
+            "bram_18k": 280,
+            "dsp48e": 220,
+            "ff": 106400,
+            "lut": 53200,
+            "uram": 0
+          },
+          "resource_feasible": true,
+          "rtl_cosim_latency_cycles_max": 664
+        },
+        "replaceable_seconds_mean": 0.12,
+        "speedup_vs_gpu_mean": 1.1856015855969466,
+        "workflow_accounting_status": "trace_replay_optimistic"
+      },
+      {
+        "architecture_id": "hybrid_hpsi_local_potential_v1",
+        "case_id": "ic_si_bulk_2atom_scf_v0",
+        "gpu_runtime_seconds_mean": 0.5683306753344368,
+        "hybrid_workflow_runtime_seconds": 0.5051863153344368,
+        "implementation_coverage": "qe_routine_equivalent_miniapp",
+        "mapped_timer_names": [
+          "h_psi"
+        ],
+        "microkernel": {
+          "architecture_id": "hybrid_hpsi_local_potential_v1",
+          "csynth_latency_cycles_max": 326,
+          "estimated_clock_ns": 8.75,
+          "microkernel_seconds": 5.81e-06,
+          "resource": {
+            "bram_18k": 34,
+            "dsp48e": 28,
+            "ff": 6561,
+            "lut": 8762,
+            "uram": 0
+          },
+          "resource_available": {
+            "bram_18k": 280,
+            "dsp48e": 220,
+            "ff": 106400,
+            "lut": 53200,
+            "uram": 0
+          },
+          "resource_feasible": true,
+          "rtl_cosim_latency_cycles_max": 664
+        },
+        "replaceable_seconds_mean": 0.07,
+        "speedup_vs_gpu_mean": 1.1249922218463064,
+        "workflow_accounting_status": "trace_replay_optimistic"
       }
     ],
-    "best_architecture_id": "hybrid_streaming_reduction_accumulator_v1",
-    "best_speedup_vs_gpu_mean": 1.1504571986607453,
+    "best_architecture_id": "hybrid_hpsi_local_potential_v1",
+    "best_speedup_vs_gpu_mean": 1.1856015855969466,
     "blockers": [
       "full_qe_kernel_equivalent_missing",
       "full_qe_kernel_integration_missing",
@@ -495,6 +622,28 @@
         },
         "resource_feasible": true,
         "rtl_cosim_latency_cycles_max": 5068
+      },
+      {
+        "architecture_id": "hybrid_hpsi_local_potential_v1",
+        "csynth_latency_cycles_max": 326,
+        "estimated_clock_ns": 8.75,
+        "microkernel_seconds": 5.81e-06,
+        "resource": {
+          "bram_18k": 34,
+          "dsp48e": 28,
+          "ff": 6561,
+          "lut": 8762,
+          "uram": 0
+        },
+        "resource_available": {
+          "bram_18k": 280,
+          "dsp48e": 220,
+          "ff": 106400,
+          "lut": 53200,
+          "uram": 0
+        },
+        "resource_feasible": true,
+        "rtl_cosim_latency_cycles_max": 664
       }
     ],
     "preliminary_label": "fpga_hybrid_weaker",
@@ -506,7 +655,7 @@
     {
       "architecture_id": "hybrid_streaming_reduction_accumulator_v1",
       "blockers": [],
-      "command": "ssh ic-eda export LC_ALL=C LANG=C; cd /tmp/dse_real_hybrid_hls_hybrid_streaming_reduction_accumulator_v1_31d23d51 && /home/Xilinx/Vivado/2019.1/bin/vivado_hls -f run_hls.tcl",
+      "command": "ssh ic-eda export LC_ALL=C LANG=C; cd /tmp/dse_real_hybrid_hls_hybrid_streaming_reduction_accumulator_v1_699c7236 && /home/Xilinx/Vivado/2019.1/bin/vivado_hls -f run_hls.tcl",
       "cosim_attempted": true,
       "cosim_parsed": {
         "blockers": [],
@@ -519,7 +668,7 @@
       },
       "cosim_passed": true,
       "cosim_report_available": true,
-      "cosim_report_hash": "sha256:bc07506915f376a11120eb4a3b97651f64e88214b5adaa66f891d7bfc19374e5",
+      "cosim_report_hash": "sha256:cab762c69f61a137f3ec34ef076548b89347216f612b3c4408faef6c9d842364",
       "cosim_report_path": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_streaming_reduction_accumulator_v1/hybrid_streaming_reduction_accumulator_v1/cosim.rpt",
       "csim_passed": true,
       "csynth_parsed": {
@@ -552,10 +701,10 @@
         "target_clock_ns": 10.0
       },
       "csynth_report_available": true,
-      "csynth_report_hash": "sha256:247951871041d522c929b898b764d601b34b5bb0e25fcc684c853fc6916418c4",
+      "csynth_report_hash": "sha256:6a925b0fdfa5e28818953cd5276597250d94f43c4c338449eebd5df6ad2b7601",
       "csynth_report_path": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_streaming_reduction_accumulator_v1/hybrid_streaming_reduction_accumulator_v1/csynth.rpt",
-      "end_timestamp": "2026-06-08T10:41:23Z",
-      "evidence_json_hash": "sha256:9b1690cfbab8e068a07d9c48dd964c0977890d81126714e69990ca4d7d79fc71",
+      "end_timestamp": "2026-06-08T11:07:05Z",
+      "evidence_json_hash": "sha256:0f4eeba2073255485a513ee39772b28bb74d39cc961fcfd0c16fbeacd9c769f7",
       "evidence_json_path": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_streaming_reduction_accumulator_v1/hybrid_streaming_reduction_accumulator_v1/real_hybrid_hls_evidence.json",
       "evidence_level": "vivado_hls_csim_csynth_cosim_attempt",
       "fpga_part": "xc7z020clg400-1",
@@ -583,11 +732,11 @@
       },
       "reason": null,
       "returncode": 0,
-      "start_timestamp": "2026-06-08T10:40:50Z",
+      "start_timestamp": "2026-06-08T11:06:32Z",
       "status": "executed",
       "stderr_hash": "sha256:8ce956aa15d4bcf4f1c0359d230437de8e5a33067bb5c11ba709d4ed4c4cd3e9",
       "stderr_log_path": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_streaming_reduction_accumulator_v1/hybrid_streaming_reduction_accumulator_v1/vivado_hls.stderr.log",
-      "stdout_hash": "sha256:466673fbe3eb3da057b7c14c823297982560979191d7cc3abcdd118174c53d48",
+      "stdout_hash": "sha256:0971463f6c90ac109f9fcb0b057af03f2998e5e92d2134a113ca10e8ff053236",
       "stdout_log_path": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_streaming_reduction_accumulator_v1/hybrid_streaming_reduction_accumulator_v1/vivado_hls.stdout.log",
       "target_type": "gpu_fpga_hybrid",
       "tool": "vivado_hls",
@@ -707,7 +856,7 @@
     {
       "architecture_id": "hybrid_tiled_complex_axpy_v1",
       "blockers": [],
-      "command": "ssh ic-eda export LC_ALL=C LANG=C; cd /tmp/dse_real_hybrid_hls_hybrid_tiled_complex_axpy_v1_19c28e32 && /home/Xilinx/Vivado/2019.1/bin/vivado_hls -f run_hls.tcl",
+      "command": "ssh ic-eda export LC_ALL=C LANG=C; cd /tmp/dse_real_hybrid_hls_hybrid_tiled_complex_axpy_v1_fbcfe577 && /home/Xilinx/Vivado/2019.1/bin/vivado_hls -f run_hls.tcl",
       "cosim_attempted": true,
       "cosim_parsed": {
         "blockers": [],
@@ -720,7 +869,7 @@
       },
       "cosim_passed": true,
       "cosim_report_available": true,
-      "cosim_report_hash": "sha256:9c4591493dbbd9a8a1230cad68d7a661f44732a1f8b8dc438988d1565d4e1679",
+      "cosim_report_hash": "sha256:cf71720a59b70c83dea555d701d65c19f225cb609a6d5dfe0136dbe267a23402",
       "cosim_report_path": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_tiled_complex_axpy_v1/hybrid_tiled_complex_axpy_v1/cosim.rpt",
       "csim_passed": true,
       "csynth_parsed": {
@@ -753,10 +902,10 @@
         "target_clock_ns": 10.0
       },
       "csynth_report_available": true,
-      "csynth_report_hash": "sha256:64c663929ca53d3d11712f5dce3fb1c8dbe8d621cf1a87089ca6d18f3c1375fc",
+      "csynth_report_hash": "sha256:b721930385ae15c50eab0af3bcb2fbf614338d0c8b01e41660048145b3246f99",
       "csynth_report_path": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_tiled_complex_axpy_v1/hybrid_tiled_complex_axpy_v1/csynth.rpt",
-      "end_timestamp": "2026-06-08T10:41:56Z",
-      "evidence_json_hash": "sha256:d2f82b0048d55fb0b2a4fb7e3e93ff14d448191ded64cf03ba98a4ec90fd6350",
+      "end_timestamp": "2026-06-08T11:07:40Z",
+      "evidence_json_hash": "sha256:515bc018b95cc47bd9d2ea43d11618f869c0cef95ca4b147c49a43308279b538",
       "evidence_json_path": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_tiled_complex_axpy_v1/hybrid_tiled_complex_axpy_v1/real_hybrid_hls_evidence.json",
       "evidence_level": "vivado_hls_csim_csynth_cosim_attempt",
       "fpga_part": "xc7z020clg400-1",
@@ -786,11 +935,11 @@
       },
       "reason": null,
       "returncode": 0,
-      "start_timestamp": "2026-06-08T10:41:23Z",
+      "start_timestamp": "2026-06-08T11:07:05Z",
       "status": "executed",
       "stderr_hash": "sha256:8ce956aa15d4bcf4f1c0359d230437de8e5a33067bb5c11ba709d4ed4c4cd3e9",
       "stderr_log_path": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_tiled_complex_axpy_v1/hybrid_tiled_complex_axpy_v1/vivado_hls.stderr.log",
-      "stdout_hash": "sha256:4b42336844bf104eecb038db0ead8a835232d5d5a250765330054ff9c9afb466",
+      "stdout_hash": "sha256:f0c1a0a0036de9394dd147131161286d67a5e73e135587210ee840a0f60d3362",
       "stdout_log_path": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_tiled_complex_axpy_v1/hybrid_tiled_complex_axpy_v1/vivado_hls.stdout.log",
       "target_type": "gpu_fpga_hybrid",
       "tool": "vivado_hls",
@@ -928,7 +1077,7 @@
     {
       "architecture_id": "hybrid_fft_twiddle_stream_v1",
       "blockers": [],
-      "command": "ssh ic-eda export LC_ALL=C LANG=C; cd /tmp/dse_real_hybrid_hls_hybrid_fft_twiddle_stream_v1_689c93a8 && /home/Xilinx/Vivado/2019.1/bin/vivado_hls -f run_hls.tcl",
+      "command": "ssh ic-eda export LC_ALL=C LANG=C; cd /tmp/dse_real_hybrid_hls_hybrid_fft_twiddle_stream_v1_93de767b && /home/Xilinx/Vivado/2019.1/bin/vivado_hls -f run_hls.tcl",
       "cosim_attempted": true,
       "cosim_parsed": {
         "blockers": [],
@@ -941,7 +1090,7 @@
       },
       "cosim_passed": true,
       "cosim_report_available": true,
-      "cosim_report_hash": "sha256:8a405b7460eaf30440f23ec475063b4e2e96ad29270d4c3dd4452f2676b5da1b",
+      "cosim_report_hash": "sha256:fb38bbdbb4a9c5aa45b71e02dfcee0fc835def59512fc0c2ef6166ddf76792dc",
       "cosim_report_path": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_fft_twiddle_stream_v1/hybrid_fft_twiddle_stream_v1/cosim.rpt",
       "csim_passed": true,
       "csynth_parsed": {
@@ -976,10 +1125,10 @@
         "target_clock_ns": 10.0
       },
       "csynth_report_available": true,
-      "csynth_report_hash": "sha256:e218d899ca234f7bf37a11524aba813f37ebabdfc7624a1ab86148e8fda9bcf3",
+      "csynth_report_hash": "sha256:48d4b7949a19e7cca208fc868bab18022b27937df4ee5d432fbeaf9b4b034590",
       "csynth_report_path": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_fft_twiddle_stream_v1/hybrid_fft_twiddle_stream_v1/csynth.rpt",
-      "end_timestamp": "2026-06-08T10:42:36Z",
-      "evidence_json_hash": "sha256:9a834b664798620e34ed06d2eefd1fb718ce85007a7a533394997a9bcf63e4d2",
+      "end_timestamp": "2026-06-08T11:08:22Z",
+      "evidence_json_hash": "sha256:c1df0457a7f58e6bc1f464dc44ce0ee83b2ffc094a367b6328a09fceb699898a",
       "evidence_json_path": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_fft_twiddle_stream_v1/hybrid_fft_twiddle_stream_v1/real_hybrid_hls_evidence.json",
       "evidence_level": "vivado_hls_csim_csynth_cosim_attempt",
       "fpga_part": "xc7z020clg400-1",
@@ -1009,11 +1158,11 @@
       },
       "reason": null,
       "returncode": 0,
-      "start_timestamp": "2026-06-08T10:41:56Z",
+      "start_timestamp": "2026-06-08T11:07:40Z",
       "status": "executed",
       "stderr_hash": "sha256:8ce956aa15d4bcf4f1c0359d230437de8e5a33067bb5c11ba709d4ed4c4cd3e9",
       "stderr_log_path": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_fft_twiddle_stream_v1/hybrid_fft_twiddle_stream_v1/vivado_hls.stderr.log",
-      "stdout_hash": "sha256:9113b904b77de973add874f58028b8777981ac54979427912478533b3ca6d467",
+      "stdout_hash": "sha256:d0657f44aec46d111db81450e8979a24e2f1d7f32a84253a7ea990cca6a3a77d",
       "stdout_log_path": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_fft_twiddle_stream_v1/hybrid_fft_twiddle_stream_v1/vivado_hls.stdout.log",
       "target_type": "gpu_fpga_hybrid",
       "tool": "vivado_hls",
@@ -1151,7 +1300,7 @@
     {
       "architecture_id": "hybrid_sum_band_density_accumulator_v1",
       "blockers": [],
-      "command": "ssh ic-eda export LC_ALL=C LANG=C; cd /tmp/dse_real_hybrid_hls_hybrid_sum_band_density_accumulator_v1_97bdce1b && /home/Xilinx/Vivado/2019.1/bin/vivado_hls -f run_hls.tcl",
+      "command": "ssh ic-eda export LC_ALL=C LANG=C; cd /tmp/dse_real_hybrid_hls_hybrid_sum_band_density_accumulator_v1_8267cebb && /home/Xilinx/Vivado/2019.1/bin/vivado_hls -f run_hls.tcl",
       "cosim_attempted": true,
       "cosim_parsed": {
         "blockers": [],
@@ -1164,7 +1313,7 @@
       },
       "cosim_passed": true,
       "cosim_report_available": true,
-      "cosim_report_hash": "sha256:0c62cc85e27cb84a05147510e79fc0126a33d4268c115d99ad8abb9c709d1c8d",
+      "cosim_report_hash": "sha256:b3b6e1cb5c1acd58e4d4b2125dd81144293a092d88cf217dc72cf3311d2449d2",
       "cosim_report_path": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_sum_band_density_accumulator_v1/hybrid_sum_band_density_accumulator_v1/cosim.rpt",
       "csim_passed": true,
       "csynth_parsed": {
@@ -1191,10 +1340,10 @@
         "target_clock_ns": 10.0
       },
       "csynth_report_available": true,
-      "csynth_report_hash": "sha256:ba8d3936b66b9d147e9422137221c06dfe0f7ab836cd1ec260ff0d8c05259ba2",
+      "csynth_report_hash": "sha256:8a46bc489237bfe55f679b83ddcdd9cb1743237ebcd5f2a3e34d11c3cdff7424",
       "csynth_report_path": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_sum_band_density_accumulator_v1/hybrid_sum_band_density_accumulator_v1/csynth.rpt",
-      "end_timestamp": "2026-06-08T10:43:07Z",
-      "evidence_json_hash": "sha256:887b71a6f73852b29e28e614d6c6b18606ee35eeb45582ce51792eb9977985cf",
+      "end_timestamp": "2026-06-08T11:08:54Z",
+      "evidence_json_hash": "sha256:8a5e8f23945912041ad0e81bacd36acafa308b0fafe5e6c25bba1698e6a30b70",
       "evidence_json_path": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_sum_band_density_accumulator_v1/hybrid_sum_band_density_accumulator_v1/real_hybrid_hls_evidence.json",
       "evidence_level": "vivado_hls_csim_csynth_cosim_attempt",
       "fpga_part": "xc7z020clg400-1",
@@ -1223,11 +1372,11 @@
       },
       "reason": null,
       "returncode": 0,
-      "start_timestamp": "2026-06-08T10:42:36Z",
+      "start_timestamp": "2026-06-08T11:08:22Z",
       "status": "executed",
       "stderr_hash": "sha256:8ce956aa15d4bcf4f1c0359d230437de8e5a33067bb5c11ba709d4ed4c4cd3e9",
       "stderr_log_path": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_sum_band_density_accumulator_v1/hybrid_sum_band_density_accumulator_v1/vivado_hls.stderr.log",
-      "stdout_hash": "sha256:4ee63e2ac1f6881e51b0239862b9a2b05abf2d08c4db607af663e083582af3b6",
+      "stdout_hash": "sha256:bf12f63908fe925d479fe21111f46685835e5bc0401aec4cb542be6b684711df",
       "stdout_log_path": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_sum_band_density_accumulator_v1/hybrid_sum_band_density_accumulator_v1/vivado_hls.stdout.log",
       "target_type": "gpu_fpga_hybrid",
       "tool": "vivado_hls",
@@ -1343,9 +1492,211 @@
         }
       ],
       "workflow_overhead_seconds": null
+    },
+    {
+      "architecture_id": "hybrid_hpsi_local_potential_v1",
+      "blockers": [],
+      "command": "ssh ic-eda export LC_ALL=C LANG=C; cd /tmp/dse_real_hybrid_hls_hybrid_hpsi_local_potential_v1_53ab067a && /home/Xilinx/Vivado/2019.1/bin/vivado_hls -f run_hls.tcl",
+      "cosim_attempted": true,
+      "cosim_parsed": {
+        "blockers": [],
+        "latency_cycles_avg": 664,
+        "latency_cycles_max": 664,
+        "latency_cycles_min": 664,
+        "rtl": "Verilog",
+        "rtl_status": "Pass",
+        "status": "parsed"
+      },
+      "cosim_passed": true,
+      "cosim_report_available": true,
+      "cosim_report_hash": "sha256:37b7c4db7ad2970c2a2b09735bd4640b73b5bb56b5f136c556e4765c59f025a5",
+      "cosim_report_path": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_hpsi_local_potential_v1/hybrid_hpsi_local_potential_v1/cosim.rpt",
+      "csim_passed": true,
+      "csynth_parsed": {
+        "blockers": [],
+        "estimated_clock_ns": 8.75,
+        "interval_cycles_max": 288,
+        "interval_cycles_min": 288,
+        "latency_cycles_max": 326,
+        "latency_cycles_min": 326,
+        "latency_estimate_source": "loop_detail_fallback_trip_count",
+        "latency_estimate_trip_count": 96,
+        "loop_achieved_ii_cycles": 3,
+        "loop_iteration_latency_cycles": 41,
+        "resource": {
+          "bram_18k": 34,
+          "dsp48e": 28,
+          "ff": 6561,
+          "lut": 8762,
+          "uram": 0
+        },
+        "resource_available": {
+          "bram_18k": 280,
+          "dsp48e": 220,
+          "ff": 106400,
+          "lut": 53200,
+          "uram": 0
+        },
+        "resource_feasible": true,
+        "status": "parsed",
+        "target_clock_ns": 10.0
+      },
+      "csynth_report_available": true,
+      "csynth_report_hash": "sha256:801af6f46793b1e497913bc44bcb43b5129a61b5cbd6a0d4fb87d2a1cc3cc834",
+      "csynth_report_path": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_hpsi_local_potential_v1/hybrid_hpsi_local_potential_v1/csynth.rpt",
+      "end_timestamp": "2026-06-08T11:09:27Z",
+      "evidence_json_hash": "sha256:c12c458c390c33277678c3c593121b66f9b79635c1c89187291142169a631c91",
+      "evidence_json_path": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_hpsi_local_potential_v1/hybrid_hpsi_local_potential_v1/real_hybrid_hls_evidence.json",
+      "evidence_level": "vivado_hls_csim_csynth_cosim_attempt",
+      "fpga_part": "xc7z020clg400-1",
+      "golden_problem_shape": {
+        "grid_points": 96,
+        "stencil_radius": 1
+      },
+      "implementation_coverage": "qe_routine_equivalent_miniapp",
+      "implementation_maturity": "real_hls_kernel",
+      "kernel_name": "qeic_real_hpsi_local_potential",
+      "mapped_qe_timer_names": [
+        "h_psi"
+      ],
+      "motif_id": "h_psi_local_potential",
+      "performance_latency_cycles_max": 664,
+      "performance_latency_source": "vivado_hls_cosim",
+      "project": {
+        "architecture_id": "hybrid_hpsi_local_potential_v1",
+        "kernel_cpp": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_hpsi_local_potential_v1/hybrid_hpsi_local_potential_v1/kernel.cpp",
+        "kernel_hash": "sha256:3d5e5db7865418ca8f5c0197cc664c594389aafd9222f81a163445287acfd67d",
+        "project_dir": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_hpsi_local_potential_v1/hybrid_hpsi_local_potential_v1",
+        "run_hls_tcl": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_hpsi_local_potential_v1/hybrid_hpsi_local_potential_v1/run_hls.tcl",
+        "tb_cpp": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_hpsi_local_potential_v1/hybrid_hpsi_local_potential_v1/tb.cpp",
+        "tcl_hash": "sha256:2f65b1c67605569f8442ef6c34752a76912a6137ce0e8aa05bb3d315b821dc13",
+        "testbench_hash": "sha256:ea2721986ae403f0ec77f63a605ff8eda6dae14b3ca8992f7fbcf56a44a00e9e"
+      },
+      "reason": null,
+      "returncode": 0,
+      "start_timestamp": "2026-06-08T11:08:54Z",
+      "status": "executed",
+      "stderr_hash": "sha256:8ce956aa15d4bcf4f1c0359d230437de8e5a33067bb5c11ba709d4ed4c4cd3e9",
+      "stderr_log_path": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_hpsi_local_potential_v1/hybrid_hpsi_local_potential_v1/vivado_hls.stderr.log",
+      "stdout_hash": "sha256:25d8fa05b80e6fba1f96b47743b8417e2acede9c977fd0a5c4b0f94e383ce0c7",
+      "stdout_log_path": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_hpsi_local_potential_v1/hybrid_hpsi_local_potential_v1/vivado_hls.stdout.log",
+      "target_type": "gpu_fpga_hybrid",
+      "tool": "vivado_hls",
+      "tool_path": "ssh://ic-eda/home/Xilinx/Vivado/2019.1/bin/vivado_hls",
+      "transfer_overhead_seconds": 5e-05,
+      "vcs_attempted": false,
+      "vcs_passed": false,
+      "workflow_accounting": [
+        {
+          "blockers": [
+            "full_qe_kernel_equivalent_missing"
+          ],
+          "case_id": "ic_sio2_dielectric_6atom_scf_v0",
+          "claim_boundary": "Optimistic trace replay of measured QE timers using real HLS C/RTL cosim latency; compact miniapp/routine evidence still requires full QE integration before final claims.",
+          "cpu_retained_seconds": 1.7005756829919605,
+          "fpga_compute_seconds": 0.0009644600000000001,
+          "fpga_kernel_seconds_per_transaction": 5.81e-06,
+          "fpga_transaction_count_estimate": 166.0,
+          "host_device_transfer_seconds": 0.0083,
+          "hybrid_workflow_runtime_seconds": 1.7264401429919605,
+          "implementation_coverage": "qe_routine_equivalent_miniapp",
+          "launch_overhead_seconds": 0.0083,
+          "mapped_timer_call_count_mean": {
+            "h_psi": 166.0
+          },
+          "mapped_timer_names": [
+            "h_psi"
+          ],
+          "mapped_timer_wall_seconds_mean": {
+            "h_psi": 0.22666666666666668
+          },
+          "qe_pwscf_wall_seconds_mean": 1.6866666666666668,
+          "replaceable_seconds_mean": 0.22666666666666668,
+          "scf_control_seconds": 0.4672423496586271,
+          "source_gpu_runtime_seconds_mean": 1.927242349658627,
+          "status": "trace_replay_optimistic",
+          "synchronization_seconds": 0.0083,
+          "timer_trace_paths": [
+            "artifacts/qe_ic_7day_prelim/runs/ic_sio2_dielectric_6atom_scf_v0/gpu_only_baseline/run_001.stdout.log",
+            "artifacts/qe_ic_7day_prelim/runs/ic_sio2_dielectric_6atom_scf_v0/gpu_only_baseline/run_002.stdout.log",
+            "artifacts/qe_ic_7day_prelim/runs/ic_sio2_dielectric_6atom_scf_v0/gpu_only_baseline/run_003.stdout.log"
+          ]
+        },
+        {
+          "blockers": [
+            "full_qe_kernel_equivalent_missing"
+          ],
+          "case_id": "ic_al_interconnect_4atom_scf_v0",
+          "claim_boundary": "Optimistic trace replay of measured QE timers using real HLS C/RTL cosim latency; compact miniapp/routine evidence still requires full QE integration before final claims.",
+          "cpu_retained_seconds": 0.5798613443380842,
+          "fpga_compute_seconds": 0.00038927000000000005,
+          "fpga_kernel_seconds_per_transaction": 5.81e-06,
+          "fpga_transaction_count_estimate": 67.0,
+          "host_device_transfer_seconds": 0.00335,
+          "hybrid_workflow_runtime_seconds": 0.5903006143380841,
+          "implementation_coverage": "qe_routine_equivalent_miniapp",
+          "launch_overhead_seconds": 0.00335,
+          "mapped_timer_call_count_mean": {
+            "h_psi": 67.0
+          },
+          "mapped_timer_names": [
+            "h_psi"
+          ],
+          "mapped_timer_wall_seconds_mean": {
+            "h_psi": 0.12
+          },
+          "qe_pwscf_wall_seconds_mean": 0.4633333333333333,
+          "replaceable_seconds_mean": 0.12,
+          "scf_control_seconds": 0.3898613443380842,
+          "source_gpu_runtime_seconds_mean": 0.6998613443380842,
+          "status": "trace_replay_optimistic",
+          "synchronization_seconds": 0.00335,
+          "timer_trace_paths": [
+            "artifacts/qe_ic_7day_prelim/runs/ic_al_interconnect_4atom_scf_v0/gpu_only_baseline/run_001.stdout.log",
+            "artifacts/qe_ic_7day_prelim/runs/ic_al_interconnect_4atom_scf_v0/gpu_only_baseline/run_002.stdout.log",
+            "artifacts/qe_ic_7day_prelim/runs/ic_al_interconnect_4atom_scf_v0/gpu_only_baseline/run_003.stdout.log"
+          ]
+        },
+        {
+          "blockers": [
+            "full_qe_kernel_equivalent_missing"
+          ],
+          "case_id": "ic_si_bulk_2atom_scf_v0",
+          "claim_boundary": "Optimistic trace replay of measured QE timers using real HLS C/RTL cosim latency; compact miniapp/routine evidence still requires full QE integration before final claims.",
+          "cpu_retained_seconds": 0.4983306753344368,
+          "fpga_compute_seconds": 0.00025564,
+          "fpga_kernel_seconds_per_transaction": 5.81e-06,
+          "fpga_transaction_count_estimate": 44.0,
+          "host_device_transfer_seconds": 0.0022,
+          "hybrid_workflow_runtime_seconds": 0.5051863153344368,
+          "implementation_coverage": "qe_routine_equivalent_miniapp",
+          "launch_overhead_seconds": 0.0022,
+          "mapped_timer_call_count_mean": {
+            "h_psi": 44.0
+          },
+          "mapped_timer_names": [
+            "h_psi"
+          ],
+          "mapped_timer_wall_seconds_mean": {
+            "h_psi": 0.07
+          },
+          "qe_pwscf_wall_seconds_mean": 0.31333333333333335,
+          "replaceable_seconds_mean": 0.07,
+          "scf_control_seconds": 0.4149973420011035,
+          "source_gpu_runtime_seconds_mean": 0.5683306753344368,
+          "status": "trace_replay_optimistic",
+          "synchronization_seconds": 0.0022,
+          "timer_trace_paths": [
+            "artifacts/qe_ic_7day_prelim/runs/ic_si_bulk_2atom_scf_v0/gpu_only_baseline/run_001.stdout.log",
+            "artifacts/qe_ic_7day_prelim/runs/ic_si_bulk_2atom_scf_v0/gpu_only_baseline/run_002.stdout.log",
+            "artifacts/qe_ic_7day_prelim/runs/ic_si_bulk_2atom_scf_v0/gpu_only_baseline/run_003.stdout.log"
+          ]
+        }
+      ],
+      "workflow_overhead_seconds": null
     }
   ],
   "gpu_baseline_path": "artifacts/qe_ic_7day_prelim/qe_ic_7day_gpu_baseline.json",
-  "run_timestamp": "2026-06-08T10:45:00Z",
+  "run_timestamp": "2026-06-08T11:09:27Z",
   "schema_version": "dse.qe_ic.real_hybrid_hls_campaign.v1"
 }
