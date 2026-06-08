@@ -20,6 +20,7 @@ from typing import Any
 
 
 DEFAULT_FPGA_PART = "xc7z020clg400-1"
+FULL_QE_KERNEL_INTEGRATION_READINESS_SCHEMA = "dse.qe_ic.full_qe_kernel_integration_readiness.v1"
 
 
 def _safe_name(value: str) -> str:
@@ -1084,6 +1085,11 @@ _INTEGRATED_VIVADO_RESULT_KEYS = {
     _INTEGRATED_SIDECAR_ID: "integrated_vivado_impl_result",
     _PIPELINED_SIDECAR_ID: "integrated_pipelined_vivado_impl_result",
     _STREAMING_SIDECAR_ID: "integrated_streaming_vivado_impl_result",
+}
+_INTEGRATED_VCS_RESULT_KEYS = {
+    _INTEGRATED_SIDECAR_ID: "integrated_vcs_sidecar_result",
+    _PIPELINED_SIDECAR_ID: "integrated_pipelined_vcs_sidecar_result",
+    _STREAMING_SIDECAR_ID: "integrated_streaming_vcs_sidecar_result",
 }
 _INTEGRATED_COMPONENT_TIMER_MAP: dict[str, list[str]] = {
     "hpsi": ["h_psi"],
@@ -4681,6 +4687,159 @@ def build_real_hybrid_claim_closure(
     }
 
 
+def _passed_integrated_vcs_ids(summary: Mapping[str, Any]) -> list[str]:
+    return sorted(
+        {
+            str(item.get("architecture_id"))
+            for key in _INTEGRATED_VCS_RESULT_KEYS.values()
+            if isinstance((item := summary.get(key)), Mapping)
+            and item.get("architecture_id")
+            and item.get("vcs_passed") is True
+            and isinstance(item.get("vcs_parsed"), Mapping)
+            and item["vcs_parsed"].get("rtl_status") == "Pass"
+            and isinstance(item["vcs_parsed"].get("latency_cycles"), (int, float))
+        }
+    )
+
+
+def _passed_integrated_vivado_ids(summary: Mapping[str, Any]) -> list[str]:
+    return sorted(
+        {
+            str(item.get("architecture_id"))
+            for key in _INTEGRATED_VIVADO_RESULT_KEYS.values()
+            if isinstance((item := summary.get(key)), Mapping)
+            and item.get("architecture_id")
+            and item.get("vivado_impl_passed") is True
+            and isinstance(item.get("implemented_clock_ns"), (int, float))
+            and isinstance(item.get("vivado_impl_timing_parsed"), Mapping)
+            and item["vivado_impl_timing_parsed"].get("timing_met") is True
+            and isinstance(item.get("vivado_impl_utilization_parsed"), Mapping)
+            and item["vivado_impl_utilization_parsed"].get("resource_feasible") is True
+        }
+    )
+
+
+def _passed_full_scf_comparison(full_scf_comparison: Mapping[str, Any] | None) -> bool:
+    if not isinstance(full_scf_comparison, Mapping):
+        return False
+    status = str(full_scf_comparison.get("status") or "").strip().lower()
+    return (
+        (full_scf_comparison.get("passed") is True or status == "passed")
+        and full_scf_comparison.get("comparison_scope") == "full_scf_host_accelerator_end_to_end"
+        and full_scf_comparison.get("trusted_accelerated_numeric_source") is True
+    )
+
+
+def build_full_qe_kernel_integration_readiness_audit(
+    *,
+    summary: Mapping[str, Any],
+    hook_coverage_audit: Mapping[str, Any] | None = None,
+    full_scf_comparison: Mapping[str, Any] | None = None,
+    candidate_id: str | None = None,
+    workload_case_id: str | None = None,
+) -> dict[str, Any]:
+    """Build a fail-closed readiness audit for the full-QE integration gate.
+
+    This artifact records what is already available from real integrated
+    VCS/Vivado sidecar work and what is still missing before the hard
+    ``full_qe_kernel_integration`` gate may be satisfied.  It is intentionally
+    diagnostic/admission evidence; it does not upgrade sidecar replay evidence
+    into full QE kernel replacement or board-measured superiority.
+    """
+
+    vcs_ids = _passed_integrated_vcs_ids(summary)
+    vivado_ids = _passed_integrated_vivado_ids(summary)
+    hook_present = isinstance(hook_coverage_audit, Mapping)
+    required_major_kernel_count = int(hook_coverage_audit.get("required_major_kernel_count", 0)) if hook_present else 0
+    runtime_hook_contract_passed_count = int(hook_coverage_audit.get("runtime_hook_contract_passed_count", 0)) if hook_present else 0
+    trusted_replacement_evidence_count = int(hook_coverage_audit.get("trusted_replacement_evidence_count", 0)) if hook_present else 0
+    accelerated_results_consumed_by_qe_count = (
+        int(hook_coverage_audit.get("accelerated_results_consumed_by_qe_count", 0)) if hook_present else 0
+    )
+    hook_passed = hook_present and hook_coverage_audit.get("passed") is True
+    runtime_replacement_contract_passed = (
+        hook_passed
+        and required_major_kernel_count > 0
+        and runtime_hook_contract_passed_count >= required_major_kernel_count
+        and trusted_replacement_evidence_count >= required_major_kernel_count
+        and accelerated_results_consumed_by_qe_count >= required_major_kernel_count
+    )
+    full_scf_passed = _passed_full_scf_comparison(full_scf_comparison)
+    full_qe_gate_satisfied = runtime_replacement_contract_passed and full_scf_passed
+
+    blockers: list[str] = []
+    if len(vcs_ids) < 1:
+        blockers.append("integrated_vcs_sidecar_latency_missing")
+    if len(vivado_ids) < 1:
+        blockers.append("integrated_vivado_post_route_missing")
+    if not hook_present:
+        blockers.append("qe_runtime_replacement_contract_missing")
+    elif not runtime_replacement_contract_passed:
+        blockers.append("qe_runtime_replacement_contract_not_passed")
+    if accelerated_results_consumed_by_qe_count < max(required_major_kernel_count, 1):
+        blockers.append("full_qe_pw_scf_consumption_proof_missing")
+    if not full_scf_passed:
+        blockers.append("full_scf_end_to_end_comparison_missing")
+    blockers.append("physical_fpga_board_measurement_missing")
+    blockers = sorted(dict.fromkeys(blockers))
+
+    return {
+        "schema_version": FULL_QE_KERNEL_INTEGRATION_READINESS_SCHEMA,
+        "candidate_id": candidate_id,
+        "workload_case_id": workload_case_id,
+        "status": "blocked_temporary" if blockers else "passed",
+        "passed": not blockers,
+        "admission_status": "admitted" if full_qe_gate_satisfied else "not_admitted",
+        "full_qe_kernel_integration_gate_satisfied": full_qe_gate_satisfied,
+        "may_satisfy_superiority_hard_gate": full_qe_gate_satisfied and "physical_fpga_board_measurement_missing" not in blockers,
+        "available_sidecar_evidence": {
+            "vcs_passed_architecture_count": len(vcs_ids),
+            "vcs_passed_architecture_ids": vcs_ids,
+            "vivado_passed_architecture_count": len(vivado_ids),
+            "vivado_passed_architecture_ids": vivado_ids,
+            "sidecar_evidence_boundary": (
+                "Integrated VCS/Vivado sidecar evidence is real RTL/tool evidence, "
+                "but remains trace-replay/sidecar evidence until QE consumes "
+                "accelerated replacement results on the full-SCF path."
+            ),
+        },
+        "qe_runtime_replacement_evidence": {
+            "hook_audit_present": hook_present,
+            "hook_audit_passed": hook_passed,
+            "required_major_kernel_count": required_major_kernel_count,
+            "runtime_hook_contract_passed_count": runtime_hook_contract_passed_count,
+            "trusted_replacement_evidence_count": trusted_replacement_evidence_count,
+            "accelerated_results_consumed_by_qe_count": accelerated_results_consumed_by_qe_count,
+            "hook_blocker_count": len(_as_list(hook_coverage_audit.get("blockers"))) if hook_present else None,
+        },
+        "full_scf_end_to_end_evidence": {
+            "comparison_present": isinstance(full_scf_comparison, Mapping),
+            "comparison_passed": full_scf_passed,
+            "comparison_scope": full_scf_comparison.get("comparison_scope") if isinstance(full_scf_comparison, Mapping) else None,
+            "trusted_accelerated_numeric_source": (
+                full_scf_comparison.get("trusted_accelerated_numeric_source")
+                if isinstance(full_scf_comparison, Mapping)
+                else None
+            ),
+        },
+        "required_next_artifacts": [
+            "kernel_evidence.json with per-major-kernel full replacement rows",
+            "offload_provenance.json proving QE mainflow integration and consumed accelerator output",
+            "full_scf_runtime_trace.json from trusted host-accelerator execution",
+            "runtime_execution_proof.json from the non-proxy QE/full-SCF run",
+            "full_scf_end_to_end_comparison.json with trusted accelerated numeric source",
+            "physical FPGA board measurement for final hardware superiority",
+        ],
+        "blockers": blockers,
+        "claim_boundary": (
+            "Readiness/admission audit only. It can guide the next full-QE integration work, "
+            "but it cannot satisfy the full_qe_kernel_integration hard gate or final superiority "
+            "claim without strict QE runtime replacement, QE consumption, full-SCF comparison, "
+            "and board-measured evidence."
+        ),
+    }
+
+
 def classify_real_hybrid_vs_gpu(gpu_baseline: Mapping[str, Any], evidence_rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
     """Classify real hybrid evidence against GPU baseline with hard gates.
 
@@ -4809,6 +4968,7 @@ def build_real_hybrid_superiority_proof_audit(
     summary: Mapping[str, Any],
     claim_closure: Mapping[str, Any],
     gpu_baseline: Mapping[str, Any],
+    full_qe_integration_readiness: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build a fail-closed audit for GPU-vs-hybrid superiority claims.
 
@@ -4866,6 +5026,12 @@ def build_real_hybrid_superiority_proof_audit(
         }
     )
     missing_gate_ids = [str(item) for item in _as_list(claim_closure.get("missing_gate_ids"))]
+    readiness_present = isinstance(full_qe_integration_readiness, Mapping)
+    readiness_gate_satisfied = (
+        readiness_present
+        and full_qe_integration_readiness.get("full_qe_kernel_integration_gate_satisfied") is True
+        and full_qe_integration_readiness.get("passed") is True
+    )
     final_claim_allowed = claim_closure.get("final_claim_allowed") is True and not missing_gate_ids
     checks = [
         {
@@ -4894,7 +5060,17 @@ def build_real_hybrid_superiority_proof_audit(
         {
             "check_id": "full_qe_kernel_integration",
             "status": "satisfied" if "full_qe_kernel_integration" not in missing_gate_ids else "missing",
-            "evidence": {"missing_gate": "full_qe_kernel_integration" in missing_gate_ids},
+            "evidence": {
+                "missing_gate": "full_qe_kernel_integration" in missing_gate_ids,
+                "readiness_audit_present": readiness_present,
+                "readiness_gate_satisfied": readiness_gate_satisfied,
+                "readiness_status": (
+                    full_qe_integration_readiness.get("status") if readiness_present else None
+                ),
+                "readiness_blockers": (
+                    _as_list(full_qe_integration_readiness.get("blockers")) if readiness_present else []
+                ),
+            },
         },
         {
             "check_id": "physical_fpga_board_measurement",
@@ -4928,6 +5104,7 @@ __all__ = [
     "build_real_hybrid_architecture_specs",
     "build_evidence_row_static_metadata",
     "build_combined_vcs_sidecar_accounting",
+    "build_full_qe_kernel_integration_readiness_audit",
     "build_integrated_vcs_sidecar_accounting",
     "build_real_hybrid_claim_closure",
     "build_real_hybrid_superiority_proof_audit",

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build a fail-closed superiority proof audit for QE IC real-hybrid evidence."""
+"""Build fail-closed full-QE integration readiness audit for real hybrid evidence."""
 
 from __future__ import annotations
 
@@ -15,11 +15,13 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from dse_v2.experiments.qe_ic_real_opportunity.real_hybrid_hls_evidence import (  # noqa: E402
-    build_real_hybrid_superiority_proof_audit,
+    build_full_qe_kernel_integration_readiness_audit,
 )
 
 
-def _load_json(path: Path) -> dict[str, Any]:
+def _load_json(path: Path | None) -> dict[str, Any] | None:
+    if path is None:
+        return None
     payload = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(payload, dict):
         raise ValueError(f"JSON payload is not an object: {path}")
@@ -28,42 +30,45 @@ def _load_json(path: Path) -> dict[str, Any]:
 
 def _write_json(path: Path, payload: Mapping[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
 def run_audit(args: argparse.Namespace) -> dict[str, Any]:
     summary = _load_json(args.summary)
-    claim_closure = _load_json(args.claim_closure)
-    gpu_baseline = _load_json(args.gpu_baseline)
-    readiness_path = getattr(args, "full_qe_integration_readiness", None)
-    full_qe_integration_readiness = _load_json(readiness_path) if readiness_path and readiness_path.exists() else None
-    audit = build_real_hybrid_superiority_proof_audit(
+    if summary is None:
+        raise ValueError("--summary is required")
+    hook_coverage_audit = _load_json(args.hook_coverage_audit)
+    full_scf_comparison = _load_json(args.full_scf_comparison)
+    audit = build_full_qe_kernel_integration_readiness_audit(
         summary=summary,
-        claim_closure=claim_closure,
-        gpu_baseline=gpu_baseline,
-        full_qe_integration_readiness=full_qe_integration_readiness,
+        hook_coverage_audit=hook_coverage_audit,
+        full_scf_comparison=full_scf_comparison,
+        candidate_id=args.candidate_id,
+        workload_case_id=args.workload_case_id,
     )
     _write_json(args.out, audit)
     return {
         "status": "written",
         "audit": str(args.out),
-        "decision": audit.get("decision"),
-        "strong_superiority_claim_allowed": audit.get("strong_superiority_claim_allowed"),
-        "missing_gate_ids": audit.get("missing_gate_ids"),
+        "passed": audit.get("passed"),
+        "admission_status": audit.get("admission_status"),
+        "full_qe_kernel_integration_gate_satisfied": audit.get("full_qe_kernel_integration_gate_satisfied"),
+        "blockers": audit.get("blockers"),
     }
 
 
 def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--summary", type=Path, default=Path("artifacts/qe_ic_real_hybrid_hls/real_hybrid_hls_summary.json"))
-    parser.add_argument("--claim-closure", type=Path, default=Path("artifacts/qe_ic_real_hybrid_hls/real_hybrid_claim_closure.json"))
-    parser.add_argument("--gpu-baseline", type=Path, default=Path("artifacts/qe_ic_7day_prelim/qe_ic_7day_gpu_baseline.json"))
+    parser.add_argument("--hook-coverage-audit", type=Path, default=None)
+    parser.add_argument("--full-scf-comparison", type=Path, default=None)
+    parser.add_argument("--candidate-id", default=None)
+    parser.add_argument("--workload-case-id", default=None)
     parser.add_argument(
-        "--full-qe-integration-readiness",
+        "--out",
         type=Path,
         default=Path("artifacts/qe_ic_real_hybrid_hls/real_hybrid_full_qe_integration_readiness_audit.json"),
     )
-    parser.add_argument("--out", type=Path, default=Path("artifacts/qe_ic_real_hybrid_hls/real_hybrid_superiority_proof_audit.json"))
     return parser.parse_args(argv)
 
 

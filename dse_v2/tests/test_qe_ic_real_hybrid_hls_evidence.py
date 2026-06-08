@@ -2160,6 +2160,25 @@ def test_build_real_hybrid_superiority_proof_audit_fail_closes_current_artifacts
     assert audit["checks_by_id"]["full_qe_kernel_integration"]["status"] == "missing"
     assert audit["checks_by_id"]["physical_fpga_board_measurement"]["status"] == "missing"
 
+    readiness = {
+        "schema_version": "dse.qe_ic.full_qe_kernel_integration_readiness.v1",
+        "status": "blocked_temporary",
+        "passed": False,
+        "full_qe_kernel_integration_gate_satisfied": False,
+        "blockers": ["full_qe_pw_scf_consumption_proof_missing"],
+    }
+    audit_with_readiness = build_real_hybrid_superiority_proof_audit(
+        summary=summary,
+        claim_closure=closure,
+        gpu_baseline=gpu_baseline,
+        full_qe_integration_readiness=readiness,
+    )
+    full_qe_check = audit_with_readiness["checks_by_id"]["full_qe_kernel_integration"]
+    assert full_qe_check["status"] == "missing"
+    assert full_qe_check["evidence"]["readiness_audit_present"] is True
+    assert full_qe_check["evidence"]["readiness_gate_satisfied"] is False
+    assert full_qe_check["evidence"]["readiness_blockers"] == ["full_qe_pw_scf_consumption_proof_missing"]
+
 
 def test_real_hybrid_superiority_audit_runner_writes_fail_closed_audit(tmp_path: Path):
     import argparse
@@ -2212,3 +2231,127 @@ def test_real_hybrid_superiority_audit_runner_writes_fail_closed_audit(tmp_path:
     assert audit["decision"] == "fpga_hybrid_weaker"
     assert audit["strong_superiority_claim_allowed"] is False
     assert audit["checks_by_id"]["physical_fpga_board_measurement"]["status"] == "missing"
+
+
+def test_build_full_qe_kernel_integration_readiness_audit_fail_closes_sidecar_only_evidence():
+    from dse_v2.experiments.qe_ic_real_opportunity.real_hybrid_hls_evidence import (
+        build_full_qe_kernel_integration_readiness_audit,
+    )
+
+    summary = {
+        "integrated_vcs_sidecar_result": {
+            "architecture_id": "hybrid_integrated_combined_sidecar_v1",
+            "vcs_passed": True,
+            "vcs_parsed": {"rtl_status": "Pass", "latency_cycles": 288},
+        },
+        "integrated_streaming_vcs_sidecar_result": {
+            "architecture_id": "hybrid_integrated_streaming_pipeline_sidecar_v3",
+            "vcs_passed": True,
+            "vcs_parsed": {"rtl_status": "Pass", "latency_cycles": 291},
+        },
+        "integrated_vivado_impl_result": {
+            "architecture_id": "hybrid_integrated_combined_sidecar_v1",
+            "vivado_impl_passed": True,
+            "implemented_clock_ns": 20.0,
+            "vivado_impl_timing_parsed": {"timing_met": True},
+            "vivado_impl_utilization_parsed": {"resource_feasible": True},
+        },
+        "integrated_streaming_vivado_impl_result": {
+            "architecture_id": "hybrid_integrated_streaming_pipeline_sidecar_v3",
+            "vivado_impl_passed": True,
+            "implemented_clock_ns": 12.0,
+            "vivado_impl_timing_parsed": {"timing_met": True},
+            "vivado_impl_utilization_parsed": {"resource_feasible": True},
+        },
+    }
+    hook_audit = {
+        "schema_version": "dse.qe.full_scf_hook_coverage_audit.v1",
+        "passed": False,
+        "required_major_kernel_count": 8,
+        "runtime_hook_contract_passed_count": 0,
+        "trusted_replacement_evidence_count": 0,
+        "accelerated_results_consumed_by_qe_count": 0,
+        "blockers": ["kernel_replacement_evidence_missing_or_untrusted::hpsi_local_potential"],
+        "major_kernel_records": [
+            {
+                "kernel_id": "hpsi_local_potential",
+                "trusted_replacement_evidence_present": False,
+                "accelerated_results_consumed_by_qe": False,
+                "runtime_hook_contract_passed": False,
+            }
+        ],
+    }
+
+    audit = build_full_qe_kernel_integration_readiness_audit(
+        summary=summary,
+        hook_coverage_audit=hook_audit,
+        candidate_id="hybrid_integrated_streaming_pipeline_sidecar_v3",
+        workload_case_id="ic_si_bulk_2atom_scf_v0",
+    )
+
+    assert audit["schema_version"] == "dse.qe_ic.full_qe_kernel_integration_readiness.v1"
+    assert audit["status"] == "blocked_temporary"
+    assert audit["passed"] is False
+    assert audit["full_qe_kernel_integration_gate_satisfied"] is False
+    assert audit["available_sidecar_evidence"]["vcs_passed_architecture_count"] == 2
+    assert audit["available_sidecar_evidence"]["vivado_passed_architecture_count"] == 2
+    assert audit["qe_runtime_replacement_evidence"]["hook_audit_present"] is True
+    assert audit["qe_runtime_replacement_evidence"]["runtime_hook_contract_passed_count"] == 0
+    assert "qe_runtime_replacement_contract_not_passed" in audit["blockers"]
+    assert "full_qe_pw_scf_consumption_proof_missing" in audit["blockers"]
+    assert "physical_fpga_board_measurement_missing" in audit["blockers"]
+    assert audit["claim_boundary"].startswith("Readiness/admission audit only")
+
+
+def test_full_qe_kernel_integration_readiness_runner_writes_fail_closed_artifact(tmp_path: Path):
+    import argparse
+    import importlib.util
+
+    script_path = Path(__file__).resolve().parents[1] / "scripts" / "dse" / "audit_qe_ic_real_hybrid_full_qe_integration_readiness.py"
+    spec = importlib.util.spec_from_file_location("audit_qe_ic_real_hybrid_full_qe_integration_readiness", script_path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    summary_path = tmp_path / "summary.json"
+    hook_path = tmp_path / "hook.json"
+    out_path = tmp_path / "readiness.json"
+    summary_path.write_text(json.dumps({
+        "integrated_streaming_vcs_sidecar_result": {
+            "architecture_id": "hybrid_integrated_streaming_pipeline_sidecar_v3",
+            "vcs_passed": True,
+            "vcs_parsed": {"rtl_status": "Pass", "latency_cycles": 291},
+        },
+        "integrated_streaming_vivado_impl_result": {
+            "architecture_id": "hybrid_integrated_streaming_pipeline_sidecar_v3",
+            "vivado_impl_passed": True,
+            "implemented_clock_ns": 12.0,
+            "vivado_impl_timing_parsed": {"timing_met": True},
+            "vivado_impl_utilization_parsed": {"resource_feasible": True},
+        },
+    }), encoding="utf-8")
+    hook_path.write_text(json.dumps({
+        "schema_version": "dse.qe.full_scf_hook_coverage_audit.v1",
+        "passed": False,
+        "required_major_kernel_count": 8,
+        "runtime_hook_contract_passed_count": 0,
+        "trusted_replacement_evidence_count": 0,
+        "accelerated_results_consumed_by_qe_count": 0,
+        "blockers": ["kernel_replacement_evidence_missing_or_untrusted::fft_ifft_ffft"],
+    }), encoding="utf-8")
+
+    status = module.run_audit(argparse.Namespace(
+        summary=summary_path,
+        hook_coverage_audit=hook_path,
+        full_scf_comparison=None,
+        candidate_id="hybrid_integrated_streaming_pipeline_sidecar_v3",
+        workload_case_id="ic_si_bulk_2atom_scf_v0",
+        out=out_path,
+    ))
+    audit = json.loads(out_path.read_text())
+
+    assert status["status"] == "written"
+    assert status["passed"] is False
+    assert audit["admission_status"] == "not_admitted"
+    assert audit["available_sidecar_evidence"]["vivado_passed_architecture_ids"] == ["hybrid_integrated_streaming_pipeline_sidecar_v3"]
+    assert "qe_runtime_replacement_contract_not_passed" in audit["blockers"]

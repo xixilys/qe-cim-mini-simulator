@@ -1,0 +1,55 @@
+{
+  "admission_status": "not_admitted",
+  "available_sidecar_evidence": {
+    "sidecar_evidence_boundary": "Integrated VCS/Vivado sidecar evidence is real RTL/tool evidence, but remains trace-replay/sidecar evidence until QE consumes accelerated replacement results on the full-SCF path.",
+    "vcs_passed_architecture_count": 3,
+    "vcs_passed_architecture_ids": [
+      "hybrid_integrated_combined_sidecar_v1",
+      "hybrid_integrated_pipelined_sidecar_v2",
+      "hybrid_integrated_streaming_pipeline_sidecar_v3"
+    ],
+    "vivado_passed_architecture_count": 3,
+    "vivado_passed_architecture_ids": [
+      "hybrid_integrated_combined_sidecar_v1",
+      "hybrid_integrated_pipelined_sidecar_v2",
+      "hybrid_integrated_streaming_pipeline_sidecar_v3"
+    ]
+  },
+  "blockers": [
+    "full_qe_pw_scf_consumption_proof_missing",
+    "full_scf_end_to_end_comparison_missing",
+    "physical_fpga_board_measurement_missing",
+    "qe_runtime_replacement_contract_missing"
+  ],
+  "candidate_id": "hybrid_integrated_streaming_pipeline_sidecar_v3",
+  "claim_boundary": "Readiness/admission audit only. It can guide the next full-QE integration work, but it cannot satisfy the full_qe_kernel_integration hard gate or final superiority claim without strict QE runtime replacement, QE consumption, full-SCF comparison, and board-measured evidence.",
+  "full_qe_kernel_integration_gate_satisfied": false,
+  "full_scf_end_to_end_evidence": {
+    "comparison_passed": false,
+    "comparison_present": false,
+    "comparison_scope": null,
+    "trusted_accelerated_numeric_source": null
+  },
+  "may_satisfy_superiority_hard_gate": false,
+  "passed": false,
+  "qe_runtime_replacement_evidence": {
+    "accelerated_results_consumed_by_qe_count": 0,
+    "hook_audit_passed": false,
+    "hook_audit_present": false,
+    "hook_blocker_count": null,
+    "required_major_kernel_count": 0,
+    "runtime_hook_contract_passed_count": 0,
+    "trusted_replacement_evidence_count": 0
+  },
+  "required_next_artifacts": [
+    "kernel_evidence.json with per-major-kernel full replacement rows",
+    "offload_provenance.json proving QE mainflow integration and consumed accelerator output",
+    "full_scf_runtime_trace.json from trusted host-accelerator execution",
+    "runtime_execution_proof.json from the non-proxy QE/full-SCF run",
+    "full_scf_end_to_end_comparison.json with trusted accelerated numeric source",
+    "physical FPGA board measurement for final hardware superiority"
+  ],
+  "schema_version": "dse.qe_ic.full_qe_kernel_integration_readiness.v1",
+  "status": "blocked_temporary",
+  "workload_case_id": "ic_si_bulk_2atom_scf_v0"
+}

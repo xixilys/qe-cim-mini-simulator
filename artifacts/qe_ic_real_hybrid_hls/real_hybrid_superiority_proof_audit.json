@@ -50,7 +50,16 @@
     {
       "check_id": "full_qe_kernel_integration",
       "evidence": {
-        "missing_gate": true
+        "missing_gate": true,
+        "readiness_audit_present": true,
+        "readiness_blockers": [
+          "full_qe_pw_scf_consumption_proof_missing",
+          "full_scf_end_to_end_comparison_missing",
+          "physical_fpga_board_measurement_missing",
+          "qe_runtime_replacement_contract_missing"
+        ],
+        "readiness_gate_satisfied": false,
+        "readiness_status": "blocked_temporary"
       },
       "status": "missing"
     },
@@ -66,7 +75,16 @@
     "full_qe_kernel_integration": {
       "check_id": "full_qe_kernel_integration",
       "evidence": {
-        "missing_gate": true
+        "missing_gate": true,
+        "readiness_audit_present": true,
+        "readiness_blockers": [
+          "full_qe_pw_scf_consumption_proof_missing",
+          "full_scf_end_to_end_comparison_missing",
+          "physical_fpga_board_measurement_missing",
+          "qe_runtime_replacement_contract_missing"
+        ],
+        "readiness_gate_satisfied": false,
+        "readiness_status": "blocked_temporary"
       },
       "status": "missing"
     },
