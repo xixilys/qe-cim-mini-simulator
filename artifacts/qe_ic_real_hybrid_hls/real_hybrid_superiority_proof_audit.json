@@ -1,0 +1,137 @@
+{
+  "architecture_count": 3,
+  "best_vivado_implemented_architecture_id": "hybrid_integrated_streaming_pipeline_sidecar_v3",
+  "best_vivado_implemented_speedup_vs_gpu_mean": 1.5508900953937812,
+  "checks": [
+    {
+      "check_id": "measured_gpu_baseline",
+      "evidence": {
+        "baseline_record_count": 3,
+        "measurements_are_real": true
+      },
+      "status": "satisfied"
+    },
+    {
+      "check_id": "multiple_distinct_integrated_architectures",
+      "evidence": {
+        "architecture_count": 3,
+        "architecture_ids": [
+          "hybrid_integrated_combined_sidecar_v1",
+          "hybrid_integrated_pipelined_sidecar_v2",
+          "hybrid_integrated_streaming_pipeline_sidecar_v3"
+        ]
+      },
+      "status": "satisfied"
+    },
+    {
+      "check_id": "vcs_non_stub_latency",
+      "evidence": {
+        "architecture_ids": [
+          "hybrid_integrated_combined_sidecar_v1",
+          "hybrid_integrated_pipelined_sidecar_v2",
+          "hybrid_integrated_streaming_pipeline_sidecar_v3"
+        ],
+        "vcs_passed_architecture_count": 3
+      },
+      "status": "satisfied"
+    },
+    {
+      "check_id": "vivado_post_route_implementation",
+      "evidence": {
+        "architecture_ids": [
+          "hybrid_integrated_combined_sidecar_v1",
+          "hybrid_integrated_pipelined_sidecar_v2",
+          "hybrid_integrated_streaming_pipeline_sidecar_v3"
+        ],
+        "vivado_passed_architecture_count": 3
+      },
+      "status": "satisfied"
+    },
+    {
+      "check_id": "full_qe_kernel_integration",
+      "evidence": {
+        "missing_gate": true
+      },
+      "status": "missing"
+    },
+    {
+      "check_id": "physical_fpga_board_measurement",
+      "evidence": {
+        "missing_gate": true
+      },
+      "status": "missing"
+    }
+  ],
+  "checks_by_id": {
+    "full_qe_kernel_integration": {
+      "check_id": "full_qe_kernel_integration",
+      "evidence": {
+        "missing_gate": true
+      },
+      "status": "missing"
+    },
+    "measured_gpu_baseline": {
+      "check_id": "measured_gpu_baseline",
+      "evidence": {
+        "baseline_record_count": 3,
+        "measurements_are_real": true
+      },
+      "status": "satisfied"
+    },
+    "multiple_distinct_integrated_architectures": {
+      "check_id": "multiple_distinct_integrated_architectures",
+      "evidence": {
+        "architecture_count": 3,
+        "architecture_ids": [
+          "hybrid_integrated_combined_sidecar_v1",
+          "hybrid_integrated_pipelined_sidecar_v2",
+          "hybrid_integrated_streaming_pipeline_sidecar_v3"
+        ]
+      },
+      "status": "satisfied"
+    },
+    "physical_fpga_board_measurement": {
+      "check_id": "physical_fpga_board_measurement",
+      "evidence": {
+        "missing_gate": true
+      },
+      "status": "missing"
+    },
+    "vcs_non_stub_latency": {
+      "check_id": "vcs_non_stub_latency",
+      "evidence": {
+        "architecture_ids": [
+          "hybrid_integrated_combined_sidecar_v1",
+          "hybrid_integrated_pipelined_sidecar_v2",
+          "hybrid_integrated_streaming_pipeline_sidecar_v3"
+        ],
+        "vcs_passed_architecture_count": 3
+      },
+      "status": "satisfied"
+    },
+    "vivado_post_route_implementation": {
+      "check_id": "vivado_post_route_implementation",
+      "evidence": {
+        "architecture_ids": [
+          "hybrid_integrated_combined_sidecar_v1",
+          "hybrid_integrated_pipelined_sidecar_v2",
+          "hybrid_integrated_streaming_pipeline_sidecar_v3"
+        ],
+        "vivado_passed_architecture_count": 3
+      },
+      "status": "satisfied"
+    }
+  },
+  "claim_boundary": "Fail-closed superiority audit: VCS/Vivado sidecar evidence can support preliminary comparison only; full-QE kernel integration and physical FPGA board measurement are required for a strong hardware superiority claim.",
+  "claim_verdict": "not_superior_current_evidence",
+  "decision": "fpga_hybrid_weaker",
+  "final_claim_allowed": false,
+  "missing_gate_ids": [
+    "full_qe_kernel_integration",
+    "physical_fpga_board_measurement"
+  ],
+  "schema_version": "dse.qe_ic.real_hybrid_superiority_proof_audit.v1",
+  "strong_superiority_claim_allowed": false,
+  "vcs_passed_architecture_count": 3,
+  "vivado_passed_architecture_count": 3
+}

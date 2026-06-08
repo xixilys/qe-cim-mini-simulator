@@ -4804,12 +4804,133 @@ def classify_real_hybrid_vs_gpu(gpu_baseline: Mapping[str, Any], evidence_rows: 
     }
 
 
+def build_real_hybrid_superiority_proof_audit(
+    *,
+    summary: Mapping[str, Any],
+    claim_closure: Mapping[str, Any],
+    gpu_baseline: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Build a fail-closed audit for GPU-vs-hybrid superiority claims.
+
+    This is deliberately stricter than a report renderer: it binds measured GPU
+    baseline, distinct non-stub integrated RTL/VCS architectures, Vivado
+    implementation evidence, and hard final-claim gates into one compact
+    artifact.  It may support a preliminary label, but final superiority remains
+    blocked unless full-QE integration and board measurement gates are present.
+    """
+
+    classification = summary.get("classification") if isinstance(summary.get("classification"), Mapping) else {}
+    baseline_records = [row for row in _as_list(gpu_baseline.get("baseline_records")) if isinstance(row, Mapping)]
+    vcs_result_keys = {
+        "integrated_vcs_sidecar_result",
+        "integrated_pipelined_vcs_sidecar_result",
+        "integrated_streaming_vcs_sidecar_result",
+    }
+    vcs_results = [
+        value
+        for key in vcs_result_keys
+        if isinstance((value := summary.get(key)), Mapping) and value.get("architecture_id")
+    ]
+    vivado_results = [
+        value
+        for key in _INTEGRATED_VIVADO_RESULT_KEYS.values()
+        if isinstance((value := summary.get(key)), Mapping) and value.get("architecture_id")
+    ]
+    architecture_ids = sorted(
+        {
+            str(item.get("architecture_id"))
+            for item in [*vcs_results, *vivado_results]
+            if item.get("architecture_id")
+        }
+    )
+    vcs_passed_ids = sorted(
+        {
+            str(item.get("architecture_id"))
+            for item in vcs_results
+            if item.get("vcs_passed") is True
+            and isinstance(item.get("vcs_parsed"), Mapping)
+            and item["vcs_parsed"].get("rtl_status") == "Pass"
+            and isinstance(item["vcs_parsed"].get("latency_cycles"), (int, float))
+        }
+    )
+    vivado_passed_ids = sorted(
+        {
+            str(item.get("architecture_id"))
+            for item in vivado_results
+            if item.get("vivado_impl_passed") is True
+            and isinstance(item.get("implemented_clock_ns"), (int, float))
+            and isinstance(item.get("vivado_impl_timing_parsed"), Mapping)
+            and item["vivado_impl_timing_parsed"].get("timing_met") is True
+            and isinstance(item.get("vivado_impl_utilization_parsed"), Mapping)
+            and item["vivado_impl_utilization_parsed"].get("resource_feasible") is True
+        }
+    )
+    missing_gate_ids = [str(item) for item in _as_list(claim_closure.get("missing_gate_ids"))]
+    final_claim_allowed = claim_closure.get("final_claim_allowed") is True and not missing_gate_ids
+    checks = [
+        {
+            "check_id": "measured_gpu_baseline",
+            "status": "satisfied" if gpu_baseline.get("measurements_are_real") is True and baseline_records else "missing",
+            "evidence": {
+                "measurements_are_real": gpu_baseline.get("measurements_are_real"),
+                "baseline_record_count": len(baseline_records),
+            },
+        },
+        {
+            "check_id": "multiple_distinct_integrated_architectures",
+            "status": "satisfied" if len(architecture_ids) >= 2 else "missing",
+            "evidence": {"architecture_count": len(architecture_ids), "architecture_ids": architecture_ids},
+        },
+        {
+            "check_id": "vcs_non_stub_latency",
+            "status": "satisfied" if len(vcs_passed_ids) >= 2 else "missing",
+            "evidence": {"vcs_passed_architecture_count": len(vcs_passed_ids), "architecture_ids": vcs_passed_ids},
+        },
+        {
+            "check_id": "vivado_post_route_implementation",
+            "status": "satisfied" if len(vivado_passed_ids) >= 1 else "missing",
+            "evidence": {"vivado_passed_architecture_count": len(vivado_passed_ids), "architecture_ids": vivado_passed_ids},
+        },
+        {
+            "check_id": "full_qe_kernel_integration",
+            "status": "satisfied" if "full_qe_kernel_integration" not in missing_gate_ids else "missing",
+            "evidence": {"missing_gate": "full_qe_kernel_integration" in missing_gate_ids},
+        },
+        {
+            "check_id": "physical_fpga_board_measurement",
+            "status": "satisfied" if "physical_fpga_board_measurement" not in missing_gate_ids else "missing",
+            "evidence": {"missing_gate": "physical_fpga_board_measurement" in missing_gate_ids},
+        },
+    ]
+    checks_by_id = {str(check["check_id"]): check for check in checks}
+    return {
+        "schema_version": "dse.qe_ic.real_hybrid_superiority_proof_audit.v1",
+        "decision": str(claim_closure.get("preliminary_label") or classification.get("preliminary_label") or "insufficient_evidence"),
+        "claim_verdict": str(claim_closure.get("claim_verdict") or "unknown"),
+        "strong_superiority_claim_allowed": final_claim_allowed,
+        "final_claim_allowed": final_claim_allowed,
+        "missing_gate_ids": missing_gate_ids,
+        "best_vivado_implemented_architecture_id": classification.get("best_vivado_implemented_architecture_id"),
+        "best_vivado_implemented_speedup_vs_gpu_mean": classification.get("best_vivado_implemented_speedup_vs_gpu_mean"),
+        "architecture_count": len(architecture_ids),
+        "vcs_passed_architecture_count": len(vcs_passed_ids),
+        "vivado_passed_architecture_count": len(vivado_passed_ids),
+        "checks": checks,
+        "checks_by_id": checks_by_id,
+        "claim_boundary": (
+            "Fail-closed superiority audit: VCS/Vivado sidecar evidence can support preliminary comparison only; "
+            "full-QE kernel integration and physical FPGA board measurement are required for a strong hardware superiority claim."
+        ),
+    }
+
+
 __all__ = [
     "build_real_hybrid_architecture_specs",
     "build_evidence_row_static_metadata",
     "build_combined_vcs_sidecar_accounting",
     "build_integrated_vcs_sidecar_accounting",
     "build_real_hybrid_claim_closure",
+    "build_real_hybrid_superiority_proof_audit",
     "build_trace_replay_workflow_accounting",
     "classify_real_hybrid_vs_gpu",
     "materialize_integrated_pipelined_vcs_sidecar_project",

@@ -2085,3 +2085,130 @@ def test_vivado_impl_runner_accepts_integrated_architecture_ids():
     args = module.parse_args(["--architecture-id", "hybrid_integrated_streaming_pipeline_sidecar_v3"])
 
     assert args.architecture_id == "hybrid_integrated_streaming_pipeline_sidecar_v3"
+
+
+def test_build_real_hybrid_superiority_proof_audit_fail_closes_current_artifacts():
+    from dse_v2.experiments.qe_ic_real_opportunity.real_hybrid_hls_evidence import (
+        build_real_hybrid_superiority_proof_audit,
+    )
+
+    summary = {
+        "classification": {
+            "preliminary_label": "fpga_hybrid_weaker",
+            "final_claim_allowed": False,
+            "best_vivado_implemented_architecture_id": "hybrid_integrated_streaming_pipeline_sidecar_v3",
+            "best_vivado_implemented_speedup_vs_gpu_mean": 1.5508900953937812,
+        },
+        "integrated_vcs_sidecar_result": {
+            "architecture_id": "hybrid_integrated_combined_sidecar_v1",
+            "vcs_passed": True,
+            "vcs_parsed": {"latency_cycles": 288, "samples": 288, "rtl_status": "Pass"},
+        },
+        "integrated_pipelined_vcs_sidecar_result": {
+            "architecture_id": "hybrid_integrated_pipelined_sidecar_v2",
+            "vcs_passed": True,
+            "vcs_parsed": {"latency_cycles": 1152, "samples": 288, "rtl_status": "Pass"},
+        },
+        "integrated_streaming_vcs_sidecar_result": {
+            "architecture_id": "hybrid_integrated_streaming_pipeline_sidecar_v3",
+            "vcs_passed": True,
+            "vcs_parsed": {"latency_cycles": 291, "samples": 288, "rtl_status": "Pass"},
+        },
+        "integrated_vivado_impl_result": {
+            "architecture_id": "hybrid_integrated_combined_sidecar_v1",
+            "vivado_impl_passed": True,
+            "implemented_clock_ns": 20.0,
+            "vivado_impl_timing_parsed": {"timing_met": True, "wns_ns": 1.183},
+            "vivado_impl_utilization_parsed": {"resource_feasible": True, "resource": {"lut": 731, "ff": 295, "dsp": 8, "bram_tile": 0}},
+        },
+        "integrated_pipelined_vivado_impl_result": {
+            "architecture_id": "hybrid_integrated_pipelined_sidecar_v2",
+            "vivado_impl_passed": True,
+            "implemented_clock_ns": 12.0,
+            "vivado_impl_timing_parsed": {"timing_met": True, "wns_ns": 0.946},
+            "vivado_impl_utilization_parsed": {"resource_feasible": True, "resource": {"lut": 805, "ff": 696, "dsp": 8, "bram_tile": 0}},
+        },
+        "integrated_streaming_vivado_impl_result": {
+            "architecture_id": "hybrid_integrated_streaming_pipeline_sidecar_v3",
+            "vivado_impl_passed": True,
+            "implemented_clock_ns": 12.0,
+            "vivado_impl_timing_parsed": {"timing_met": True, "wns_ns": 0.962},
+            "vivado_impl_utilization_parsed": {"resource_feasible": True, "resource": {"lut": 848, "ff": 736, "dsp": 8, "bram_tile": 0}},
+        },
+    }
+    closure = {
+        "preliminary_label": "fpga_hybrid_weaker",
+        "claim_verdict": "not_superior_current_evidence",
+        "final_claim_allowed": False,
+        "missing_gate_ids": ["full_qe_kernel_integration", "physical_fpga_board_measurement"],
+    }
+    gpu_baseline = {"measurements_are_real": True, "baseline_records": [{"case_id": "case-a"}, {"case_id": "case-b"}, {"case_id": "case-c"}]}
+
+    audit = build_real_hybrid_superiority_proof_audit(summary=summary, claim_closure=closure, gpu_baseline=gpu_baseline)
+
+    assert audit["schema_version"] == "dse.qe_ic.real_hybrid_superiority_proof_audit.v1"
+    assert audit["decision"] == "fpga_hybrid_weaker"
+    assert audit["claim_verdict"] == "not_superior_current_evidence"
+    assert audit["strong_superiority_claim_allowed"] is False
+    assert audit["missing_gate_ids"] == ["full_qe_kernel_integration", "physical_fpga_board_measurement"]
+    assert audit["best_vivado_implemented_architecture_id"] == "hybrid_integrated_streaming_pipeline_sidecar_v3"
+    assert audit["architecture_count"] == 3
+    assert audit["vcs_passed_architecture_count"] == 3
+    assert audit["vivado_passed_architecture_count"] == 3
+    assert audit["checks_by_id"]["measured_gpu_baseline"]["status"] == "satisfied"
+    assert audit["checks_by_id"]["multiple_distinct_integrated_architectures"]["status"] == "satisfied"
+    assert audit["checks_by_id"]["full_qe_kernel_integration"]["status"] == "missing"
+    assert audit["checks_by_id"]["physical_fpga_board_measurement"]["status"] == "missing"
+
+
+def test_real_hybrid_superiority_audit_runner_writes_fail_closed_audit(tmp_path: Path):
+    import argparse
+    import importlib.util
+
+    script_path = Path(__file__).resolve().parents[1] / "scripts" / "dse" / "audit_qe_ic_real_hybrid_superiority.py"
+    spec = importlib.util.spec_from_file_location("audit_qe_ic_real_hybrid_superiority", script_path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+    summary_path = out_dir / "summary.json"
+    closure_path = out_dir / "closure.json"
+    baseline_path = out_dir / "baseline.json"
+    audit_path = out_dir / "audit.json"
+    summary_path.write_text(json.dumps({
+        "classification": {
+            "preliminary_label": "fpga_hybrid_weaker",
+            "final_claim_allowed": False,
+            "best_vivado_implemented_architecture_id": "hybrid_integrated_streaming_pipeline_sidecar_v3",
+            "best_vivado_implemented_speedup_vs_gpu_mean": 1.55,
+        },
+        "integrated_streaming_vcs_sidecar_result": {
+            "architecture_id": "hybrid_integrated_streaming_pipeline_sidecar_v3",
+            "vcs_passed": True,
+            "vcs_parsed": {"rtl_status": "Pass", "latency_cycles": 291},
+        },
+        "integrated_streaming_vivado_impl_result": {
+            "architecture_id": "hybrid_integrated_streaming_pipeline_sidecar_v3",
+            "vivado_impl_passed": True,
+            "implemented_clock_ns": 12.0,
+            "vivado_impl_timing_parsed": {"timing_met": True, "wns_ns": 0.962},
+            "vivado_impl_utilization_parsed": {"resource_feasible": True, "resource": {"lut": 848}},
+        },
+    }), encoding="utf-8")
+    closure_path.write_text(json.dumps({
+        "preliminary_label": "fpga_hybrid_weaker",
+        "claim_verdict": "not_superior_current_evidence",
+        "final_claim_allowed": False,
+        "missing_gate_ids": ["full_qe_kernel_integration", "physical_fpga_board_measurement"],
+    }), encoding="utf-8")
+    baseline_path.write_text(json.dumps({"measurements_are_real": True, "baseline_records": [{"case_id": "case-a"}]}), encoding="utf-8")
+
+    status = module.run_audit(argparse.Namespace(summary=summary_path, claim_closure=closure_path, gpu_baseline=baseline_path, out=audit_path))
+    audit = json.loads(audit_path.read_text(encoding="utf-8"))
+
+    assert status["status"] == "written"
+    assert audit["decision"] == "fpga_hybrid_weaker"
+    assert audit["strong_superiority_claim_allowed"] is False
+    assert audit["checks_by_id"]["physical_fpga_board_measurement"]["status"] == "missing"
