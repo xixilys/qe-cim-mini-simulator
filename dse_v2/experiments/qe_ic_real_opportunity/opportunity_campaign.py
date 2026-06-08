@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from dse_v2.evidence.qe_ic import analyze_qe_ic_real_baseline_opportunity
+from dse_v2.evidence.qe_ic import classify_preliminary_opportunity
 from dse_v2.experiments.qe_ic_real_opportunity.campaign_config import (
     load_json_object,
     opportunity_config_from_campaign,
@@ -628,6 +629,34 @@ def _attach_audit_to_opportunity_records(
     return enriched
 
 
+def _attach_preliminary_classification(
+    *,
+    opportunity_summary: Mapping[str, Any],
+    baseline_summary: Mapping[str, Any],
+    candidate_summary: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Attach the seven-day preliminary advisor-facing classification.
+
+    This is a reporting adapter over existing opportunity records. It does not
+    change claim-gate verdicts and never upgrades preliminary evidence into a
+    final hardware superiority claim.
+    """
+
+    enriched = dict(opportunity_summary)
+    classifier_input = {
+        "gpu_baseline_summary": dict(baseline_summary),
+        "candidate_evidence_summary": dict(candidate_summary),
+        "opportunity_records": [
+            dict(record)
+            for record in _as_list(opportunity_summary.get("opportunity_records"))
+            if isinstance(record, Mapping)
+        ],
+        "system_conclusion": dict(_as_mapping(opportunity_summary.get("system_conclusion"))),
+    }
+    enriched["preliminary_classification"] = classify_preliminary_opportunity(classifier_input)
+    return enriched
+
+
 def _final_answer(
     *,
     opportunity_summary: Mapping[str, Any],
@@ -1026,6 +1055,11 @@ def run_qe_ic_real_opportunity_campaign(
     baseline_summary = _artifact_summary(baseline_evidence, kind="gpu_baseline")
     candidate_summary = _artifact_summary(candidate_evidence, kind="candidate")
     candidate_summary["attempt_count"] = len(candidate_attempts)
+    opportunity_summary = _attach_preliminary_classification(
+        opportunity_summary=opportunity_summary,
+        baseline_summary=baseline_summary,
+        candidate_summary=candidate_summary,
+    )
     final_answer = _final_answer(
         opportunity_summary=opportunity_summary,
         implementation_audit=implementation_audit,
@@ -1052,6 +1086,11 @@ def run_qe_ic_real_opportunity_campaign(
             "Generated proxy/stub evidence is available, but it is not final measured performance; "
             "no strong GPU-vs-FPGA superiority claim is allowed."
         )
+    preliminary = _as_mapping(opportunity_summary.get("preliminary_classification"))
+    final_answer["preliminary_label"] = preliminary.get("preliminary_label")
+    final_answer["preliminary_confidence"] = preliminary.get("confidence")
+    final_answer["preliminary_evidence_tier"] = preliminary.get("evidence_tier")
+    final_answer["preliminary_required_next_evidence"] = list(_as_list(preliminary.get("required_next_evidence")))
     if nonblocking and baseline_summary.get("measurements_are_real") is not True and final_answer.get("overall_answer") == "evidence_missing":
         baseline_blockers = set(str(row) for row in _as_list(baseline_summary.get("blocker_reasons")))
         if "gpu_qe_build_failed" in baseline_blockers:

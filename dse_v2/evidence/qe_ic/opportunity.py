@@ -11,6 +11,7 @@ from typing import Any
 from dse_v2.evidence.qe_ic.candidate_result import candidate_results_by_id
 from dse_v2.evidence.qe_ic.claim_gate import evaluate_qe_ic_claim_gate
 from dse_v2.evidence.qe_ic.gpu_baseline import baseline_match_key, baseline_records_by_match_key
+from dse_v2.evidence.qe_ic.preliminary_classifier import classify_preliminary_opportunity
 from dse_v2.evidence.qe_ic.schema import (
     ANALYSIS_ROLE,
     CLAIM_BOUNDARY,
@@ -291,7 +292,7 @@ def analyze_qe_ic_real_baseline_opportunity(
             candidate_high_fidelity_results,
         )
     ]
-    return {
+    report = {
         "schema_version": QE_IC_REAL_BASELINE_OPPORTUNITY_REPORT_SCHEMA_VERSION,
         "analysis_role": ANALYSIS_ROLE,
         "layer": LAYER_NAME,
@@ -311,3 +312,5 @@ def analyze_qe_ic_real_baseline_opportunity(
         "system_conclusion": _system_conclusion(records),
         "claim_boundary": CLAIM_BOUNDARY,
     }
+    report["preliminary_classification"] = classify_preliminary_opportunity(report)
+    return report

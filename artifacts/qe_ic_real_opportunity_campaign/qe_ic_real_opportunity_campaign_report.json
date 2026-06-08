@@ -224,41 +224,6 @@
         "ph.x": "/usr/bin/ph.x",
         "pw.x": "/usr/bin/pw.x"
       },
-      "qe_gpu_build_probe": {
-        "build": {
-          "build_dir": "/home/xixilys/project/qe_gpu_build/q-e/build_gpu_serial_nvhpc_cuda",
-          "build_logs": {
-            "epw.x": "/home/xixilys/project/dft_accelerate/artifacts/qe_gpu_build/build_qe_epw_exe_gpu_serial_nvhpc_cuda.log",
-            "ph.x": "/home/xixilys/project/dft_accelerate/artifacts/qe_gpu_build/build_qe_phonon_ph_exe_gpu_serial_nvhpc_cuda.log",
-            "pw.x": "/home/xixilys/project/dft_accelerate/artifacts/qe_gpu_build/build_qe_pw_exe_gpu_serial_nvhpc_cuda.log"
-          },
-          "configure_log": "/home/xixilys/project/dft_accelerate/artifacts/qe_gpu_build/cmake_configure_gpu_serial_nvhpc_cuda.log"
-        },
-        "failure_reason": "GPU-enabled QE 7.5 binaries were built and link CUDA/OpenACC/NVHPC libraries, but strong runtime probes are not reusable: help/version invocations segfault (shell rc 139, Python signal -11) for built QE binaries. Minimal NVHPC cudart program also segfaults, while nvaccelinfo and OpenACC probes work when /usr/lib/wsl/lib is first in LD_LIBRARY_PATH. This points to an NVHPC CUDA runtime/CUDA-Fortran startup compatibility issue in the local WSL environment, not CPU-only QE.",
-        "path": "/home/xixilys/project/dft_accelerate/artifacts/qe_gpu_build/qe_gpu_build_probe.json",
-        "program_count": 3,
-        "program_paths": {
-          "epw.x": "/home/xixilys/project/qe_gpu_build/q-e/build_gpu_serial_nvhpc_cuda/bin/epw.x",
-          "ph.x": "/home/xixilys/project/qe_gpu_build/q-e/build_gpu_serial_nvhpc_cuda/bin/ph.x",
-          "pw.x": "/home/xixilys/project/qe_gpu_build/q-e/build_gpu_serial_nvhpc_cuda/bin/pw.x"
-        },
-        "runtime_validation": {
-          "all_programs_gpu_linked": true,
-          "all_programs_runtime_usable": false,
-          "segfault_return_codes": {
-            "python_subprocess": -11,
-            "shell": 139
-          },
-          "verdict": "not_ready_due_to_runtime_segfault"
-        },
-        "source": {
-          "commit": "770a0b2d12928a67048e2f3da8d10d057e52179e",
-          "repo": "https://github.com/QEF/q-e.git",
-          "source_dir": "/home/xixilys/project/qe_gpu_build/q-e",
-          "tag": "qe-7.5"
-        },
-        "status": "gpu_qe_build_failed"
-      },
       "systemc": {
         "generic_sim": null,
         "systemc_runner": null
@@ -280,6 +245,12 @@
       "provide Vivado or DC resource/timing evidence when making FPGA/ASIC feasibility claims"
     ],
     "overall_answer": "evidence_missing",
+    "preliminary_confidence": "low",
+    "preliminary_evidence_tier": "insufficient_evidence",
+    "preliminary_label": "insufficient_evidence",
+    "preliminary_required_next_evidence": [
+      "replace missing/fixture evidence with measured GPU baseline and real or high-fidelity candidate records"
+    ],
     "what_we_can_say": "The campaign can prepare cases, select Layer-4 candidates, and report exact missing evidence.",
     "what_we_cannot_say": "We cannot say FPGA-only or GPU+FPGA is faster than the GPU-only baseline without measured baseline and high-fidelity candidate evidence."
   },
@@ -441,6 +412,34 @@
         "workload_family_id": "phonon_dfpt"
       }
     ],
+    "preliminary_classification": {
+      "advisor_labels_supported": false,
+      "best_candidate_id": "qeic_l4_fpga_candidate_ground_state_band_structure_fft_transpose_fpga_only_fpga_fft_transpose_engine_9bfbea2b1f",
+      "best_speedup_vs_gpu": null,
+      "best_target_type": "fpga_only",
+      "blockers": [
+        "measured_gpu_baseline_missing",
+        "real_or_high_fidelity_candidate_evidence_missing",
+        "missing:gpu_baseline_runs_missing",
+        "missing:blocked_by_missing_candidate_evidence"
+      ],
+      "claim_boundary": "not_final_hardware_superiority_claim: preliminary labels summarize current GPU-baseline and FPGA/hybrid evidence for triage only. Final FPGA/hybrid claims still require workload-representative full-SCF accounting plus the tool-specific correctness, synthesis, implementation, and timing gates.",
+      "claim_gate_passed": false,
+      "confidence": "low",
+      "dominant_reasons": [
+        "blocked_by_missing_candidate_evidence",
+        "gpu_baseline_runs_missing",
+        "evidence_missing"
+      ],
+      "evidence_tier": "insufficient_evidence",
+      "final_claim_allowed": false,
+      "preliminary_label": "insufficient_evidence",
+      "record_count": 3,
+      "required_next_evidence": [
+        "replace missing/fixture evidence with measured GPU baseline and real or high-fidelity candidate records"
+      ],
+      "schema_version": "dse.qe_ic.preliminary_opportunity_classification.v1"
+    },
     "system_conclusion": {
       "best_candidate_id": null,
       "best_speedup_vs_gpu": null,

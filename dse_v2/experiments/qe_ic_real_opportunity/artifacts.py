@@ -78,6 +78,12 @@ def build_qe_ic_real_opportunity_campaign_readme(report: Mapping[str, Any]) -> s
     """Build README text explaining how to run and interpret the campaign."""
 
     final = report.get("final_answer") if isinstance(report.get("final_answer"), Mapping) else {}
+    opportunity = report.get("opportunity_summary") if isinstance(report.get("opportunity_summary"), Mapping) else {}
+    preliminary = (
+        opportunity.get("preliminary_classification")
+        if isinstance(opportunity.get("preliminary_classification"), Mapping)
+        else {}
+    )
     return "\n".join(
         [
             "# QE-IC Real Opportunity Campaign",
@@ -147,6 +153,20 @@ def build_qe_ic_real_opportunity_campaign_readme(report: Mapping[str, Any]) -> s
             "Do not claim FPGA-only or GPU+FPGA is faster than GPU-only unless the claim gate passes. "
             "EDA tool availability and generated-stub syntax success do not imply speedup. Fixture "
             "evidence, templates, L1 estimates, and synthetic labels are progress evidence only.",
+            "",
+            "## Seven-Day Preliminary Label",
+            "",
+            "The report includes `opportunity_summary.preliminary_classification` and mirrors the "
+            "advisor-facing fields in `final_answer.preliminary_*`. The label is a preliminary triage "
+            "result, not a final FPGA/hybrid superiority claim. Supported advisor labels are "
+            "`fpga_hybrid_stronger`, `fpga_hybrid_weaker`, `gpu_dominant`, and "
+            "`fundamental_no_opportunity`; when required baseline or candidate evidence is missing, "
+            "the fail-closed label is `insufficient_evidence` and `advisor_labels_supported=false`.",
+            "",
+            f"- Preliminary label: {preliminary.get('preliminary_label')}",
+            f"- Confidence: {preliminary.get('confidence')}",
+            f"- Evidence tier: {preliminary.get('evidence_tier')}",
+            f"- Final hardware claim allowed: {preliminary.get('final_claim_allowed')}",
             "",
             "## Current Answer",
             "",

@@ -63,6 +63,12 @@ real/ingested evidence, implementation quality audit, and final interpretation.
 8. Audit whether losses are implementation-limited, fundamentally unattractive,
    invalid, evidence-missing, or inconclusive.
 9. Emit a plain final answer with missing evidence and next actions.
+10. Attach a seven-day preliminary advisor-facing classification under
+    `opportunity_summary.preliminary_classification` and mirror the headline
+    fields in `final_answer.preliminary_*`. This label is a triage/reporting
+    adapter over the existing claim-gated evidence; it does not change
+    claim-gate verdicts and must never upgrade proxy, fixture, L1-only, or
+    generated-stub evidence into a final FPGA/hybrid superiority claim.
 
 ## Modes
 
@@ -123,6 +129,15 @@ communication time must be represented as `null` with
 
 The campaign may report `opportunity_found` only when the existing claim gate
 returns a claim-allowed FPGA or hybrid opportunity record.
+
+The preliminary classification may report one of the four advisor labels
+(`fpga_hybrid_stronger`, `fpga_hybrid_weaker`, `gpu_dominant`, or
+`fundamental_no_opportunity`) only when the required baseline/candidate evidence
+is present for that preliminary tier. If measured GPU baseline evidence or real
+or high-fidelity candidate evidence is missing, the classifier fails closed to
+`insufficient_evidence` with `advisor_labels_supported=false`, low confidence,
+explicit blockers, and required next evidence. `final_claim_allowed` remains
+`false` for all preliminary labels.
 
 EDA tool availability is machine capability only. A remote `ic-eda` tool path
 can unlock stub/resource/timing attempts when a candidate design binding exists

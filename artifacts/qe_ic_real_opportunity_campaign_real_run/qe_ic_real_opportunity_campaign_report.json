@@ -355,6 +355,12 @@
       "repeat workflow-level measurements"
     ],
     "overall_answer": "proxy_only_inconclusive",
+    "preliminary_confidence": "low",
+    "preliminary_evidence_tier": "insufficient_evidence",
+    "preliminary_label": "insufficient_evidence",
+    "preliminary_required_next_evidence": [
+      "replace missing/fixture evidence with measured GPU baseline and real or high-fidelity candidate records"
+    ],
     "what_we_can_say": "The current implementation is weak or insufficiently calibrated.",
     "what_we_cannot_say": "We cannot conclude the FPGA/hybrid idea has no opportunity."
   },
@@ -508,6 +514,30 @@
         "workload_family_id": "phonon_dfpt"
       }
     ],
+    "preliminary_classification": {
+      "advisor_labels_supported": false,
+      "best_candidate_id": "qeic_l4_fpga_candidate_ground_state_band_structure_fft_transpose_fpga_only_fpga_fft_transpose_engine_9bfbea2b1f",
+      "best_speedup_vs_gpu": 0.8333333333333334,
+      "best_target_type": "fpga_only",
+      "blockers": [
+        "real_or_high_fidelity_candidate_evidence_missing"
+      ],
+      "claim_boundary": "not_final_hardware_superiority_claim: preliminary labels summarize current GPU-baseline and FPGA/hybrid evidence for triage only. Final FPGA/hybrid claims still require workload-representative full-SCF accounting plus the tool-specific correctness, synthesis, implementation, and timing gates.",
+      "claim_gate_passed": false,
+      "confidence": "low",
+      "dominant_reasons": [
+        "generated_proxy_not_claim_gate_eligible",
+        "proxy_only_inconclusive"
+      ],
+      "evidence_tier": "insufficient_evidence",
+      "final_claim_allowed": false,
+      "preliminary_label": "insufficient_evidence",
+      "record_count": 3,
+      "required_next_evidence": [
+        "replace missing/fixture evidence with measured GPU baseline and real or high-fidelity candidate records"
+      ],
+      "schema_version": "dse.qe_ic.preliminary_opportunity_classification.v1"
+    },
     "system_conclusion": {
       "best_candidate_id": null,
       "best_speedup_vs_gpu": null,

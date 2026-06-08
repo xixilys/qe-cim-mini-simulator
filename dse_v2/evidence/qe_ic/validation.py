@@ -15,6 +15,10 @@ from dse_v2.candidates.qe_ic import validate_qe_ic_candidate_plan
 from dse_v2.evaluation.qe_ic.l1_cost_model import validate_qe_ic_l1_cost_model_results
 from dse_v2.evidence.qe_ic.candidate_result import validate_qe_ic_candidate_high_fidelity_results
 from dse_v2.evidence.qe_ic.claim_gate import evaluate_qe_ic_claim_gate
+from dse_v2.evidence.qe_ic.preliminary_classifier import (
+    PRELIMINARY_LABELS,
+    classify_preliminary_opportunity,
+)
 from dse_v2.evidence.qe_ic.gpu_baseline import (
     baseline_match_key,
     baseline_records_by_match_key,
@@ -583,6 +587,45 @@ def validate_qe_ic_real_baseline_opportunity_report(report: Mapping[str, Any]) -
         for field in ("claim_blockers", "failure_reasons"):
             if record.get(field) != expected_gate[field]:
                 _error(errors, f"{prefix}.{field}", f"{field} does not match recomputed claim gate")
+
+    preliminary = _as_mapping(report.get("preliminary_classification"))
+    if not preliminary:
+        _error(errors, "preliminary_classification", "preliminary_classification is required")
+    else:
+        label = preliminary.get("preliminary_label")
+        if label not in PRELIMINARY_LABELS:
+            _error(errors, "preliminary_classification.preliminary_label", "preliminary_label is unsupported")
+        expected_preliminary = classify_preliminary_opportunity(report)
+        for field in (
+            "preliminary_label",
+            "advisor_labels_supported",
+            "confidence",
+            "evidence_tier",
+            "best_candidate_id",
+            "best_target_type",
+            "best_speedup_vs_gpu",
+            "claim_gate_passed",
+            "final_claim_allowed",
+        ):
+            if not _compare(expected_preliminary.get(field), preliminary.get(field)):
+                _error(
+                    errors,
+                    f"preliminary_classification.{field}",
+                    f"{field} does not match recomputed preliminary classification",
+                )
+        for field in ("dominant_reasons", "blockers", "required_next_evidence"):
+            if preliminary.get(field) != expected_preliminary.get(field):
+                _error(
+                    errors,
+                    f"preliminary_classification.{field}",
+                    f"{field} does not match recomputed preliminary classification",
+                )
+        if preliminary.get("final_claim_allowed") is not False:
+            _error(
+                errors,
+                "preliminary_classification.final_claim_allowed",
+                "preliminary classification must not authorize final hardware claims",
+            )
 
     conclusion = _as_mapping(report.get("system_conclusion"))
     if conclusion.get("overall_verdict") not in SYSTEM_VERDICTS:

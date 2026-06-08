@@ -36,6 +36,15 @@ Replace templates by adding real input deck paths, GPU baseline run JSON, profil
 
 Do not claim FPGA-only or GPU+FPGA is faster than GPU-only unless the claim gate passes. EDA tool availability and generated-stub syntax success do not imply speedup. Fixture evidence, templates, L1 estimates, and synthetic labels are progress evidence only.
 
+## Seven-Day Preliminary Label
+
+The report includes `opportunity_summary.preliminary_classification` and mirrors the advisor-facing fields in `final_answer.preliminary_*`. The label is a preliminary triage result, not a final FPGA/hybrid superiority claim. Supported advisor labels are `fpga_hybrid_stronger`, `fpga_hybrid_weaker`, `gpu_dominant`, and `fundamental_no_opportunity`; when required baseline or candidate evidence is missing, the fail-closed label is `insufficient_evidence` and `advisor_labels_supported=false`.
+
+- Preliminary label: insufficient_evidence
+- Confidence: low
+- Evidence tier: insufficient_evidence
+- Final hardware claim allowed: False
+
 ## Current Answer
 
 Generated proxy/stub evidence is available, but it is not final measured performance; no strong GPU-vs-FPGA superiority claim is allowed.

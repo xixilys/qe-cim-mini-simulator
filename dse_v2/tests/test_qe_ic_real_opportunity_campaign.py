@@ -1098,6 +1098,10 @@ def test_opportunity_found_only_when_existing_claim_gate_passes(tmp_path: Path):
     assert report["final_answer"]["best_candidate_id"] == candidate["candidate_id"]
     assert report["final_answer"]["best_speedup_vs_gpu"] == pytest.approx(1.25)
     assert report["opportunity_summary"]["opportunity_records"][0]["claim_allowed"] is True
+    preliminary = report["opportunity_summary"]["preliminary_classification"]
+    assert preliminary["preliminary_label"] == "fpga_hybrid_stronger"
+    assert preliminary["best_candidate_id"] == candidate["candidate_id"]
+    assert preliminary["final_claim_allowed"] is False
 
 
 def test_final_answer_says_evidence_missing_when_no_real_baseline_exists(tmp_path: Path):
@@ -1113,6 +1117,23 @@ def test_final_answer_says_evidence_missing_when_no_real_baseline_exists(tmp_pat
 
     assert report["final_answer"]["overall_answer"] == "evidence_missing"
     assert "baseline" in report["final_answer"]["what_we_cannot_say"].lower()
+    assert report["opportunity_summary"]["preliminary_classification"]["preliminary_label"] == "insufficient_evidence"
+
+
+def test_proxy_real_run_reports_preliminary_insufficient_evidence(tmp_path: Path):
+    report = campaign.run_qe_ic_real_opportunity_campaign(
+        CONFIG_PATH,
+        out_dir=tmp_path,
+        execute_real=True,
+        allow_generated_inputs=True,
+        nonblocking=True,
+    )
+
+    preliminary = report["opportunity_summary"]["preliminary_classification"]
+    assert preliminary["preliminary_label"] == "insufficient_evidence"
+    assert preliminary["advisor_labels_supported"] is False
+    assert "real_or_high_fidelity_candidate_evidence_missing" in preliminary["blockers"]
+    assert report["final_answer"]["preliminary_label"] == "insufficient_evidence"
 
 
 def test_validator_rejects_stale_or_inconsistent_final_answer(tmp_path: Path):
