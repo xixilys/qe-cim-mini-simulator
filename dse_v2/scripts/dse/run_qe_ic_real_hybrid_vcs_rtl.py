@@ -20,12 +20,15 @@ if str(REPO_ROOT) not in sys.path:
 
 from dse_v2.experiments.qe_ic_real_opportunity.real_hybrid_hls_evidence import (  # noqa: E402
     build_combined_vcs_sidecar_accounting,
+    build_integrated_vcs_sidecar_accounting,
     build_real_hybrid_claim_closure,
     build_real_hybrid_architecture_specs,
     build_trace_replay_workflow_accounting,
     classify_real_hybrid_vs_gpu,
+    materialize_integrated_vcs_sidecar_project,
     materialize_vcs_rtl_project,
     merge_combined_vcs_sidecar_comparisons,
+    merge_integrated_vcs_sidecar_comparisons,
     merge_vcs_rtl_evidence_into_summary,
     parse_vcs_rtl_run_log,
     render_real_hybrid_hls_report,
@@ -190,24 +193,133 @@ def run_vcs_rtl_for_architecture(
     return row
 
 
+def run_integrated_vcs_sidecar(
+    specs: Sequence[Mapping[str, Any]],
+    *,
+    out_dir: Path,
+    timeout_seconds: int,
+) -> dict[str, Any]:
+    project = materialize_integrated_vcs_sidecar_project(specs, out_dir / "runs")
+    project_dir = Path(project["project_dir"])
+    run_id = _safe_name(project["architecture_id"])
+    remote_dir = f"/tmp/dse_real_hybrid_vcs_rtl_{run_id}_{hashlib.sha256(str(time.time()).encode()).hexdigest()[:8]}"
+    stdout_path = project_dir / "vcs.stdout.log"
+    stderr_path = project_dir / "vcs.stderr.log"
+    compile_log_path = project_dir / "vcs_compile.log"
+    run_log_path = project_dir / "vcs_run.log"
+    start_timestamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+
+    tar_cmd = f"mkdir -p {shlex.quote(remote_dir)} && tar -xzf - -C {shlex.quote(remote_dir)}"
+    stage = subprocess.run(
+        f"tar -czf - -C {shlex.quote(str(project_dir))} . | ssh {REMOTE_ALIAS} {shlex.quote(tar_cmd)}",
+        shell=True,
+        check=False,
+        capture_output=True,
+        text=False,
+        timeout=120,
+    )
+    if stage.returncode != 0:
+        stdout_path.write_bytes(stage.stdout or b"")
+        stderr_path.write_bytes(stage.stderr or b"")
+        return {
+            "schema_version": SCHEMA_VERSION,
+            "architecture_id": project.get("architecture_id"),
+            "status": "failed",
+            "reason": "remote_stage_failed",
+            "returncode": stage.returncode,
+            "vcs_attempted": False,
+            "vcs_passed": False,
+            "vcs_rtl_project": project,
+            "start_timestamp": start_timestamp,
+            "end_timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        }
+
+    rtl_name = Path(str(project["rtl_sv"])).name
+    tb_name = Path(str(project["tb_sv"])).name
+    remote_cmd = (
+        f"source ~/.bashrc; export LC_ALL=C LANG=C; cd {shlex.quote(remote_dir)} && "
+        f"vcs -full64 -sverilog {shlex.quote(rtl_name)} {shlex.quote(tb_name)} -o simv > vcs_compile.log 2>&1 "
+        f"&& ./simv > vcs_run.log 2>&1"
+    )
+    result = subprocess.run(
+        ["ssh", REMOTE_ALIAS, remote_cmd],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=timeout_seconds,
+    )
+    stdout_path.write_text(result.stdout or "", encoding="utf-8", errors="replace")
+    stderr_path.write_text(result.stderr or "", encoding="utf-8", errors="replace")
+    compile_available = _fetch_remote_file(f"{remote_dir}/vcs_compile.log", compile_log_path)
+    run_available = _fetch_remote_file(f"{remote_dir}/vcs_run.log", run_log_path)
+    run_text = run_log_path.read_text(encoding="utf-8", errors="replace") if run_available else ""
+    parsed = parse_vcs_rtl_run_log(run_text)
+    vcs_passed = parsed.get("status") == "parsed" and parsed.get("rtl_status") == "Pass" and result.returncode == 0
+    command = f"ssh {REMOTE_ALIAS} {remote_cmd}"
+    claim_boundary = (
+        "Single integrated handwritten RTL/VCS sidecar miniapp for h_psi + sum_band + AXPY motifs; "
+        "not full-QE integration, board measurement, or final FPGA superiority evidence."
+    )
+    row: dict[str, Any] = {
+        "schema_version": SCHEMA_VERSION,
+        "architecture_id": project.get("architecture_id"),
+        "kernel_name": project.get("kernel_name"),
+        "status": "executed" if compile_available or run_available else "failed",
+        "reason": None if vcs_passed else "vcs_returned_nonzero_or_rtl_test_failed",
+        "tool": "vcs",
+        "command": command,
+        "returncode": result.returncode,
+        "vcs_command": command,
+        "vcs_returncode": result.returncode,
+        "vcs_attempted": True,
+        "vcs_passed": vcs_passed,
+        "vcs_parsed": parsed,
+        "vcs_rtl_project": project,
+        "clock_ns": project.get("clock_ns"),
+        "component_samples": project.get("component_samples"),
+        "start_timestamp": start_timestamp,
+        "end_timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "vcs_stdout_log_path": str(stdout_path),
+        "vcs_stderr_log_path": str(stderr_path),
+        "vcs_compile_log_path": str(compile_log_path),
+        "vcs_run_log_path": str(run_log_path),
+        "vcs_stdout_log_hash": _sha256_file(stdout_path),
+        "vcs_stderr_log_hash": _sha256_file(stderr_path),
+        "vcs_compile_log_hash": _sha256_file(compile_log_path),
+        "vcs_run_log_hash": _sha256_file(run_log_path),
+        "blockers": [] if vcs_passed else list(parsed.get("blockers") or ["vcs_rtl_sim_failed"]),
+        "claim_boundary": claim_boundary,
+    }
+    _write_json(project_dir / "real_hybrid_integrated_vcs_rtl_evidence.json", row)
+    row["vcs_evidence_json_path"] = str(project_dir / "real_hybrid_integrated_vcs_rtl_evidence.json")
+    row["vcs_evidence_json_hash"] = _sha256_file(project_dir / "real_hybrid_integrated_vcs_rtl_evidence.json")
+    return row
+
+
 def run_campaign(args: argparse.Namespace) -> dict[str, Any]:
     out_dir: Path = args.out
     summary_path = args.summary or out_dir / "real_hybrid_hls_summary.json"
     summary = _load_summary(summary_path)
     specs = {str(spec["architecture_id"]): spec for spec in build_real_hybrid_architecture_specs()}
-    if args.architecture_id not in specs:
+    integrated_architecture_id = "hybrid_integrated_combined_sidecar_v1"
+    if args.architecture_id == integrated_architecture_id:
+        result = run_integrated_vcs_sidecar(list(specs.values()), out_dir=out_dir, timeout_seconds=args.timeout_seconds)
+        merged = json.loads(json.dumps(summary))
+        merged["integrated_vcs_sidecar_result"] = result
+    elif args.architecture_id in specs:
+        result = run_vcs_rtl_for_architecture(specs[args.architecture_id], out_dir=out_dir, timeout_seconds=args.timeout_seconds)
+        merged = merge_vcs_rtl_evidence_into_summary(summary, result)
+        for row in merged.get("evidence_rows", []):
+            if not isinstance(row, dict) or str(row.get("architecture_id")) != args.architecture_id:
+                continue
+            row_path_value = row.get("evidence_json_path")
+            if row_path_value:
+                row_path = Path(str(row_path_value))
+                _write_json(row_path, row)
+                row["evidence_json_hash"] = _sha256_file(row_path)
+            break
+    else:
         raise ValueError(f"unknown architecture id: {args.architecture_id}")
-    result = run_vcs_rtl_for_architecture(specs[args.architecture_id], out_dir=out_dir, timeout_seconds=args.timeout_seconds)
-    merged = merge_vcs_rtl_evidence_into_summary(summary, result)
-    for row in merged.get("evidence_rows", []):
-        if not isinstance(row, dict) or str(row.get("architecture_id")) != args.architecture_id:
-            continue
-        row_path_value = row.get("evidence_json_path")
-        if row_path_value:
-            row_path = Path(str(row_path_value))
-            _write_json(row_path, row)
-            row["evidence_json_hash"] = _sha256_file(row_path)
-        break
     _write_json(summary_path, merged)
     baseline_path = Path(str(merged.get("gpu_baseline_path") or "artifacts/qe_ic_7day_prelim/qe_ic_7day_gpu_baseline.json"))
     baseline = _load_gpu_baseline(baseline_path)
@@ -224,8 +336,11 @@ def run_campaign(args: argparse.Namespace) -> dict[str, Any]:
         classification = classify_real_hybrid_vs_gpu(baseline, rows)
         combined_vcs_sidecar_accounting = build_combined_vcs_sidecar_accounting(baseline, gpu_runs_root, rows)
         classification = merge_combined_vcs_sidecar_comparisons(baseline, classification, combined_vcs_sidecar_accounting)
+        integrated_vcs_sidecar_accounting = build_integrated_vcs_sidecar_accounting(baseline, gpu_runs_root, merged.get("integrated_vcs_sidecar_result"))
+        classification = merge_integrated_vcs_sidecar_comparisons(baseline, classification, integrated_vcs_sidecar_accounting)
         merged["evidence_rows"] = rows
         merged["combined_vcs_sidecar_accounting"] = combined_vcs_sidecar_accounting
+        merged["integrated_vcs_sidecar_accounting"] = integrated_vcs_sidecar_accounting
         merged["classification"] = classification
         claim_closure_path = Path(str(merged.get("claim_closure_path") or out_dir / "real_hybrid_claim_closure.json"))
         claim_closure = build_real_hybrid_claim_closure(baseline, rows, classification)

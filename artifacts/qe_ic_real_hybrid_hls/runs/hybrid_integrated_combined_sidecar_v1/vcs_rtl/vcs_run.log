@@ -1,0 +1,10 @@
+Chronologic VCS simulator copyright 1991-2018
+Contains Synopsys proprietary information.
+Compiler version O-2018.09-1_Full64; Runtime version O-2018.09-1_Full64;  Jun  8 20:44 2026
+DSE_REAL_RTL_COMPONENT hpsi samples=96 cycles=96
+DSE_REAL_RTL_COMPONENT sum_band samples=128 cycles=128
+DSE_REAL_RTL_COMPONENT axpy samples=64 cycles=64
+DSE_REAL_RTL_PASS qeic_real_integrated_combined_sidecar_rtl samples=288
+DSE_REAL_RTL_LATENCY_CYCLES 288
+           V C S   S i m u l a t i o n   R e p o r t 
+Time: 2931

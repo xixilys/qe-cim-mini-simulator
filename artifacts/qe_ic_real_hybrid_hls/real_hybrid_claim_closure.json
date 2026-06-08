@@ -5,7 +5,7 @@
     "hls_resource_infeasible_architectures_filtered",
     "physical_fpga_board_measurement_missing"
   ],
-  "claim_boundary": "Combined VCS RTL sidecar trace replay can improve optimistic sensitivity, but it is still partial-sidecar evidence rather than full QE kernel integration; report current implementation as weaker/not superior.",
+  "claim_boundary": "Integrated VCS RTL sidecar trace replay improves hardware-integration evidence, but it remains a compact sidecar miniapp rather than full QE kernel integration; report current implementation as weaker/not superior.",
   "claim_verdict": "not_superior_current_evidence",
   "final_claim_allowed": false,
   "gates": [

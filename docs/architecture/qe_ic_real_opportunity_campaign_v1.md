@@ -158,6 +158,15 @@ sensitivity and architecture ranking, but it does not satisfy full QE kernel
 integration or physical FPGA board measurement gates and must not be reported
 as final GPU-vs-FPGA superiority.
 
+The same follow-up campaign can also run
+`hybrid_integrated_combined_sidecar_v1`, a single handwritten RTL/VCS miniapp
+that contains h_psi, sum_band, and AXPY/memory-update datapaths in one sidecar
+module and emits component-cycle breakdown plus total integrated latency. This
+is stronger than adding independent miniapp latencies because one VCS run
+checks one integrated sidecar RTL/testbench. It is still compact miniapp
+evidence, not QE mainflow integration or board measurement, so it improves
+preliminary architecture evidence but does not clear final superiority gates.
+
 `execute_real` emits additional small evidence summaries:
 
 - `qe_ic_cpu_baseline_measurements_real_run.json`

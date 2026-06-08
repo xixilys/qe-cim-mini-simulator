@@ -1072,6 +1072,447 @@ endmodule
 """
 
 
+_INTEGRATED_SIDECAR_ID = "hybrid_integrated_combined_sidecar_v1"
+_INTEGRATED_SIDECAR_KERNEL = "qeic_real_integrated_combined_sidecar_rtl"
+_INTEGRATED_COMPONENT_TIMER_MAP: dict[str, list[str]] = {
+    "hpsi": ["h_psi"],
+    "sum_band": ["sum_band"],
+    "axpy": ["mix_rho", "h_psi:calbec", "calbec"],
+}
+
+
+def _integrated_vcs_rtl_source() -> str:
+    return r"""module qeic_real_integrated_combined_sidecar_rtl #(
+    parameter integer TOTAL_SAMPLES = 288,
+    parameter integer WIDTH = 18,
+    parameter integer ACC_WIDTH = 48,
+    parameter signed [WIDTH-1:0] ALPHA_RE = 18'sd192,
+    parameter signed [WIDTH-1:0] ALPHA_IM = -18'sd32
+) (
+    input  wire clk,
+    input  wire reset_n,
+    input  wire start,
+    input  wire sample_valid,
+    input  wire [1:0] mode,
+    input  wire band_first,
+    input  wire band_last,
+    input  wire signed [WIDTH-1:0] a_re,
+    input  wire signed [WIDTH-1:0] a_im,
+    input  wire signed [WIDTH-1:0] b_re,
+    input  wire signed [WIDTH-1:0] b_im,
+    input  wire signed [WIDTH-1:0] c_re,
+    input  wire signed [WIDTH-1:0] c_im,
+    input  wire signed [WIDTH-1:0] weight,
+    input  wire signed [WIDTH-1:0] y_re,
+    input  wire signed [WIDTH-1:0] y_im,
+    output reg  signed [ACC_WIDTH-1:0] out_re,
+    output reg  signed [ACC_WIDTH-1:0] out_im,
+    output reg  signed [ACC_WIDTH-1:0] rho_out,
+    output reg  valid,
+    output reg  done
+);
+    localparam [1:0] MODE_HPSI = 2'd0;
+    localparam [1:0] MODE_SUM_BAND = 2'd1;
+    localparam [1:0] MODE_AXPY = 2'd2;
+
+    reg active;
+    integer sample_count;
+    reg signed [ACC_WIDTH-1:0] rho_acc;
+
+    wire signed [ACC_WIDTH-1:0] lap_re = {{(ACC_WIDTH-WIDTH){a_re[WIDTH-1]}}, a_re}
+        - ({{(ACC_WIDTH-WIDTH){b_re[WIDTH-1]}}, b_re} <<< 1)
+        + {{(ACC_WIDTH-WIDTH){c_re[WIDTH-1]}}, c_re};
+    wire signed [ACC_WIDTH-1:0] lap_im = {{(ACC_WIDTH-WIDTH){a_im[WIDTH-1]}}, a_im}
+        - ({{(ACC_WIDTH-WIDTH){b_im[WIDTH-1]}}, b_im} <<< 1)
+        + {{(ACC_WIDTH-WIDTH){c_im[WIDTH-1]}}, c_im};
+    wire signed [(2*WIDTH)-1:0] vloc_re = weight * b_re;
+    wire signed [(2*WIDTH)-1:0] vloc_im = weight * b_im;
+    wire signed [ACC_WIDTH-1:0] hpsi_re = -(lap_re >>> 1) + (vloc_re >>> 8);
+    wire signed [ACC_WIDTH-1:0] hpsi_im = -(lap_im >>> 1) + (vloc_im >>> 8);
+
+    wire signed [(2*WIDTH)-1:0] sb_re_sq = b_re * b_re;
+    wire signed [(2*WIDTH)-1:0] sb_im_sq = b_im * b_im;
+    wire signed [ACC_WIDTH-1:0] sb_abs_sq = {{(ACC_WIDTH-(2*WIDTH)){1'b0}}, sb_re_sq + sb_im_sq};
+    wire signed [(ACC_WIDTH+WIDTH)-1:0] sb_weighted = sb_abs_sq * weight;
+    wire signed [ACC_WIDTH-1:0] sb_contribution = sb_weighted[ACC_WIDTH+WIDTH-1:WIDTH];
+    wire signed [ACC_WIDTH-1:0] rho_acc_next = band_first ? sb_contribution : (rho_acc + sb_contribution);
+
+    wire signed [(2*WIDTH)-1:0] ar_xr = ALPHA_RE * a_re;
+    wire signed [(2*WIDTH)-1:0] ai_xi = ALPHA_IM * a_im;
+    wire signed [(2*WIDTH)-1:0] ar_xi = ALPHA_RE * a_im;
+    wire signed [(2*WIDTH)-1:0] ai_xr = ALPHA_IM * a_re;
+    wire signed [ACC_WIDTH-1:0] y_re_ext = {{(ACC_WIDTH-WIDTH){y_re[WIDTH-1]}}, y_re} <<< 8;
+    wire signed [ACC_WIDTH-1:0] y_im_ext = {{(ACC_WIDTH-WIDTH){y_im[WIDTH-1]}}, y_im} <<< 8;
+    wire signed [ACC_WIDTH-1:0] alpha_x_re = ar_xr - ai_xi;
+    wire signed [ACC_WIDTH-1:0] alpha_x_im = ar_xi + ai_xr;
+
+    always @(posedge clk or negedge reset_n) begin
+        if (!reset_n) begin
+            active <= 1'b0;
+            sample_count <= 0;
+            rho_acc <= 0;
+            out_re <= 0;
+            out_im <= 0;
+            rho_out <= 0;
+            valid <= 1'b0;
+            done <= 1'b0;
+        end else begin
+            valid <= 1'b0;
+            if (start) begin
+                active <= 1'b1;
+                sample_count <= 0;
+                rho_acc <= 0;
+                out_re <= 0;
+                out_im <= 0;
+                rho_out <= 0;
+                done <= 1'b0;
+            end else if (active && sample_valid) begin
+                case (mode)
+                    MODE_HPSI: begin
+                        out_re <= hpsi_re;
+                        out_im <= hpsi_im;
+                        valid <= 1'b1;
+                    end
+                    MODE_SUM_BAND: begin
+                        rho_acc <= rho_acc_next;
+                        rho_out <= rho_acc_next;
+                        valid <= band_last;
+                    end
+                    MODE_AXPY: begin
+                        out_re <= y_re_ext + alpha_x_re;
+                        out_im <= y_im_ext + alpha_x_im;
+                        valid <= 1'b1;
+                    end
+                    default: begin
+                        out_re <= 0;
+                        out_im <= 0;
+                        rho_out <= 0;
+                        valid <= 1'b0;
+                    end
+                endcase
+                if (sample_count == TOTAL_SAMPLES - 1) begin
+                    active <= 1'b0;
+                    done <= 1'b1;
+                end
+                sample_count <= sample_count + 1;
+            end
+        end
+    end
+endmodule
+"""
+
+
+def _integrated_vcs_tb_source(*, hpsi_samples: int, sum_band_grid_points: int, sum_band_bands: int, axpy_samples: int) -> str:
+    sum_band_samples = sum_band_grid_points * sum_band_bands
+    total_samples = hpsi_samples + sum_band_samples + axpy_samples
+    return f"""module tb_qeic_real_integrated_combined_sidecar_rtl;
+    localparam integer HPSI_N = {hpsi_samples};
+    localparam integer SUM_GRID = {sum_band_grid_points};
+    localparam integer SUM_BANDS = {sum_band_bands};
+    localparam integer SUM_SAMPLES = {sum_band_samples};
+    localparam integer AXPY_N = {axpy_samples};
+    localparam integer TOTAL_SAMPLES = {total_samples};
+    localparam integer WIDTH = 18;
+    localparam integer ACC_WIDTH = 48;
+    localparam [1:0] MODE_HPSI = 2'd0;
+    localparam [1:0] MODE_SUM_BAND = 2'd1;
+    localparam [1:0] MODE_AXPY = 2'd2;
+    localparam signed [WIDTH-1:0] ALPHA_RE = 18'sd192;
+    localparam signed [WIDTH-1:0] ALPHA_IM = -18'sd32;
+    reg clk;
+    reg reset_n;
+    reg start;
+    reg sample_valid;
+    reg [1:0] mode;
+    reg band_first;
+    reg band_last;
+    reg signed [WIDTH-1:0] a_re;
+    reg signed [WIDTH-1:0] a_im;
+    reg signed [WIDTH-1:0] b_re;
+    reg signed [WIDTH-1:0] b_im;
+    reg signed [WIDTH-1:0] c_re;
+    reg signed [WIDTH-1:0] c_im;
+    reg signed [WIDTH-1:0] weight;
+    reg signed [WIDTH-1:0] y_re;
+    reg signed [WIDTH-1:0] y_im;
+    wire signed [ACC_WIDTH-1:0] out_re;
+    wire signed [ACC_WIDTH-1:0] out_im;
+    wire signed [ACC_WIDTH-1:0] rho_out;
+    wire valid;
+    wire done;
+
+    reg signed [WIDTH-1:0] hpsi_re [0:HPSI_N-1];
+    reg signed [WIDTH-1:0] hpsi_im [0:HPSI_N-1];
+    reg signed [WIDTH-1:0] hpsi_vloc [0:HPSI_N-1];
+    reg signed [ACC_WIDTH-1:0] hpsi_expected_re [0:HPSI_N-1];
+    reg signed [ACC_WIDTH-1:0] hpsi_expected_im [0:HPSI_N-1];
+    reg signed [WIDTH-1:0] sum_re [0:SUM_SAMPLES-1];
+    reg signed [WIDTH-1:0] sum_im [0:SUM_SAMPLES-1];
+    reg signed [WIDTH-1:0] sum_weight [0:SUM_BANDS-1];
+    reg signed [ACC_WIDTH-1:0] sum_expected [0:SUM_GRID-1];
+    reg signed [WIDTH-1:0] axpy_x_re [0:AXPY_N-1];
+    reg signed [WIDTH-1:0] axpy_x_im [0:AXPY_N-1];
+    reg signed [WIDTH-1:0] axpy_y_re [0:AXPY_N-1];
+    reg signed [WIDTH-1:0] axpy_y_im [0:AXPY_N-1];
+    reg signed [ACC_WIDTH-1:0] axpy_expected_re [0:AXPY_N-1];
+    reg signed [ACC_WIDTH-1:0] axpy_expected_im [0:AXPY_N-1];
+    reg signed [ACC_WIDTH-1:0] lap_re;
+    reg signed [ACC_WIDTH-1:0] lap_im;
+    reg signed [ACC_WIDTH-1:0] acc;
+    reg signed [(2*WIDTH)-1:0] re_sq;
+    reg signed [(2*WIDTH)-1:0] im_sq;
+    reg signed [ACC_WIDTH-1:0] abs_sq;
+    integer i;
+    integer g;
+    integer b;
+    integer left;
+    integer right;
+    integer idx;
+    integer latency_cycles;
+    integer hpsi_cycles;
+    integer sum_band_cycles;
+    integer axpy_cycles;
+
+    qeic_real_integrated_combined_sidecar_rtl #(
+        .TOTAL_SAMPLES(TOTAL_SAMPLES),
+        .WIDTH(WIDTH),
+        .ACC_WIDTH(ACC_WIDTH),
+        .ALPHA_RE(ALPHA_RE),
+        .ALPHA_IM(ALPHA_IM)
+    ) dut (
+        .clk(clk),
+        .reset_n(reset_n),
+        .start(start),
+        .sample_valid(sample_valid),
+        .mode(mode),
+        .band_first(band_first),
+        .band_last(band_last),
+        .a_re(a_re),
+        .a_im(a_im),
+        .b_re(b_re),
+        .b_im(b_im),
+        .c_re(c_re),
+        .c_im(c_im),
+        .weight(weight),
+        .y_re(y_re),
+        .y_im(y_im),
+        .out_re(out_re),
+        .out_im(out_im),
+        .rho_out(rho_out),
+        .valid(valid),
+        .done(done)
+    );
+
+    initial begin
+        clk = 1'b0;
+        forever #5 clk = ~clk;
+    end
+
+    initial begin
+        reset_n = 1'b0;
+        start = 1'b0;
+        sample_valid = 1'b0;
+        mode = MODE_HPSI;
+        band_first = 1'b0;
+        band_last = 1'b0;
+        a_re = 0;
+        a_im = 0;
+        b_re = 0;
+        b_im = 0;
+        c_re = 0;
+        c_im = 0;
+        weight = 0;
+        y_re = 0;
+        y_im = 0;
+        latency_cycles = 0;
+        hpsi_cycles = 0;
+        sum_band_cycles = 0;
+        axpy_cycles = 0;
+
+        for (g = 0; g < HPSI_N; g = g + 1) begin
+            hpsi_re[g] = 18'sd64 + g * 18'sd3;
+            hpsi_im[g] = -18'sd51 - g * 18'sd2;
+            hpsi_vloc[g] = 18'sd128 + ((g * 17) & 31);
+        end
+        for (g = 0; g < HPSI_N; g = g + 1) begin
+            left = (g == 0) ? 0 : g - 1;
+            right = (g == HPSI_N - 1) ? HPSI_N - 1 : g + 1;
+            lap_re = hpsi_re[left] - (hpsi_re[g] <<< 1) + hpsi_re[right];
+            lap_im = hpsi_im[left] - (hpsi_im[g] <<< 1) + hpsi_im[right];
+            hpsi_expected_re[g] = -(lap_re >>> 1) + ((hpsi_vloc[g] * hpsi_re[g]) >>> 8);
+            hpsi_expected_im[g] = -(lap_im >>> 1) + ((hpsi_vloc[g] * hpsi_im[g]) >>> 8);
+        end
+        for (b = 0; b < SUM_BANDS; b = b + 1) begin
+            sum_weight[b] = 18'sd64 + b * 18'sd11;
+        end
+        for (g = 0; g < SUM_GRID; g = g + 1) begin
+            sum_expected[g] = 0;
+        end
+        for (b = 0; b < SUM_BANDS; b = b + 1) begin
+            for (g = 0; g < SUM_GRID; g = g + 1) begin
+                idx = b * SUM_GRID + g;
+                sum_re[idx] = 18'sd32 + idx * 18'sd2 + (g & 3);
+                sum_im[idx] = -18'sd21 - idx;
+            end
+        end
+        for (g = 0; g < SUM_GRID; g = g + 1) begin
+            acc = 0;
+            for (b = 0; b < SUM_BANDS; b = b + 1) begin
+                idx = b * SUM_GRID + g;
+                re_sq = sum_re[idx] * sum_re[idx];
+                im_sq = sum_im[idx] * sum_im[idx];
+                abs_sq = re_sq + im_sq;
+                acc = acc + ((abs_sq * sum_weight[b]) >>> WIDTH);
+            end
+            sum_expected[g] = acc;
+        end
+        for (i = 0; i < AXPY_N; i = i + 1) begin
+            axpy_x_re[i] = 18'sd16 + i * 18'sd3;
+            axpy_x_im[i] = -18'sd11 - i * 18'sd2;
+            axpy_y_re[i] = 18'sd7 + (i & 7);
+            axpy_y_im[i] = -18'sd5 - (i & 5);
+            axpy_expected_re[i] = (axpy_y_re[i] <<< 8) + (ALPHA_RE * axpy_x_re[i]) - (ALPHA_IM * axpy_x_im[i]);
+            axpy_expected_im[i] = (axpy_y_im[i] <<< 8) + (ALPHA_RE * axpy_x_im[i]) + (ALPHA_IM * axpy_x_re[i]);
+        end
+
+        repeat (3) @(posedge clk);
+        reset_n = 1'b1;
+        @(posedge clk);
+        start = 1'b1;
+        @(posedge clk);
+        start = 1'b0;
+
+        for (g = 0; g < HPSI_N; g = g + 1) begin
+            left = (g == 0) ? 0 : g - 1;
+            right = (g == HPSI_N - 1) ? HPSI_N - 1 : g + 1;
+            @(negedge clk);
+            mode = MODE_HPSI;
+            a_re = hpsi_re[left];
+            a_im = hpsi_im[left];
+            b_re = hpsi_re[g];
+            b_im = hpsi_im[g];
+            c_re = hpsi_re[right];
+            c_im = hpsi_im[right];
+            weight = hpsi_vloc[g];
+            band_first = 1'b0;
+            band_last = 1'b0;
+            sample_valid = 1'b1;
+            @(posedge clk);
+            #1;
+            latency_cycles = latency_cycles + 1;
+            hpsi_cycles = hpsi_cycles + 1;
+            if (valid !== 1'b1 || out_re !== hpsi_expected_re[g] || out_im !== hpsi_expected_im[g]) begin
+                $display("DSE_REAL_RTL_FAIL hpsi sample=%0d expected=%0d,%0d got=%0d,%0d valid=%0d", g, hpsi_expected_re[g], hpsi_expected_im[g], out_re, out_im, valid);
+                $finish(1);
+            end
+        end
+
+        for (g = 0; g < SUM_GRID; g = g + 1) begin
+            for (b = 0; b < SUM_BANDS; b = b + 1) begin
+                @(negedge clk);
+                idx = b * SUM_GRID + g;
+                mode = MODE_SUM_BAND;
+                b_re = sum_re[idx];
+                b_im = sum_im[idx];
+                weight = sum_weight[b];
+                band_first = (b == 0);
+                band_last = (b == SUM_BANDS - 1);
+                sample_valid = 1'b1;
+                @(posedge clk);
+                #1;
+                latency_cycles = latency_cycles + 1;
+                sum_band_cycles = sum_band_cycles + 1;
+                if (band_last) begin
+                    if (valid !== 1'b1 || rho_out !== sum_expected[g]) begin
+                        $display("DSE_REAL_RTL_FAIL sum_band grid=%0d expected=%0d got=%0d valid=%0d", g, sum_expected[g], rho_out, valid);
+                        $finish(1);
+                    end
+                end
+            end
+        end
+
+        for (i = 0; i < AXPY_N; i = i + 1) begin
+            @(negedge clk);
+            mode = MODE_AXPY;
+            a_re = axpy_x_re[i];
+            a_im = axpy_x_im[i];
+            y_re = axpy_y_re[i];
+            y_im = axpy_y_im[i];
+            band_first = 1'b0;
+            band_last = 1'b0;
+            sample_valid = 1'b1;
+            @(posedge clk);
+            #1;
+            latency_cycles = latency_cycles + 1;
+            axpy_cycles = axpy_cycles + 1;
+            if (valid !== 1'b1 || out_re !== axpy_expected_re[i] || out_im !== axpy_expected_im[i]) begin
+                $display("DSE_REAL_RTL_FAIL axpy sample=%0d expected=%0d,%0d got=%0d,%0d valid=%0d", i, axpy_expected_re[i], axpy_expected_im[i], out_re, out_im, valid);
+                $finish(1);
+            end
+        end
+
+        @(negedge clk);
+        sample_valid = 1'b0;
+        #1;
+        if (done !== 1'b1 || latency_cycles != TOTAL_SAMPLES) begin
+            $display("DSE_REAL_RTL_FAIL done=%0d latency=%0d total=%0d", done, latency_cycles, TOTAL_SAMPLES);
+            $finish(1);
+        end
+        $display("DSE_REAL_RTL_COMPONENT hpsi samples=%0d cycles=%0d", HPSI_N, hpsi_cycles);
+        $display("DSE_REAL_RTL_COMPONENT sum_band samples=%0d cycles=%0d", SUM_SAMPLES, sum_band_cycles);
+        $display("DSE_REAL_RTL_COMPONENT axpy samples=%0d cycles=%0d", AXPY_N, axpy_cycles);
+        $display("DSE_REAL_RTL_PASS qeic_real_integrated_combined_sidecar_rtl samples=%0d", TOTAL_SAMPLES);
+        $display("DSE_REAL_RTL_LATENCY_CYCLES %0d", latency_cycles);
+        $finish(0);
+    end
+endmodule
+"""
+
+
+def materialize_integrated_vcs_sidecar_project(specs: Sequence[Mapping[str, Any]], out_dir: Path) -> dict[str, Any]:
+    """Materialize one integrated RTL/VCS sidecar covering h_psi, sum_band, and AXPY motifs."""
+
+    by_id = {str(spec.get("architecture_id")): spec for spec in specs if spec.get("architecture_id")}
+    hpsi = by_id.get("hybrid_hpsi_local_potential_v1", {})
+    sum_band = by_id.get("hybrid_sum_band_density_accumulator_v1", {})
+    axpy = by_id.get("hybrid_tiled_complex_axpy_v1", {})
+    hpsi_samples = int(hpsi.get("golden_grid_points") or hpsi.get("golden_vector_length") or 96)
+    sum_grid = int(sum_band.get("golden_grid_points") or 32)
+    sum_bands = int(sum_band.get("golden_band_count") or 4)
+    axpy_samples = int(axpy.get("golden_vector_length") or 64)
+    component_samples = {
+        "hpsi": hpsi_samples,
+        "sum_band": sum_grid * sum_bands,
+        "axpy": axpy_samples,
+    }
+    project_dir = Path(out_dir) / _INTEGRATED_SIDECAR_ID / "vcs_rtl"
+    project_dir.mkdir(parents=True, exist_ok=True)
+    rtl_source = _integrated_vcs_rtl_source()
+    tb_source = _integrated_vcs_tb_source(
+        hpsi_samples=hpsi_samples,
+        sum_band_grid_points=sum_grid,
+        sum_band_bands=sum_bands,
+        axpy_samples=axpy_samples,
+    )
+    rtl_sv = project_dir / "qeic_real_integrated_combined_sidecar_rtl.sv"
+    tb_sv = project_dir / "tb_qeic_real_integrated_combined_sidecar_rtl.sv"
+    rtl_sv.write_text(rtl_source, encoding="utf-8")
+    tb_sv.write_text(tb_source, encoding="utf-8")
+    return {
+        "architecture_id": _INTEGRATED_SIDECAR_ID,
+        "kernel_name": _INTEGRATED_SIDECAR_KERNEL,
+        "project_dir": str(project_dir),
+        "rtl_sv": str(rtl_sv),
+        "tb_sv": str(tb_sv),
+        "rtl_hash": _sha256_text(rtl_source),
+        "testbench_hash": _sha256_text(tb_source),
+        "samples": sum(component_samples.values()),
+        "component_samples": component_samples,
+        "clock_ns": 8.75,
+        "claim_boundary": "Single integrated RTL/VCS sidecar miniapp covering h_psi, sum_band, and AXPY motifs; not full QE kernel integration or board measurement.",
+    }
+
+
 def materialize_vcs_rtl_project(spec: Mapping[str, Any], out_dir: Path) -> dict[str, Any]:
     """Materialize a non-HLS RTL/VCS project for a supported QE miniapp."""
 
@@ -1123,14 +1564,21 @@ def parse_vcs_rtl_run_log(text: str) -> dict[str, Any]:
     pass_match = re.search(r"DSE_REAL_RTL_PASS\s+\S+\s+samples=(\d+)", text)
     fail_match = re.search(r"DSE_REAL_RTL_FAIL[^\n]*", text)
     latency_match = re.search(r"DSE_REAL_RTL_LATENCY_CYCLES\s+(\d+)", text)
+    component_cycles = {
+        match.group(1): {"samples": int(match.group(2)), "cycles": int(match.group(3))}
+        for match in re.finditer(r"DSE_REAL_RTL_COMPONENT\s+([A-Za-z0-9_:+.-]+)\s+samples=(\d+)\s+cycles=(\d+)", text)
+    }
     if pass_match and latency_match:
-        return {
+        parsed = {
             "status": "parsed",
             "rtl_status": "Pass",
             "latency_cycles": int(latency_match.group(1)),
             "samples": int(pass_match.group(1)),
             "blockers": [],
         }
+        if component_cycles:
+            parsed["component_cycles"] = component_cycles
+        return parsed
     blockers: list[str] = []
     if fail_match:
         blockers.append("vcs_rtl_testbench_failed")
@@ -1977,7 +2425,7 @@ def merge_combined_vcs_sidecar_comparisons(
         )
     merged["architecture_comparisons"] = rows
     if rows:
-        best = max(rows, key=lambda item: float(item.get("speedup_vs_gpu_mean") or 0.0))
+        best = max(rows, key=lambda item: (float(item.get("speedup_vs_gpu_mean") or 0.0), 1 if item.get("architecture_id") == _INTEGRATED_SIDECAR_ID else 0))
         merged["best_architecture_id"] = best.get("architecture_id")
         merged["best_speedup_vs_gpu_mean"] = best.get("speedup_vs_gpu_mean")
     blockers = sorted(set(str(item) for item in _as_list(merged.get("blockers"))) | {"full_qe_kernel_equivalent_missing", "full_qe_kernel_integration_missing"})
@@ -1985,6 +2433,203 @@ def merge_combined_vcs_sidecar_comparisons(
     merged["preliminary_label"] = "fpga_hybrid_weaker" if merged.get("preliminary_label") != "insufficient_evidence" else merged.get("preliminary_label")
     merged["final_claim_allowed"] = False
     merged["claim_boundary"] = "Combined VCS RTL sidecar trace replay can improve optimistic sensitivity, but it is still partial-sidecar evidence rather than full QE kernel integration; report current implementation as weaker/not superior."
+    return merged
+
+
+def build_integrated_vcs_sidecar_accounting(
+    gpu_baseline: Mapping[str, Any],
+    gpu_runs_root: Path,
+    integrated_result: Mapping[str, Any] | None,
+) -> list[dict[str, Any]]:
+    """Build trace replay from one integrated VCS RTL sidecar result."""
+
+    if not isinstance(integrated_result, Mapping) or integrated_result.get("vcs_passed") is not True:
+        return []
+    vcs = integrated_result.get("vcs_parsed") if isinstance(integrated_result.get("vcs_parsed"), Mapping) else {}
+    latency = vcs.get("latency_cycles") if isinstance(vcs, Mapping) else None
+    component_cycles = vcs.get("component_cycles") if isinstance(vcs.get("component_cycles"), Mapping) else {}
+    clock_ns = integrated_result.get("clock_ns")
+    if not isinstance(clock_ns, (int, float)):
+        clock_ns = 8.75
+    if not isinstance(latency, (int, float)):
+        return []
+    records = [record for record in _as_list(gpu_baseline.get("baseline_records")) if isinstance(record, Mapping)]
+    accountings: list[dict[str, Any]] = []
+    for record in records:
+        case_id = str(record.get("case_id") or "")
+        gpu_runtime = record.get("runtime_seconds_mean")
+        if not case_id or not isinstance(gpu_runtime, (int, float)):
+            continue
+        stdout_paths = sorted((gpu_runs_root / case_id / "gpu_only_baseline").glob("run_*.stdout.log"))
+        if not stdout_paths:
+            accountings.append(
+                {
+                    "architecture_id": _INTEGRATED_SIDECAR_ID,
+                    "status": "missing_qe_timer_trace",
+                    "case_id": case_id,
+                    "blockers": ["qe_stdout_timer_logs_missing"],
+                    "implementation_coverage": "integrated_partial_sidecar_motif",
+                }
+            )
+            continue
+        parsed_logs = [parse_qe_timer_stdout(path.read_text(encoding="utf-8", errors="replace")) for path in stdout_paths]
+        used_timers: set[str] = set()
+        routine_means: dict[str, float] = {}
+        routine_call_means: dict[str, float] = {}
+        component_rows: list[dict[str, Any]] = []
+        replaceable_seconds = 0.0
+        fpga_compute_seconds = 0.0
+        transaction_count_total = 0.0
+        for component_id, timer_names in _INTEGRATED_COMPONENT_TIMER_MAP.items():
+            component = component_cycles.get(component_id) if isinstance(component_cycles, Mapping) else None
+            component_latency = component.get("cycles") if isinstance(component, Mapping) else None
+            component_samples = component.get("samples") if isinstance(component, Mapping) else None
+            if not isinstance(component_latency, (int, float)):
+                continue
+            mapped_timer_names: list[str] = []
+            component_replaceable = 0.0
+            component_transaction_count = 0.0
+            for timer_name in timer_names:
+                if timer_name in used_timers:
+                    continue
+                walls: list[float] = []
+                calls: list[float] = []
+                for parsed_log in parsed_logs:
+                    routine = parsed_log["routines"].get(timer_name)
+                    if not isinstance(routine, Mapping):
+                        continue
+                    if isinstance(routine.get("wall_seconds"), (int, float)):
+                        walls.append(float(routine["wall_seconds"]))
+                    if isinstance(routine.get("calls"), (int, float)):
+                        calls.append(float(routine["calls"]))
+                mean_wall = _mean(walls)
+                if mean_wall is None:
+                    continue
+                mean_calls = _mean(calls) or 1.0
+                used_timers.add(timer_name)
+                mapped_timer_names.append(timer_name)
+                routine_means[timer_name] = mean_wall
+                routine_call_means[timer_name] = mean_calls
+                component_replaceable += mean_wall
+                component_transaction_count += mean_calls
+            if not mapped_timer_names:
+                continue
+            kernel_seconds = float(clock_ns) * float(component_latency) * 1.0e-9
+            transactions = max(1.0, component_transaction_count)
+            component_compute = kernel_seconds * transactions
+            replaceable_seconds += component_replaceable
+            fpga_compute_seconds += component_compute
+            transaction_count_total += transactions
+            component_rows.append(
+                {
+                    "component_id": component_id,
+                    "mapped_timer_names": mapped_timer_names,
+                    "latency_cycles": int(component_latency),
+                    "samples": component_samples,
+                    "clock_ns": float(clock_ns),
+                    "kernel_seconds_per_transaction": kernel_seconds,
+                    "transaction_count_estimate": transactions,
+                    "fpga_compute_seconds": component_compute,
+                    "replaceable_seconds_mean": component_replaceable,
+                }
+            )
+        if len(component_rows) < 2 or replaceable_seconds <= 0.0:
+            accountings.append(
+                {
+                    "architecture_id": _INTEGRATED_SIDECAR_ID,
+                    "status": "missing_trace_replay_inputs",
+                    "case_id": case_id,
+                    "mapped_timer_names": sorted(used_timers),
+                    "blockers": ["integrated_vcs_timer_or_component_latency_missing"],
+                    "implementation_coverage": "integrated_partial_sidecar_motif",
+                }
+            )
+            continue
+        launch_overhead = 0.00005 * transaction_count_total
+        host_device_transfer = 0.00005 * transaction_count_total
+        synchronization = 0.00005 * transaction_count_total
+        cpu_retained = max(float(gpu_runtime) - replaceable_seconds, 0.0)
+        hybrid_runtime = cpu_retained + fpga_compute_seconds + launch_overhead + host_device_transfer + synchronization
+        accountings.append(
+            {
+                "architecture_id": _INTEGRATED_SIDECAR_ID,
+                "status": "trace_replay_integrated_vcs_sidecar_sensitivity",
+                "case_id": case_id,
+                "source_gpu_runtime_seconds_mean": float(gpu_runtime),
+                "mapped_timer_names": sorted(used_timers),
+                "mapped_timer_wall_seconds_mean": routine_means,
+                "mapped_timer_call_count_mean": routine_call_means,
+                "replaceable_seconds_mean": replaceable_seconds,
+                "latency_source": "integrated_vcs_rtl",
+                "integrated_latency_cycles": int(latency),
+                "fpga_clock_ns": float(clock_ns),
+                "fpga_component_count": len(component_rows),
+                "fpga_components": component_rows,
+                "fpga_transaction_count_estimate": transaction_count_total,
+                "fpga_compute_seconds": fpga_compute_seconds,
+                "scf_control_seconds": 0.0,
+                "cpu_retained_seconds": cpu_retained,
+                "host_device_transfer_seconds": host_device_transfer,
+                "synchronization_seconds": synchronization,
+                "launch_overhead_seconds": launch_overhead,
+                "hybrid_workflow_runtime_seconds": hybrid_runtime,
+                "implementation_coverage": "integrated_partial_sidecar_motif",
+                "blockers": ["full_qe_kernel_equivalent_missing", "full_qe_kernel_integration_missing"],
+                "timer_trace_paths": [str(path) for path in stdout_paths],
+                "claim_boundary": "Trace replay using a single integrated RTL/VCS sidecar miniapp over measured QE timer traces; not full-QE integration, board measurement, or final FPGA superiority evidence.",
+            }
+        )
+    return accountings
+
+
+def merge_integrated_vcs_sidecar_comparisons(
+    gpu_baseline: Mapping[str, Any],
+    classification: Mapping[str, Any],
+    integrated_accounting: Sequence[Mapping[str, Any]],
+) -> dict[str, Any]:
+    """Return classification with integrated VCS sidecar accounting rows appended."""
+
+    merged = json.loads(json.dumps(classification))
+    baseline_records = [row for row in _as_list(gpu_baseline.get("baseline_records")) if isinstance(row, Mapping)]
+    baseline_by_case = {
+        str(row.get("case_id")): float(row["runtime_seconds_mean"])
+        for row in baseline_records
+        if row.get("case_id") is not None and row.get("runtime_seconds_mean") is not None
+    }
+    rows = [row for row in _as_list(merged.get("architecture_comparisons")) if isinstance(row, Mapping)]
+    for accounting in integrated_accounting:
+        if accounting.get("status") != "trace_replay_integrated_vcs_sidecar_sensitivity":
+            continue
+        case_id = str(accounting.get("case_id") or "")
+        gpu_seconds = baseline_by_case.get(case_id)
+        hybrid_value = accounting.get("hybrid_workflow_runtime_seconds")
+        if gpu_seconds is None or not isinstance(hybrid_value, (int, float)) or float(hybrid_value) <= 0:
+            continue
+        rows.append(
+            {
+                "architecture_id": accounting.get("architecture_id"),
+                "case_id": case_id,
+                "gpu_runtime_seconds_mean": gpu_seconds,
+                "hybrid_workflow_runtime_seconds": float(hybrid_value),
+                "speedup_vs_gpu_mean": gpu_seconds / float(hybrid_value),
+                "workflow_accounting_status": accounting.get("status"),
+                "latency_source": accounting.get("latency_source"),
+                "implementation_coverage": accounting.get("implementation_coverage"),
+                "replaceable_seconds_mean": accounting.get("replaceable_seconds_mean"),
+                "mapped_timer_names": accounting.get("mapped_timer_names"),
+                "microkernel": {"fpga_components": accounting.get("fpga_components"), "fpga_component_count": accounting.get("fpga_component_count")},
+            }
+        )
+    merged["architecture_comparisons"] = rows
+    if rows:
+        best = max(rows, key=lambda item: (float(item.get("speedup_vs_gpu_mean") or 0.0), 1 if item.get("architecture_id") == _INTEGRATED_SIDECAR_ID else 0))
+        merged["best_architecture_id"] = best.get("architecture_id")
+        merged["best_speedup_vs_gpu_mean"] = best.get("speedup_vs_gpu_mean")
+    blockers = sorted(set(str(item) for item in _as_list(merged.get("blockers"))) | {"full_qe_kernel_equivalent_missing", "full_qe_kernel_integration_missing"})
+    merged["blockers"] = blockers
+    merged["preliminary_label"] = "fpga_hybrid_weaker" if merged.get("preliminary_label") != "insufficient_evidence" else merged.get("preliminary_label")
+    merged["final_claim_allowed"] = False
+    merged["claim_boundary"] = "Integrated VCS RTL sidecar trace replay improves hardware-integration evidence, but it remains a compact sidecar miniapp rather than full QE kernel integration; report current implementation as weaker/not superior."
     return merged
 
 
@@ -2306,12 +2951,15 @@ __all__ = [
     "build_real_hybrid_architecture_specs",
     "build_evidence_row_static_metadata",
     "build_combined_vcs_sidecar_accounting",
+    "build_integrated_vcs_sidecar_accounting",
     "build_real_hybrid_claim_closure",
     "build_trace_replay_workflow_accounting",
     "classify_real_hybrid_vs_gpu",
+    "materialize_integrated_vcs_sidecar_project",
     "materialize_hls_project",
     "materialize_vcs_rtl_project",
     "merge_combined_vcs_sidecar_comparisons",
+    "merge_integrated_vcs_sidecar_comparisons",
     "merge_vcs_rtl_evidence_into_summary",
     "parse_qe_timer_stdout",
     "parse_vcs_rtl_run_log",

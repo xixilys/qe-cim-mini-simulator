@@ -10,12 +10,15 @@ from dse_v2.experiments.qe_ic_real_opportunity.real_hybrid_hls_evidence import (
     build_real_hybrid_architecture_specs,
     build_evidence_row_static_metadata,
     build_combined_vcs_sidecar_accounting,
+    build_integrated_vcs_sidecar_accounting,
     build_real_hybrid_claim_closure,
     build_trace_replay_workflow_accounting,
     classify_real_hybrid_vs_gpu,
+    materialize_integrated_vcs_sidecar_project,
     materialize_hls_project,
     materialize_vcs_rtl_project,
     merge_combined_vcs_sidecar_comparisons,
+    merge_integrated_vcs_sidecar_comparisons,
     merge_vcs_rtl_evidence_into_summary,
     parse_qe_timer_stdout,
     parse_vcs_rtl_run_log,
@@ -809,6 +812,31 @@ def test_materialize_vcs_rtl_project_for_sum_band_contains_non_stub_density_accu
     assert "expected_rho" in tb
     assert project["samples"] == spec["golden_grid_points"] * spec["golden_band_count"]
 
+
+def test_materialize_integrated_vcs_sidecar_project_contains_three_non_stub_motifs(tmp_path: Path):
+    specs = build_real_hybrid_architecture_specs()
+
+    project = materialize_integrated_vcs_sidecar_project(specs, tmp_path)
+
+    rtl = Path(project["rtl_sv"]).read_text()
+    tb = Path(project["tb_sv"]).read_text()
+    assert project["architecture_id"] == "hybrid_integrated_combined_sidecar_v1"
+    assert "module qeic_real_integrated_combined_sidecar_rtl" in rtl
+    assert "MODE_HPSI" in rtl
+    assert "MODE_SUM_BAND" in rtl
+    assert "MODE_AXPY" in rtl
+    assert "rho_acc_next" in rtl
+    assert "alpha_x_re" in rtl
+    assert "lap_re" in rtl
+    assert "stub" not in rtl.lower()
+    assert "DSE_REAL_RTL_PASS qeic_real_integrated_combined_sidecar_rtl" in tb
+    assert "DSE_REAL_RTL_COMPONENT hpsi" in tb
+    assert "DSE_REAL_RTL_COMPONENT sum_band" in tb
+    assert "DSE_REAL_RTL_COMPONENT axpy" in tb
+    assert project["samples"] == 96 + 128 + 64
+    assert set(project["component_samples"]) == {"hpsi", "sum_band", "axpy"}
+
+
 def test_parse_vcs_rtl_run_log_extracts_pass_and_latency():
     log = """
 DSE_REAL_RTL_PASS qeic_real_hpsi_local_potential_rtl samples=96
@@ -824,6 +852,26 @@ DSE_REAL_RTL_LATENCY_CYCLES 192
         "samples": 96,
         "blockers": [],
     }
+
+
+def test_parse_vcs_rtl_run_log_extracts_integrated_component_breakdown():
+    log = """
+DSE_REAL_RTL_COMPONENT hpsi samples=96 cycles=96
+DSE_REAL_RTL_COMPONENT sum_band samples=128 cycles=128
+DSE_REAL_RTL_COMPONENT axpy samples=64 cycles=64
+DSE_REAL_RTL_PASS qeic_real_integrated_combined_sidecar_rtl samples=288
+DSE_REAL_RTL_LATENCY_CYCLES 288
+"""
+
+    parsed = parse_vcs_rtl_run_log(log)
+
+    assert parsed["status"] == "parsed"
+    assert parsed["rtl_status"] == "Pass"
+    assert parsed["latency_cycles"] == 288
+    assert parsed["samples"] == 288
+    assert parsed["component_cycles"]["hpsi"]["cycles"] == 96
+    assert parsed["component_cycles"]["sum_band"]["samples"] == 128
+    assert parsed["component_cycles"]["axpy"]["cycles"] == 64
 
 
 
@@ -1218,5 +1266,87 @@ def test_merge_combined_vcs_sidecar_comparisons_appends_combined_candidate():
     assert merged["best_speedup_vs_gpu_mean"] == 1.0 / 0.75
     assert merged["architecture_comparisons"][0]["latency_source"] == "combined_vcs_rtl"
     assert merged["architecture_comparisons"][0]["workflow_accounting_status"] == "trace_replay_combined_vcs_sidecar_sensitivity"
+    assert "full_qe_kernel_integration_missing" in merged["blockers"]
+    assert merged["final_claim_allowed"] is False
+
+
+def test_build_integrated_vcs_sidecar_accounting_uses_single_integrated_rtl_result(tmp_path: Path):
+    run_dir = tmp_path / "runs" / "case-a" / "gpu_only_baseline"
+    run_dir.mkdir(parents=True)
+    (run_dir / "run_001.stdout.log").write_text(
+        """
+     h_psi        :      0.10s CPU      0.30s WALL (       4 calls)
+     sum_band     :      0.01s CPU      0.20s WALL (       5 calls)
+     mix_rho      :      0.02s CPU      0.10s WALL (       3 calls)
+     PWSCF        :      0.90s CPU      1.00s WALL
+""",
+        encoding="utf-8",
+    )
+    gpu_baseline = {
+        "measurements_are_real": True,
+        "baseline_records": [{"case_id": "case-a", "runtime_seconds_mean": 1.0}],
+    }
+    integrated_result = {
+        "architecture_id": "hybrid_integrated_combined_sidecar_v1",
+        "vcs_passed": True,
+        "vcs_parsed": {
+            "status": "parsed",
+            "rtl_status": "Pass",
+            "latency_cycles": 288,
+            "samples": 288,
+            "component_cycles": {
+                "hpsi": {"samples": 96, "cycles": 96},
+                "sum_band": {"samples": 128, "cycles": 128},
+                "axpy": {"samples": 64, "cycles": 64},
+            },
+            "blockers": [],
+        },
+        "clock_ns": 8.75,
+    }
+
+    accounting = build_integrated_vcs_sidecar_accounting(gpu_baseline, tmp_path / "runs", integrated_result)
+
+    assert len(accounting) == 1
+    item = accounting[0]
+    assert item["architecture_id"] == "hybrid_integrated_combined_sidecar_v1"
+    assert item["status"] == "trace_replay_integrated_vcs_sidecar_sensitivity"
+    assert item["latency_source"] == "integrated_vcs_rtl"
+    assert set(item["mapped_timer_names"]) == {"h_psi", "sum_band", "mix_rho"}
+    assert item["integrated_latency_cycles"] == 288
+    assert item["fpga_component_count"] == 3
+    assert item["hybrid_workflow_runtime_seconds"] < 1.0
+    assert item["implementation_coverage"] == "integrated_partial_sidecar_motif"
+    assert "single integrated RTL/VCS sidecar" in item["claim_boundary"]
+
+
+def test_merge_integrated_vcs_sidecar_comparisons_appends_integrated_candidate():
+    gpu_baseline = {"baseline_records": [{"case_id": "case-a", "runtime_seconds_mean": 1.0}]}
+    classification = {
+        "preliminary_label": "fpga_hybrid_weaker",
+        "final_claim_allowed": False,
+        "blockers": ["physical_fpga_board_measurement_missing"],
+        "architecture_comparisons": [],
+    }
+    integrated = [
+        {
+            "architecture_id": "hybrid_integrated_combined_sidecar_v1",
+            "status": "trace_replay_integrated_vcs_sidecar_sensitivity",
+            "case_id": "case-a",
+            "latency_source": "integrated_vcs_rtl",
+            "mapped_timer_names": ["h_psi", "sum_band"],
+            "hybrid_workflow_runtime_seconds": 0.8,
+            "replaceable_seconds_mean": 0.30,
+            "implementation_coverage": "integrated_partial_sidecar_motif",
+            "fpga_component_count": 2,
+            "fpga_components": [{"component_id": "hpsi"}, {"component_id": "sum_band"}],
+        }
+    ]
+
+    merged = merge_integrated_vcs_sidecar_comparisons(gpu_baseline, classification, integrated)
+
+    assert merged["best_architecture_id"] == "hybrid_integrated_combined_sidecar_v1"
+    assert merged["best_speedup_vs_gpu_mean"] == 1.25
+    assert merged["architecture_comparisons"][0]["latency_source"] == "integrated_vcs_rtl"
+    assert merged["architecture_comparisons"][0]["workflow_accounting_status"] == "trace_replay_integrated_vcs_sidecar_sensitivity"
     assert "full_qe_kernel_integration_missing" in merged["blockers"]
     assert merged["final_claim_allowed"] is False
