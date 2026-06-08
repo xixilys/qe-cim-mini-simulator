@@ -1,4 +1,4 @@
-Report time       : Mon Jun  8 18:41:56 CST 2026.
+Report time       : Mon Jun  8 18:43:07 CST 2026.
 Solution          : sol1.
 Simulation tool   : xsim.
 
@@ -8,5 +8,5 @@ Simulation tool   : xsim.
 |          |          |      min      |      avg      |      max      |      min      |      avg      |      max      |
 +----------+----------+-----------------------------------------------+-----------------------------------------------+
 |      VHDL|        NA|             NA|             NA|             NA|             NA|             NA|             NA|
-|   Verilog|      Pass|            175|            175|            175|             NA|             NA|             NA|
+|   Verilog|      Pass|           5068|           5068|           5068|             NA|             NA|             NA|
 +----------+----------+-----------------------------------------------+-----------------------------------------------+

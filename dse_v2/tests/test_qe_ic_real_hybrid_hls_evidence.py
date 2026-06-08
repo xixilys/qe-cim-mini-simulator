@@ -7,10 +7,12 @@ from pathlib import Path
 
 from dse_v2.experiments.qe_ic_real_opportunity.real_hybrid_hls_evidence import (
     build_real_hybrid_architecture_specs,
+    build_evidence_row_static_metadata,
     build_trace_replay_workflow_accounting,
     classify_real_hybrid_vs_gpu,
     materialize_hls_project,
     parse_qe_timer_stdout,
+    render_real_hybrid_hls_report,
     parse_vivado_hls_cosim_report,
     parse_vivado_hls_csynth_report,
 )
@@ -24,6 +26,7 @@ def test_real_hybrid_specs_are_not_stub_or_proxy():
         "hybrid_streaming_reduction_accumulator_v1",
         "hybrid_tiled_complex_axpy_v1",
         "hybrid_fft_twiddle_stream_v1",
+        "hybrid_sum_band_density_accumulator_v1",
     }
     for spec in specs:
         text = " ".join(str(value).lower() for value in spec.values())
@@ -36,6 +39,54 @@ def test_real_hybrid_specs_are_not_stub_or_proxy():
         assert "stub" not in text
         assert "proxy" not in text
 
+
+def test_real_hybrid_specs_include_qe_routine_equivalent_candidate():
+    specs = build_real_hybrid_architecture_specs()
+    by_id = {spec["architecture_id"]: spec for spec in specs}
+
+    spec = by_id["hybrid_sum_band_density_accumulator_v1"]
+
+    assert spec["motif_id"] == "sum_band_density_accumulation"
+    assert spec["implementation_coverage"] == "qe_routine_equivalent_miniapp"
+    assert spec["mapped_qe_timer_names"] == ["sum_band"]
+    assert spec["golden_grid_points"] >= 16
+    assert spec["golden_band_count"] >= 4
+
+
+def test_hls_project_materialization_for_sum_band_density_uses_nested_accumulation(tmp_path: Path):
+    spec = next(
+        item
+        for item in build_real_hybrid_architecture_specs()
+        if item["architecture_id"] == "hybrid_sum_band_density_accumulator_v1"
+    )
+
+    project = materialize_hls_project(spec, tmp_path, fpga_part="xc7z020clg400-1")
+
+    kernel_cpp = Path(project["kernel_cpp"]).read_text()
+    tb_cpp = Path(project["tb_cpp"]).read_text()
+    assert "psi_re" in kernel_cpp
+    assert "rho_out" in kernel_cpp
+    assert "for (int g = 0" in kernel_cpp
+    assert "for (int b = 0" in kernel_cpp
+    assert "weights[b] * (re * re + im * im)" in kernel_cpp
+    assert "DSE_REAL_HLS_PASS" in tb_cpp
+    assert "expected[g]" in tb_cpp
+
+
+
+def test_real_hybrid_campaign_default_includes_all_current_architectures():
+    import importlib.util
+
+    script_path = Path(__file__).resolve().parents[1] / "scripts" / "dse" / "run_qe_ic_real_hybrid_hls_campaign.py"
+    spec = importlib.util.spec_from_file_location("run_qe_ic_real_hybrid_hls_campaign", script_path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    args = module.parse_args([])
+
+    assert args.max_architectures == len(build_real_hybrid_architecture_specs())
+    assert args.max_architectures >= 4
 
 def test_hls_project_materialization_contains_golden_correctness_and_cosim(tmp_path: Path):
     spec = build_real_hybrid_architecture_specs()[0]
@@ -173,7 +224,191 @@ def test_parse_vivado_hls_csynth_report_extracts_latency_timing_and_resources():
     assert parsed["blockers"] == []
 
 
+def test_parse_vivado_hls_csynth_report_flags_resource_infeasible_when_total_exceeds_available():
+    report = """
++ Timing (ns):
+    * Summary:
+    +--------+-------+----------+------------+
+    |  Clock | Target| Estimated| Uncertainty|
+    +--------+-------+----------+------------+
+    |ap_clk  |  10.00|     8.750|        1.25|
+    +--------+-------+----------+------------+
++ Latency (clock cycles):
+    * Summary:
+    +-----+-----+-----+-----+---------+
+    |  Latency  |  Interval | Pipeline|
+    | min | max | min | max |   Type  |
+    +-----+-----+-----+-----+---------+
+    |   10|   10|   10|   10|   none  |
+    +-----+-----+-----+-----+---------+
+== Utilization Estimates
+* Summary:
++-----------------+---------+-------+--------+-------+-----+
+|       Name      | BRAM_18K| DSP48E|   FF   |  LUT  | URAM|
++-----------------+---------+-------+--------+-------+-----+
+|Total            |       48|    237|   18387|  23350|    0|
+|Available        |      280|    220|  106400|  53200|    0|
++-----------------+---------+-------+--------+-------+-----+
+"""
 
+    parsed = parse_vivado_hls_csynth_report(report)
+
+    assert parsed["resource"] == {
+        "bram_18k": 48,
+        "dsp48e": 237,
+        "ff": 18387,
+        "lut": 23350,
+        "uram": 0,
+    }
+    assert parsed["resource_available"]["dsp48e"] == 220
+    assert parsed["resource_feasible"] is False
+    assert "hls_resource_infeasible" in parsed["blockers"]
+
+
+def test_trace_replay_accounting_preserves_routine_equivalent_coverage(tmp_path: Path):
+    run_dir = tmp_path / "runs" / "case-a" / "gpu_only_baseline"
+    run_dir.mkdir(parents=True)
+    (run_dir / "run_001.stdout.log").write_text(
+        """
+     sum_band     :      0.01s CPU      0.20s WALL (       5 calls)
+     PWSCF        :      0.90s CPU      1.00s WALL
+""",
+        encoding="utf-8",
+    )
+    gpu_baseline = {
+        "measurements_are_real": True,
+        "baseline_records": [{"case_id": "case-a", "runtime_seconds_mean": 1.0}],
+    }
+    row = {
+        "architecture_id": "hybrid_sum_band_density_accumulator_v1",
+        "motif_id": "sum_band_density_accumulation",
+        "implementation_coverage": "qe_routine_equivalent_miniapp",
+        "csynth_parsed": {"estimated_clock_ns": 10.0},
+        "cosim_parsed": {"latency_cycles_max": 100},
+    }
+
+    accounting = build_trace_replay_workflow_accounting(gpu_baseline, tmp_path / "runs", row)
+
+    assert accounting[0]["implementation_coverage"] == "qe_routine_equivalent_miniapp"
+    assert accounting[0]["mapped_timer_names"] == ["sum_band"]
+
+
+
+def test_evidence_row_static_metadata_carries_spec_coverage_and_timer_mapping():
+    spec = next(
+        item
+        for item in build_real_hybrid_architecture_specs()
+        if item["architecture_id"] == "hybrid_sum_band_density_accumulator_v1"
+    )
+
+    metadata = build_evidence_row_static_metadata(spec)
+
+    assert metadata["implementation_coverage"] == "qe_routine_equivalent_miniapp"
+    assert metadata["mapped_qe_timer_names"] == ["sum_band"]
+    assert metadata["golden_problem_shape"] == {"grid_points": 32, "band_count": 4}
+
+
+
+def test_classify_filters_resource_infeasible_architecture_but_uses_other_feasible_attempts():
+    gpu_baseline = {
+        "measurements_are_real": True,
+        "baseline_records": [{"case_id": "case-a", "runtime_seconds_mean": 1.0}],
+    }
+    common_accounting = {
+        "status": "trace_replay_optimistic",
+        "case_id": "case-a",
+        "scf_control_seconds": 0.1,
+        "cpu_retained_seconds": 0.85,
+        "host_device_transfer_seconds": 0.00005,
+        "synchronization_seconds": 0.00005,
+        "launch_overhead_seconds": 0.00005,
+        "hybrid_workflow_runtime_seconds": 0.8501,
+        "implementation_coverage": "partial_sidecar_motif",
+    }
+    rows = []
+    for arch, feasible in (
+        ("hybrid_streaming_reduction_accumulator_v1", True),
+        ("hybrid_tiled_complex_axpy_v1", True),
+        ("hybrid_fft_twiddle_stream_v1", False),
+    ):
+        rows.append(
+            {
+                "architecture_id": arch,
+                "status": "executed",
+                "csim_passed": True,
+                "csynth_parsed": {
+                    "status": "parsed" if feasible else "partial",
+                    "latency_cycles_max": 64,
+                    "estimated_clock_ns": 7.0,
+                    "resource": {"bram_18k": 1, "dsp48e": 1 if feasible else 999, "ff": 1, "lut": 1, "uram": 0},
+                    "resource_available": {"bram_18k": 280, "dsp48e": 220, "ff": 106400, "lut": 53200, "uram": 0},
+                    "resource_feasible": feasible,
+                    "blockers": [] if feasible else ["hls_resource_infeasible"],
+                },
+                "cosim_passed": True,
+                "cosim_parsed": {"status": "parsed", "latency_cycles_max": 70, "blockers": []},
+                "vcs_passed": False,
+                "implementation_maturity": "real_hls_kernel",
+                "workflow_accounting": [dict(common_accounting)],
+            }
+        )
+
+    result = classify_real_hybrid_vs_gpu(gpu_baseline, rows)
+
+    assert result["preliminary_label"] == "fpga_hybrid_weaker"
+    assert "resource_feasible_hls_required" not in result["blockers"]
+    assert "hls_resource_infeasible_architectures_filtered" in result["blockers"]
+    assert {row["architecture_id"] for row in result["architecture_comparisons"]} == {
+        "hybrid_streaming_reduction_accumulator_v1",
+        "hybrid_tiled_complex_axpy_v1",
+    }
+
+def test_classify_real_hybrid_marks_resource_infeasible_rows_as_insufficient():
+    gpu_baseline = {
+        "measurements_are_real": True,
+        "baseline_records": [{"case_id": "case-a", "runtime_seconds_mean": 1.0}],
+    }
+    rows = []
+    for arch in ("hybrid_sum_band_density_accumulator_v1", "hybrid_tiled_complex_axpy_v1"):
+        rows.append(
+            {
+                "architecture_id": arch,
+                "status": "executed",
+                "csim_passed": True,
+                "csynth_parsed": {
+                    "status": "partial",
+                    "latency_cycles_max": 64,
+                    "estimated_clock_ns": 7.0,
+                    "resource": {"bram_18k": 1, "dsp48e": 999, "ff": 1, "lut": 1, "uram": 0},
+                    "resource_available": {"bram_18k": 280, "dsp48e": 220, "ff": 106400, "lut": 53200, "uram": 0},
+                    "resource_feasible": False,
+                    "blockers": ["hls_resource_infeasible"],
+                },
+                "cosim_passed": True,
+                "cosim_parsed": {"status": "parsed", "latency_cycles_max": 70, "blockers": []},
+                "vcs_passed": False,
+                "implementation_maturity": "real_hls_kernel",
+                "workflow_accounting": [
+                    {
+                        "status": "trace_replay_optimistic",
+                        "case_id": "case-a",
+                        "scf_control_seconds": 0.1,
+                        "cpu_retained_seconds": 0.7,
+                        "host_device_transfer_seconds": 0.00005,
+                        "synchronization_seconds": 0.00005,
+                        "launch_overhead_seconds": 0.00005,
+                        "hybrid_workflow_runtime_seconds": 0.7001,
+                        "implementation_coverage": "full_qe_kernel_equivalent",
+                    }
+                ],
+            }
+        )
+
+    result = classify_real_hybrid_vs_gpu(gpu_baseline, rows)
+
+    assert result["preliminary_label"] == "insufficient_evidence"
+    assert "resource_feasible_hls_required" in result["blockers"]
+    assert result["final_claim_allowed"] is False
 
 def test_parse_qe_timer_stdout_extracts_full_scf_routine_timers():
     stdout = """
@@ -344,6 +579,56 @@ def test_classify_real_hybrid_requires_full_scf_accounting_after_cosim():
     assert "full_scf_workflow_accounting_required" in result["blockers"]
     assert result["microkernel_evidence"][0]["rtl_cosim_latency_cycles_max"] == 70
     assert result["final_claim_allowed"] is False
+
+
+def test_render_real_hybrid_hls_report_includes_resource_filter_and_latency_source():
+    summary = {
+        "classification": {
+            "preliminary_label": "fpga_hybrid_weaker",
+            "confidence": "medium",
+            "final_claim_allowed": False,
+            "best_architecture_id": "hybrid_sum_band_density_accumulator_v1",
+            "best_speedup_vs_gpu_mean": 1.02,
+            "resource_infeasible_architecture_ids": ["hybrid_fft_twiddle_stream_v1"],
+            "architecture_comparisons": [
+                {
+                    "architecture_id": "hybrid_sum_band_density_accumulator_v1",
+                    "case_id": "case-a",
+                    "mapped_timer_names": ["sum_band"],
+                    "speedup_vs_gpu_mean": 1.02,
+                    "implementation_coverage": "qe_routine_equivalent_miniapp",
+                }
+            ],
+            "blockers": ["full_qe_kernel_integration_missing"],
+            "claim_boundary": "boundary text",
+        },
+        "evidence_rows": [
+            {
+                "architecture_id": "hybrid_sum_band_density_accumulator_v1",
+                "implementation_coverage": "qe_routine_equivalent_miniapp",
+                "mapped_qe_timer_names": ["sum_band"],
+                "csim_passed": True,
+                "cosim_passed": True,
+                "performance_latency_source": "vivado_hls_cosim",
+                "performance_latency_cycles_max": 5068,
+                "csynth_parsed": {
+                    "status": "partial",
+                    "estimated_clock_ns": 8.75,
+                    "resource_feasible": True,
+                    "resource": {"bram_18k": 16, "dsp48e": 25, "ff": 4652, "lut": 6465, "uram": 0},
+                    "blockers": ["hls_latency_summary_missing"],
+                },
+                "cosim_parsed": {"latency_cycles_max": 5068},
+            }
+        ],
+    }
+
+    report = render_real_hybrid_hls_report(summary)
+
+    assert "hybrid_sum_band_density_accumulator_v1" in report
+    assert "vivado_hls_cosim" in report
+    assert "Resource-infeasible architectures filtered" in report
+    assert "hybrid_fft_twiddle_stream_v1" in report
 
 def test_classify_real_hybrid_requires_multiple_architectures_and_not_synthesis_only():
     gpu_baseline = {

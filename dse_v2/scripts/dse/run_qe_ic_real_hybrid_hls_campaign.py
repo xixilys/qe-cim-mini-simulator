@@ -21,11 +21,13 @@ if str(REPO_ROOT) not in sys.path:
 from dse_v2.experiments.qe_ic_real_opportunity.real_hybrid_hls_evidence import (  # noqa: E402
     DEFAULT_FPGA_PART,
     build_real_hybrid_architecture_specs,
+    build_evidence_row_static_metadata,
     build_trace_replay_workflow_accounting,
     classify_real_hybrid_vs_gpu,
     materialize_hls_project,
     parse_vivado_hls_cosim_report,
     parse_vivado_hls_csynth_report,
+    render_real_hybrid_hls_report,
 )
 
 REMOTE_ALIAS = "ic-eda"
@@ -139,6 +141,7 @@ def run_one_architecture(
     stdout = result.stdout or ""
     cosim_passed = cosim_parsed.get("status") == "parsed" and cosim_parsed.get("rtl_status") == "Pass"
     row = {
+        **build_evidence_row_static_metadata(spec),
         "architecture_id": spec.get("architecture_id"),
         "kernel_name": kernel_name,
         "target_type": spec.get("target_type"),
@@ -159,6 +162,8 @@ def run_one_architecture(
         "cosim_report_available": cosim_available,
         "cosim_passed": cosim_passed,
         "cosim_parsed": cosim_parsed,
+        "performance_latency_source": "vivado_hls_cosim" if cosim_parsed.get("latency_cycles_max") is not None else "vivado_hls_csynth",
+        "performance_latency_cycles_max": cosim_parsed.get("latency_cycles_max") or parsed.get("latency_cycles_max"),
         "vcs_passed": False,
         "vcs_attempted": False,
         "blockers": [],
@@ -221,6 +226,7 @@ def run_campaign(args: argparse.Namespace) -> dict[str, Any]:
         "claim_boundary": "Non-stub HLS kernels with real Vivado-HLS attempts; final hardware superiority still requires full QE integration and board/implementation closure.",
     }
     _write_json(out_dir / "real_hybrid_hls_summary.json", summary)
+    (out_dir / "real_hybrid_hls_report.md").write_text(render_real_hybrid_hls_report(summary), encoding="utf-8")
     return summary
 
 
@@ -228,7 +234,7 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--gpu-baseline", type=Path, default=Path("artifacts/qe_ic_7day_prelim/qe_ic_7day_gpu_baseline.json"))
     parser.add_argument("--out", type=Path, default=Path("artifacts/qe_ic_real_hybrid_hls"))
-    parser.add_argument("--max-architectures", type=int, default=3)
+    parser.add_argument("--max-architectures", type=int, default=len(build_real_hybrid_architecture_specs()))
     parser.add_argument("--fpga-part", default=DEFAULT_FPGA_PART)
     parser.add_argument("--gpu-runs-root", type=Path, default=None, help="Root containing <case_id>/gpu_only_baseline/run_*.stdout.log timer traces")
     parser.add_argument("--timeout-seconds", type=int, default=1200)

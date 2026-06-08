@@ -9,14 +9,14 @@ tb.cpp
 
 source /home/Xilinx/Vivado/2019.1/scripts/vivado_hls/hls.tcl -notrace
 INFO: [HLS 200-10] Running '/home/Xilinx/Vivado/2019.1/bin/unwrapped/lnx64.o/vivado_hls'
-INFO: [HLS 200-10] For user 'ICer' on host 'IC_EDA' (Linux_x86_64 version 3.10.0-1160.53.1.el7.x86_64) on Mon Jun 08 18:30:42 CST 2026
+INFO: [HLS 200-10] For user 'ICer' on host 'IC_EDA' (Linux_x86_64 version 3.10.0-1160.53.1.el7.x86_64) on Mon Jun 08 18:41:59 CST 2026
 INFO: [HLS 200-10] On os "CentOS Linux release 7.9.2009 (Core)"
-INFO: [HLS 200-10] In directory '/tmp/dse_real_hybrid_hls_hybrid_fft_twiddle_stream_v1_7eb983dd'
+INFO: [HLS 200-10] In directory '/tmp/dse_real_hybrid_hls_hybrid_fft_twiddle_stream_v1_689c93a8'
 Sourcing Tcl script 'run_hls.tcl'
-INFO: [HLS 200-10] Creating and opening project '/tmp/dse_real_hybrid_hls_hybrid_fft_twiddle_stream_v1_7eb983dd/real_hybrid_hls'.
+INFO: [HLS 200-10] Creating and opening project '/tmp/dse_real_hybrid_hls_hybrid_fft_twiddle_stream_v1_689c93a8/real_hybrid_hls'.
 INFO: [HLS 200-10] Adding design file 'kernel.cpp' to the project
 INFO: [HLS 200-10] Adding test bench file 'tb.cpp' to the project
-INFO: [HLS 200-10] Creating and opening solution '/tmp/dse_real_hybrid_hls_hybrid_fft_twiddle_stream_v1_7eb983dd/real_hybrid_hls/sol1'.
+INFO: [HLS 200-10] Creating and opening solution '/tmp/dse_real_hybrid_hls_hybrid_fft_twiddle_stream_v1_689c93a8/real_hybrid_hls/sol1'.
 INFO: [HLS 200-10] Cleaning up the solution database.
 INFO: [HLS 200-10] Setting target device to 'xc7z020-clg400-1'
 INFO: [SYN 201-201] Setting up clock 'default' with a period of 10ns.
@@ -30,10 +30,10 @@ INFO: [SIM 211-1] CSim done with 0 errors.
 INFO: [SIM 211-3] *************** CSIM finish ***************
 INFO: [SCHED 204-61] Option 'relax_ii_for_timing' is enabled, will increase II to preserve clock frequency constraints.
 INFO: [HLS 200-10] Analyzing design file 'kernel.cpp' ... 
-INFO: [HLS 200-111] Finished Linking Time (s): cpu = 00:00:03 ; elapsed = 00:00:04 . Memory (MB): peak = 815.234 ; gain = 128.000 ; free physical = 7820 ; free virtual = 23152
-INFO: [HLS 200-111] Finished Checking Pragmas Time (s): cpu = 00:00:03 ; elapsed = 00:00:04 . Memory (MB): peak = 815.234 ; gain = 128.000 ; free physical = 7820 ; free virtual = 23152
+INFO: [HLS 200-111] Finished Linking Time (s): cpu = 00:00:03 ; elapsed = 00:00:04 . Memory (MB): peak = 815.234 ; gain = 128.000 ; free physical = 7536 ; free virtual = 23139
+INFO: [HLS 200-111] Finished Checking Pragmas Time (s): cpu = 00:00:03 ; elapsed = 00:00:04 . Memory (MB): peak = 815.234 ; gain = 128.000 ; free physical = 7536 ; free virtual = 23139
 INFO: [HLS 200-10] Starting code transformations ...
-INFO: [HLS 200-111] Finished Standard Transforms Time (s): cpu = 00:00:05 ; elapsed = 00:00:05 . Memory (MB): peak = 884.648 ; gain = 197.414 ; free physical = 7692 ; free virtual = 23044
+INFO: [HLS 200-111] Finished Standard Transforms Time (s): cpu = 00:00:05 ; elapsed = 00:00:05 . Memory (MB): peak = 884.648 ; gain = 197.414 ; free physical = 7410 ; free virtual = 23032
 INFO: [HLS 200-10] Checking synthesizability ...
 INFO: [XFORM 203-602] Inlining function 'fp_struct<double>::expv' into 'range_redux_payne_hanek_hotbm<61, double, 63, 63>' (/wrk/2019.1/continuous/2019_05_24_2552052/src/products/hls/hls_lib/hlsmath/include/FloatingPoint/hls_range_redux.h:470) automatically.
 INFO: [XFORM 203-602] Inlining function 'table_lookup_4oPi_hotbm<52, 61>' into 'range_redux_payne_hanek_hotbm<61, double, 63, 63>' (/wrk/2019.1/continuous/2019_05_24_2552052/src/products/hls/hls_lib/hlsmath/include/FloatingPoint/hls_range_redux.h:496) automatically.
@@ -51,7 +51,7 @@ INFO: [XFORM 203-602] Inlining function 'cos' into 'qeic_real_fft_twiddle_stream
 INFO: [XFORM 203-602] Inlining function 'sin' into 'qeic_real_fft_twiddle_stream' (kernel.cpp:18) automatically.
 WARNING: [SYNCHK 200-23] /wrk/2019.1/continuous/2019_05_24_2552052/src/products/hls/hls_lib/src/hls/utils/x_hls_float_utils.h:425: variable-indexed range selection may cause suboptimal QoR.
 INFO: [SYNCHK 200-10] 0 error(s), 1 warning(s).
-INFO: [HLS 200-111] Finished Checking Synthesizability Time (s): cpu = 00:00:05 ; elapsed = 00:00:05 . Memory (MB): peak = 884.648 ; gain = 197.414 ; free physical = 7656 ; free virtual = 23014
+INFO: [HLS 200-111] Finished Checking Synthesizability Time (s): cpu = 00:00:05 ; elapsed = 00:00:05 . Memory (MB): peak = 884.648 ; gain = 197.414 ; free physical = 7375 ; free virtual = 23004
 INFO: [XFORM 203-502] Unrolling all loops for pipelining in function 'scaled_fixed2ieee<63, 1>' (/wrk/2019.1/continuous/2019_05_24_2552052/src/products/hls/hls_lib/src/hls/utils/x_hls_float_utils.h:411).
 INFO: [HLS 200-489] Unrolling loop 'Loop-1' (/wrk/2019.1/continuous/2019_05_24_2552052/src/products/hls/hls_lib/src/hls/utils/x_hls_float_utils.h:423) in function 'scaled_fixed2ieee<63, 1>' completely with a factor of 3.
 INFO: [HLS 200-489] Unrolling loop 'Loop-2' (/wrk/2019.1/continuous/2019_05_24_2552052/src/products/hls/hls_lib/src/hls/utils/x_hls_float_utils.h:434) in function 'scaled_fixed2ieee<63, 1>' completely with a factor of 4.
@@ -80,11 +80,11 @@ INFO: [XFORM 203-602] Inlining function 'sin' into 'qeic_real_fft_twiddle_stream
 INFO: [XFORM 203-401] Performing if-conversion on hyperblock to (/wrk/2019.1/continuous/2019_05_24_2552052/src/products/hls/hls_lib/src/hls/utils/x_hls_float_utils.h:467:1) in function 'scaled_fixed2ieee<63, 1>'... converting 7 basic blocks.
 INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/wrk/2019.1/continuous/2019_05_24_2552052/src/products/hls/hls_lib/hlsmath/include/FloatingPoint/hls_hotbm.h:238:18) to (/wrk/2019.1/continuous/2019_05_24_2552052/src/products/hls/hls_lib/hlsmath/include/FloatingPoint/hls_hotbm.h:316:12) in function 'hotbm_::sin_or_cos<double>'... converting 9 basic blocks.
 INFO: [XFORM 203-602] Inlining function 'scaled_fixed2ieee<63, 1>' into 'hotbm_::sin_or_cos<double>' (/wrk/2019.1/continuous/2019_05_24_2552052/src/products/hls/hls_lib/hlsmath/include/FloatingPoint/hls_hotbm.h:281) automatically.
-INFO: [HLS 200-111] Finished Pre-synthesis Time (s): cpu = 00:00:06 ; elapsed = 00:00:06 . Memory (MB): peak = 1010.609 ; gain = 323.375 ; free physical = 7567 ; free virtual = 22934
+INFO: [HLS 200-111] Finished Pre-synthesis Time (s): cpu = 00:00:06 ; elapsed = 00:00:06 . Memory (MB): peak = 1010.609 ; gain = 323.375 ; free physical = 7286 ; free virtual = 22924
 WARNING: [XFORM 203-631] Renaming function 'hotbm_::sin_or_cos<double>' to 'sin_or_cos<double>' (/wrk/2019.1/continuous/2019_05_24_2552052/src/products/hls/hls_lib/hlsmath/include/FloatingPoint/hls_hotbm.h:238)
 INFO: [HLS 200-444] Inferring multiple bus burst read of variable length on port 'gmem0' (kernel.cpp:19:9). These data requests might be further partitioned to multiple requests during RTL generation, based on max_read_burst_length or max_write_burst_length settings.
 INFO: [HLS 200-444] Inferring multiple bus burst read of variable length on port 'gmem1' (kernel.cpp:19:9). These data requests might be further partitioned to multiple requests during RTL generation, based on max_read_burst_length or max_write_burst_length settings.
-INFO: [HLS 200-111] Finished Architecture Synthesis Time (s): cpu = 00:00:06 ; elapsed = 00:00:06 . Memory (MB): peak = 1010.609 ; gain = 323.375 ; free physical = 7538 ; free virtual = 22909
+INFO: [HLS 200-111] Finished Architecture Synthesis Time (s): cpu = 00:00:06 ; elapsed = 00:00:06 . Memory (MB): peak = 1010.609 ; gain = 323.375 ; free physical = 7257 ; free virtual = 22899
 INFO: [HLS 200-10] Starting hardware synthesis ...
 INFO: [HLS 200-10] Synthesizing 'qeic_real_fft_twiddle_stream' ...
 WARNING: [SYN 201-103] Legalizing function name 'sin_or_cos<double>' to 'sin_or_cos_double_s'.
@@ -95,7 +95,7 @@ INFO: [SCHED 204-11] Starting scheduling ...
 INFO: [SCHED 204-61] Pipelining function 'sin_or_cos<double>'.
 INFO: [SCHED 204-61] Pipelining result : Target II = 1, Final II = 1, Depth = 27.
 INFO: [SCHED 204-11] Finished scheduling.
-INFO: [HLS 200-111]  Elapsed time: 6.61 seconds; current allocated memory: 312.652 MB.
+INFO: [HLS 200-111]  Elapsed time: 6.54 seconds; current allocated memory: 312.652 MB.
 INFO: [BIND 205-100] Starting micro-architecture generation ...
 INFO: [BIND 205-101] Performing variable lifetime analysis.
 INFO: [BIND 205-101] Exploring resource sharing.
@@ -109,13 +109,13 @@ INFO: [SCHED 204-11] Starting scheduling ...
 INFO: [SCHED 204-61] Pipelining loop 'Loop 1'.
 INFO: [SCHED 204-61] Pipelining result : Target II = 1, Final II = 1, Depth = 56.
 INFO: [SCHED 204-11] Finished scheduling.
-INFO: [HLS 200-111]  Elapsed time: 0.2 seconds; current allocated memory: 314.360 MB.
+INFO: [HLS 200-111]  Elapsed time: 0.21 seconds; current allocated memory: 314.360 MB.
 INFO: [BIND 205-100] Starting micro-architecture generation ...
 INFO: [BIND 205-101] Performing variable lifetime analysis.
 INFO: [BIND 205-101] Exploring resource sharing.
 INFO: [BIND 205-101] Binding ...
 INFO: [BIND 205-100] Finished micro-architecture generation.
-INFO: [HLS 200-111]  Elapsed time: 0.22 seconds; current allocated memory: 315.242 MB.
+INFO: [HLS 200-111]  Elapsed time: 0.22 seconds; current allocated memory: 315.243 MB.
 INFO: [HLS 200-10] ----------------------------------------------------------------
 INFO: [HLS 200-10] -- Generating RTL for module 'sin_or_cos_double_s' 
 INFO: [HLS 200-10] ----------------------------------------------------------------
@@ -128,7 +128,7 @@ INFO: [RTGEN 206-100] Generating core module 'qeic_real_fft_twiddle_stream_mul_6
 INFO: [RTGEN 206-100] Generating core module 'qeic_real_fft_twiddle_stream_mux_164_1_1_1': 2 instance(s).
 INFO: [RTGEN 206-100] Generating core module 'qeic_real_fft_twiddle_stream_mux_83_1_1_1': 1 instance(s).
 INFO: [RTGEN 206-100] Finished creating RTL model for 'sin_or_cos_double_s'.
-INFO: [HLS 200-111]  Elapsed time: 0.26 seconds; current allocated memory: 317.862 MB.
+INFO: [HLS 200-111]  Elapsed time: 0.27 seconds; current allocated memory: 317.863 MB.
 INFO: [HLS 200-10] ----------------------------------------------------------------
 INFO: [HLS 200-10] -- Generating RTL for module 'qeic_real_fft_twiddle_stream' 
 INFO: [HLS 200-10] ----------------------------------------------------------------
@@ -148,7 +148,7 @@ INFO: [RTGEN 206-100] Generating core module 'qeic_real_fft_twiddle_stream_dmul_
 INFO: [RTGEN 206-100] Generating core module 'qeic_real_fft_twiddle_stream_dsub_64ns_64ns_64_5_full_dsp_1': 1 instance(s).
 INFO: [RTGEN 206-100] Generating core module 'qeic_real_fft_twiddle_stream_sitodp_32ns_64_6_1': 1 instance(s).
 INFO: [RTGEN 206-100] Finished creating RTL model for 'qeic_real_fft_twiddle_stream'.
-INFO: [HLS 200-111]  Elapsed time: 0.41 seconds; current allocated memory: 324.680 MB.
+INFO: [HLS 200-111]  Elapsed time: 0.4 seconds; current allocated memory: 324.681 MB.
 INFO: [RTMG 210-282] Generating pipelined core: 'qeic_real_fft_twiddle_stream_mul_170ns_53ns_223_5_1_MulnS_0'
 INFO: [RTMG 210-282] Generating pipelined core: 'qeic_real_fft_twiddle_stream_mul_49ns_49ns_98_2_1_MulnS_1'
 INFO: [RTMG 210-282] Generating pipelined core: 'qeic_real_fft_twiddle_stream_mul_56ns_52s_108_2_1_MulnS_2'
@@ -161,7 +161,7 @@ INFO: [RTMG 210-279] Implementing memory 'sin_or_cos_double_s_fourth_order_doubl
 INFO: [RTMG 210-279] Implementing memory 'sin_or_cos_double_s_fourth_order_double_6_rom' using distributed ROMs.
 INFO: [RTMG 210-279] Implementing memory 'sin_or_cos_double_s_fourth_order_double_7_rom' using distributed ROMs.
 INFO: [RTMG 210-279] Implementing memory 'sin_or_cos_double_s_fourth_order_double_s_rom' using distributed ROMs.
-INFO: [HLS 200-111] Finished generating all RTL models Time (s): cpu = 00:00:08 ; elapsed = 00:00:09 . Memory (MB): peak = 1087.965 ; gain = 400.730 ; free physical = 7506 ; free virtual = 22886
+INFO: [HLS 200-111] Finished generating all RTL models Time (s): cpu = 00:00:08 ; elapsed = 00:00:09 . Memory (MB): peak = 1087.582 ; gain = 400.348 ; free physical = 7225 ; free virtual = 22875
 INFO: [VHDL 208-304] Generating VHDL RTL for qeic_real_fft_twiddle_stream.
 INFO: [VLOG 209-307] Generating Verilog RTL for qeic_real_fft_twiddle_stream.
 INFO: [COSIM 212-47] Using XSIM for RTL simulation.
@@ -188,75 +188,75 @@ Copyright 1986-1999, 2001-2019 Xilinx, Inc. All Rights Reserved.
 Running: /home/Xilinx/Vivado/2019.1/bin/unwrapped/lnx64.o/xelab xil_defaultlib.apatb_qeic_real_fft_twiddle_stream_top glbl -prj qeic_real_fft_twiddle_stream.prj -L smartconnect_v1_0 -L axi_protocol_checker_v1_1_12 -L axi_protocol_checker_v1_1_13 -L axis_protocol_checker_v1_1_11 -L axis_protocol_checker_v1_1_12 -L xil_defaultlib -L unisims_ver -L xpm --initfile /home/Xilinx/Vivado/2019.1/data/xsim/ip/xsim_ip.ini --lib ieee_proposed=./ieee_proposed -s qeic_real_fft_twiddle_stream 
 Multi-threading is on. Using 14 slave threads.
 Determining compilation order of HDL files.
-INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_fft_twiddle_stream_v1_7eb983dd/real_hybrid_hls/sol1/sim/verilog/glbl.v" into library work
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_fft_twiddle_stream_v1_689c93a8/real_hybrid_hls/sol1/sim/verilog/glbl.v" into library work
 INFO: [VRFC 10-311] analyzing module glbl
-INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_fft_twiddle_stream_v1_7eb983dd/real_hybrid_hls/sol1/sim/verilog/qeic_real_fft_twiddle_stream.autotb.v" into library xil_defaultlib
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_fft_twiddle_stream_v1_689c93a8/real_hybrid_hls/sol1/sim/verilog/qeic_real_fft_twiddle_stream.autotb.v" into library xil_defaultlib
 INFO: [VRFC 10-311] analyzing module apatb_qeic_real_fft_twiddle_stream_top
-INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_fft_twiddle_stream_v1_7eb983dd/real_hybrid_hls/sol1/sim/verilog/AESL_axi_master_gmem0.v" into library xil_defaultlib
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_fft_twiddle_stream_v1_689c93a8/real_hybrid_hls/sol1/sim/verilog/AESL_axi_master_gmem0.v" into library xil_defaultlib
 INFO: [VRFC 10-311] analyzing module AESL_axi_master_gmem0
-INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_fft_twiddle_stream_v1_7eb983dd/real_hybrid_hls/sol1/sim/verilog/AESL_axi_master_gmem1.v" into library xil_defaultlib
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_fft_twiddle_stream_v1_689c93a8/real_hybrid_hls/sol1/sim/verilog/AESL_axi_master_gmem1.v" into library xil_defaultlib
 INFO: [VRFC 10-311] analyzing module AESL_axi_master_gmem1
-INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_fft_twiddle_stream_v1_7eb983dd/real_hybrid_hls/sol1/sim/verilog/AESL_axi_master_gmem2.v" into library xil_defaultlib
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_fft_twiddle_stream_v1_689c93a8/real_hybrid_hls/sol1/sim/verilog/AESL_axi_master_gmem2.v" into library xil_defaultlib
 INFO: [VRFC 10-311] analyzing module AESL_axi_master_gmem2
-INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_fft_twiddle_stream_v1_7eb983dd/real_hybrid_hls/sol1/sim/verilog/AESL_axi_master_gmem3.v" into library xil_defaultlib
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_fft_twiddle_stream_v1_689c93a8/real_hybrid_hls/sol1/sim/verilog/AESL_axi_master_gmem3.v" into library xil_defaultlib
 INFO: [VRFC 10-311] analyzing module AESL_axi_master_gmem3
-INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_fft_twiddle_stream_v1_7eb983dd/real_hybrid_hls/sol1/sim/verilog/AESL_axi_slave_control.v" into library xil_defaultlib
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_fft_twiddle_stream_v1_689c93a8/real_hybrid_hls/sol1/sim/verilog/AESL_axi_slave_control.v" into library xil_defaultlib
 INFO: [VRFC 10-311] analyzing module AESL_axi_slave_control
-INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_fft_twiddle_stream_v1_7eb983dd/real_hybrid_hls/sol1/sim/verilog/sin_or_cos_double_s.v" into library xil_defaultlib
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_fft_twiddle_stream_v1_689c93a8/real_hybrid_hls/sol1/sim/verilog/sin_or_cos_double_s.v" into library xil_defaultlib
 INFO: [VRFC 10-311] analyzing module sin_or_cos_double_s
-INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_fft_twiddle_stream_v1_7eb983dd/real_hybrid_hls/sol1/sim/verilog/qeic_real_fft_twiddle_stream.v" into library xil_defaultlib
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_fft_twiddle_stream_v1_689c93a8/real_hybrid_hls/sol1/sim/verilog/qeic_real_fft_twiddle_stream.v" into library xil_defaultlib
 INFO: [VRFC 10-311] analyzing module qeic_real_fft_twiddle_stream
-INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_fft_twiddle_stream_v1_7eb983dd/real_hybrid_hls/sol1/sim/verilog/qeic_real_fft_twiddle_stream_mul_170ns_53ns_223_5_1.v" into library xil_defaultlib
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_fft_twiddle_stream_v1_689c93a8/real_hybrid_hls/sol1/sim/verilog/qeic_real_fft_twiddle_stream_mul_170ns_53ns_223_5_1.v" into library xil_defaultlib
 INFO: [VRFC 10-311] analyzing module qeic_real_fft_twiddle_stream_mul_170ns_53ns_223_5_1_MulnS_0
 INFO: [VRFC 10-311] analyzing module qeic_real_fft_twiddle_stream_mul_170ns_53ns_223_5_1
-INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_fft_twiddle_stream_v1_7eb983dd/real_hybrid_hls/sol1/sim/verilog/qeic_real_fft_twiddle_stream_mux_83_1_1_1.v" into library xil_defaultlib
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_fft_twiddle_stream_v1_689c93a8/real_hybrid_hls/sol1/sim/verilog/qeic_real_fft_twiddle_stream_mux_83_1_1_1.v" into library xil_defaultlib
 INFO: [VRFC 10-311] analyzing module qeic_real_fft_twiddle_stream_mux_83_1_1_1
-INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_fft_twiddle_stream_v1_7eb983dd/real_hybrid_hls/sol1/sim/verilog/qeic_real_fft_twiddle_stream_mul_49ns_49ns_98_2_1.v" into library xil_defaultlib
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_fft_twiddle_stream_v1_689c93a8/real_hybrid_hls/sol1/sim/verilog/qeic_real_fft_twiddle_stream_mul_49ns_49ns_98_2_1.v" into library xil_defaultlib
 INFO: [VRFC 10-311] analyzing module qeic_real_fft_twiddle_stream_mul_49ns_49ns_98_2_1_MulnS_1
 INFO: [VRFC 10-311] analyzing module qeic_real_fft_twiddle_stream_mul_49ns_49ns_98_2_1
-INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_fft_twiddle_stream_v1_7eb983dd/real_hybrid_hls/sol1/sim/verilog/qeic_real_fft_twiddle_stream_mux_164_1_1_1.v" into library xil_defaultlib
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_fft_twiddle_stream_v1_689c93a8/real_hybrid_hls/sol1/sim/verilog/qeic_real_fft_twiddle_stream_mux_164_1_1_1.v" into library xil_defaultlib
 INFO: [VRFC 10-311] analyzing module qeic_real_fft_twiddle_stream_mux_164_1_1_1
-INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_fft_twiddle_stream_v1_7eb983dd/real_hybrid_hls/sol1/sim/verilog/qeic_real_fft_twiddle_stream_mul_56ns_52s_108_2_1.v" into library xil_defaultlib
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_fft_twiddle_stream_v1_689c93a8/real_hybrid_hls/sol1/sim/verilog/qeic_real_fft_twiddle_stream_mul_56ns_52s_108_2_1.v" into library xil_defaultlib
 INFO: [VRFC 10-311] analyzing module qeic_real_fft_twiddle_stream_mul_56ns_52s_108_2_1_MulnS_2
 INFO: [VRFC 10-311] analyzing module qeic_real_fft_twiddle_stream_mul_56ns_52s_108_2_1
-INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_fft_twiddle_stream_v1_7eb983dd/real_hybrid_hls/sol1/sim/verilog/qeic_real_fft_twiddle_stream_mul_49ns_44s_93_2_1.v" into library xil_defaultlib
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_fft_twiddle_stream_v1_689c93a8/real_hybrid_hls/sol1/sim/verilog/qeic_real_fft_twiddle_stream_mul_49ns_44s_93_2_1.v" into library xil_defaultlib
 INFO: [VRFC 10-311] analyzing module qeic_real_fft_twiddle_stream_mul_49ns_44s_93_2_1_MulnS_3
 INFO: [VRFC 10-311] analyzing module qeic_real_fft_twiddle_stream_mul_49ns_44s_93_2_1
-INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_fft_twiddle_stream_v1_7eb983dd/real_hybrid_hls/sol1/sim/verilog/qeic_real_fft_twiddle_stream_mul_42ns_33ns_75_2_1.v" into library xil_defaultlib
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_fft_twiddle_stream_v1_689c93a8/real_hybrid_hls/sol1/sim/verilog/qeic_real_fft_twiddle_stream_mul_42ns_33ns_75_2_1.v" into library xil_defaultlib
 INFO: [VRFC 10-311] analyzing module qeic_real_fft_twiddle_stream_mul_42ns_33ns_75_2_1_MulnS_4
 INFO: [VRFC 10-311] analyzing module qeic_real_fft_twiddle_stream_mul_42ns_33ns_75_2_1
-INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_fft_twiddle_stream_v1_7eb983dd/real_hybrid_hls/sol1/sim/verilog/qeic_real_fft_twiddle_stream_mul_64s_63ns_126_5_1.v" into library xil_defaultlib
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_fft_twiddle_stream_v1_689c93a8/real_hybrid_hls/sol1/sim/verilog/qeic_real_fft_twiddle_stream_mul_64s_63ns_126_5_1.v" into library xil_defaultlib
 INFO: [VRFC 10-311] analyzing module qeic_real_fft_twiddle_stream_mul_64s_63ns_126_5_1_MulnS_5
 INFO: [VRFC 10-311] analyzing module qeic_real_fft_twiddle_stream_mul_64s_63ns_126_5_1
-INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_fft_twiddle_stream_v1_7eb983dd/real_hybrid_hls/sol1/sim/verilog/sin_or_cos_double_s_ref_4oPi_table_256_V.v" into library xil_defaultlib
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_fft_twiddle_stream_v1_689c93a8/real_hybrid_hls/sol1/sim/verilog/sin_or_cos_double_s_ref_4oPi_table_256_V.v" into library xil_defaultlib
 INFO: [VRFC 10-311] analyzing module sin_or_cos_double_s_ref_4oPi_table_256_V_rom
 INFO: [VRFC 10-311] analyzing module sin_or_cos_double_s_ref_4oPi_table_256_V
-INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_fft_twiddle_stream_v1_7eb983dd/real_hybrid_hls/sol1/sim/verilog/sin_or_cos_double_s_fourth_order_double_4.v" into library xil_defaultlib
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_fft_twiddle_stream_v1_689c93a8/real_hybrid_hls/sol1/sim/verilog/sin_or_cos_double_s_fourth_order_double_4.v" into library xil_defaultlib
 INFO: [VRFC 10-311] analyzing module sin_or_cos_double_s_fourth_order_double_4_rom
 INFO: [VRFC 10-311] analyzing module sin_or_cos_double_s_fourth_order_double_4
-INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_fft_twiddle_stream_v1_7eb983dd/real_hybrid_hls/sol1/sim/verilog/sin_or_cos_double_s_fourth_order_double_5.v" into library xil_defaultlib
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_fft_twiddle_stream_v1_689c93a8/real_hybrid_hls/sol1/sim/verilog/sin_or_cos_double_s_fourth_order_double_5.v" into library xil_defaultlib
 INFO: [VRFC 10-311] analyzing module sin_or_cos_double_s_fourth_order_double_5_rom
 INFO: [VRFC 10-311] analyzing module sin_or_cos_double_s_fourth_order_double_5
-INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_fft_twiddle_stream_v1_7eb983dd/real_hybrid_hls/sol1/sim/verilog/sin_or_cos_double_s_fourth_order_double_6.v" into library xil_defaultlib
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_fft_twiddle_stream_v1_689c93a8/real_hybrid_hls/sol1/sim/verilog/sin_or_cos_double_s_fourth_order_double_6.v" into library xil_defaultlib
 INFO: [VRFC 10-311] analyzing module sin_or_cos_double_s_fourth_order_double_6_rom
 INFO: [VRFC 10-311] analyzing module sin_or_cos_double_s_fourth_order_double_6
-INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_fft_twiddle_stream_v1_7eb983dd/real_hybrid_hls/sol1/sim/verilog/sin_or_cos_double_s_fourth_order_double_7.v" into library xil_defaultlib
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_fft_twiddle_stream_v1_689c93a8/real_hybrid_hls/sol1/sim/verilog/sin_or_cos_double_s_fourth_order_double_7.v" into library xil_defaultlib
 INFO: [VRFC 10-311] analyzing module sin_or_cos_double_s_fourth_order_double_7_rom
 INFO: [VRFC 10-311] analyzing module sin_or_cos_double_s_fourth_order_double_7
-INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_fft_twiddle_stream_v1_7eb983dd/real_hybrid_hls/sol1/sim/verilog/sin_or_cos_double_s_fourth_order_double_s.v" into library xil_defaultlib
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_fft_twiddle_stream_v1_689c93a8/real_hybrid_hls/sol1/sim/verilog/sin_or_cos_double_s_fourth_order_double_s.v" into library xil_defaultlib
 INFO: [VRFC 10-311] analyzing module sin_or_cos_double_s_fourth_order_double_s_rom
 INFO: [VRFC 10-311] analyzing module sin_or_cos_double_s_fourth_order_double_s
-INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_fft_twiddle_stream_v1_7eb983dd/real_hybrid_hls/sol1/sim/verilog/qeic_real_fft_twiddle_stream_dsub_64ns_64ns_64_5_full_dsp_1.v" into library xil_defaultlib
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_fft_twiddle_stream_v1_689c93a8/real_hybrid_hls/sol1/sim/verilog/qeic_real_fft_twiddle_stream_dsub_64ns_64ns_64_5_full_dsp_1.v" into library xil_defaultlib
 INFO: [VRFC 10-311] analyzing module qeic_real_fft_twiddle_stream_dsub_64ns_64ns_64_5_full_dsp_1
-INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_fft_twiddle_stream_v1_7eb983dd/real_hybrid_hls/sol1/sim/verilog/qeic_real_fft_twiddle_stream_dadd_64ns_64ns_64_5_full_dsp_1.v" into library xil_defaultlib
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_fft_twiddle_stream_v1_689c93a8/real_hybrid_hls/sol1/sim/verilog/qeic_real_fft_twiddle_stream_dadd_64ns_64ns_64_5_full_dsp_1.v" into library xil_defaultlib
 INFO: [VRFC 10-311] analyzing module qeic_real_fft_twiddle_stream_dadd_64ns_64ns_64_5_full_dsp_1
-INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_fft_twiddle_stream_v1_7eb983dd/real_hybrid_hls/sol1/sim/verilog/qeic_real_fft_twiddle_stream_dmul_64ns_64ns_64_6_max_dsp_1.v" into library xil_defaultlib
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_fft_twiddle_stream_v1_689c93a8/real_hybrid_hls/sol1/sim/verilog/qeic_real_fft_twiddle_stream_dmul_64ns_64ns_64_6_max_dsp_1.v" into library xil_defaultlib
 INFO: [VRFC 10-311] analyzing module qeic_real_fft_twiddle_stream_dmul_64ns_64ns_64_6_max_dsp_1
-INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_fft_twiddle_stream_v1_7eb983dd/real_hybrid_hls/sol1/sim/verilog/qeic_real_fft_twiddle_stream_sitodp_32ns_64_6_1.v" into library xil_defaultlib
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_fft_twiddle_stream_v1_689c93a8/real_hybrid_hls/sol1/sim/verilog/qeic_real_fft_twiddle_stream_sitodp_32ns_64_6_1.v" into library xil_defaultlib
 INFO: [VRFC 10-311] analyzing module qeic_real_fft_twiddle_stream_sitodp_32ns_64_6_1
-INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_fft_twiddle_stream_v1_7eb983dd/real_hybrid_hls/sol1/sim/verilog/qeic_real_fft_twiddle_stream_control_s_axi.v" into library xil_defaultlib
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_fft_twiddle_stream_v1_689c93a8/real_hybrid_hls/sol1/sim/verilog/qeic_real_fft_twiddle_stream_control_s_axi.v" into library xil_defaultlib
 INFO: [VRFC 10-311] analyzing module qeic_real_fft_twiddle_stream_control_s_axi
-INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_fft_twiddle_stream_v1_7eb983dd/real_hybrid_hls/sol1/sim/verilog/qeic_real_fft_twiddle_stream_gmem0_m_axi.v" into library xil_defaultlib
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_fft_twiddle_stream_v1_689c93a8/real_hybrid_hls/sol1/sim/verilog/qeic_real_fft_twiddle_stream_gmem0_m_axi.v" into library xil_defaultlib
 INFO: [VRFC 10-311] analyzing module qeic_real_fft_twiddle_stream_gmem0_m_axi
 INFO: [VRFC 10-311] analyzing module qeic_real_fft_twiddle_stream_gmem0_m_axi_reg_slice
 INFO: [VRFC 10-311] analyzing module qeic_real_fft_twiddle_stream_gmem0_m_axi_fifo
@@ -265,7 +265,7 @@ INFO: [VRFC 10-311] analyzing module qeic_real_fft_twiddle_stream_gmem0_m_axi_de
 INFO: [VRFC 10-311] analyzing module qeic_real_fft_twiddle_stream_gmem0_m_axi_throttl
 INFO: [VRFC 10-311] analyzing module qeic_real_fft_twiddle_stream_gmem0_m_axi_read
 INFO: [VRFC 10-311] analyzing module qeic_real_fft_twiddle_stream_gmem0_m_axi_write
-INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_fft_twiddle_stream_v1_7eb983dd/real_hybrid_hls/sol1/sim/verilog/qeic_real_fft_twiddle_stream_gmem1_m_axi.v" into library xil_defaultlib
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_fft_twiddle_stream_v1_689c93a8/real_hybrid_hls/sol1/sim/verilog/qeic_real_fft_twiddle_stream_gmem1_m_axi.v" into library xil_defaultlib
 INFO: [VRFC 10-311] analyzing module qeic_real_fft_twiddle_stream_gmem1_m_axi
 INFO: [VRFC 10-311] analyzing module qeic_real_fft_twiddle_stream_gmem1_m_axi_reg_slice
 INFO: [VRFC 10-311] analyzing module qeic_real_fft_twiddle_stream_gmem1_m_axi_fifo
@@ -274,7 +274,7 @@ INFO: [VRFC 10-311] analyzing module qeic_real_fft_twiddle_stream_gmem1_m_axi_de
 INFO: [VRFC 10-311] analyzing module qeic_real_fft_twiddle_stream_gmem1_m_axi_throttl
 INFO: [VRFC 10-311] analyzing module qeic_real_fft_twiddle_stream_gmem1_m_axi_read
 INFO: [VRFC 10-311] analyzing module qeic_real_fft_twiddle_stream_gmem1_m_axi_write
-INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_fft_twiddle_stream_v1_7eb983dd/real_hybrid_hls/sol1/sim/verilog/qeic_real_fft_twiddle_stream_gmem2_m_axi.v" into library xil_defaultlib
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_fft_twiddle_stream_v1_689c93a8/real_hybrid_hls/sol1/sim/verilog/qeic_real_fft_twiddle_stream_gmem2_m_axi.v" into library xil_defaultlib
 INFO: [VRFC 10-311] analyzing module qeic_real_fft_twiddle_stream_gmem2_m_axi
 INFO: [VRFC 10-311] analyzing module qeic_real_fft_twiddle_stream_gmem2_m_axi_reg_slice
 INFO: [VRFC 10-311] analyzing module qeic_real_fft_twiddle_stream_gmem2_m_axi_fifo
@@ -283,7 +283,7 @@ INFO: [VRFC 10-311] analyzing module qeic_real_fft_twiddle_stream_gmem2_m_axi_de
 INFO: [VRFC 10-311] analyzing module qeic_real_fft_twiddle_stream_gmem2_m_axi_throttl
 INFO: [VRFC 10-311] analyzing module qeic_real_fft_twiddle_stream_gmem2_m_axi_read
 INFO: [VRFC 10-311] analyzing module qeic_real_fft_twiddle_stream_gmem2_m_axi_write
-INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_fft_twiddle_stream_v1_7eb983dd/real_hybrid_hls/sol1/sim/verilog/qeic_real_fft_twiddle_stream_gmem3_m_axi.v" into library xil_defaultlib
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_fft_twiddle_stream_v1_689c93a8/real_hybrid_hls/sol1/sim/verilog/qeic_real_fft_twiddle_stream_gmem3_m_axi.v" into library xil_defaultlib
 INFO: [VRFC 10-311] analyzing module qeic_real_fft_twiddle_stream_gmem3_m_axi
 INFO: [VRFC 10-311] analyzing module qeic_real_fft_twiddle_stream_gmem3_m_axi_reg_slice
 INFO: [VRFC 10-311] analyzing module qeic_real_fft_twiddle_stream_gmem3_m_axi_fifo
@@ -292,19 +292,19 @@ INFO: [VRFC 10-311] analyzing module qeic_real_fft_twiddle_stream_gmem3_m_axi_de
 INFO: [VRFC 10-311] analyzing module qeic_real_fft_twiddle_stream_gmem3_m_axi_throttl
 INFO: [VRFC 10-311] analyzing module qeic_real_fft_twiddle_stream_gmem3_m_axi_read
 INFO: [VRFC 10-311] analyzing module qeic_real_fft_twiddle_stream_gmem3_m_axi_write
-INFO: [VRFC 10-163] Analyzing VHDL file "/tmp/dse_real_hybrid_hls_hybrid_fft_twiddle_stream_v1_7eb983dd/real_hybrid_hls/sol1/sim/verilog/ip/xil_defaultlib/qeic_real_fft_twiddle_stream_ap_dsub_3_full_dsp_64.vhd" into library xil_defaultlib
+INFO: [VRFC 10-163] Analyzing VHDL file "/tmp/dse_real_hybrid_hls_hybrid_fft_twiddle_stream_v1_689c93a8/real_hybrid_hls/sol1/sim/verilog/ip/xil_defaultlib/qeic_real_fft_twiddle_stream_ap_dsub_3_full_dsp_64.vhd" into library xil_defaultlib
 INFO: [VRFC 10-3107] analyzing entity 'qeic_real_fft_twiddle_stream_ap_dsub_3_full_dsp_64'
-INFO: [VRFC 10-163] Analyzing VHDL file "/tmp/dse_real_hybrid_hls_hybrid_fft_twiddle_stream_v1_7eb983dd/real_hybrid_hls/sol1/sim/verilog/ip/xil_defaultlib/qeic_real_fft_twiddle_stream_ap_dadd_3_full_dsp_64.vhd" into library xil_defaultlib
+INFO: [VRFC 10-163] Analyzing VHDL file "/tmp/dse_real_hybrid_hls_hybrid_fft_twiddle_stream_v1_689c93a8/real_hybrid_hls/sol1/sim/verilog/ip/xil_defaultlib/qeic_real_fft_twiddle_stream_ap_dadd_3_full_dsp_64.vhd" into library xil_defaultlib
 INFO: [VRFC 10-3107] analyzing entity 'qeic_real_fft_twiddle_stream_ap_dadd_3_full_dsp_64'
-INFO: [VRFC 10-163] Analyzing VHDL file "/tmp/dse_real_hybrid_hls_hybrid_fft_twiddle_stream_v1_7eb983dd/real_hybrid_hls/sol1/sim/verilog/ip/xil_defaultlib/qeic_real_fft_twiddle_stream_ap_dmul_4_max_dsp_64.vhd" into library xil_defaultlib
+INFO: [VRFC 10-163] Analyzing VHDL file "/tmp/dse_real_hybrid_hls_hybrid_fft_twiddle_stream_v1_689c93a8/real_hybrid_hls/sol1/sim/verilog/ip/xil_defaultlib/qeic_real_fft_twiddle_stream_ap_dmul_4_max_dsp_64.vhd" into library xil_defaultlib
 INFO: [VRFC 10-3107] analyzing entity 'qeic_real_fft_twiddle_stream_ap_dmul_4_max_dsp_64'
-INFO: [VRFC 10-163] Analyzing VHDL file "/tmp/dse_real_hybrid_hls_hybrid_fft_twiddle_stream_v1_7eb983dd/real_hybrid_hls/sol1/sim/verilog/ip/xil_defaultlib/qeic_real_fft_twiddle_stream_ap_sitodp_4_no_dsp_32.vhd" into library xil_defaultlib
+INFO: [VRFC 10-163] Analyzing VHDL file "/tmp/dse_real_hybrid_hls_hybrid_fft_twiddle_stream_v1_689c93a8/real_hybrid_hls/sol1/sim/verilog/ip/xil_defaultlib/qeic_real_fft_twiddle_stream_ap_sitodp_4_no_dsp_32.vhd" into library xil_defaultlib
 INFO: [VRFC 10-3107] analyzing entity 'qeic_real_fft_twiddle_stream_ap_sitodp_4_no_dsp_32'
 Starting static elaboration
 WARNING: [VRFC 10-3499] library name 'floating_point_v7_1_8' of instantiated unit conflicts with visible identifier [ip/xil_defaultlib/qeic_real_fft_twiddle_stream_ap_dsub_3_full_dsp_64.vhd:201]
 WARNING: [VRFC 10-3499] library name 'floating_point_v7_1_8' of instantiated unit conflicts with visible identifier [ip/xil_defaultlib/qeic_real_fft_twiddle_stream_ap_dadd_3_full_dsp_64.vhd:201]
 WARNING: [VRFC 10-3499] library name 'floating_point_v7_1_8' of instantiated unit conflicts with visible identifier [ip/xil_defaultlib/qeic_real_fft_twiddle_stream_ap_dmul_4_max_dsp_64.vhd:201]
-WARNING: [VRFC 10-3499] library name 'floating_point_v7_1_8' of instantiated unit conflicts with visible identifier [/tmp/dse_real_hybrid_hls_hybrid_fft_twiddle_stream_v1_7eb983dd/real_hybrid_hls/sol1/sim/verilog/ip/xil_defaultlib/qeic_real_fft_twiddle_stream_ap_sitodp_4_no_dsp_32.vhd:196]
+WARNING: [VRFC 10-3499] library name 'floating_point_v7_1_8' of instantiated unit conflicts with visible identifier [/tmp/dse_real_hybrid_hls_hybrid_fft_twiddle_stream_v1_689c93a8/real_hybrid_hls/sol1/sim/verilog/ip/xil_defaultlib/qeic_real_fft_twiddle_stream_ap_sitodp_4_no_dsp_32.vhd:196]
 Completed static elaboration
 Starting simulation data flow analysis
 Completed simulation data flow analysis
@@ -642,8 +642,8 @@ Built simulation snapshot qeic_real_fft_twiddle_stream
   **** IP Build 2548770 on Fri May 24 18:01:18 MDT 2019
     ** Copyright 1986-2019 Xilinx, Inc. All Rights Reserved.
 
-source /tmp/dse_real_hybrid_hls_hybrid_fft_twiddle_stream_v1_7eb983dd/real_hybrid_hls/sol1/sim/verilog/xsim.dir/qeic_real_fft_twiddle_stream/webtalk/xsim_webtalk.tcl -notrace
-INFO: [Common 17-206] Exiting Webtalk at Mon Jun  8 18:31:14 2026...
+source /tmp/dse_real_hybrid_hls_hybrid_fft_twiddle_stream_v1_689c93a8/real_hybrid_hls/sol1/sim/verilog/xsim.dir/qeic_real_fft_twiddle_stream/webtalk/xsim_webtalk.tcl -notrace
+INFO: [Common 17-206] Exiting Webtalk at Mon Jun  8 18:42:30 2026...
 
 ****** xsim v2019.1 (64-bit)
   **** SW Build 2552052 on Fri May 24 14:47:09 MDT 2019
@@ -679,12 +679,12 @@ Warning: OPMODE Input Warning : The OPMODE 011XX11 with CARRYINSEL  000 to DSP48
 Time: 735100 ps  Iteration: 10  Process: /apatb_qeic_real_fft_twiddle_stream_top/AESL_inst_qeic_real_fft_twiddle_stream/qeic_real_fft_twiddle_stream_dmul_64ns_64ns_64_6_max_dsp_1_U35/qeic_real_fft_twiddle_stream_ap_dmul_4_max_dsp_64_u/U0/i_synth/mult/OP/i_non_prim/R_AND_R/logic/R_AND_R/dsp48_e1/dsp48e1_add/DSP48E1_ADD/DSP/prcs_opmode_drc  File: /home/Xilinx/Vivado/2019.1/data/vhdl/src/unisims/primitive/DSP48E1.vhd
 // RTL Simulation : 1 / 1 [n/a] @ "3025000"
 ////////////////////////////////////////////////////////////////////////////////////
-$finish called at time : 3065 ns : File "/tmp/dse_real_hybrid_hls_hybrid_fft_twiddle_stream_v1_7eb983dd/real_hybrid_hls/sol1/sim/verilog/qeic_real_fft_twiddle_stream.autotb.v" Line 903
+$finish called at time : 3065 ns : File "/tmp/dse_real_hybrid_hls_hybrid_fft_twiddle_stream_v1_689c93a8/real_hybrid_hls/sol1/sim/verilog/qeic_real_fft_twiddle_stream.autotb.v" Line 903
 ## quit
-INFO: [Common 17-206] Exiting xsim at Mon Jun  8 18:31:19 2026...
+INFO: [Common 17-206] Exiting xsim at Mon Jun  8 18:42:35 2026...
 INFO: [COSIM 212-316] Starting C post checking ...
 DSE_REAL_HLS_PASS qeic_real_fft_twiddle_stream 64
 INFO: [COSIM 212-1000] *** C/RTL co-simulation finished: PASS ***
 INFO: [COSIM 212-211] II is measurable only when transaction number is greater than 1 in RTL simulation. Otherwise, they will be marked as all NA. If user wants to calculate them, please make sure there are at least 2 transactions in RTL simulation.
-INFO: [HLS 200-112] Total elapsed time: 37.3 seconds; peak allocated memory: 324.680 MB.
-INFO: [Common 17-206] Exiting vivado_hls at Mon Jun  8 18:31:20 2026...
+INFO: [HLS 200-112] Total elapsed time: 36.17 seconds; peak allocated memory: 324.681 MB.
+INFO: [Common 17-206] Exiting vivado_hls at Mon Jun  8 18:42:35 2026...

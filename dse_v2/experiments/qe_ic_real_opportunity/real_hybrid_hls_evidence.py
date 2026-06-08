@@ -80,7 +80,37 @@ def build_real_hybrid_architecture_specs() -> list[dict[str, Any]]:
             "algorithm_description": "Streaming complex twiddle multiply and deterministic lane remap for FFT/transpose motif.",
             "fpga_role": "apply generated twiddle factors and reorder lanes for a stream tile",
         },
+        {
+            **common,
+            "architecture_id": "hybrid_sum_band_density_accumulator_v1",
+            "kernel_name": "qeic_real_sum_band_density_accumulator",
+            "motif_id": "sum_band_density_accumulation",
+            "golden_vector_length": 128,
+            "golden_grid_points": 32,
+            "golden_band_count": 4,
+            "implementation_coverage": "qe_routine_equivalent_miniapp",
+            "mapped_qe_timer_names": ["sum_band"],
+            "algorithm_description": "Miniapp for QE sum_band-style density accumulation over bands and grid points.",
+            "fpga_role": "accumulate weighted |psi|^2 density contributions across bands for each grid point",
+        },
     ]
+
+
+def build_evidence_row_static_metadata(spec: Mapping[str, Any]) -> dict[str, Any]:
+    """Return spec metadata that every evidence row must preserve."""
+
+    shape: dict[str, int] = {}
+    if isinstance(spec.get("golden_grid_points"), int):
+        shape["grid_points"] = int(spec["golden_grid_points"])
+    if isinstance(spec.get("golden_band_count"), int):
+        shape["band_count"] = int(spec["golden_band_count"])
+    if not shape and isinstance(spec.get("golden_vector_length"), int):
+        shape["vector_length"] = int(spec["golden_vector_length"])
+    return {
+        "implementation_coverage": str(spec.get("implementation_coverage") or "partial_sidecar_motif"),
+        "mapped_qe_timer_names": list(spec.get("mapped_qe_timer_names") or _MOTIF_TIMER_MAP.get(str(spec.get("motif_id") or ""), [])),
+        "golden_problem_shape": shape,
+    }
 
 
 def _reduction_kernel(spec: Mapping[str, Any]) -> str:
@@ -169,8 +199,38 @@ extern "C" void {fn}(const double *in_re, const double *in_im, double *out_re, d
 """
 
 
+def _sum_band_density_kernel(spec: Mapping[str, Any]) -> str:
+    fn = str(spec["kernel_name"])
+    return f"""extern "C" void {fn}(const double *psi_re, const double *psi_im, const double *weights, double *rho_out, int ngrid, int nbands) {{
+#pragma HLS INTERFACE m_axi port=psi_re depth=128 offset=slave bundle=gmem0
+#pragma HLS INTERFACE m_axi port=psi_im depth=128 offset=slave bundle=gmem1
+#pragma HLS INTERFACE m_axi port=weights depth=4 offset=slave bundle=gmem2
+#pragma HLS INTERFACE m_axi port=rho_out depth=64 offset=slave bundle=gmem3
+#pragma HLS INTERFACE s_axilite port=psi_re bundle=control
+#pragma HLS INTERFACE s_axilite port=psi_im bundle=control
+#pragma HLS INTERFACE s_axilite port=weights bundle=control
+#pragma HLS INTERFACE s_axilite port=rho_out bundle=control
+#pragma HLS INTERFACE s_axilite port=ngrid bundle=control
+#pragma HLS INTERFACE s_axilite port=nbands bundle=control
+#pragma HLS INTERFACE s_axilite port=return bundle=control
+    for (int g = 0; g < ngrid; ++g) {{
+#pragma HLS PIPELINE II=1
+        double acc = 0.0;
+        for (int b = 0; b < nbands; ++b) {{
+            int idx = b * ngrid + g;
+            double re = psi_re[idx];
+            double im = psi_im[idx];
+            acc += weights[b] * (re * re + im * im);
+        }}
+        rho_out[g] = acc;
+    }}
+}}
+"""
+
 def _kernel_source(spec: Mapping[str, Any]) -> str:
     architecture_id = str(spec["architecture_id"])
+    if "sum_band" in architecture_id:
+        return _sum_band_density_kernel(spec)
     if "reduction" in architecture_id:
         return _reduction_kernel(spec)
     if "axpy" in architecture_id:
@@ -279,8 +339,50 @@ int main() {{
 """
 
 
+def _sum_band_density_tb(spec: Mapping[str, Any]) -> str:
+    fn = str(spec["kernel_name"])
+    ngrid = int(spec.get("golden_grid_points") or 32)
+    nbands = int(spec.get("golden_band_count") or 4)
+    n = ngrid * nbands
+    return f"""#include <math.h>
+#include <stdio.h>
+extern "C" void {fn}(const double *psi_re, const double *psi_im, const double *weights, double *rho_out, int ngrid, int nbands);
+int main() {{
+    const int ngrid = {ngrid};
+    const int nbands = {nbands};
+    const int n = {n};
+    double psi_re[n], psi_im[n], weights[nbands], rho_out[ngrid], expected[ngrid];
+    for (int b = 0; b < nbands; ++b) {{
+        weights[b] = 0.5 + 0.125 * (double)(b + 1);
+    }}
+    for (int g = 0; g < ngrid; ++g) {{
+        expected[g] = 0.0;
+        rho_out[g] = 0.0;
+    }}
+    for (int b = 0; b < nbands; ++b) {{
+        for (int g = 0; g < ngrid; ++g) {{
+            int idx = b * ngrid + g;
+            psi_re[idx] = 0.01 * (double)(idx + 1) + 0.001 * (double)(g & 3);
+            psi_im[idx] = -0.0075 * (double)(idx + 2) + 0.0005 * (double)(b & 1);
+            expected[g] += weights[b] * (psi_re[idx] * psi_re[idx] + psi_im[idx] * psi_im[idx]);
+        }}
+    }}
+    {fn}(psi_re, psi_im, weights, rho_out, ngrid, nbands);
+    for (int g = 0; g < ngrid; ++g) {{
+        if (fabs(rho_out[g] - expected[g]) > 1.0e-8) {{
+            printf("DSE_REAL_HLS_FAIL %d expected %.12f got %.12f\\n", g, expected[g], rho_out[g]);
+            return 1;
+        }}
+    }}
+    printf("DSE_REAL_HLS_PASS {fn} %d %d\\n", ngrid, nbands);
+    return 0;
+}}
+"""
+
 def _tb_source(spec: Mapping[str, Any]) -> str:
     architecture_id = str(spec["architecture_id"])
+    if "sum_band" in architecture_id:
+        return _sum_band_density_tb(spec)
     if "reduction" in architecture_id:
         return _reduction_tb(spec)
     if "axpy" in architecture_id:
@@ -441,7 +543,18 @@ def _parse_loop_detail(text: str) -> tuple[int, int, int | None] | None:
     return None
 
 
-def _parse_resource_summary(text: str) -> dict[str, int] | None:
+def _parse_resource_row(columns: Sequence[str]) -> dict[str, int]:
+    values = list(columns)[-5:]
+    return {
+        "bram_18k": _parse_resource_cell(values[0]),
+        "dsp48e": _parse_resource_cell(values[1]),
+        "ff": _parse_resource_cell(values[2]),
+        "lut": _parse_resource_cell(values[3]),
+        "uram": _parse_resource_cell(values[4]),
+    }
+
+
+def _parse_resource_table(text: str) -> tuple[dict[str, int] | None, dict[str, int] | None]:
     lines = text.splitlines()
     for index, line in enumerate(lines):
         columns = _table_columns(line)
@@ -449,7 +562,9 @@ def _parse_resource_summary(text: str) -> dict[str, int] | None:
         if not {"bram_18k", "dsp48e", "ff", "lut"}.issubset(set(normalized)):
             continue
         candidate: dict[str, int] | None = None
-        for data_line in lines[index + 1 : index + 16]:
+        total: dict[str, int] | None = None
+        available: dict[str, int] | None = None
+        for data_line in lines[index + 1 : index + 20]:
             data_columns = _table_columns(data_line)
             if len(data_columns) < 5:
                 continue
@@ -457,20 +572,33 @@ def _parse_resource_summary(text: str) -> dict[str, int] | None:
             values = data_columns[-5:]
             if not any(_parse_int_cell(value) is not None for value in values):
                 continue
-            parsed = {
-                "bram_18k": _parse_resource_cell(values[0]),
-                "dsp48e": _parse_resource_cell(values[1]),
-                "ff": _parse_resource_cell(values[2]),
-                "lut": _parse_resource_cell(values[3]),
-                "uram": _parse_resource_cell(values[4]),
-            }
+            parsed = _parse_resource_row(values)
             if label == "total":
-                return parsed
-            if candidate is None:
+                total = parsed
+            elif label == "available":
+                available = parsed
+            elif candidate is None:
                 candidate = parsed
-        if candidate is not None:
-            return candidate
-    return None
+        return total or candidate, available
+    return None, None
+
+
+def _parse_resource_summary(text: str) -> dict[str, int] | None:
+    resource, _available = _parse_resource_table(text)
+    return resource
+
+
+def _resource_feasible(resource: Mapping[str, int], available: Mapping[str, int]) -> bool:
+    for key, value in resource.items():
+        limit = available.get(key)
+        if limit is None:
+            continue
+        if limit == 0:
+            if value > 0:
+                return False
+        elif value > limit:
+            return False
+    return True
 
 
 def parse_vivado_hls_csynth_report(text: str, *, fallback_trip_count: int | None = None) -> dict[str, Any]:
@@ -520,9 +648,14 @@ def parse_vivado_hls_csynth_report(text: str, *, fallback_trip_count: int | None
         else:
             parsed["blockers"].append("hls_latency_summary_missing")
 
-    resource = _parse_resource_summary(text)
+    resource, available = _parse_resource_table(text)
     if resource is not None:
         parsed["resource"] = resource
+        if available is not None:
+            parsed["resource_available"] = available
+            parsed["resource_feasible"] = _resource_feasible(resource, available)
+            if parsed["resource_feasible"] is False:
+                parsed["blockers"].append("hls_resource_infeasible")
     else:
         parsed["blockers"].append("hls_resource_summary_missing")
     if parsed["blockers"]:
@@ -575,6 +708,7 @@ _QE_TIMER_RE = re.compile(
 
 _MOTIF_TIMER_MAP: dict[str, list[str]] = {
     "reduction_collective": ["sum_band"],
+    "sum_band_density_accumulation": ["sum_band"],
     "wavefunction_memory": ["mix_rho", "h_psi:calbec", "calbec"],
     "fft_transpose": ["fft", "ffts", "fftw"],
 }
@@ -629,6 +763,112 @@ def _microkernel_seconds(row: Mapping[str, Any]) -> float | None:
     return float(clock_ns) * float(latency) * 1.0e-9
 
 
+def _performance_latency_fields(row: Mapping[str, Any]) -> dict[str, Any]:
+    cosim = row.get("cosim_parsed") if isinstance(row.get("cosim_parsed"), Mapping) else {}
+    csynth = row.get("csynth_parsed") if isinstance(row.get("csynth_parsed"), Mapping) else {}
+    if isinstance(cosim.get("latency_cycles_max"), (int, float)):
+        return {
+            "performance_latency_source": "vivado_hls_cosim",
+            "performance_latency_cycles_max": cosim.get("latency_cycles_max"),
+        }
+    if isinstance(csynth.get("latency_cycles_max"), (int, float)):
+        return {
+            "performance_latency_source": "vivado_hls_csynth",
+            "performance_latency_cycles_max": csynth.get("latency_cycles_max"),
+        }
+    return {
+        "performance_latency_source": "missing",
+        "performance_latency_cycles_max": None,
+    }
+
+
+def render_real_hybrid_hls_report(summary: Mapping[str, Any]) -> str:
+    """Render a reproducible markdown summary for the real-HLS campaign."""
+
+    classification = summary.get("classification") if isinstance(summary.get("classification"), Mapping) else {}
+    evidence_rows = [row for row in _as_list(summary.get("evidence_rows")) if isinstance(row, Mapping)]
+    lines: list[str] = []
+    lines.append("# Real Hybrid HLS Evidence Campaign Summary")
+    lines.append("")
+    lines.append(f"- Preliminary label: `{classification.get('preliminary_label')}`")
+    lines.append(f"- Confidence: `{classification.get('confidence')}`")
+    lines.append(f"- Final hardware claim allowed: `{classification.get('final_claim_allowed')}`")
+    if classification.get("best_architecture_id"):
+        lines.append(f"- Best architecture: `{classification.get('best_architecture_id')}`")
+    if classification.get("best_speedup_vs_gpu_mean") is not None:
+        lines.append(f"- Best optimistic trace-replay speedup vs GPU: `{float(classification.get('best_speedup_vs_gpu_mean')):.6g}x`")
+    if classification.get("resource_infeasible_architecture_ids"):
+        lines.append(
+            "- Resource-infeasible architectures filtered: `"
+            + ", ".join(str(item) for item in _as_list(classification.get("resource_infeasible_architecture_ids")))
+            + "`"
+        )
+    lines.append("")
+    lines.append("## Direct answer")
+    lines.append("")
+    lines.append(
+        "The current non-stub hybrid FPGA/HLS evidence supports **FPGA/hybrid weaker / not superior to the GPU baseline** for claim purposes unless all hard gates pass. The evidence includes real HLS kernels and Vivado-HLS C/RTL co-simulation, but miniapps and sidecar motifs are not final full-QE integration evidence."
+    )
+    lines.append("")
+    lines.append("## Evidence gates")
+    lines.append("")
+    for row in evidence_rows:
+        parsed = row.get("csynth_parsed") if isinstance(row.get("csynth_parsed"), Mapping) else {}
+        cosim = row.get("cosim_parsed") if isinstance(row.get("cosim_parsed"), Mapping) else {}
+        resource = parsed.get("resource") if isinstance(parsed.get("resource"), Mapping) else {}
+        perf_source = row.get("performance_latency_source") or _performance_latency_fields(row).get("performance_latency_source")
+        perf_latency = row.get("performance_latency_cycles_max") or _performance_latency_fields(row).get("performance_latency_cycles_max")
+        lines.append(f"- `{row.get('architecture_id')}`")
+        lines.append(
+            f"  - Coverage: `{row.get('implementation_coverage')}`; mapped timers: `"
+            + ", ".join(str(item) for item in _as_list(row.get("mapped_qe_timer_names")))
+            + "`"
+        )
+        lines.append(f"  - C-sim golden: `{row.get('csim_passed')}`")
+        lines.append(
+            f"  - C-synth parsed: `{parsed.get('status')}`, latency `{parsed.get('latency_cycles_max')}` cycles, estimated clock `{parsed.get('estimated_clock_ns')}` ns"
+        )
+        lines.append(f"  - Verilog C/RTL cosim: `{row.get('cosim_passed')}`, latency `{cosim.get('latency_cycles_max')}` cycles")
+        lines.append(f"  - Performance latency source: `{perf_source}`, latency `{perf_latency}` cycles")
+        lines.append(
+            f"  - Resource feasible on target: `{parsed.get('resource_feasible')}`; BRAM18K `{resource.get('bram_18k')}`, DSP `{resource.get('dsp48e')}`, FF `{resource.get('ff')}`, LUT `{resource.get('lut')}`, URAM `{resource.get('uram')}`"
+        )
+        if parsed.get("blockers"):
+            lines.append("  - HLS blockers: `" + ", ".join(str(item) for item in _as_list(parsed.get("blockers"))) + "`")
+    lines.append("")
+    lines.append("## Workflow accounting result")
+    lines.append("")
+    lines.append(
+        "Trace replay used measured QE full-SCF timer logs from `artifacts/qe_ic_7day_prelim/runs/<case>/gpu_only_baseline/run_*.stdout.log` plus real HLS C/RTL cosim latency. Rows marked `partial_sidecar_motif` or `qe_routine_equivalent_miniapp` are not final full-QE integration evidence."
+    )
+    lines.append("")
+    comparisons = [row for row in _as_list(classification.get("architecture_comparisons")) if isinstance(row, Mapping)]
+    if comparisons:
+        lines.append("| Architecture | Case | Mapped QE timers | Optimistic speedup | Coverage |")
+        lines.append("| --- | --- | --- | ---: | --- |")
+        for comparison in comparisons:
+            timers = ", ".join(str(item) for item in _as_list(comparison.get("mapped_timer_names")))
+            speedup = float(comparison.get("speedup_vs_gpu_mean") or 0.0)
+            lines.append(
+                f"| `{comparison.get('architecture_id')}` | `{comparison.get('case_id')}` | `{timers}` | {speedup:.4f}x | `{comparison.get('implementation_coverage')}` |"
+            )
+    else:
+        lines.append("No claimable case-matched workflow comparison rows survived the hard gates.")
+    lines.append("")
+    lines.append("## Claim boundary")
+    lines.append("")
+    lines.append(str(classification.get("claim_boundary") or "unknown"))
+    lines.append("")
+    lines.append("Blockers:")
+    for blocker in _as_list(classification.get("blockers")):
+        lines.append(f"- `{blocker}`")
+    lines.append("")
+    lines.append(
+        "Therefore this artifact improves the evidence chain beyond generated stubs/proxies and includes a QE-routine miniapp when present, but it still does not allow final hardware superiority or fundamental no-opportunity wording without full QE integration and board/implementation closure."
+    )
+    return "\n".join(lines) + "\n"
+
+
 def build_trace_replay_workflow_accounting(
     gpu_baseline: Mapping[str, Any],
     gpu_runs_root: Path,
@@ -642,7 +882,8 @@ def build_trace_replay_workflow_accounting(
     """
 
     motif_id = str(row.get("motif_id") or "")
-    timer_names = _MOTIF_TIMER_MAP.get(motif_id, [])
+    timer_names = list(row.get("mapped_qe_timer_names") or _MOTIF_TIMER_MAP.get(motif_id, []))
+    implementation_coverage = str(row.get("implementation_coverage") or "partial_sidecar_motif")
     kernel_seconds = _microkernel_seconds(row)
     records = [record for record in _as_list(gpu_baseline.get("baseline_records")) if isinstance(record, Mapping)]
     accountings: list[dict[str, Any]] = []
@@ -658,7 +899,7 @@ def build_trace_replay_workflow_accounting(
                     "status": "missing_qe_timer_trace",
                     "case_id": case_id,
                     "blockers": ["qe_stdout_timer_logs_missing"],
-                    "implementation_coverage": "partial_sidecar_motif",
+                    "implementation_coverage": implementation_coverage,
                 }
             )
             continue
@@ -691,7 +932,7 @@ def build_trace_replay_workflow_accounting(
                     "case_id": case_id,
                     "mapped_timer_names": mapped_timer_names,
                     "blockers": ["mapped_qe_timer_or_hls_latency_missing"],
-                    "implementation_coverage": "partial_sidecar_motif",
+                    "implementation_coverage": implementation_coverage,
                 }
             )
             continue
@@ -732,10 +973,10 @@ def build_trace_replay_workflow_accounting(
                 "synchronization_seconds": synchronization,
                 "launch_overhead_seconds": launch_overhead,
                 "hybrid_workflow_runtime_seconds": hybrid_runtime,
-                "implementation_coverage": "partial_sidecar_motif",
-                "blockers": ["full_qe_kernel_equivalent_missing"],
+                "implementation_coverage": implementation_coverage,
+                "blockers": [] if implementation_coverage == "full_qe_kernel_equivalent" else ["full_qe_kernel_equivalent_missing"],
                 "timer_trace_paths": [str(path) for path in stdout_paths],
-                "claim_boundary": "Optimistic trace replay of measured QE timers using real HLS C/RTL cosim latency; compact sidecar is not a full QE kernel replacement.",
+                "claim_boundary": "Optimistic trace replay of measured QE timers using real HLS C/RTL cosim latency; compact miniapp/routine evidence still requires full QE integration before final claims.",
             }
         )
     return accountings
@@ -785,7 +1026,19 @@ def _microkernel_row(row: Mapping[str, Any]) -> dict[str, Any]:
         "estimated_clock_ns": clock_ns,
         "microkernel_seconds": kernel_seconds,
         "resource": parsed.get("resource") if isinstance(parsed, Mapping) else None,
+        "resource_available": parsed.get("resource_available") if isinstance(parsed, Mapping) else None,
+        "resource_feasible": parsed.get("resource_feasible") if isinstance(parsed, Mapping) else None,
     }
+
+
+def _row_resource_feasible(row: Mapping[str, Any]) -> bool:
+    parsed = row.get("csynth_parsed")
+    if not isinstance(parsed, Mapping):
+        return False
+    if parsed.get("resource_feasible") is False:
+        return False
+    blockers = {str(item) for item in _as_list(parsed.get("blockers"))}
+    return "hls_resource_infeasible" not in blockers
 
 
 def classify_real_hybrid_vs_gpu(gpu_baseline: Mapping[str, Any], evidence_rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
@@ -803,8 +1056,13 @@ def classify_real_hybrid_vs_gpu(gpu_baseline: Mapping[str, Any], evidence_rows: 
     if gpu_baseline.get("measurements_are_real") is not True or not baseline_records:
         blockers.append("measured_gpu_baseline_required")
     architecture_ids = {str(row.get("architecture_id")) for row in evidence_rows if row.get("architecture_id")}
+    feasible_rows = [row for row in evidence_rows if _row_resource_feasible(row)]
+    feasible_architecture_ids = {str(row.get("architecture_id")) for row in feasible_rows if row.get("architecture_id")}
+    resource_infeasible_architecture_ids = sorted(architecture_ids - feasible_architecture_ids)
     if len(architecture_ids) < 2:
         blockers.append("at_least_two_architecture_families_required")
+    elif len(feasible_architecture_ids) < 2:
+        blockers.append("resource_feasible_hls_required")
     if any(str(row.get("implementation_maturity")) != "real_hls_kernel" for row in evidence_rows):
         blockers.append("real_hls_kernel_implementation_required")
     if not evidence_rows:
@@ -813,9 +1071,9 @@ def classify_real_hybrid_vs_gpu(gpu_baseline: Mapping[str, Any], evidence_rows: 
         blockers.append("golden_csim_required")
     if not all(isinstance(row.get("csynth_parsed"), Mapping) and row["csynth_parsed"].get("status") in {"parsed", "partial"} for row in evidence_rows):
         blockers.append("hls_synthesis_latency_resource_required")
-    if not any(row.get("cosim_passed") is True or row.get("vcs_passed") is True for row in evidence_rows):
+    if not any(row.get("cosim_passed") is True or row.get("vcs_passed") is True for row in feasible_rows):
         blockers.append("cosim_or_vcs_required_for_strong_conclusion")
-    if not any(_workflow_accounting_is_claimable(row) for row in evidence_rows):
+    if not any(_workflow_accounting_is_claimable(row) for row in feasible_rows):
         blockers.append("full_scf_workflow_accounting_required")
 
     microkernel_evidence = [_microkernel_row(row) for row in evidence_rows]
@@ -827,7 +1085,8 @@ def classify_real_hybrid_vs_gpu(gpu_baseline: Mapping[str, Any], evidence_rows: 
             "final_claim_allowed": False,
             "blockers": sorted(set(blockers)),
             "microkernel_evidence": microkernel_evidence,
-            "claim_boundary": "Real-HLS C/RTL evidence is microkernel evidence. Strong GPU-vs-hybrid conclusions require measured GPU baseline, multiple architectures, golden correctness, synthesis latency/resource, cosim/VCS, and full-SCF workflow accounting/coupling.",
+            "resource_infeasible_architecture_ids": resource_infeasible_architecture_ids,
+            "claim_boundary": "Real-HLS C/RTL evidence is microkernel evidence. Strong GPU-vs-hybrid conclusions require measured GPU baseline, multiple resource-feasible architectures, golden correctness, synthesis latency/resource, cosim/VCS, and full-SCF workflow accounting/coupling.",
         }
 
     baseline_by_case = {
@@ -837,7 +1096,7 @@ def classify_real_hybrid_vs_gpu(gpu_baseline: Mapping[str, Any], evidence_rows: 
     }
     rows: list[dict[str, Any]] = []
     has_partial_sidecar = False
-    for row in evidence_rows:
+    for row in feasible_rows:
         for accounting in _workflow_accounting_items(row):
             if accounting.get("status") not in {"measured", "trace_replay", "trace_replay_optimistic", "full_scf_accounted", "claimable_estimate"}:
                 continue
@@ -874,6 +1133,8 @@ def classify_real_hybrid_vs_gpu(gpu_baseline: Mapping[str, Any], evidence_rows: 
         }
     best = max(rows, key=lambda item: item["speedup_vs_gpu_mean"])
     result_blockers = ["physical_fpga_board_measurement_missing", "full_qe_kernel_integration_missing"]
+    if resource_infeasible_architecture_ids:
+        result_blockers.append("hls_resource_infeasible_architectures_filtered")
     if has_partial_sidecar:
         label = "fpga_hybrid_weaker"
         confidence = "medium"
@@ -895,6 +1156,7 @@ def classify_real_hybrid_vs_gpu(gpu_baseline: Mapping[str, Any], evidence_rows: 
         "best_speedup_vs_gpu_mean": best["speedup_vs_gpu_mean"],
         "architecture_comparisons": rows,
         "microkernel_evidence": microkernel_evidence,
+        "resource_infeasible_architecture_ids": resource_infeasible_architecture_ids,
         "blockers": sorted(set(result_blockers)),
         "claim_boundary": claim_boundary,
     }
@@ -902,10 +1164,12 @@ def classify_real_hybrid_vs_gpu(gpu_baseline: Mapping[str, Any], evidence_rows: 
 
 __all__ = [
     "build_real_hybrid_architecture_specs",
+    "build_evidence_row_static_metadata",
     "build_trace_replay_workflow_accounting",
     "classify_real_hybrid_vs_gpu",
     "materialize_hls_project",
     "parse_qe_timer_stdout",
+    "render_real_hybrid_hls_report",
     "parse_vivado_hls_cosim_report",
     "parse_vivado_hls_csynth_report",
 ]
