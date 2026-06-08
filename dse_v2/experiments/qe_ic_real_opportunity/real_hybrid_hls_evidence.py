@@ -1074,6 +1074,17 @@ endmodule
 
 _INTEGRATED_SIDECAR_ID = "hybrid_integrated_combined_sidecar_v1"
 _INTEGRATED_SIDECAR_KERNEL = "qeic_real_integrated_combined_sidecar_rtl"
+_PIPELINED_SIDECAR_ID = "hybrid_integrated_pipelined_sidecar_v2"
+_PIPELINED_SIDECAR_KERNEL = "qeic_real_integrated_pipelined_sidecar_rtl"
+_PIPELINED_SIDECAR_PIPELINE_LATENCY = 4
+_STREAMING_SIDECAR_ID = "hybrid_integrated_streaming_pipeline_sidecar_v3"
+_STREAMING_SIDECAR_KERNEL = "qeic_real_integrated_streaming_pipeline_sidecar_rtl"
+_STREAMING_SIDECAR_PIPELINE_LATENCY = 4
+_INTEGRATED_VIVADO_RESULT_KEYS = {
+    _INTEGRATED_SIDECAR_ID: "integrated_vivado_impl_result",
+    _PIPELINED_SIDECAR_ID: "integrated_pipelined_vivado_impl_result",
+    _STREAMING_SIDECAR_ID: "integrated_streaming_vivado_impl_result",
+}
 _INTEGRATED_COMPONENT_TIMER_MAP: dict[str, list[str]] = {
     "hpsi": ["h_psi"],
     "sum_band": ["sum_band"],
@@ -1513,6 +1524,1101 @@ def materialize_integrated_vcs_sidecar_project(specs: Sequence[Mapping[str, Any]
     }
 
 
+def _integrated_pipelined_vcs_rtl_source() -> str:
+    return r"""module qeic_real_integrated_pipelined_sidecar_rtl #(
+    parameter integer TOTAL_SAMPLES = 288,
+    parameter integer WIDTH = 18,
+    parameter integer ACC_WIDTH = 48,
+    parameter signed [WIDTH-1:0] ALPHA_RE = 18'sd192,
+    parameter signed [WIDTH-1:0] ALPHA_IM = -18'sd32
+) (
+    input  wire clk,
+    input  wire reset_n,
+    input  wire start,
+    input  wire sample_valid,
+    input  wire [1:0] mode,
+    input  wire band_first,
+    input  wire band_last,
+    input  wire signed [WIDTH-1:0] a_re,
+    input  wire signed [WIDTH-1:0] a_im,
+    input  wire signed [WIDTH-1:0] b_re,
+    input  wire signed [WIDTH-1:0] b_im,
+    input  wire signed [WIDTH-1:0] c_re,
+    input  wire signed [WIDTH-1:0] c_im,
+    input  wire signed [WIDTH-1:0] weight,
+    input  wire signed [WIDTH-1:0] y_re,
+    input  wire signed [WIDTH-1:0] y_im,
+    output reg  signed [ACC_WIDTH-1:0] out_re,
+    output reg  signed [ACC_WIDTH-1:0] out_im,
+    output reg  signed [ACC_WIDTH-1:0] rho_out,
+    output reg  valid,
+    output reg  done
+);
+    localparam [1:0] MODE_HPSI = 2'd0;
+    localparam [1:0] MODE_SUM_BAND = 2'd1;
+    localparam [1:0] MODE_AXPY = 2'd2;
+
+    reg active;
+    reg busy;
+    reg [2:0] phase;
+    integer processed_count;
+    reg stage1_valid;
+    reg stage2_valid;
+    reg stage3_valid;
+    reg stage4_valid;
+
+    reg [1:0] mode_r;
+    reg band_first_r;
+    reg band_last_r;
+    reg signed [WIDTH-1:0] a_re_r;
+    reg signed [WIDTH-1:0] a_im_r;
+    reg signed [WIDTH-1:0] b_re_r;
+    reg signed [WIDTH-1:0] b_im_r;
+    reg signed [WIDTH-1:0] c_re_r;
+    reg signed [WIDTH-1:0] c_im_r;
+    reg signed [WIDTH-1:0] weight_r;
+    reg signed [WIDTH-1:0] y_re_r;
+    reg signed [WIDTH-1:0] y_im_r;
+
+    reg signed [ACC_WIDTH-1:0] lap_re_s2;
+    reg signed [ACC_WIDTH-1:0] lap_im_s2;
+    reg signed [(2*WIDTH)-1:0] vloc_re_s2;
+    reg signed [(2*WIDTH)-1:0] vloc_im_s2;
+    reg signed [(2*WIDTH)-1:0] re_sq_s2;
+    reg signed [(2*WIDTH)-1:0] im_sq_s2;
+    reg signed [WIDTH-1:0] weight_s2;
+    reg signed [ACC_WIDTH-1:0] alpha_x_re_s2;
+    reg signed [ACC_WIDTH-1:0] alpha_x_im_s2;
+    reg signed [ACC_WIDTH-1:0] y_re_ext_s2;
+    reg signed [ACC_WIDTH-1:0] y_im_ext_s2;
+
+    reg signed [ACC_WIDTH-1:0] hpsi_re_s3;
+    reg signed [ACC_WIDTH-1:0] hpsi_im_s3;
+    reg signed [ACC_WIDTH-1:0] abs_sq_s3;
+    reg signed [(ACC_WIDTH+WIDTH)-1:0] weighted_s3;
+    reg signed [ACC_WIDTH-1:0] axpy_re_s3;
+    reg signed [ACC_WIDTH-1:0] axpy_im_s3;
+    reg signed [ACC_WIDTH-1:0] rho_acc;
+    wire signed [ACC_WIDTH-1:0] sb_contribution_s3 = weighted_s3[ACC_WIDTH+WIDTH-1:WIDTH];
+    wire signed [ACC_WIDTH-1:0] rho_acc_next = band_first_r ? sb_contribution_s3 : (rho_acc + sb_contribution_s3);
+
+    always @(posedge clk or negedge reset_n) begin
+        if (!reset_n) begin
+            active <= 1'b0;
+            busy <= 1'b0;
+            phase <= 3'd0;
+            processed_count <= 0;
+            stage1_valid <= 1'b0;
+            stage2_valid <= 1'b0;
+            stage3_valid <= 1'b0;
+            stage4_valid <= 1'b0;
+            rho_acc <= 0;
+            out_re <= 0;
+            out_im <= 0;
+            rho_out <= 0;
+            valid <= 1'b0;
+            done <= 1'b0;
+        end else begin
+            stage1_valid <= 1'b0;
+            stage2_valid <= 1'b0;
+            stage3_valid <= 1'b0;
+            stage4_valid <= 1'b0;
+            valid <= 1'b0;
+            if (start) begin
+                active <= 1'b1;
+                busy <= 1'b0;
+                phase <= 3'd0;
+                processed_count <= 0;
+                rho_acc <= 0;
+                out_re <= 0;
+                out_im <= 0;
+                rho_out <= 0;
+                done <= 1'b0;
+            end else if (active) begin
+                if (!busy && sample_valid) begin
+                    mode_r <= mode;
+                    band_first_r <= band_first;
+                    band_last_r <= band_last;
+                    a_re_r <= a_re;
+                    a_im_r <= a_im;
+                    b_re_r <= b_re;
+                    b_im_r <= b_im;
+                    c_re_r <= c_re;
+                    c_im_r <= c_im;
+                    weight_r <= weight;
+                    y_re_r <= y_re;
+                    y_im_r <= y_im;
+                    busy <= 1'b1;
+                    phase <= 3'd1;
+                    stage1_valid <= 1'b1;
+                end else if (busy) begin
+                    case (phase)
+                        3'd1: begin
+                            lap_re_s2 <= {{(ACC_WIDTH-WIDTH){a_re_r[WIDTH-1]}}, a_re_r}
+                                - ({{(ACC_WIDTH-WIDTH){b_re_r[WIDTH-1]}}, b_re_r} <<< 1)
+                                + {{(ACC_WIDTH-WIDTH){c_re_r[WIDTH-1]}}, c_re_r};
+                            lap_im_s2 <= {{(ACC_WIDTH-WIDTH){a_im_r[WIDTH-1]}}, a_im_r}
+                                - ({{(ACC_WIDTH-WIDTH){b_im_r[WIDTH-1]}}, b_im_r} <<< 1)
+                                + {{(ACC_WIDTH-WIDTH){c_im_r[WIDTH-1]}}, c_im_r};
+                            vloc_re_s2 <= weight_r * b_re_r;
+                            vloc_im_s2 <= weight_r * b_im_r;
+                            re_sq_s2 <= b_re_r * b_re_r;
+                            im_sq_s2 <= b_im_r * b_im_r;
+                            weight_s2 <= weight_r;
+                            alpha_x_re_s2 <= (ALPHA_RE * a_re_r) - (ALPHA_IM * a_im_r);
+                            alpha_x_im_s2 <= (ALPHA_RE * a_im_r) + (ALPHA_IM * a_re_r);
+                            y_re_ext_s2 <= {{(ACC_WIDTH-WIDTH){y_re_r[WIDTH-1]}}, y_re_r} <<< 8;
+                            y_im_ext_s2 <= {{(ACC_WIDTH-WIDTH){y_im_r[WIDTH-1]}}, y_im_r} <<< 8;
+                            stage2_valid <= 1'b1;
+                            phase <= 3'd2;
+                        end
+                        3'd2: begin
+                            hpsi_re_s3 <= -(lap_re_s2 >>> 1) + (vloc_re_s2 >>> 8);
+                            hpsi_im_s3 <= -(lap_im_s2 >>> 1) + (vloc_im_s2 >>> 8);
+                            abs_sq_s3 <= {{(ACC_WIDTH-(2*WIDTH)){1'b0}}, re_sq_s2 + im_sq_s2};
+                            weighted_s3 <= ({{(ACC_WIDTH-(2*WIDTH)){1'b0}}, re_sq_s2 + im_sq_s2}) * weight_s2;
+                            axpy_re_s3 <= y_re_ext_s2 + alpha_x_re_s2;
+                            axpy_im_s3 <= y_im_ext_s2 + alpha_x_im_s2;
+                            stage3_valid <= 1'b1;
+                            phase <= 3'd3;
+                        end
+                        default: begin
+                            case (mode_r)
+                                MODE_HPSI: begin
+                                    out_re <= hpsi_re_s3;
+                                    out_im <= hpsi_im_s3;
+                                    rho_out <= 0;
+                                    valid <= 1'b1;
+                                end
+                                MODE_SUM_BAND: begin
+                                    rho_acc <= rho_acc_next;
+                                    rho_out <= rho_acc_next;
+                                    out_re <= 0;
+                                    out_im <= 0;
+                                    valid <= band_last_r;
+                                end
+                                MODE_AXPY: begin
+                                    out_re <= axpy_re_s3;
+                                    out_im <= axpy_im_s3;
+                                    rho_out <= 0;
+                                    valid <= 1'b1;
+                                end
+                                default: begin
+                                    out_re <= 0;
+                                    out_im <= 0;
+                                    rho_out <= 0;
+                                    valid <= 1'b0;
+                                end
+                            endcase
+                            stage4_valid <= 1'b1;
+                            if (processed_count == TOTAL_SAMPLES - 1) begin
+                                active <= 1'b0;
+                                done <= 1'b1;
+                            end
+                            processed_count <= processed_count + 1;
+                            busy <= 1'b0;
+                            phase <= 3'd0;
+                        end
+                    endcase
+                end
+            end
+        end
+    end
+endmodule
+"""
+
+
+def _integrated_pipelined_vcs_tb_source(*, hpsi_samples: int, sum_band_grid_points: int, sum_band_bands: int, axpy_samples: int) -> str:
+    sum_band_samples = sum_band_grid_points * sum_band_bands
+    total_samples = hpsi_samples + sum_band_samples + axpy_samples
+    pipeline_latency = _PIPELINED_SIDECAR_PIPELINE_LATENCY
+    return f"""module tb_qeic_real_integrated_pipelined_sidecar_rtl;
+    localparam integer HPSI_N = {hpsi_samples};
+    localparam integer SUM_GRID = {sum_band_grid_points};
+    localparam integer SUM_BANDS = {sum_band_bands};
+    localparam integer SUM_SAMPLES = {sum_band_samples};
+    localparam integer AXPY_N = {axpy_samples};
+    localparam integer TOTAL_SAMPLES = {total_samples};
+    localparam integer PIPELINE_LATENCY = {pipeline_latency};
+    localparam integer WIDTH = 18;
+    localparam integer ACC_WIDTH = 48;
+    localparam [1:0] MODE_HPSI = 2'd0;
+    localparam [1:0] MODE_SUM_BAND = 2'd1;
+    localparam [1:0] MODE_AXPY = 2'd2;
+    localparam signed [WIDTH-1:0] ALPHA_RE = 18'sd192;
+    localparam signed [WIDTH-1:0] ALPHA_IM = -18'sd32;
+    reg clk;
+    reg reset_n;
+    reg start;
+    reg sample_valid;
+    reg [1:0] mode;
+    reg band_first;
+    reg band_last;
+    reg signed [WIDTH-1:0] a_re;
+    reg signed [WIDTH-1:0] a_im;
+    reg signed [WIDTH-1:0] b_re;
+    reg signed [WIDTH-1:0] b_im;
+    reg signed [WIDTH-1:0] c_re;
+    reg signed [WIDTH-1:0] c_im;
+    reg signed [WIDTH-1:0] weight;
+    reg signed [WIDTH-1:0] y_re;
+    reg signed [WIDTH-1:0] y_im;
+    wire signed [ACC_WIDTH-1:0] out_re;
+    wire signed [ACC_WIDTH-1:0] out_im;
+    wire signed [ACC_WIDTH-1:0] rho_out;
+    wire valid;
+    wire done;
+
+    reg signed [WIDTH-1:0] hpsi_re [0:HPSI_N-1];
+    reg signed [WIDTH-1:0] hpsi_im [0:HPSI_N-1];
+    reg signed [WIDTH-1:0] hpsi_vloc [0:HPSI_N-1];
+    reg signed [ACC_WIDTH-1:0] hpsi_expected_re [0:HPSI_N-1];
+    reg signed [ACC_WIDTH-1:0] hpsi_expected_im [0:HPSI_N-1];
+    reg signed [WIDTH-1:0] sum_re [0:SUM_SAMPLES-1];
+    reg signed [WIDTH-1:0] sum_im [0:SUM_SAMPLES-1];
+    reg signed [WIDTH-1:0] sum_weight [0:SUM_BANDS-1];
+    reg signed [ACC_WIDTH-1:0] sum_expected [0:SUM_GRID-1];
+    reg signed [WIDTH-1:0] axpy_x_re [0:AXPY_N-1];
+    reg signed [WIDTH-1:0] axpy_x_im [0:AXPY_N-1];
+    reg signed [WIDTH-1:0] axpy_y_re [0:AXPY_N-1];
+    reg signed [WIDTH-1:0] axpy_y_im [0:AXPY_N-1];
+    reg signed [ACC_WIDTH-1:0] axpy_expected_re [0:AXPY_N-1];
+    reg signed [ACC_WIDTH-1:0] axpy_expected_im [0:AXPY_N-1];
+    reg signed [ACC_WIDTH-1:0] lap_re;
+    reg signed [ACC_WIDTH-1:0] lap_im;
+    reg signed [ACC_WIDTH-1:0] acc;
+    reg signed [(2*WIDTH)-1:0] re_sq;
+    reg signed [(2*WIDTH)-1:0] im_sq;
+    reg signed [ACC_WIDTH-1:0] abs_sq;
+    integer i;
+    integer g;
+    integer b;
+    integer left;
+    integer right;
+    integer idx;
+    integer latency_cycles;
+    integer hpsi_cycles;
+    integer sum_band_cycles;
+    integer axpy_cycles;
+
+    qeic_real_integrated_pipelined_sidecar_rtl #(
+        .TOTAL_SAMPLES(TOTAL_SAMPLES),
+        .WIDTH(WIDTH),
+        .ACC_WIDTH(ACC_WIDTH),
+        .ALPHA_RE(ALPHA_RE),
+        .ALPHA_IM(ALPHA_IM)
+    ) dut (
+        .clk(clk),
+        .reset_n(reset_n),
+        .start(start),
+        .sample_valid(sample_valid),
+        .mode(mode),
+        .band_first(band_first),
+        .band_last(band_last),
+        .a_re(a_re),
+        .a_im(a_im),
+        .b_re(b_re),
+        .b_im(b_im),
+        .c_re(c_re),
+        .c_im(c_im),
+        .weight(weight),
+        .y_re(y_re),
+        .y_im(y_im),
+        .out_re(out_re),
+        .out_im(out_im),
+        .rho_out(rho_out),
+        .valid(valid),
+        .done(done)
+    );
+
+    initial begin
+        clk = 1'b0;
+        forever #5 clk = ~clk;
+    end
+
+    task automatic drive_and_check;
+        input [1:0] in_mode;
+        input in_band_first;
+        input in_band_last;
+        input signed [WIDTH-1:0] in_a_re;
+        input signed [WIDTH-1:0] in_a_im;
+        input signed [WIDTH-1:0] in_b_re;
+        input signed [WIDTH-1:0] in_b_im;
+        input signed [WIDTH-1:0] in_c_re;
+        input signed [WIDTH-1:0] in_c_im;
+        input signed [WIDTH-1:0] in_weight;
+        input signed [WIDTH-1:0] in_y_re;
+        input signed [WIDTH-1:0] in_y_im;
+        input expect_valid;
+        input signed [ACC_WIDTH-1:0] expect_re;
+        input signed [ACC_WIDTH-1:0] expect_im;
+        input signed [ACC_WIDTH-1:0] expect_rho;
+        begin
+            @(negedge clk);
+            mode = in_mode;
+            band_first = in_band_first;
+            band_last = in_band_last;
+            a_re = in_a_re;
+            a_im = in_a_im;
+            b_re = in_b_re;
+            b_im = in_b_im;
+            c_re = in_c_re;
+            c_im = in_c_im;
+            weight = in_weight;
+            y_re = in_y_re;
+            y_im = in_y_im;
+            sample_valid = 1'b1;
+            @(posedge clk);
+            #1;
+            latency_cycles = latency_cycles + 1;
+            @(negedge clk);
+            sample_valid = 1'b0;
+            repeat (PIPELINE_LATENCY - 1) begin
+                @(posedge clk);
+                #1;
+                latency_cycles = latency_cycles + 1;
+            end
+            if (valid !== expect_valid) begin
+                $display("DSE_REAL_RTL_FAIL pipeline valid expected=%0d got=%0d mode=%0d", expect_valid, valid, in_mode);
+                $finish(1);
+            end
+            if (expect_valid && in_mode == MODE_SUM_BAND && rho_out !== expect_rho) begin
+                $display("DSE_REAL_RTL_FAIL pipeline sum_band expected=%0d got=%0d", expect_rho, rho_out);
+                $finish(1);
+            end
+            if (expect_valid && in_mode != MODE_SUM_BAND && (out_re !== expect_re || out_im !== expect_im)) begin
+                $display("DSE_REAL_RTL_FAIL pipeline vector expected=%0d,%0d got=%0d,%0d mode=%0d", expect_re, expect_im, out_re, out_im, in_mode);
+                $finish(1);
+            end
+        end
+    endtask
+
+    initial begin
+        reset_n = 1'b0;
+        start = 1'b0;
+        sample_valid = 1'b0;
+        mode = MODE_HPSI;
+        band_first = 1'b0;
+        band_last = 1'b0;
+        a_re = 0;
+        a_im = 0;
+        b_re = 0;
+        b_im = 0;
+        c_re = 0;
+        c_im = 0;
+        weight = 0;
+        y_re = 0;
+        y_im = 0;
+        latency_cycles = 0;
+        hpsi_cycles = 0;
+        sum_band_cycles = 0;
+        axpy_cycles = 0;
+
+        for (g = 0; g < HPSI_N; g = g + 1) begin
+            hpsi_re[g] = 18'sd64 + g * 18'sd3;
+            hpsi_im[g] = -18'sd51 - g * 18'sd2;
+            hpsi_vloc[g] = 18'sd128 + ((g * 17) & 31);
+        end
+        for (g = 0; g < HPSI_N; g = g + 1) begin
+            left = (g == 0) ? 0 : g - 1;
+            right = (g == HPSI_N - 1) ? HPSI_N - 1 : g + 1;
+            lap_re = hpsi_re[left] - (hpsi_re[g] <<< 1) + hpsi_re[right];
+            lap_im = hpsi_im[left] - (hpsi_im[g] <<< 1) + hpsi_im[right];
+            hpsi_expected_re[g] = -(lap_re >>> 1) + ((hpsi_vloc[g] * hpsi_re[g]) >>> 8);
+            hpsi_expected_im[g] = -(lap_im >>> 1) + ((hpsi_vloc[g] * hpsi_im[g]) >>> 8);
+        end
+        for (b = 0; b < SUM_BANDS; b = b + 1) begin
+            sum_weight[b] = 18'sd64 + b * 18'sd11;
+        end
+        for (g = 0; g < SUM_GRID; g = g + 1) begin
+            sum_expected[g] = 0;
+        end
+        for (b = 0; b < SUM_BANDS; b = b + 1) begin
+            for (g = 0; g < SUM_GRID; g = g + 1) begin
+                idx = b * SUM_GRID + g;
+                sum_re[idx] = 18'sd32 + idx * 18'sd2 + (g & 3);
+                sum_im[idx] = -18'sd21 - idx;
+            end
+        end
+        for (g = 0; g < SUM_GRID; g = g + 1) begin
+            acc = 0;
+            for (b = 0; b < SUM_BANDS; b = b + 1) begin
+                idx = b * SUM_GRID + g;
+                re_sq = sum_re[idx] * sum_re[idx];
+                im_sq = sum_im[idx] * sum_im[idx];
+                abs_sq = re_sq + im_sq;
+                acc = acc + ((abs_sq * sum_weight[b]) >>> WIDTH);
+            end
+            sum_expected[g] = acc;
+        end
+        for (i = 0; i < AXPY_N; i = i + 1) begin
+            axpy_x_re[i] = 18'sd16 + i * 18'sd3;
+            axpy_x_im[i] = -18'sd11 - i * 18'sd2;
+            axpy_y_re[i] = 18'sd7 + (i & 7);
+            axpy_y_im[i] = -18'sd5 - (i & 5);
+            axpy_expected_re[i] = (axpy_y_re[i] <<< 8) + (ALPHA_RE * axpy_x_re[i]) - (ALPHA_IM * axpy_x_im[i]);
+            axpy_expected_im[i] = (axpy_y_im[i] <<< 8) + (ALPHA_RE * axpy_x_im[i]) + (ALPHA_IM * axpy_x_re[i]);
+        end
+
+        repeat (3) @(posedge clk);
+        reset_n = 1'b1;
+        @(posedge clk);
+        start = 1'b1;
+        @(posedge clk);
+        start = 1'b0;
+
+        for (g = 0; g < HPSI_N; g = g + 1) begin
+            left = (g == 0) ? 0 : g - 1;
+            right = (g == HPSI_N - 1) ? HPSI_N - 1 : g + 1;
+            drive_and_check(MODE_HPSI, 1'b0, 1'b0, hpsi_re[left], hpsi_im[left], hpsi_re[g], hpsi_im[g], hpsi_re[right], hpsi_im[right], hpsi_vloc[g], 0, 0, 1'b1, hpsi_expected_re[g], hpsi_expected_im[g], 0);
+            hpsi_cycles = hpsi_cycles + PIPELINE_LATENCY;
+        end
+
+        for (g = 0; g < SUM_GRID; g = g + 1) begin
+            for (b = 0; b < SUM_BANDS; b = b + 1) begin
+                idx = b * SUM_GRID + g;
+                drive_and_check(MODE_SUM_BAND, b == 0, b == SUM_BANDS - 1, 0, 0, sum_re[idx], sum_im[idx], 0, 0, sum_weight[b], 0, 0, b == SUM_BANDS - 1, 0, 0, sum_expected[g]);
+                sum_band_cycles = sum_band_cycles + PIPELINE_LATENCY;
+            end
+        end
+
+        for (i = 0; i < AXPY_N; i = i + 1) begin
+            drive_and_check(MODE_AXPY, 1'b0, 1'b0, axpy_x_re[i], axpy_x_im[i], 0, 0, 0, 0, 0, axpy_y_re[i], axpy_y_im[i], 1'b1, axpy_expected_re[i], axpy_expected_im[i], 0);
+            axpy_cycles = axpy_cycles + PIPELINE_LATENCY;
+        end
+
+        #1;
+        if (done !== 1'b1 || latency_cycles != TOTAL_SAMPLES * PIPELINE_LATENCY) begin
+            $display("DSE_REAL_RTL_FAIL pipeline done=%0d latency=%0d total=%0d", done, latency_cycles, TOTAL_SAMPLES * PIPELINE_LATENCY);
+            $finish(1);
+        end
+        $display("DSE_REAL_RTL_COMPONENT hpsi samples=%0d cycles=%0d", HPSI_N, hpsi_cycles);
+        $display("DSE_REAL_RTL_COMPONENT sum_band samples=%0d cycles=%0d", SUM_SAMPLES, sum_band_cycles);
+        $display("DSE_REAL_RTL_COMPONENT axpy samples=%0d cycles=%0d", AXPY_N, axpy_cycles);
+        $display("DSE_REAL_RTL_PASS qeic_real_integrated_pipelined_sidecar_rtl samples=%0d", TOTAL_SAMPLES);
+        $display("DSE_REAL_RTL_LATENCY_CYCLES %0d", latency_cycles);
+        $finish(0);
+    end
+endmodule
+"""
+
+
+def materialize_integrated_pipelined_vcs_sidecar_project(specs: Sequence[Mapping[str, Any]], out_dir: Path) -> dict[str, Any]:
+    """Materialize a second integrated RTL/VCS sidecar with explicit intra-sample pipeline stages."""
+
+    by_id = {str(spec.get("architecture_id")): spec for spec in specs if spec.get("architecture_id")}
+    hpsi = by_id.get("hybrid_hpsi_local_potential_v1", {})
+    sum_band = by_id.get("hybrid_sum_band_density_accumulator_v1", {})
+    axpy = by_id.get("hybrid_tiled_complex_axpy_v1", {})
+    hpsi_samples = int(hpsi.get("golden_grid_points") or hpsi.get("golden_vector_length") or 96)
+    sum_grid = int(sum_band.get("golden_grid_points") or 32)
+    sum_bands = int(sum_band.get("golden_band_count") or 4)
+    axpy_samples = int(axpy.get("golden_vector_length") or 64)
+    component_samples = {
+        "hpsi": hpsi_samples,
+        "sum_band": sum_grid * sum_bands,
+        "axpy": axpy_samples,
+    }
+    project_dir = Path(out_dir) / _PIPELINED_SIDECAR_ID / "vcs_rtl"
+    project_dir.mkdir(parents=True, exist_ok=True)
+    rtl_source = _integrated_pipelined_vcs_rtl_source()
+    tb_source = _integrated_pipelined_vcs_tb_source(
+        hpsi_samples=hpsi_samples,
+        sum_band_grid_points=sum_grid,
+        sum_band_bands=sum_bands,
+        axpy_samples=axpy_samples,
+    )
+    rtl_sv = project_dir / "qeic_real_integrated_pipelined_sidecar_rtl.sv"
+    tb_sv = project_dir / "tb_qeic_real_integrated_pipelined_sidecar_rtl.sv"
+    rtl_sv.write_text(rtl_source, encoding="utf-8")
+    tb_sv.write_text(tb_source, encoding="utf-8")
+    return {
+        "architecture_id": _PIPELINED_SIDECAR_ID,
+        "kernel_name": _PIPELINED_SIDECAR_KERNEL,
+        "project_dir": str(project_dir),
+        "rtl_sv": str(rtl_sv),
+        "tb_sv": str(tb_sv),
+        "rtl_hash": _sha256_text(rtl_source),
+        "testbench_hash": _sha256_text(tb_source),
+        "samples": sum(component_samples.values()),
+        "component_samples": component_samples,
+        "pipeline_latency_cycles": _PIPELINED_SIDECAR_PIPELINE_LATENCY,
+        "clock_ns": 10.0,
+        "claim_boundary": "Pipelined integrated RTL/VCS sidecar miniapp covering h_psi, sum_band, and AXPY motifs; not full QE kernel integration or board measurement.",
+    }
+
+
+def _integrated_streaming_vcs_rtl_source() -> str:
+    return r"""module qeic_real_integrated_streaming_pipeline_sidecar_rtl #(
+    parameter integer TOTAL_SAMPLES = 288,
+    parameter integer WIDTH = 18,
+    parameter integer ACC_WIDTH = 48,
+    parameter signed [WIDTH-1:0] ALPHA_RE = 18'sd192,
+    parameter signed [WIDTH-1:0] ALPHA_IM = -18'sd32
+) (
+    input  wire clk,
+    input  wire reset_n,
+    input  wire start,
+    input  wire sample_valid,
+    input  wire [1:0] mode,
+    input  wire band_first,
+    input  wire band_last,
+    input  wire signed [WIDTH-1:0] a_re,
+    input  wire signed [WIDTH-1:0] a_im,
+    input  wire signed [WIDTH-1:0] b_re,
+    input  wire signed [WIDTH-1:0] b_im,
+    input  wire signed [WIDTH-1:0] c_re,
+    input  wire signed [WIDTH-1:0] c_im,
+    input  wire signed [WIDTH-1:0] weight,
+    input  wire signed [WIDTH-1:0] y_re,
+    input  wire signed [WIDTH-1:0] y_im,
+    output reg  signed [ACC_WIDTH-1:0] out_re,
+    output reg  signed [ACC_WIDTH-1:0] out_im,
+    output reg  signed [ACC_WIDTH-1:0] rho_out,
+    output reg  valid,
+    output reg  done
+);
+    localparam [1:0] MODE_HPSI = 2'd0;
+    localparam [1:0] MODE_SUM_BAND = 2'd1;
+    localparam [1:0] MODE_AXPY = 2'd2;
+
+    reg active;
+    integer accepted_count;
+    integer completed_count;
+
+    reg stage1_valid;
+    reg [1:0] mode_s1;
+    reg band_first_s1;
+    reg band_last_s1;
+    reg signed [WIDTH-1:0] a_re_s1;
+    reg signed [WIDTH-1:0] a_im_s1;
+    reg signed [WIDTH-1:0] b_re_s1;
+    reg signed [WIDTH-1:0] b_im_s1;
+    reg signed [WIDTH-1:0] c_re_s1;
+    reg signed [WIDTH-1:0] c_im_s1;
+    reg signed [WIDTH-1:0] weight_s1;
+    reg signed [WIDTH-1:0] y_re_s1;
+    reg signed [WIDTH-1:0] y_im_s1;
+
+    reg stage2_valid;
+    reg [1:0] mode_s2;
+    reg band_first_s2;
+    reg band_last_s2;
+    reg signed [ACC_WIDTH-1:0] lap_re_s2;
+    reg signed [ACC_WIDTH-1:0] lap_im_s2;
+    reg signed [(2*WIDTH)-1:0] vloc_re_s2;
+    reg signed [(2*WIDTH)-1:0] vloc_im_s2;
+    reg signed [(2*WIDTH)-1:0] re_sq_s2;
+    reg signed [(2*WIDTH)-1:0] im_sq_s2;
+    reg signed [WIDTH-1:0] weight_s2;
+    reg signed [ACC_WIDTH-1:0] alpha_x_re_s2;
+    reg signed [ACC_WIDTH-1:0] alpha_x_im_s2;
+    reg signed [ACC_WIDTH-1:0] y_re_ext_s2;
+    reg signed [ACC_WIDTH-1:0] y_im_ext_s2;
+
+    reg stage3_valid;
+    reg [1:0] mode_s3;
+    reg band_first_s3;
+    reg band_last_s3;
+    reg signed [ACC_WIDTH-1:0] hpsi_re_s3;
+    reg signed [ACC_WIDTH-1:0] hpsi_im_s3;
+    reg signed [(ACC_WIDTH+WIDTH)-1:0] weighted_s3;
+    reg signed [ACC_WIDTH-1:0] axpy_re_s3;
+    reg signed [ACC_WIDTH-1:0] axpy_im_s3;
+    reg signed [ACC_WIDTH-1:0] rho_acc;
+
+    wire signed [ACC_WIDTH-1:0] sb_contribution_s3 = weighted_s3[ACC_WIDTH+WIDTH-1:WIDTH];
+    wire signed [ACC_WIDTH-1:0] rho_acc_next = band_first_s3 ? sb_contribution_s3 : (rho_acc + sb_contribution_s3);
+
+    always @(posedge clk or negedge reset_n) begin
+        if (!reset_n) begin
+            active <= 1'b0;
+            accepted_count <= 0;
+            completed_count <= 0;
+            stage1_valid <= 1'b0;
+            stage2_valid <= 1'b0;
+            stage3_valid <= 1'b0;
+            rho_acc <= 0;
+            out_re <= 0;
+            out_im <= 0;
+            rho_out <= 0;
+            valid <= 1'b0;
+            done <= 1'b0;
+        end else begin
+            valid <= 1'b0;
+            if (start) begin
+                active <= 1'b1;
+                accepted_count <= 0;
+                completed_count <= 0;
+                stage1_valid <= 1'b0;
+                stage2_valid <= 1'b0;
+                stage3_valid <= 1'b0;
+                rho_acc <= 0;
+                out_re <= 0;
+                out_im <= 0;
+                rho_out <= 0;
+                done <= 1'b0;
+            end else if (active) begin
+                if (stage3_valid) begin
+                    case (mode_s3)
+                        MODE_HPSI: begin
+                            out_re <= hpsi_re_s3;
+                            out_im <= hpsi_im_s3;
+                            rho_out <= 0;
+                            valid <= 1'b1;
+                        end
+                        MODE_SUM_BAND: begin
+                            rho_acc <= rho_acc_next;
+                            rho_out <= rho_acc_next;
+                            out_re <= 0;
+                            out_im <= 0;
+                            valid <= band_last_s3;
+                        end
+                        MODE_AXPY: begin
+                            out_re <= axpy_re_s3;
+                            out_im <= axpy_im_s3;
+                            rho_out <= 0;
+                            valid <= 1'b1;
+                        end
+                        default: begin
+                            out_re <= 0;
+                            out_im <= 0;
+                            rho_out <= 0;
+                            valid <= 1'b0;
+                        end
+                    endcase
+                    if (completed_count == TOTAL_SAMPLES - 1) begin
+                        active <= 1'b0;
+                        done <= 1'b1;
+                    end
+                    completed_count <= completed_count + 1;
+                end
+
+                stage3_valid <= stage2_valid;
+                mode_s3 <= mode_s2;
+                band_first_s3 <= band_first_s2;
+                band_last_s3 <= band_last_s2;
+                hpsi_re_s3 <= -(lap_re_s2 >>> 1) + (vloc_re_s2 >>> 8);
+                hpsi_im_s3 <= -(lap_im_s2 >>> 1) + (vloc_im_s2 >>> 8);
+                weighted_s3 <= ({{(ACC_WIDTH-(2*WIDTH)){1'b0}}, re_sq_s2 + im_sq_s2}) * weight_s2;
+                axpy_re_s3 <= y_re_ext_s2 + alpha_x_re_s2;
+                axpy_im_s3 <= y_im_ext_s2 + alpha_x_im_s2;
+
+                stage2_valid <= stage1_valid;
+                mode_s2 <= mode_s1;
+                band_first_s2 <= band_first_s1;
+                band_last_s2 <= band_last_s1;
+                lap_re_s2 <= {{(ACC_WIDTH-WIDTH){a_re_s1[WIDTH-1]}}, a_re_s1}
+                    - ({{(ACC_WIDTH-WIDTH){b_re_s1[WIDTH-1]}}, b_re_s1} <<< 1)
+                    + {{(ACC_WIDTH-WIDTH){c_re_s1[WIDTH-1]}}, c_re_s1};
+                lap_im_s2 <= {{(ACC_WIDTH-WIDTH){a_im_s1[WIDTH-1]}}, a_im_s1}
+                    - ({{(ACC_WIDTH-WIDTH){b_im_s1[WIDTH-1]}}, b_im_s1} <<< 1)
+                    + {{(ACC_WIDTH-WIDTH){c_im_s1[WIDTH-1]}}, c_im_s1};
+                vloc_re_s2 <= weight_s1 * b_re_s1;
+                vloc_im_s2 <= weight_s1 * b_im_s1;
+                re_sq_s2 <= b_re_s1 * b_re_s1;
+                im_sq_s2 <= b_im_s1 * b_im_s1;
+                weight_s2 <= weight_s1;
+                alpha_x_re_s2 <= (ALPHA_RE * a_re_s1) - (ALPHA_IM * a_im_s1);
+                alpha_x_im_s2 <= (ALPHA_RE * a_im_s1) + (ALPHA_IM * a_re_s1);
+                y_re_ext_s2 <= {{(ACC_WIDTH-WIDTH){y_re_s1[WIDTH-1]}}, y_re_s1} <<< 8;
+                y_im_ext_s2 <= {{(ACC_WIDTH-WIDTH){y_im_s1[WIDTH-1]}}, y_im_s1} <<< 8;
+
+                if (sample_valid && accepted_count < TOTAL_SAMPLES) begin
+                    stage1_valid <= 1'b1;
+                    mode_s1 <= mode;
+                    band_first_s1 <= band_first;
+                    band_last_s1 <= band_last;
+                    a_re_s1 <= a_re;
+                    a_im_s1 <= a_im;
+                    b_re_s1 <= b_re;
+                    b_im_s1 <= b_im;
+                    c_re_s1 <= c_re;
+                    c_im_s1 <= c_im;
+                    weight_s1 <= weight;
+                    y_re_s1 <= y_re;
+                    y_im_s1 <= y_im;
+                    accepted_count <= accepted_count + 1;
+                end else begin
+                    stage1_valid <= 1'b0;
+                end
+            end
+        end
+    end
+endmodule
+"""
+
+
+def _integrated_streaming_vcs_tb_source(*, hpsi_samples: int, sum_band_grid_points: int, sum_band_bands: int, axpy_samples: int) -> str:
+    sum_band_samples = sum_band_grid_points * sum_band_bands
+    total_samples = hpsi_samples + sum_band_samples + axpy_samples
+    output_samples = hpsi_samples + sum_band_grid_points + axpy_samples
+    pipeline_latency = _STREAMING_SIDECAR_PIPELINE_LATENCY
+    expected_latency = total_samples + pipeline_latency - 1
+    hpsi_component_cycles = hpsi_samples + pipeline_latency - 1
+    sum_band_component_cycles = sum_band_samples + pipeline_latency - 1
+    axpy_component_cycles = axpy_samples + pipeline_latency - 1
+    return f"""module tb_qeic_real_integrated_streaming_pipeline_sidecar_rtl;
+    localparam integer HPSI_N = {hpsi_samples};
+    localparam integer SUM_GRID = {sum_band_grid_points};
+    localparam integer SUM_BANDS = {sum_band_bands};
+    localparam integer SUM_SAMPLES = {sum_band_samples};
+    localparam integer AXPY_N = {axpy_samples};
+    localparam integer TOTAL_SAMPLES = {total_samples};
+    localparam integer OUTPUT_SAMPLES = {output_samples};
+    localparam integer PIPELINE_LATENCY = {pipeline_latency};
+    localparam integer EXPECTED_LATENCY = {expected_latency};
+    localparam integer HPSI_COMPONENT_CYCLES = {hpsi_component_cycles};
+    localparam integer SUM_BAND_COMPONENT_CYCLES = {sum_band_component_cycles};
+    localparam integer AXPY_COMPONENT_CYCLES = {axpy_component_cycles};
+    localparam integer WIDTH = 18;
+    localparam integer ACC_WIDTH = 48;
+    localparam [1:0] MODE_HPSI = 2'd0;
+    localparam [1:0] MODE_SUM_BAND = 2'd1;
+    localparam [1:0] MODE_AXPY = 2'd2;
+    localparam signed [WIDTH-1:0] ALPHA_RE = 18'sd192;
+    localparam signed [WIDTH-1:0] ALPHA_IM = -18'sd32;
+    reg clk;
+    reg reset_n;
+    reg start;
+    reg sample_valid;
+    reg [1:0] mode;
+    reg band_first;
+    reg band_last;
+    reg signed [WIDTH-1:0] a_re;
+    reg signed [WIDTH-1:0] a_im;
+    reg signed [WIDTH-1:0] b_re;
+    reg signed [WIDTH-1:0] b_im;
+    reg signed [WIDTH-1:0] c_re;
+    reg signed [WIDTH-1:0] c_im;
+    reg signed [WIDTH-1:0] weight;
+    reg signed [WIDTH-1:0] y_re;
+    reg signed [WIDTH-1:0] y_im;
+    wire signed [ACC_WIDTH-1:0] out_re;
+    wire signed [ACC_WIDTH-1:0] out_im;
+    wire signed [ACC_WIDTH-1:0] rho_out;
+    wire valid;
+    wire done;
+
+    reg signed [WIDTH-1:0] hpsi_re [0:HPSI_N-1];
+    reg signed [WIDTH-1:0] hpsi_im [0:HPSI_N-1];
+    reg signed [WIDTH-1:0] hpsi_vloc [0:HPSI_N-1];
+    reg signed [ACC_WIDTH-1:0] hpsi_expected_re [0:HPSI_N-1];
+    reg signed [ACC_WIDTH-1:0] hpsi_expected_im [0:HPSI_N-1];
+    reg signed [WIDTH-1:0] sum_re [0:SUM_SAMPLES-1];
+    reg signed [WIDTH-1:0] sum_im [0:SUM_SAMPLES-1];
+    reg signed [WIDTH-1:0] sum_weight [0:SUM_BANDS-1];
+    reg signed [ACC_WIDTH-1:0] sum_expected [0:SUM_GRID-1];
+    reg signed [WIDTH-1:0] axpy_x_re [0:AXPY_N-1];
+    reg signed [WIDTH-1:0] axpy_x_im [0:AXPY_N-1];
+    reg signed [WIDTH-1:0] axpy_y_re [0:AXPY_N-1];
+    reg signed [WIDTH-1:0] axpy_y_im [0:AXPY_N-1];
+    reg signed [ACC_WIDTH-1:0] axpy_expected_re [0:AXPY_N-1];
+    reg signed [ACC_WIDTH-1:0] axpy_expected_im [0:AXPY_N-1];
+    reg signed [ACC_WIDTH-1:0] expected_re [0:OUTPUT_SAMPLES-1];
+    reg signed [ACC_WIDTH-1:0] expected_im [0:OUTPUT_SAMPLES-1];
+    reg signed [ACC_WIDTH-1:0] expected_rho [0:OUTPUT_SAMPLES-1];
+    reg expected_is_sum [0:OUTPUT_SAMPLES-1];
+    reg signed [ACC_WIDTH-1:0] lap_re;
+    reg signed [ACC_WIDTH-1:0] lap_im;
+    reg signed [ACC_WIDTH-1:0] acc;
+    reg signed [(2*WIDTH)-1:0] re_sq;
+    reg signed [(2*WIDTH)-1:0] im_sq;
+    reg signed [ACC_WIDTH-1:0] abs_sq;
+    integer i;
+    integer g;
+    integer b;
+    integer left;
+    integer right;
+    integer idx;
+    integer output_idx;
+    integer expected_idx;
+    integer latency_cycles;
+
+    qeic_real_integrated_streaming_pipeline_sidecar_rtl #(
+        .TOTAL_SAMPLES(TOTAL_SAMPLES),
+        .WIDTH(WIDTH),
+        .ACC_WIDTH(ACC_WIDTH),
+        .ALPHA_RE(ALPHA_RE),
+        .ALPHA_IM(ALPHA_IM)
+    ) dut (
+        .clk(clk),
+        .reset_n(reset_n),
+        .start(start),
+        .sample_valid(sample_valid),
+        .mode(mode),
+        .band_first(band_first),
+        .band_last(band_last),
+        .a_re(a_re),
+        .a_im(a_im),
+        .b_re(b_re),
+        .b_im(b_im),
+        .c_re(c_re),
+        .c_im(c_im),
+        .weight(weight),
+        .y_re(y_re),
+        .y_im(y_im),
+        .out_re(out_re),
+        .out_im(out_im),
+        .rho_out(rho_out),
+        .valid(valid),
+        .done(done)
+    );
+
+    initial begin
+        clk = 1'b0;
+        forever #5 clk = ~clk;
+    end
+
+    task automatic check_output;
+        begin
+            if (valid === 1'b1) begin
+                if (output_idx >= OUTPUT_SAMPLES) begin
+                    $display("DSE_REAL_RTL_FAIL streaming extra_valid output_idx=%0d", output_idx);
+                    $finish(1);
+                end
+                if (expected_is_sum[output_idx]) begin
+                    if (rho_out !== expected_rho[output_idx]) begin
+                        $display("DSE_REAL_RTL_FAIL streaming sum output=%0d expected=%0d got=%0d", output_idx, expected_rho[output_idx], rho_out);
+                        $finish(1);
+                    end
+                end else if (out_re !== expected_re[output_idx] || out_im !== expected_im[output_idx]) begin
+                    $display("DSE_REAL_RTL_FAIL streaming vector output=%0d expected=%0d,%0d got=%0d,%0d", output_idx, expected_re[output_idx], expected_im[output_idx], out_re, out_im);
+                    $finish(1);
+                end
+                output_idx = output_idx + 1;
+            end
+        end
+    endtask
+
+    task automatic tick_and_check;
+        begin
+            @(posedge clk);
+            #1;
+            latency_cycles = latency_cycles + 1;
+            check_output();
+        end
+    endtask
+
+    initial begin
+        reset_n = 1'b0;
+        start = 1'b0;
+        sample_valid = 1'b0;
+        mode = MODE_HPSI;
+        band_first = 1'b0;
+        band_last = 1'b0;
+        a_re = 0;
+        a_im = 0;
+        b_re = 0;
+        b_im = 0;
+        c_re = 0;
+        c_im = 0;
+        weight = 0;
+        y_re = 0;
+        y_im = 0;
+        output_idx = 0;
+        expected_idx = 0;
+        latency_cycles = 0;
+
+        for (g = 0; g < HPSI_N; g = g + 1) begin
+            hpsi_re[g] = 18'sd64 + g * 18'sd3;
+            hpsi_im[g] = -18'sd51 - g * 18'sd2;
+            hpsi_vloc[g] = 18'sd128 + ((g * 17) & 31);
+        end
+        for (g = 0; g < HPSI_N; g = g + 1) begin
+            left = (g == 0) ? 0 : g - 1;
+            right = (g == HPSI_N - 1) ? HPSI_N - 1 : g + 1;
+            lap_re = hpsi_re[left] - (hpsi_re[g] <<< 1) + hpsi_re[right];
+            lap_im = hpsi_im[left] - (hpsi_im[g] <<< 1) + hpsi_im[right];
+            hpsi_expected_re[g] = -(lap_re >>> 1) + ((hpsi_vloc[g] * hpsi_re[g]) >>> 8);
+            hpsi_expected_im[g] = -(lap_im >>> 1) + ((hpsi_vloc[g] * hpsi_im[g]) >>> 8);
+            expected_re[expected_idx] = hpsi_expected_re[g];
+            expected_im[expected_idx] = hpsi_expected_im[g];
+            expected_rho[expected_idx] = 0;
+            expected_is_sum[expected_idx] = 1'b0;
+            expected_idx = expected_idx + 1;
+        end
+        for (b = 0; b < SUM_BANDS; b = b + 1) begin
+            sum_weight[b] = 18'sd64 + b * 18'sd11;
+        end
+        for (g = 0; g < SUM_GRID; g = g + 1) begin
+            sum_expected[g] = 0;
+        end
+        for (b = 0; b < SUM_BANDS; b = b + 1) begin
+            for (g = 0; g < SUM_GRID; g = g + 1) begin
+                idx = b * SUM_GRID + g;
+                sum_re[idx] = 18'sd32 + idx * 18'sd2 + (g & 3);
+                sum_im[idx] = -18'sd21 - idx;
+            end
+        end
+        for (g = 0; g < SUM_GRID; g = g + 1) begin
+            acc = 0;
+            for (b = 0; b < SUM_BANDS; b = b + 1) begin
+                idx = b * SUM_GRID + g;
+                re_sq = sum_re[idx] * sum_re[idx];
+                im_sq = sum_im[idx] * sum_im[idx];
+                abs_sq = re_sq + im_sq;
+                acc = acc + ((abs_sq * sum_weight[b]) >>> WIDTH);
+            end
+            sum_expected[g] = acc;
+            expected_re[expected_idx] = 0;
+            expected_im[expected_idx] = 0;
+            expected_rho[expected_idx] = acc;
+            expected_is_sum[expected_idx] = 1'b1;
+            expected_idx = expected_idx + 1;
+        end
+        for (i = 0; i < AXPY_N; i = i + 1) begin
+            axpy_x_re[i] = 18'sd16 + i * 18'sd3;
+            axpy_x_im[i] = -18'sd11 - i * 18'sd2;
+            axpy_y_re[i] = 18'sd7 + (i & 7);
+            axpy_y_im[i] = -18'sd5 - (i & 5);
+            axpy_expected_re[i] = (axpy_y_re[i] <<< 8) + (ALPHA_RE * axpy_x_re[i]) - (ALPHA_IM * axpy_x_im[i]);
+            axpy_expected_im[i] = (axpy_y_im[i] <<< 8) + (ALPHA_RE * axpy_x_im[i]) + (ALPHA_IM * axpy_x_re[i]);
+            expected_re[expected_idx] = axpy_expected_re[i];
+            expected_im[expected_idx] = axpy_expected_im[i];
+            expected_rho[expected_idx] = 0;
+            expected_is_sum[expected_idx] = 1'b0;
+            expected_idx = expected_idx + 1;
+        end
+        if (expected_idx != OUTPUT_SAMPLES) begin
+            $display("DSE_REAL_RTL_FAIL streaming expected_idx=%0d output_samples=%0d", expected_idx, OUTPUT_SAMPLES);
+            $finish(1);
+        end
+
+        repeat (3) @(posedge clk);
+        reset_n = 1'b1;
+        @(posedge clk);
+        start = 1'b1;
+        @(posedge clk);
+        start = 1'b0;
+
+        for (g = 0; g < HPSI_N; g = g + 1) begin
+            left = (g == 0) ? 0 : g - 1;
+            right = (g == HPSI_N - 1) ? HPSI_N - 1 : g + 1;
+            @(negedge clk);
+            mode = MODE_HPSI;
+            a_re = hpsi_re[left];
+            a_im = hpsi_im[left];
+            b_re = hpsi_re[g];
+            b_im = hpsi_im[g];
+            c_re = hpsi_re[right];
+            c_im = hpsi_im[right];
+            weight = hpsi_vloc[g];
+            band_first = 1'b0;
+            band_last = 1'b0;
+            y_re = 0;
+            y_im = 0;
+            sample_valid = 1'b1;
+            tick_and_check();
+        end
+
+        for (g = 0; g < SUM_GRID; g = g + 1) begin
+            for (b = 0; b < SUM_BANDS; b = b + 1) begin
+                @(negedge clk);
+                idx = b * SUM_GRID + g;
+                mode = MODE_SUM_BAND;
+                a_re = 0;
+                a_im = 0;
+                b_re = sum_re[idx];
+                b_im = sum_im[idx];
+                c_re = 0;
+                c_im = 0;
+                weight = sum_weight[b];
+                y_re = 0;
+                y_im = 0;
+                band_first = (b == 0);
+                band_last = (b == SUM_BANDS - 1);
+                sample_valid = 1'b1;
+                tick_and_check();
+            end
+        end
+
+        for (i = 0; i < AXPY_N; i = i + 1) begin
+            @(negedge clk);
+            mode = MODE_AXPY;
+            a_re = axpy_x_re[i];
+            a_im = axpy_x_im[i];
+            b_re = 0;
+            b_im = 0;
+            c_re = 0;
+            c_im = 0;
+            weight = 0;
+            y_re = axpy_y_re[i];
+            y_im = axpy_y_im[i];
+            band_first = 1'b0;
+            band_last = 1'b0;
+            sample_valid = 1'b1;
+            tick_and_check();
+        end
+
+        @(negedge clk);
+        sample_valid = 1'b0;
+        band_first = 1'b0;
+        band_last = 1'b0;
+        while (done !== 1'b1) begin
+            tick_and_check();
+        end
+        if (output_idx != OUTPUT_SAMPLES || latency_cycles != EXPECTED_LATENCY) begin
+            $display("DSE_REAL_RTL_FAIL streaming done=%0d outputs=%0d expected_outputs=%0d latency=%0d expected_latency=%0d", done, output_idx, OUTPUT_SAMPLES, latency_cycles, EXPECTED_LATENCY);
+            $finish(1);
+        end
+        $display("DSE_REAL_RTL_COMPONENT hpsi samples=%0d cycles=%0d", HPSI_N, HPSI_COMPONENT_CYCLES);
+        $display("DSE_REAL_RTL_COMPONENT sum_band samples=%0d cycles=%0d", SUM_SAMPLES, SUM_BAND_COMPONENT_CYCLES);
+        $display("DSE_REAL_RTL_COMPONENT axpy samples=%0d cycles=%0d", AXPY_N, AXPY_COMPONENT_CYCLES);
+        $display("DSE_REAL_RTL_PASS qeic_real_integrated_streaming_pipeline_sidecar_rtl samples=%0d", TOTAL_SAMPLES);
+        $display("DSE_REAL_RTL_LATENCY_CYCLES %0d", latency_cycles);
+        $finish(0);
+    end
+endmodule
+"""
+
+
+def materialize_integrated_streaming_vcs_sidecar_project(specs: Sequence[Mapping[str, Any]], out_dir: Path) -> dict[str, Any]:
+    """Materialize an integrated RTL/VCS sidecar with II=1 streaming pipeline stages."""
+
+    by_id = {str(spec.get("architecture_id")): spec for spec in specs if spec.get("architecture_id")}
+    hpsi = by_id.get("hybrid_hpsi_local_potential_v1", {})
+    sum_band = by_id.get("hybrid_sum_band_density_accumulator_v1", {})
+    axpy = by_id.get("hybrid_tiled_complex_axpy_v1", {})
+    hpsi_samples = int(hpsi.get("golden_grid_points") or hpsi.get("golden_vector_length") or 96)
+    sum_grid = int(sum_band.get("golden_grid_points") or 32)
+    sum_bands = int(sum_band.get("golden_band_count") or 4)
+    axpy_samples = int(axpy.get("golden_vector_length") or 64)
+    component_samples = {
+        "hpsi": hpsi_samples,
+        "sum_band": sum_grid * sum_bands,
+        "axpy": axpy_samples,
+    }
+    project_dir = Path(out_dir) / _STREAMING_SIDECAR_ID / "vcs_rtl"
+    project_dir.mkdir(parents=True, exist_ok=True)
+    rtl_source = _integrated_streaming_vcs_rtl_source()
+    tb_source = _integrated_streaming_vcs_tb_source(
+        hpsi_samples=hpsi_samples,
+        sum_band_grid_points=sum_grid,
+        sum_band_bands=sum_bands,
+        axpy_samples=axpy_samples,
+    )
+    rtl_sv = project_dir / "qeic_real_integrated_streaming_pipeline_sidecar_rtl.sv"
+    tb_sv = project_dir / "tb_qeic_real_integrated_streaming_pipeline_sidecar_rtl.sv"
+    rtl_sv.write_text(rtl_source, encoding="utf-8")
+    tb_sv.write_text(tb_source, encoding="utf-8")
+    return {
+        "architecture_id": _STREAMING_SIDECAR_ID,
+        "kernel_name": _STREAMING_SIDECAR_KERNEL,
+        "project_dir": str(project_dir),
+        "rtl_sv": str(rtl_sv),
+        "tb_sv": str(tb_sv),
+        "rtl_hash": _sha256_text(rtl_source),
+        "testbench_hash": _sha256_text(tb_source),
+        "samples": sum(component_samples.values()),
+        "component_samples": component_samples,
+        "pipeline_latency_cycles": _STREAMING_SIDECAR_PIPELINE_LATENCY,
+        "initiation_interval_cycles": 1,
+        "clock_ns": 10.0,
+        "claim_boundary": "Streaming II=1 integrated RTL/VCS sidecar miniapp covering h_psi, sum_band, and AXPY motifs; not full QE kernel integration or board measurement.",
+    }
+
+
 def _integrated_vivado_impl_wrapper_source(
     *,
     hpsi_samples: int,
@@ -1729,6 +2835,209 @@ set_false_path -from [get_ports reset_n]
         "fpga_part": fpga_part,
         "clock_period_ns": clock_period_ns,
         "claim_boundary": "Integrated RTL sidecar Vivado implementation project covering h_psi, sum_band, and AXPY motifs; not full QE kernel integration or board measurement.",
+    }
+
+
+def _integrated_pipelined_vivado_impl_wrapper_source(
+    *,
+    hpsi_samples: int,
+    sum_band_grid_points: int,
+    sum_band_bands: int,
+    axpy_samples: int,
+) -> str:
+    return _integrated_vivado_impl_wrapper_source(
+        hpsi_samples=hpsi_samples,
+        sum_band_grid_points=sum_band_grid_points,
+        sum_band_bands=sum_band_bands,
+        axpy_samples=axpy_samples,
+    ).replace(
+        "qeic_real_integrated_combined_sidecar_impl_top",
+        "qeic_real_integrated_pipelined_sidecar_impl_top",
+    ).replace(
+        "qeic_real_integrated_combined_sidecar_rtl",
+        "qeic_real_integrated_pipelined_sidecar_rtl",
+    )
+
+
+def _integrated_pipelined_vivado_impl_tcl(*, fpga_part: str) -> str:
+    return f"""set_msg_config -id {{Common 17-55}} -new_severity {{INFO}}
+read_verilog -sv qeic_real_integrated_pipelined_sidecar_rtl.sv
+read_verilog -sv qeic_real_integrated_pipelined_sidecar_impl_top.sv
+read_xdc vivado_impl.xdc
+synth_design -top qeic_real_integrated_pipelined_sidecar_impl_top -part {fpga_part}
+opt_design
+place_design
+route_design
+report_utilization -file vivado_utilization.rpt
+report_timing_summary -file vivado_timing_summary.rpt
+write_checkpoint -force post_route.dcp
+"""
+
+
+def materialize_integrated_pipelined_vivado_impl_project(
+    specs: Sequence[Mapping[str, Any]],
+    out_dir: Path,
+    *,
+    fpga_part: str = DEFAULT_FPGA_PART,
+    clock_period_ns: float = 10.0,
+) -> dict[str, Any]:
+    """Materialize a Vivado implementation project for the pipelined integrated RTL sidecar."""
+
+    by_id = {str(spec.get("architecture_id")): spec for spec in specs if spec.get("architecture_id")}
+    hpsi = by_id.get("hybrid_hpsi_local_potential_v1", {})
+    sum_band = by_id.get("hybrid_sum_band_density_accumulator_v1", {})
+    axpy = by_id.get("hybrid_tiled_complex_axpy_v1", {})
+    hpsi_samples = int(hpsi.get("golden_grid_points") or hpsi.get("golden_vector_length") or 96)
+    sum_grid = int(sum_band.get("golden_grid_points") or 32)
+    sum_bands = int(sum_band.get("golden_band_count") or 4)
+    axpy_samples = int(axpy.get("golden_vector_length") or 64)
+    component_samples = {
+        "hpsi": hpsi_samples,
+        "sum_band": sum_grid * sum_bands,
+        "axpy": axpy_samples,
+    }
+    project_dir = Path(out_dir) / _PIPELINED_SIDECAR_ID / "vivado_impl"
+    project_dir.mkdir(parents=True, exist_ok=True)
+    rtl_source = _integrated_pipelined_vcs_rtl_source()
+    wrapper_source = _integrated_pipelined_vivado_impl_wrapper_source(
+        hpsi_samples=hpsi_samples,
+        sum_band_grid_points=sum_grid,
+        sum_band_bands=sum_bands,
+        axpy_samples=axpy_samples,
+    )
+    tcl_source = _integrated_pipelined_vivado_impl_tcl(fpga_part=fpga_part)
+    xdc_source = f"""create_clock -period {clock_period_ns:.3f} -name clk [get_ports clk]
+set_false_path -from [get_ports reset_n]
+"""
+    rtl_sv = project_dir / "qeic_real_integrated_pipelined_sidecar_rtl.sv"
+    wrapper_sv = project_dir / "qeic_real_integrated_pipelined_sidecar_impl_top.sv"
+    vivado_impl_tcl = project_dir / "vivado_impl.tcl"
+    vivado_impl_xdc = project_dir / "vivado_impl.xdc"
+    rtl_sv.write_text(rtl_source, encoding="utf-8")
+    wrapper_sv.write_text(wrapper_source, encoding="utf-8")
+    vivado_impl_tcl.write_text(tcl_source, encoding="utf-8")
+    vivado_impl_xdc.write_text(xdc_source, encoding="utf-8")
+    return {
+        "architecture_id": _PIPELINED_SIDECAR_ID,
+        "kernel_name": _PIPELINED_SIDECAR_KERNEL,
+        "top_module": "qeic_real_integrated_pipelined_sidecar_impl_top",
+        "project_dir": str(project_dir),
+        "rtl_sv": str(rtl_sv),
+        "wrapper_sv": str(wrapper_sv),
+        "vivado_impl_tcl": str(vivado_impl_tcl),
+        "vivado_impl_xdc": str(vivado_impl_xdc),
+        "rtl_hash": _sha256_text(rtl_source),
+        "wrapper_hash": _sha256_text(wrapper_source),
+        "tcl_hash": _sha256_text(tcl_source),
+        "xdc_hash": _sha256_text(xdc_source),
+        "samples": sum(component_samples.values()),
+        "component_samples": component_samples,
+        "pipeline_latency_cycles": _PIPELINED_SIDECAR_PIPELINE_LATENCY,
+        "fpga_part": fpga_part,
+        "clock_period_ns": clock_period_ns,
+        "claim_boundary": "Pipelined integrated RTL sidecar Vivado implementation project covering h_psi, sum_band, and AXPY motifs; not full QE kernel integration or board measurement.",
+    }
+
+
+def _integrated_streaming_vivado_impl_wrapper_source(
+    *,
+    hpsi_samples: int,
+    sum_band_grid_points: int,
+    sum_band_bands: int,
+    axpy_samples: int,
+) -> str:
+    return _integrated_vivado_impl_wrapper_source(
+        hpsi_samples=hpsi_samples,
+        sum_band_grid_points=sum_band_grid_points,
+        sum_band_bands=sum_band_bands,
+        axpy_samples=axpy_samples,
+    ).replace(
+        "qeic_real_integrated_combined_sidecar_impl_top",
+        "qeic_real_integrated_streaming_pipeline_sidecar_impl_top",
+    ).replace(
+        "qeic_real_integrated_combined_sidecar_rtl",
+        "qeic_real_integrated_streaming_pipeline_sidecar_rtl",
+    )
+
+
+def _integrated_streaming_vivado_impl_tcl(*, fpga_part: str) -> str:
+    return f"""set_msg_config -id {{Common 17-55}} -new_severity {{INFO}}
+read_verilog -sv qeic_real_integrated_streaming_pipeline_sidecar_rtl.sv
+read_verilog -sv qeic_real_integrated_streaming_pipeline_sidecar_impl_top.sv
+read_xdc vivado_impl.xdc
+synth_design -top qeic_real_integrated_streaming_pipeline_sidecar_impl_top -part {fpga_part}
+opt_design
+place_design
+route_design
+report_utilization -file vivado_utilization.rpt
+report_timing_summary -file vivado_timing_summary.rpt
+write_checkpoint -force post_route.dcp
+"""
+
+
+def materialize_integrated_streaming_vivado_impl_project(
+    specs: Sequence[Mapping[str, Any]],
+    out_dir: Path,
+    *,
+    fpga_part: str = DEFAULT_FPGA_PART,
+    clock_period_ns: float = 10.0,
+) -> dict[str, Any]:
+    """Materialize a Vivado implementation project for the II=1 streaming integrated RTL sidecar."""
+
+    by_id = {str(spec.get("architecture_id")): spec for spec in specs if spec.get("architecture_id")}
+    hpsi = by_id.get("hybrid_hpsi_local_potential_v1", {})
+    sum_band = by_id.get("hybrid_sum_band_density_accumulator_v1", {})
+    axpy = by_id.get("hybrid_tiled_complex_axpy_v1", {})
+    hpsi_samples = int(hpsi.get("golden_grid_points") or hpsi.get("golden_vector_length") or 96)
+    sum_grid = int(sum_band.get("golden_grid_points") or 32)
+    sum_bands = int(sum_band.get("golden_band_count") or 4)
+    axpy_samples = int(axpy.get("golden_vector_length") or 64)
+    component_samples = {
+        "hpsi": hpsi_samples,
+        "sum_band": sum_grid * sum_bands,
+        "axpy": axpy_samples,
+    }
+    project_dir = Path(out_dir) / _STREAMING_SIDECAR_ID / "vivado_impl"
+    project_dir.mkdir(parents=True, exist_ok=True)
+    rtl_source = _integrated_streaming_vcs_rtl_source()
+    wrapper_source = _integrated_streaming_vivado_impl_wrapper_source(
+        hpsi_samples=hpsi_samples,
+        sum_band_grid_points=sum_grid,
+        sum_band_bands=sum_bands,
+        axpy_samples=axpy_samples,
+    )
+    tcl_source = _integrated_streaming_vivado_impl_tcl(fpga_part=fpga_part)
+    xdc_source = f"""create_clock -period {clock_period_ns:.3f} -name clk [get_ports clk]
+set_false_path -from [get_ports reset_n]
+"""
+    rtl_sv = project_dir / "qeic_real_integrated_streaming_pipeline_sidecar_rtl.sv"
+    wrapper_sv = project_dir / "qeic_real_integrated_streaming_pipeline_sidecar_impl_top.sv"
+    vivado_impl_tcl = project_dir / "vivado_impl.tcl"
+    vivado_impl_xdc = project_dir / "vivado_impl.xdc"
+    rtl_sv.write_text(rtl_source, encoding="utf-8")
+    wrapper_sv.write_text(wrapper_source, encoding="utf-8")
+    vivado_impl_tcl.write_text(tcl_source, encoding="utf-8")
+    vivado_impl_xdc.write_text(xdc_source, encoding="utf-8")
+    return {
+        "architecture_id": _STREAMING_SIDECAR_ID,
+        "kernel_name": _STREAMING_SIDECAR_KERNEL,
+        "top_module": "qeic_real_integrated_streaming_pipeline_sidecar_impl_top",
+        "project_dir": str(project_dir),
+        "rtl_sv": str(rtl_sv),
+        "wrapper_sv": str(wrapper_sv),
+        "vivado_impl_tcl": str(vivado_impl_tcl),
+        "vivado_impl_xdc": str(vivado_impl_xdc),
+        "rtl_hash": _sha256_text(rtl_source),
+        "wrapper_hash": _sha256_text(wrapper_source),
+        "tcl_hash": _sha256_text(tcl_source),
+        "xdc_hash": _sha256_text(xdc_source),
+        "samples": sum(component_samples.values()),
+        "component_samples": component_samples,
+        "pipeline_latency_cycles": _STREAMING_SIDECAR_PIPELINE_LATENCY,
+        "initiation_interval_cycles": 1,
+        "fpga_part": fpga_part,
+        "clock_period_ns": clock_period_ns,
+        "claim_boundary": "Streaming II=1 integrated RTL sidecar Vivado implementation project covering h_psi, sum_band, and AXPY motifs; not full QE kernel integration or board measurement.",
     }
 
 
@@ -2027,13 +3336,58 @@ def merge_integrated_vivado_impl_evidence_into_summary(summary: Mapping[str, Any
     resource_feasible = util.get("resource_feasible") is True
     timing_met = timing.get("timing_met") is True
 
-    merged["integrated_vivado_impl_result"] = json.loads(json.dumps(vivado_result))
-    classification["integrated_vivado_impl_attempted"] = vivado_result.get("vivado_impl_attempted") is True
-    classification["integrated_vivado_impl_passed"] = impl_passed
-    classification["integrated_vivado_impl_resource_feasible"] = resource_feasible
-    classification["integrated_vivado_impl_timing_met"] = timing_met
-    classification["integrated_vivado_impl_resource"] = util.get("resource")
-    classification["integrated_vivado_impl_wns_ns"] = timing.get("wns_ns")
+    architecture_id = str(vivado_result.get("architecture_id") or _INTEGRATED_SIDECAR_ID)
+    result_key = _INTEGRATED_VIVADO_RESULT_KEYS.get(architecture_id, "integrated_vivado_impl_result")
+    merged[result_key] = json.loads(json.dumps(vivado_result))
+    legacy_result = merged.get("integrated_vivado_impl_result")
+    if isinstance(legacy_result, Mapping):
+        legacy_architecture_id = str(legacy_result.get("architecture_id") or "")
+        legacy_key = _INTEGRATED_VIVADO_RESULT_KEYS.get(legacy_architecture_id)
+        if legacy_key and legacy_key != "integrated_vivado_impl_result" and legacy_key not in merged:
+            merged[legacy_key] = json.loads(json.dumps(legacy_result))
+    if architecture_id != _INTEGRATED_SIDECAR_ID and result_key != "integrated_vivado_impl_result":
+        legacy_result = merged.get("integrated_vivado_impl_result")
+        if isinstance(legacy_result, Mapping) and str(legacy_result.get("architecture_id") or "") != _INTEGRATED_SIDECAR_ID:
+            merged.pop("integrated_vivado_impl_result", None)
+    else:
+        merged["integrated_vivado_impl_result"] = json.loads(json.dumps(vivado_result))
+
+    integrated_results = [
+        value
+        for key in _INTEGRATED_VIVADO_RESULT_KEYS.values()
+        if isinstance((value := merged.get(key)), Mapping)
+    ]
+    if not integrated_results and isinstance(merged.get("integrated_vivado_impl_result"), Mapping):
+        integrated_results = [merged["integrated_vivado_impl_result"]]
+    satisfying_results = [
+        item
+        for item in integrated_results
+        if item.get("vivado_impl_passed") is True
+        and isinstance(item.get("vivado_impl_utilization_parsed"), Mapping)
+        and item["vivado_impl_utilization_parsed"].get("resource_feasible") is True
+        and isinstance(item.get("vivado_impl_timing_parsed"), Mapping)
+        and item["vivado_impl_timing_parsed"].get("timing_met") is True
+    ]
+    representative = satisfying_results[-1] if satisfying_results else vivado_result
+    representative_util = (
+        representative.get("vivado_impl_utilization_parsed")
+        if isinstance(representative.get("vivado_impl_utilization_parsed"), Mapping)
+        else util
+    )
+    representative_timing = (
+        representative.get("vivado_impl_timing_parsed")
+        if isinstance(representative.get("vivado_impl_timing_parsed"), Mapping)
+        else timing
+    )
+    classification["integrated_vivado_impl_attempted"] = any(item.get("vivado_impl_attempted") is True for item in integrated_results)
+    classification["integrated_vivado_impl_passed"] = bool(satisfying_results) or impl_passed
+    classification["integrated_vivado_impl_resource_feasible"] = bool(satisfying_results) or resource_feasible
+    classification["integrated_vivado_impl_timing_met"] = bool(satisfying_results) or timing_met
+    classification["integrated_vivado_impl_resource"] = representative_util.get("resource")
+    classification["integrated_vivado_impl_wns_ns"] = representative_timing.get("wns_ns")
+    classification["integrated_vivado_impl_architecture_ids"] = sorted(
+        {str(item.get("architecture_id")) for item in integrated_results if item.get("architecture_id")}
+    )
     satisfied = set(str(item) for item in _as_list(classification.get("satisfied_preliminary_gates")))
     if impl_passed:
         satisfied.add("vivado_impl_executed")
@@ -2475,14 +3829,27 @@ def render_real_hybrid_hls_report(summary: Mapping[str, Any]) -> str:
         )
     if summary.get("claim_closure_path"):
         lines.append(f"- Claim closure audit: `{summary.get('claim_closure_path')}`")
-    impl_result = summary.get("integrated_vivado_impl_result") if isinstance(summary.get("integrated_vivado_impl_result"), Mapping) else {}
+    impl_result: Mapping[str, Any] = {}
+    best_impl_architecture = str(classification.get("best_vivado_implemented_architecture_id") or "")
+    if best_impl_architecture:
+        best_impl_key = _INTEGRATED_VIVADO_RESULT_KEYS.get(best_impl_architecture)
+        if best_impl_key and isinstance(summary.get(best_impl_key), Mapping):
+            impl_result = summary[best_impl_key]
+    if not impl_result:
+        impl_candidates = [
+            value
+            for key in _INTEGRATED_VIVADO_RESULT_KEYS.values()
+            if isinstance((value := summary.get(key)), Mapping) and value.get("vivado_impl_passed") is True
+        ]
+        impl_result = impl_candidates[-1] if impl_candidates else {}
     if impl_result:
         impl_util = impl_result.get("vivado_impl_utilization_parsed") if isinstance(impl_result.get("vivado_impl_utilization_parsed"), Mapping) else {}
         impl_timing = impl_result.get("vivado_impl_timing_parsed") if isinstance(impl_result.get("vivado_impl_timing_parsed"), Mapping) else {}
         impl_resource = impl_util.get("resource") if isinstance(impl_util.get("resource"), Mapping) else {}
         lines.append(
             "- Integrated Vivado implementation: "
-            f"`{impl_result.get('vivado_impl_passed')}`, WNS `{impl_timing.get('wns_ns')}` ns, "
+            f"`{impl_result.get('architecture_id')}` passed `{impl_result.get('vivado_impl_passed')}`, "
+            f"WNS `{impl_timing.get('wns_ns')}` ns, "
             f"implemented clock `{impl_result.get('implemented_clock_ns')}` ns, "
             f"LUT `{impl_resource.get('lut')}`, FF `{impl_resource.get('ff')}`, "
             f"BRAM tile `{impl_resource.get('bram_tile')}`, DSP `{impl_resource.get('dsp')}`"
@@ -2906,6 +4273,13 @@ def build_integrated_vcs_sidecar_accounting(
 
     if not isinstance(integrated_result, Mapping) or integrated_result.get("vcs_passed") is not True:
         return []
+    architecture_id = str(integrated_result.get("architecture_id") or _INTEGRATED_SIDECAR_ID)
+    if architecture_id == _STREAMING_SIDECAR_ID:
+        implementation_coverage = "integrated_streaming_pipeline_sidecar_motif"
+    elif architecture_id == _PIPELINED_SIDECAR_ID:
+        implementation_coverage = "integrated_pipelined_sidecar_motif"
+    else:
+        implementation_coverage = "integrated_partial_sidecar_motif"
     vcs = integrated_result.get("vcs_parsed") if isinstance(integrated_result.get("vcs_parsed"), Mapping) else {}
     latency = vcs.get("latency_cycles") if isinstance(vcs, Mapping) else None
     component_cycles = vcs.get("component_cycles") if isinstance(vcs.get("component_cycles"), Mapping) else {}
@@ -2931,11 +4305,11 @@ def build_integrated_vcs_sidecar_accounting(
         if not stdout_paths:
             accountings.append(
                 {
-                    "architecture_id": _INTEGRATED_SIDECAR_ID,
+                    "architecture_id": architecture_id,
                     "status": "missing_qe_timer_trace",
                     "case_id": case_id,
                     "blockers": ["qe_stdout_timer_logs_missing"],
-                    "implementation_coverage": "integrated_partial_sidecar_motif",
+                    "implementation_coverage": implementation_coverage,
                 }
             )
             continue
@@ -3003,12 +4377,12 @@ def build_integrated_vcs_sidecar_accounting(
         if len(component_rows) < 2 or replaceable_seconds <= 0.0:
             accountings.append(
                 {
-                    "architecture_id": _INTEGRATED_SIDECAR_ID,
+                    "architecture_id": architecture_id,
                     "status": "missing_trace_replay_inputs",
                     "case_id": case_id,
                     "mapped_timer_names": sorted(used_timers),
                     "blockers": ["integrated_vcs_timer_or_component_latency_missing"],
-                    "implementation_coverage": "integrated_partial_sidecar_motif",
+                    "implementation_coverage": implementation_coverage,
                 }
             )
             continue
@@ -3019,7 +4393,7 @@ def build_integrated_vcs_sidecar_accounting(
         hybrid_runtime = cpu_retained + fpga_compute_seconds + launch_overhead + host_device_transfer + synchronization
         accountings.append(
             {
-                "architecture_id": _INTEGRATED_SIDECAR_ID,
+                "architecture_id": architecture_id,
                 "status": "trace_replay_integrated_vcs_sidecar_sensitivity",
                 "case_id": case_id,
                 "source_gpu_runtime_seconds_mean": float(gpu_runtime),
@@ -3041,7 +4415,7 @@ def build_integrated_vcs_sidecar_accounting(
                 "synchronization_seconds": synchronization,
                 "launch_overhead_seconds": launch_overhead,
                 "hybrid_workflow_runtime_seconds": hybrid_runtime,
-                "implementation_coverage": "integrated_partial_sidecar_motif",
+                "implementation_coverage": implementation_coverage,
                 "blockers": ["full_qe_kernel_equivalent_missing", "full_qe_kernel_integration_missing"],
                 "timer_trace_paths": [str(path) for path in stdout_paths],
                 "claim_boundary": "Trace replay using a single integrated RTL/VCS sidecar miniapp over measured QE timer traces; not full-QE integration, board measurement, or final FPGA superiority evidence.",
@@ -3438,6 +4812,10 @@ __all__ = [
     "build_real_hybrid_claim_closure",
     "build_trace_replay_workflow_accounting",
     "classify_real_hybrid_vs_gpu",
+    "materialize_integrated_pipelined_vcs_sidecar_project",
+    "materialize_integrated_pipelined_vivado_impl_project",
+    "materialize_integrated_streaming_vcs_sidecar_project",
+    "materialize_integrated_streaming_vivado_impl_project",
     "materialize_integrated_vcs_sidecar_project",
     "materialize_integrated_vivado_impl_project",
     "materialize_hls_project",

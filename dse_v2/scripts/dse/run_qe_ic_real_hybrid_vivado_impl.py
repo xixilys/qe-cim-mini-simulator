@@ -24,6 +24,8 @@ from dse_v2.experiments.qe_ic_real_opportunity.real_hybrid_hls_evidence import (
     build_integrated_vcs_sidecar_accounting,
     build_real_hybrid_architecture_specs,
     build_real_hybrid_claim_closure,
+    materialize_integrated_pipelined_vivado_impl_project,
+    materialize_integrated_streaming_vivado_impl_project,
     materialize_integrated_vivado_impl_project,
     merge_combined_vcs_sidecar_comparisons,
     merge_integrated_vcs_sidecar_comparisons,
@@ -36,6 +38,16 @@ from dse_v2.experiments.qe_ic_real_opportunity.real_hybrid_hls_evidence import (
 REMOTE_ALIAS = "ic-eda"
 REMOTE_VIVADO = "/home/Xilinx/Vivado/2019.1/bin/vivado"
 SCHEMA_VERSION = "dse.qe_ic.real_hybrid_vivado_impl_evidence.v1"
+INTEGRATED_VCS_RESULT_KEYS = (
+    "integrated_vcs_sidecar_result",
+    "integrated_pipelined_vcs_sidecar_result",
+    "integrated_streaming_vcs_sidecar_result",
+)
+INTEGRATED_VIVADO_RESULT_KEYS = {
+    "hybrid_integrated_combined_sidecar_v1": "integrated_vivado_impl_result",
+    "hybrid_integrated_pipelined_sidecar_v2": "integrated_pipelined_vivado_impl_result",
+    "hybrid_integrated_streaming_pipeline_sidecar_v3": "integrated_streaming_vivado_impl_result",
+}
 
 
 def _write_json(path: Path, payload: Mapping[str, Any]) -> None:
@@ -63,6 +75,20 @@ def _load_summary(path: Path) -> dict[str, Any]:
     return payload
 
 
+def _normalize_integrated_vivado_result_keys(summary: Mapping[str, Any]) -> dict[str, Any]:
+    """Move legacy non-v1 Vivado evidence into architecture-specific result keys."""
+
+    normalized = json.loads(json.dumps(summary))
+    legacy = normalized.get("integrated_vivado_impl_result")
+    if isinstance(legacy, Mapping):
+        architecture_id = str(legacy.get("architecture_id") or "")
+        key = INTEGRATED_VIVADO_RESULT_KEYS.get(architecture_id)
+        if key and key != "integrated_vivado_impl_result":
+            normalized.setdefault(key, legacy)
+            normalized.pop("integrated_vivado_impl_result", None)
+    return normalized
+
+
 def _load_gpu_baseline(path: Path) -> dict[str, Any] | None:
     if not path.exists():
         return None
@@ -84,7 +110,12 @@ def _drop_stale_synthetic_sidecar_comparisons(classification: Mapping[str, Any])
 
     cleaned = json.loads(json.dumps(classification))
     rows = []
-    stale_architectures = {"hybrid_combined_vcs_sidecar_v1", "hybrid_integrated_combined_sidecar_v1"}
+    stale_architectures = {
+        "hybrid_combined_vcs_sidecar_v1",
+        "hybrid_integrated_combined_sidecar_v1",
+        "hybrid_integrated_pipelined_sidecar_v2",
+        "hybrid_integrated_streaming_pipeline_sidecar_v3",
+    }
     for row in cleaned.get("architecture_comparisons", []):
         if not isinstance(row, Mapping):
             continue
@@ -108,7 +139,12 @@ def _annotate_best_vivado_implemented_comparison(classification: Mapping[str, An
         row
         for row in annotated.get("architecture_comparisons", [])
         if isinstance(row, Mapping)
-        and row.get("architecture_id") == "hybrid_integrated_combined_sidecar_v1"
+        and row.get("architecture_id")
+        in {
+            "hybrid_integrated_combined_sidecar_v1",
+            "hybrid_integrated_pipelined_sidecar_v2",
+            "hybrid_integrated_streaming_pipeline_sidecar_v3",
+        }
         and row.get("latency_source") == "integrated_vcs_rtl"
     ]
     if rows:
@@ -137,15 +173,37 @@ def run_integrated_vivado_impl(
     fpga_part: str,
     clock_period_ns: float,
     timeout_seconds: int,
+    architecture_id: str = "hybrid_integrated_combined_sidecar_v1",
 ) -> dict[str, Any]:
     """Run remote Vivado synth/place/route for the integrated sidecar."""
 
-    project = materialize_integrated_vivado_impl_project(
-        build_real_hybrid_architecture_specs(),
-        out_dir / "runs",
-        fpga_part=fpga_part,
-        clock_period_ns=clock_period_ns,
-    )
+    if architecture_id == "hybrid_integrated_streaming_pipeline_sidecar_v3":
+        project = materialize_integrated_streaming_vivado_impl_project(
+            build_real_hybrid_architecture_specs(),
+            out_dir / "runs",
+            fpga_part=fpga_part,
+            clock_period_ns=clock_period_ns,
+        )
+        evidence_name = "real_hybrid_integrated_streaming_vivado_impl_evidence.json"
+        boundary = "Integrated Vivado implementation evidence for the II=1 streaming RTL sidecar; not physical board measurement or full QE kernel integration."
+    elif architecture_id == "hybrid_integrated_pipelined_sidecar_v2":
+        project = materialize_integrated_pipelined_vivado_impl_project(
+            build_real_hybrid_architecture_specs(),
+            out_dir / "runs",
+            fpga_part=fpga_part,
+            clock_period_ns=clock_period_ns,
+        )
+        evidence_name = "real_hybrid_integrated_pipelined_vivado_impl_evidence.json"
+        boundary = "Integrated Vivado implementation evidence for the pipelined RTL sidecar; not physical board measurement or full QE kernel integration."
+    else:
+        project = materialize_integrated_vivado_impl_project(
+            build_real_hybrid_architecture_specs(),
+            out_dir / "runs",
+            fpga_part=fpga_part,
+            clock_period_ns=clock_period_ns,
+        )
+        evidence_name = "real_hybrid_integrated_vivado_impl_evidence.json"
+        boundary = "Integrated Vivado implementation evidence for the single RTL sidecar; not physical board measurement or full QE kernel integration."
     project_dir = Path(project["project_dir"])
     run_id = _safe_name(project["architecture_id"])
     remote_dir = f"/tmp/dse_real_hybrid_vivado_impl_{run_id}_{hashlib.sha256(str(time.time()).encode()).hexdigest()[:8]}"
@@ -249,9 +307,9 @@ def run_integrated_vivado_impl(
         "vivado_utilization_report_hash": _sha256_file(utilization_path),
         "vivado_timing_summary_report_hash": _sha256_file(timing_path),
         "blockers": sorted(set(str(item) for item in blockers if item)),
-        "claim_boundary": "Integrated Vivado implementation evidence for the single RTL sidecar; not physical board measurement or full QE kernel integration.",
+        "claim_boundary": boundary,
     }
-    evidence_path = project_dir / "real_hybrid_integrated_vivado_impl_evidence.json"
+    evidence_path = project_dir / evidence_name
     _write_json(evidence_path, row)
     row["vivado_impl_evidence_json_path"] = str(evidence_path)
     row["vivado_impl_evidence_json_hash"] = _sha256_file(evidence_path)
@@ -263,14 +321,17 @@ def run_integrated_vivado_impl(
 def run_campaign(args: argparse.Namespace) -> dict[str, Any]:
     out_dir: Path = args.out
     summary_path = args.summary or out_dir / "real_hybrid_hls_summary.json"
-    summary = _load_summary(summary_path)
+    summary = _normalize_integrated_vivado_result_keys(_load_summary(summary_path))
+    architecture_id = getattr(args, "architecture_id", "hybrid_integrated_combined_sidecar_v1")
     result = run_integrated_vivado_impl(
         out_dir=out_dir,
         fpga_part=args.fpga_part,
         clock_period_ns=args.clock_period_ns,
         timeout_seconds=args.timeout_seconds,
+        architecture_id=architecture_id,
     )
     merged = merge_integrated_vivado_impl_evidence_into_summary(summary, result)
+    merged[INTEGRATED_VIVADO_RESULT_KEYS.get(architecture_id, "integrated_vivado_impl_result")] = result
 
     baseline_path = Path(str(merged.get("gpu_baseline_path") or "artifacts/qe_ic_7day_prelim/qe_ic_7day_gpu_baseline.json"))
     baseline = _load_gpu_baseline(baseline_path)
@@ -280,12 +341,21 @@ def run_campaign(args: argparse.Namespace) -> dict[str, Any]:
         classification = _drop_stale_synthetic_sidecar_comparisons(merged["classification"])
         combined_vcs_sidecar_accounting = build_combined_vcs_sidecar_accounting(baseline, gpu_runs_root, rows)
         classification = merge_combined_vcs_sidecar_comparisons(baseline, classification, combined_vcs_sidecar_accounting)
-        integrated_result = merged.get("integrated_vcs_sidecar_result")
+        if architecture_id == "hybrid_integrated_streaming_pipeline_sidecar_v3":
+            integrated_key = "integrated_streaming_vcs_sidecar_result"
+        elif architecture_id == "hybrid_integrated_pipelined_sidecar_v2":
+            integrated_key = "integrated_pipelined_vcs_sidecar_result"
+        else:
+            integrated_key = "integrated_vcs_sidecar_result"
+        integrated_result = merged.get(integrated_key)
         if isinstance(integrated_result, dict) and result.get("vivado_impl_passed") is True and isinstance(result.get("implemented_clock_ns"), (int, float)):
             integrated_result["implemented_clock_ns"] = result["implemented_clock_ns"]
             integrated_result["implemented_clock_source"] = result.get("implemented_clock_source") or "vivado_post_route_timing_met"
-            merged["integrated_vcs_sidecar_result"] = integrated_result
-        integrated_vcs_sidecar_accounting = build_integrated_vcs_sidecar_accounting(baseline, gpu_runs_root, merged.get("integrated_vcs_sidecar_result"))
+            merged[integrated_key] = integrated_result
+        integrated_vcs_sidecar_accounting = []
+        for key in INTEGRATED_VCS_RESULT_KEYS:
+            integrated_candidate = merged.get(key)
+            integrated_vcs_sidecar_accounting.extend(build_integrated_vcs_sidecar_accounting(baseline, gpu_runs_root, integrated_candidate))
         classification = merge_integrated_vcs_sidecar_comparisons(baseline, classification, integrated_vcs_sidecar_accounting)
         classification = merge_integrated_vivado_impl_evidence_into_summary({"classification": classification, "evidence_rows": rows}, result)["classification"]
         classification = _annotate_best_vivado_implemented_comparison(classification)
@@ -306,6 +376,7 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", type=Path, default=Path("artifacts/qe_ic_real_hybrid_hls"))
     parser.add_argument("--summary", type=Path, default=None)
+    parser.add_argument("--architecture-id", default="hybrid_integrated_combined_sidecar_v1")
     parser.add_argument("--fpga-part", default=DEFAULT_FPGA_PART)
     parser.add_argument("--clock-period-ns", type=float, default=10.0)
     parser.add_argument("--timeout-seconds", type=int, default=1800)

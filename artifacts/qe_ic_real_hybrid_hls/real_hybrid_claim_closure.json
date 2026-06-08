@@ -6,7 +6,7 @@
     "physical_fpga_board_measurement_missing",
     "vivado_impl_setup_timing_not_met"
   ],
-  "claim_boundary": "Integrated Vivado implementation evidence for the single RTL sidecar; not physical board measurement or full QE kernel integration. Current conclusion remains bounded by full QE kernel integration and physical FPGA board measurement gates.",
+  "claim_boundary": "Integrated VCS RTL sidecar trace replay improves hardware-integration evidence, but it remains a compact sidecar miniapp rather than full QE kernel integration; report current implementation as weaker/not superior.",
   "claim_verdict": "not_superior_current_evidence",
   "final_claim_allowed": false,
   "gates": [
@@ -100,12 +100,12 @@
         "integrated_vivado_impl_resource": {
           "bram_tile": 0,
           "dsp": 8,
-          "ff": 295,
-          "lut": 731
+          "ff": 736,
+          "lut": 848
         },
         "integrated_vivado_impl_resource_feasible": true,
         "integrated_vivado_impl_timing_met": true,
-        "integrated_vivado_impl_wns_ns": 1.183
+        "integrated_vivado_impl_wns_ns": 0.962
       },
       "gate_id": "integrated_vivado_implementation",
       "required_for": "preliminary_fpga_implementation_feasibility",

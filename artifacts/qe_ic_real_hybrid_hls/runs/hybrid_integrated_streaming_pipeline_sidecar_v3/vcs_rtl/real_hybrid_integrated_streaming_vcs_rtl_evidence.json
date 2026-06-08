@@ -1,0 +1,72 @@
+{
+  "architecture_id": "hybrid_integrated_streaming_pipeline_sidecar_v3",
+  "blockers": [],
+  "claim_boundary": "Single integrated handwritten II=1 streaming RTL/VCS sidecar miniapp for h_psi + sum_band + AXPY motifs; not full-QE integration, board measurement, or final FPGA superiority evidence.",
+  "clock_ns": 10.0,
+  "command": "ssh ic-eda source ~/.bashrc; export LC_ALL=C LANG=C; cd /tmp/dse_real_hybrid_vcs_rtl_hybrid_integrated_streaming_pipeline_sidecar_v3_b2db5478 && vcs -full64 -sverilog qeic_real_integrated_streaming_pipeline_sidecar_rtl.sv tb_qeic_real_integrated_streaming_pipeline_sidecar_rtl.sv -o simv > vcs_compile.log 2>&1 && ./simv > vcs_run.log 2>&1",
+  "component_samples": {
+    "axpy": 64,
+    "hpsi": 96,
+    "sum_band": 128
+  },
+  "end_timestamp": "2026-06-08T13:49:56Z",
+  "kernel_name": "qeic_real_integrated_streaming_pipeline_sidecar_rtl",
+  "reason": null,
+  "returncode": 0,
+  "schema_version": "dse.qe_ic.real_hybrid_vcs_rtl_evidence.v1",
+  "start_timestamp": "2026-06-08T13:49:53Z",
+  "status": "executed",
+  "tool": "vcs",
+  "vcs_attempted": true,
+  "vcs_command": "ssh ic-eda source ~/.bashrc; export LC_ALL=C LANG=C; cd /tmp/dse_real_hybrid_vcs_rtl_hybrid_integrated_streaming_pipeline_sidecar_v3_b2db5478 && vcs -full64 -sverilog qeic_real_integrated_streaming_pipeline_sidecar_rtl.sv tb_qeic_real_integrated_streaming_pipeline_sidecar_rtl.sv -o simv > vcs_compile.log 2>&1 && ./simv > vcs_run.log 2>&1",
+  "vcs_compile_log_hash": "sha256:58095da4b1c72b31376bbc439dd786dc3cb596055fbd07be31a7ec36dd7fbb7e",
+  "vcs_compile_log_path": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_integrated_streaming_pipeline_sidecar_v3/vcs_rtl/vcs_compile.log",
+  "vcs_parsed": {
+    "blockers": [],
+    "component_cycles": {
+      "axpy": {
+        "cycles": 67,
+        "samples": 64
+      },
+      "hpsi": {
+        "cycles": 99,
+        "samples": 96
+      },
+      "sum_band": {
+        "cycles": 131,
+        "samples": 128
+      }
+    },
+    "latency_cycles": 291,
+    "rtl_status": "Pass",
+    "samples": 288,
+    "status": "parsed"
+  },
+  "vcs_passed": true,
+  "vcs_returncode": 0,
+  "vcs_rtl_project": {
+    "architecture_id": "hybrid_integrated_streaming_pipeline_sidecar_v3",
+    "claim_boundary": "Streaming II=1 integrated RTL/VCS sidecar miniapp covering h_psi, sum_band, and AXPY motifs; not full QE kernel integration or board measurement.",
+    "clock_ns": 10.0,
+    "component_samples": {
+      "axpy": 64,
+      "hpsi": 96,
+      "sum_band": 128
+    },
+    "initiation_interval_cycles": 1,
+    "kernel_name": "qeic_real_integrated_streaming_pipeline_sidecar_rtl",
+    "pipeline_latency_cycles": 4,
+    "project_dir": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_integrated_streaming_pipeline_sidecar_v3/vcs_rtl",
+    "rtl_hash": "sha256:66c97ba3ed019d136a7bd0534580d8b5c5a5c65503b21b5334b3b12ee733d13d",
+    "rtl_sv": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_integrated_streaming_pipeline_sidecar_v3/vcs_rtl/qeic_real_integrated_streaming_pipeline_sidecar_rtl.sv",
+    "samples": 288,
+    "tb_sv": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_integrated_streaming_pipeline_sidecar_v3/vcs_rtl/tb_qeic_real_integrated_streaming_pipeline_sidecar_rtl.sv",
+    "testbench_hash": "sha256:69bafbe928625d38ef560eef85031b63b81f006918113e41acecf0f2a9cda97c"
+  },
+  "vcs_run_log_hash": "sha256:cb89a15bb4e920a3521bf82d5634f7c02fa4f328f5ff86cf7f068f21ea7b2330",
+  "vcs_run_log_path": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_integrated_streaming_pipeline_sidecar_v3/vcs_rtl/vcs_run.log",
+  "vcs_stderr_log_hash": "sha256:913221ef02bbf14a2fad766f6c60a155b6f067196e1fe5c725001ac9831689b0",
+  "vcs_stderr_log_path": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_integrated_streaming_pipeline_sidecar_v3/vcs_rtl/vcs.stderr.log",
+  "vcs_stdout_log_hash": "sha256:226e6fa4d2bd7aa890a4102a88e6d567c6ea4fcc2c05a81fc6523f8633bf3e34",
+  "vcs_stdout_log_path": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_integrated_streaming_pipeline_sidecar_v3/vcs_rtl/vcs.stdout.log"
+}

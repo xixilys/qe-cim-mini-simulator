@@ -1,0 +1,93 @@
+{
+  "architecture_id": "hybrid_integrated_pipelined_sidecar_v2",
+  "blockers": [],
+  "claim_boundary": "Integrated Vivado implementation evidence for the pipelined RTL sidecar; not physical board measurement or full QE kernel integration.",
+  "clock_period_ns": 12.0,
+  "command": "ssh ic-eda source ~/.bashrc; export LC_ALL=C LANG=C; cd /tmp/dse_real_hybrid_vivado_impl_hybrid_integrated_pipelined_sidecar_v2_47bebc25 && /home/Xilinx/Vivado/2019.1/bin/vivado -mode batch -source vivado_impl.tcl",
+  "end_timestamp": "2026-06-08T13:39:03Z",
+  "fpga_part": "xc7z020clg400-1",
+  "implemented_clock_ns": 12.0,
+  "implemented_clock_source": "vivado_post_route_timing_met",
+  "kernel_name": "qeic_real_integrated_pipelined_sidecar_rtl",
+  "reason": null,
+  "returncode": 0,
+  "schema_version": "dse.qe_ic.real_hybrid_vivado_impl_evidence.v1",
+  "start_timestamp": "2026-06-08T13:38:20Z",
+  "status": "executed",
+  "tool": "vivado",
+  "tool_path": "ssh://ic-eda/home/Xilinx/Vivado/2019.1/bin/vivado",
+  "vivado_impl_attempted": true,
+  "vivado_impl_command": "ssh ic-eda source ~/.bashrc; export LC_ALL=C LANG=C; cd /tmp/dse_real_hybrid_vivado_impl_hybrid_integrated_pipelined_sidecar_v2_47bebc25 && /home/Xilinx/Vivado/2019.1/bin/vivado -mode batch -source vivado_impl.tcl",
+  "vivado_impl_evidence_json_hash": "sha256:784fc866ed28c651194fe195d633e1ec368ea2184801980acf3781dfbf5ec0d6",
+  "vivado_impl_evidence_json_path": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_integrated_pipelined_sidecar_v2/vivado_impl/real_hybrid_integrated_pipelined_vivado_impl_evidence.json",
+  "vivado_impl_passed": true,
+  "vivado_impl_project": {
+    "architecture_id": "hybrid_integrated_pipelined_sidecar_v2",
+    "claim_boundary": "Pipelined integrated RTL sidecar Vivado implementation project covering h_psi, sum_band, and AXPY motifs; not full QE kernel integration or board measurement.",
+    "clock_period_ns": 12.0,
+    "component_samples": {
+      "axpy": 64,
+      "hpsi": 96,
+      "sum_band": 128
+    },
+    "fpga_part": "xc7z020clg400-1",
+    "kernel_name": "qeic_real_integrated_pipelined_sidecar_rtl",
+    "pipeline_latency_cycles": 4,
+    "project_dir": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_integrated_pipelined_sidecar_v2/vivado_impl",
+    "rtl_hash": "sha256:3d1749d556a9b6c4238f74a250568edb9c0e7da4c3e049525a0e36dc9d778986",
+    "rtl_sv": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_integrated_pipelined_sidecar_v2/vivado_impl/qeic_real_integrated_pipelined_sidecar_rtl.sv",
+    "samples": 288,
+    "tcl_hash": "sha256:f33a22af01cabf8c88bcbefcd1da67c88660bb7b9d32ff740156629a6bccb25a",
+    "top_module": "qeic_real_integrated_pipelined_sidecar_impl_top",
+    "vivado_impl_tcl": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_integrated_pipelined_sidecar_v2/vivado_impl/vivado_impl.tcl",
+    "vivado_impl_xdc": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_integrated_pipelined_sidecar_v2/vivado_impl/vivado_impl.xdc",
+    "wrapper_hash": "sha256:386e488f96c9fe26357868b34c5b4bf542156022cf45a3c1f6ac593e66c40af1",
+    "wrapper_sv": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_integrated_pipelined_sidecar_v2/vivado_impl/qeic_real_integrated_pipelined_sidecar_impl_top.sv",
+    "xdc_hash": "sha256:0fa03be2db97fbf5da06f2bb1698a4232cc6021401583e6a0b185089e5fe1fb3"
+  },
+  "vivado_impl_returncode": 0,
+  "vivado_impl_timing_parsed": {
+    "blockers": [],
+    "status": "parsed",
+    "ths_ns": 0.0,
+    "timing_met": true,
+    "tns_ns": 0.0,
+    "tpws_ns": 0.0,
+    "whs_ns": 0.083,
+    "wns_ns": 0.946,
+    "wpws_ns": 5.5
+  },
+  "vivado_impl_timing_report_available": true,
+  "vivado_impl_utilization_parsed": {
+    "blockers": [],
+    "resource": {
+      "bram_tile": 0,
+      "dsp": 8,
+      "ff": 696,
+      "lut": 805
+    },
+    "resource_available": {
+      "bram_tile": 140,
+      "dsp": 220,
+      "ff": 106400,
+      "lut": 53200
+    },
+    "resource_feasible": true,
+    "resource_utilization_percent": {
+      "bram_tile": 0.0,
+      "dsp": 3.64,
+      "ff": 0.65,
+      "lut": 1.51
+    },
+    "status": "parsed"
+  },
+  "vivado_impl_utilization_report_available": true,
+  "vivado_stderr_log_hash": "sha256:913221ef02bbf14a2fad766f6c60a155b6f067196e1fe5c725001ac9831689b0",
+  "vivado_stderr_log_path": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_integrated_pipelined_sidecar_v2/vivado_impl/vivado.stderr.log",
+  "vivado_stdout_log_hash": "sha256:5238911a49fbcaa48f646c07b0028da155576176b7e22e844bcbbcb36a550c42",
+  "vivado_stdout_log_path": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_integrated_pipelined_sidecar_v2/vivado_impl/vivado.stdout.log",
+  "vivado_timing_summary_report_hash": "sha256:dd7a1bf60adcbf073c57a858b6c0f9f49be16bbf9a64f362c287667c388b098c",
+  "vivado_timing_summary_report_path": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_integrated_pipelined_sidecar_v2/vivado_impl/vivado_timing_summary.rpt",
+  "vivado_utilization_report_hash": "sha256:89fc8088c001493d5da256b2689cf35ef89a013ae335a668145e0a33014fb224",
+  "vivado_utilization_report_path": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_integrated_pipelined_sidecar_v2/vivado_impl/vivado_utilization.rpt"
+}

@@ -25,6 +25,8 @@ from dse_v2.experiments.qe_ic_real_opportunity.real_hybrid_hls_evidence import (
     build_real_hybrid_architecture_specs,
     build_trace_replay_workflow_accounting,
     classify_real_hybrid_vs_gpu,
+    materialize_integrated_pipelined_vcs_sidecar_project,
+    materialize_integrated_streaming_vcs_sidecar_project,
     materialize_integrated_vcs_sidecar_project,
     materialize_vcs_rtl_project,
     merge_combined_vcs_sidecar_comparisons,
@@ -198,8 +200,29 @@ def run_integrated_vcs_sidecar(
     *,
     out_dir: Path,
     timeout_seconds: int,
+    architecture_id: str = "hybrid_integrated_combined_sidecar_v1",
 ) -> dict[str, Any]:
-    project = materialize_integrated_vcs_sidecar_project(specs, out_dir / "runs")
+    if architecture_id == "hybrid_integrated_streaming_pipeline_sidecar_v3":
+        project = materialize_integrated_streaming_vcs_sidecar_project(specs, out_dir / "runs")
+        evidence_name = "real_hybrid_integrated_streaming_vcs_rtl_evidence.json"
+        claim_boundary = (
+            "Single integrated handwritten II=1 streaming RTL/VCS sidecar miniapp for h_psi + sum_band + AXPY motifs; "
+            "not full-QE integration, board measurement, or final FPGA superiority evidence."
+        )
+    elif architecture_id == "hybrid_integrated_pipelined_sidecar_v2":
+        project = materialize_integrated_pipelined_vcs_sidecar_project(specs, out_dir / "runs")
+        evidence_name = "real_hybrid_integrated_pipelined_vcs_rtl_evidence.json"
+        claim_boundary = (
+            "Single integrated handwritten pipelined RTL/VCS sidecar miniapp for h_psi + sum_band + AXPY motifs; "
+            "not full-QE integration, board measurement, or final FPGA superiority evidence."
+        )
+    else:
+        project = materialize_integrated_vcs_sidecar_project(specs, out_dir / "runs")
+        evidence_name = "real_hybrid_integrated_vcs_rtl_evidence.json"
+        claim_boundary = (
+            "Single integrated handwritten RTL/VCS sidecar miniapp for h_psi + sum_band + AXPY motifs; "
+            "not full-QE integration, board measurement, or final FPGA superiority evidence."
+        )
     project_dir = Path(project["project_dir"])
     run_id = _safe_name(project["architecture_id"])
     remote_dir = f"/tmp/dse_real_hybrid_vcs_rtl_{run_id}_{hashlib.sha256(str(time.time()).encode()).hexdigest()[:8]}"
@@ -256,10 +279,6 @@ def run_integrated_vcs_sidecar(
     parsed = parse_vcs_rtl_run_log(run_text)
     vcs_passed = parsed.get("status") == "parsed" and parsed.get("rtl_status") == "Pass" and result.returncode == 0
     command = f"ssh {REMOTE_ALIAS} {remote_cmd}"
-    claim_boundary = (
-        "Single integrated handwritten RTL/VCS sidecar miniapp for h_psi + sum_band + AXPY motifs; "
-        "not full-QE integration, board measurement, or final FPGA superiority evidence."
-    )
     row: dict[str, Any] = {
         "schema_version": SCHEMA_VERSION,
         "architecture_id": project.get("architecture_id"),
@@ -290,9 +309,9 @@ def run_integrated_vcs_sidecar(
         "blockers": [] if vcs_passed else list(parsed.get("blockers") or ["vcs_rtl_sim_failed"]),
         "claim_boundary": claim_boundary,
     }
-    _write_json(project_dir / "real_hybrid_integrated_vcs_rtl_evidence.json", row)
-    row["vcs_evidence_json_path"] = str(project_dir / "real_hybrid_integrated_vcs_rtl_evidence.json")
-    row["vcs_evidence_json_hash"] = _sha256_file(project_dir / "real_hybrid_integrated_vcs_rtl_evidence.json")
+    _write_json(project_dir / evidence_name, row)
+    row["vcs_evidence_json_path"] = str(project_dir / evidence_name)
+    row["vcs_evidence_json_hash"] = _sha256_file(project_dir / evidence_name)
     return row
 
 
@@ -301,11 +320,20 @@ def run_campaign(args: argparse.Namespace) -> dict[str, Any]:
     summary_path = args.summary or out_dir / "real_hybrid_hls_summary.json"
     summary = _load_summary(summary_path)
     specs = {str(spec["architecture_id"]): spec for spec in build_real_hybrid_architecture_specs()}
-    integrated_architecture_id = "hybrid_integrated_combined_sidecar_v1"
-    if args.architecture_id == integrated_architecture_id:
-        result = run_integrated_vcs_sidecar(list(specs.values()), out_dir=out_dir, timeout_seconds=args.timeout_seconds)
+    integrated_architecture_ids = {
+        "hybrid_integrated_combined_sidecar_v1",
+        "hybrid_integrated_pipelined_sidecar_v2",
+        "hybrid_integrated_streaming_pipeline_sidecar_v3",
+    }
+    if args.architecture_id in integrated_architecture_ids:
+        result = run_integrated_vcs_sidecar(list(specs.values()), out_dir=out_dir, timeout_seconds=args.timeout_seconds, architecture_id=args.architecture_id)
         merged = json.loads(json.dumps(summary))
-        merged["integrated_vcs_sidecar_result"] = result
+        if args.architecture_id == "hybrid_integrated_streaming_pipeline_sidecar_v3":
+            merged["integrated_streaming_vcs_sidecar_result"] = result
+        elif args.architecture_id == "hybrid_integrated_pipelined_sidecar_v2":
+            merged["integrated_pipelined_vcs_sidecar_result"] = result
+        else:
+            merged["integrated_vcs_sidecar_result"] = result
     elif args.architecture_id in specs:
         result = run_vcs_rtl_for_architecture(specs[args.architecture_id], out_dir=out_dir, timeout_seconds=args.timeout_seconds)
         merged = merge_vcs_rtl_evidence_into_summary(summary, result)
@@ -336,7 +364,13 @@ def run_campaign(args: argparse.Namespace) -> dict[str, Any]:
         classification = classify_real_hybrid_vs_gpu(baseline, rows)
         combined_vcs_sidecar_accounting = build_combined_vcs_sidecar_accounting(baseline, gpu_runs_root, rows)
         classification = merge_combined_vcs_sidecar_comparisons(baseline, classification, combined_vcs_sidecar_accounting)
-        integrated_vcs_sidecar_accounting = build_integrated_vcs_sidecar_accounting(baseline, gpu_runs_root, merged.get("integrated_vcs_sidecar_result"))
+        integrated_vcs_sidecar_accounting = []
+        for integrated_result in (
+            merged.get("integrated_vcs_sidecar_result"),
+            merged.get("integrated_pipelined_vcs_sidecar_result"),
+            merged.get("integrated_streaming_vcs_sidecar_result"),
+        ):
+            integrated_vcs_sidecar_accounting.extend(build_integrated_vcs_sidecar_accounting(baseline, gpu_runs_root, integrated_result))
         classification = merge_integrated_vcs_sidecar_comparisons(baseline, classification, integrated_vcs_sidecar_accounting)
         merged["evidence_rows"] = rows
         merged["combined_vcs_sidecar_accounting"] = combined_vcs_sidecar_accounting

@@ -1471,6 +1471,42 @@ def test_merge_integrated_vivado_impl_evidence_into_summary_and_claim_closure():
     assert "not board measurement" in merged["claim_boundary"]
 
 
+def test_merge_integrated_vivado_impl_evidence_moves_legacy_non_v1_to_architecture_key():
+    from dse_v2.experiments.qe_ic_real_opportunity.real_hybrid_hls_evidence import (
+        merge_integrated_vivado_impl_evidence_into_summary,
+    )
+
+    summary = {
+        "integrated_vivado_impl_result": {
+            "architecture_id": "hybrid_integrated_pipelined_sidecar_v2",
+            "vivado_impl_attempted": True,
+            "vivado_impl_passed": True,
+            "vivado_impl_utilization_parsed": {"resource": {"lut": 805, "ff": 696, "bram_tile": 0, "dsp": 8}, "resource_feasible": True, "blockers": []},
+            "vivado_impl_timing_parsed": {"wns_ns": 0.946, "timing_met": True, "blockers": []},
+        },
+        "classification": {"preliminary_label": "fpga_hybrid_weaker", "architecture_comparisons": []},
+        "evidence_rows": [],
+    }
+    streaming_result = {
+        "architecture_id": "hybrid_integrated_streaming_pipeline_sidecar_v3",
+        "vivado_impl_attempted": True,
+        "vivado_impl_passed": True,
+        "vivado_impl_utilization_parsed": {"resource": {"lut": 848, "ff": 736, "bram_tile": 0, "dsp": 8}, "resource_feasible": True, "blockers": []},
+        "vivado_impl_timing_parsed": {"wns_ns": 0.962, "timing_met": True, "blockers": []},
+        "claim_boundary": "Streaming Vivado implementation evidence; not final hardware claim.",
+    }
+
+    merged = merge_integrated_vivado_impl_evidence_into_summary(summary, streaming_result)
+
+    assert "integrated_vivado_impl_result" not in merged
+    assert merged["integrated_pipelined_vivado_impl_result"]["architecture_id"] == "hybrid_integrated_pipelined_sidecar_v2"
+    assert merged["integrated_streaming_vivado_impl_result"]["architecture_id"] == "hybrid_integrated_streaming_pipeline_sidecar_v3"
+    assert set(merged["classification"]["integrated_vivado_impl_architecture_ids"]) == {
+        "hybrid_integrated_pipelined_sidecar_v2",
+        "hybrid_integrated_streaming_pipeline_sidecar_v3",
+    }
+
+
 def test_real_hybrid_vivado_impl_runner_merges_result_into_summary(tmp_path: Path, monkeypatch):
     import argparse
     import importlib.util
@@ -1504,7 +1540,7 @@ def test_real_hybrid_vivado_impl_runner_merges_result_into_summary(tmp_path: Pat
         encoding="utf-8",
     )
 
-    def fake_run(*, out_dir, fpga_part, clock_period_ns, timeout_seconds):
+    def fake_run(*, out_dir, fpga_part, clock_period_ns, timeout_seconds, architecture_id="hybrid_integrated_combined_sidecar_v1"):
         return {
             "architecture_id": "hybrid_integrated_combined_sidecar_v1",
             "vivado_impl_attempted": True,
@@ -1708,7 +1744,7 @@ def test_real_hybrid_vivado_impl_runner_recomputes_integrated_trace_replay_with_
         encoding="utf-8",
     )
 
-    def fake_run(*, out_dir, fpga_part, clock_period_ns, timeout_seconds):
+    def fake_run(*, out_dir, fpga_part, clock_period_ns, timeout_seconds, architecture_id="hybrid_integrated_combined_sidecar_v1"):
         return {
             "architecture_id": "hybrid_integrated_combined_sidecar_v1",
             "vivado_impl_attempted": True,
@@ -1808,7 +1844,7 @@ def test_real_hybrid_vivado_impl_runner_drops_stale_synthetic_sidecar_comparison
         encoding="utf-8",
     )
 
-    def fake_run(*, out_dir, fpga_part, clock_period_ns, timeout_seconds):
+    def fake_run(*, out_dir, fpga_part, clock_period_ns, timeout_seconds, architecture_id="hybrid_integrated_combined_sidecar_v1"):
         return {
             "architecture_id": "hybrid_integrated_combined_sidecar_v1",
             "vivado_impl_attempted": True,
@@ -1862,3 +1898,190 @@ def test_render_real_hybrid_hls_report_distinguishes_vivado_implemented_best_spe
     assert "Best Vivado-implemented architecture: `hybrid_integrated_combined_sidecar_v1`" in report
     assert "Best Vivado-implemented trace-replay speedup vs GPU: `1.55047x`" in report
     assert "implemented clock `20.0` ns" in report
+
+
+def test_materialize_integrated_pipelined_vcs_sidecar_project_contains_pipeline_and_markers(tmp_path: Path):
+    from dse_v2.experiments.qe_ic_real_opportunity.real_hybrid_hls_evidence import (
+        materialize_integrated_pipelined_vcs_sidecar_project,
+    )
+
+    project = materialize_integrated_pipelined_vcs_sidecar_project(build_real_hybrid_architecture_specs(), tmp_path)
+
+    assert project["architecture_id"] == "hybrid_integrated_pipelined_sidecar_v2"
+    assert project["pipeline_latency_cycles"] >= 4
+    rtl = Path(project["rtl_sv"]).read_text()
+    tb = Path(project["tb_sv"]).read_text()
+    assert "module qeic_real_integrated_pipelined_sidecar_rtl" in rtl
+    assert "stage1_valid" in rtl
+    assert "stage2_valid" in rtl
+    assert "stage3_valid" in rtl
+    assert "stage4_valid" in rtl
+    assert "DSE_REAL_RTL_PASS qeic_real_integrated_pipelined_sidecar_rtl" in tb
+    assert "DSE_REAL_RTL_COMPONENT hpsi" in tb
+    assert "DSE_REAL_RTL_COMPONENT sum_band" in tb
+    assert "DSE_REAL_RTL_COMPONENT axpy" in tb
+    assert "stub" not in rtl.lower()
+    assert project["samples"] == 96 + 128 + 64
+    assert project["component_samples"] == {"hpsi": 96, "sum_band": 128, "axpy": 64}
+
+
+def test_materialize_integrated_pipelined_vivado_impl_project_uses_pipelined_rtl(tmp_path: Path):
+    from dse_v2.experiments.qe_ic_real_opportunity.real_hybrid_hls_evidence import (
+        materialize_integrated_pipelined_vivado_impl_project,
+    )
+
+    project = materialize_integrated_pipelined_vivado_impl_project(
+        build_real_hybrid_architecture_specs(), tmp_path, fpga_part="xc7z020clg400-1", clock_period_ns=10.0
+    )
+
+    assert project["architecture_id"] == "hybrid_integrated_pipelined_sidecar_v2"
+    assert project["top_module"] == "qeic_real_integrated_pipelined_sidecar_impl_top"
+    rtl = Path(project["rtl_sv"]).read_text()
+    wrapper = Path(project["wrapper_sv"]).read_text()
+    tcl = Path(project["vivado_impl_tcl"]).read_text()
+    assert "module qeic_real_integrated_pipelined_sidecar_rtl" in rtl
+    assert "module qeic_real_integrated_pipelined_sidecar_impl_top" in wrapper
+    assert "qeic_real_integrated_pipelined_sidecar_rtl" in wrapper
+    assert "synth_design -top qeic_real_integrated_pipelined_sidecar_impl_top -part xc7z020clg400-1" in tcl
+    assert "create_clock -period 10.000" in Path(project["vivado_impl_xdc"]).read_text()
+
+
+def test_materialize_integrated_streaming_vcs_sidecar_project_contains_ii1_markers(tmp_path: Path):
+    from dse_v2.experiments.qe_ic_real_opportunity.real_hybrid_hls_evidence import (
+        materialize_integrated_streaming_vcs_sidecar_project,
+    )
+
+    project = materialize_integrated_streaming_vcs_sidecar_project(build_real_hybrid_architecture_specs(), tmp_path)
+
+    assert project["architecture_id"] == "hybrid_integrated_streaming_pipeline_sidecar_v3"
+    assert project["pipeline_latency_cycles"] == 4
+    assert project["initiation_interval_cycles"] == 1
+    rtl = Path(project["rtl_sv"]).read_text()
+    tb = Path(project["tb_sv"]).read_text()
+    assert "module qeic_real_integrated_streaming_pipeline_sidecar_rtl" in rtl
+    assert "accepted_count" in rtl
+    assert "completed_count" in rtl
+    assert "stage1_valid" in rtl and "stage2_valid" in rtl and "stage3_valid" in rtl
+    assert "TOTAL_SAMPLES + PIPELINE_LATENCY - 1" not in tb  # baked into generated evidence.
+    assert "EXPECTED_LATENCY = 291" in tb
+    assert "DSE_REAL_RTL_PASS qeic_real_integrated_streaming_pipeline_sidecar_rtl" in tb
+    assert "DSE_REAL_RTL_COMPONENT hpsi samples=%0d cycles=%0d" in tb
+    assert "stub" not in rtl.lower()
+    assert project["samples"] == 96 + 128 + 64
+    assert project["component_samples"] == {"hpsi": 96, "sum_band": 128, "axpy": 64}
+
+
+def test_materialize_integrated_streaming_vivado_impl_project_uses_streaming_rtl(tmp_path: Path):
+    from dse_v2.experiments.qe_ic_real_opportunity.real_hybrid_hls_evidence import (
+        materialize_integrated_streaming_vivado_impl_project,
+    )
+
+    project = materialize_integrated_streaming_vivado_impl_project(
+        build_real_hybrid_architecture_specs(), tmp_path, fpga_part="xc7z020clg400-1", clock_period_ns=12.0
+    )
+
+    assert project["architecture_id"] == "hybrid_integrated_streaming_pipeline_sidecar_v3"
+    assert project["top_module"] == "qeic_real_integrated_streaming_pipeline_sidecar_impl_top"
+    assert project["initiation_interval_cycles"] == 1
+    rtl = Path(project["rtl_sv"]).read_text()
+    wrapper = Path(project["wrapper_sv"]).read_text()
+    tcl = Path(project["vivado_impl_tcl"]).read_text()
+    assert "module qeic_real_integrated_streaming_pipeline_sidecar_rtl" in rtl
+    assert "module qeic_real_integrated_streaming_pipeline_sidecar_impl_top" in wrapper
+    assert "qeic_real_integrated_streaming_pipeline_sidecar_rtl" in wrapper
+    assert "synth_design -top qeic_real_integrated_streaming_pipeline_sidecar_impl_top -part xc7z020clg400-1" in tcl
+    assert "create_clock -period 12.000" in Path(project["vivado_impl_xdc"]).read_text()
+
+
+def test_build_integrated_vcs_sidecar_accounting_preserves_pipelined_architecture_id(tmp_path: Path):
+    run_dir = tmp_path / "runs" / "case-a" / "gpu_only_baseline"
+    run_dir.mkdir(parents=True)
+    (run_dir / "run_001.stdout.log").write_text(
+        """
+     h_psi        :      0.10s CPU      0.30s WALL (       4 calls)
+     sum_band     :      0.01s CPU      0.20s WALL (       5 calls)
+     mix_rho      :      0.02s CPU      0.10s WALL (       3 calls)
+     PWSCF        :      0.90s CPU      1.00s WALL
+""",
+        encoding="utf-8",
+    )
+    gpu_baseline = {"measurements_are_real": True, "baseline_records": [{"case_id": "case-a", "runtime_seconds_mean": 1.0}]}
+    integrated_result = {
+        "architecture_id": "hybrid_integrated_pipelined_sidecar_v2",
+        "vcs_passed": True,
+        "implemented_clock_ns": 10.0,
+        "implemented_clock_source": "vivado_post_route_timing_met",
+        "vcs_parsed": {
+            "status": "parsed",
+            "rtl_status": "Pass",
+            "latency_cycles": 300,
+            "samples": 288,
+            "component_cycles": {
+                "hpsi": {"samples": 96, "cycles": 100},
+                "sum_band": {"samples": 128, "cycles": 132},
+                "axpy": {"samples": 64, "cycles": 68},
+            },
+            "blockers": [],
+        },
+    }
+
+    accounting = build_integrated_vcs_sidecar_accounting(gpu_baseline, tmp_path / "runs", integrated_result)
+
+    assert accounting[0]["architecture_id"] == "hybrid_integrated_pipelined_sidecar_v2"
+    assert accounting[0]["integrated_latency_cycles"] == 300
+    assert accounting[0]["fpga_clock_ns"] == 10.0
+    assert accounting[0]["fpga_clock_source"] == "vivado_post_route_timing_met"
+
+
+def test_build_integrated_vcs_sidecar_accounting_marks_streaming_architecture(tmp_path: Path):
+    run_dir = tmp_path / "runs" / "case-a" / "gpu_only_baseline"
+    run_dir.mkdir(parents=True)
+    (run_dir / "run_001.stdout.log").write_text(
+        """
+     h_psi        :      0.10s CPU      0.30s WALL (       4 calls)
+     sum_band     :      0.01s CPU      0.20s WALL (       5 calls)
+     mix_rho      :      0.02s CPU      0.10s WALL (       3 calls)
+     PWSCF        :      0.90s CPU      1.00s WALL
+""",
+        encoding="utf-8",
+    )
+    gpu_baseline = {"measurements_are_real": True, "baseline_records": [{"case_id": "case-a", "runtime_seconds_mean": 1.0}]}
+    integrated_result = {
+        "architecture_id": "hybrid_integrated_streaming_pipeline_sidecar_v3",
+        "vcs_passed": True,
+        "implemented_clock_ns": 12.0,
+        "implemented_clock_source": "vivado_post_route_timing_met",
+        "vcs_parsed": {
+            "status": "parsed",
+            "rtl_status": "Pass",
+            "latency_cycles": 291,
+            "samples": 288,
+            "component_cycles": {
+                "hpsi": {"samples": 96, "cycles": 99},
+                "sum_band": {"samples": 128, "cycles": 131},
+                "axpy": {"samples": 64, "cycles": 67},
+            },
+            "blockers": [],
+        },
+    }
+
+    accounting = build_integrated_vcs_sidecar_accounting(gpu_baseline, tmp_path / "runs", integrated_result)
+
+    assert accounting[0]["architecture_id"] == "hybrid_integrated_streaming_pipeline_sidecar_v3"
+    assert accounting[0]["implementation_coverage"] == "integrated_streaming_pipeline_sidecar_motif"
+    assert accounting[0]["integrated_latency_cycles"] == 291
+    assert accounting[0]["fpga_clock_ns"] == 12.0
+
+
+def test_vivado_impl_runner_accepts_integrated_architecture_ids():
+    import importlib.util
+
+    script_path = Path(__file__).resolve().parents[1] / "scripts" / "dse" / "run_qe_ic_real_hybrid_vivado_impl.py"
+    spec = importlib.util.spec_from_file_location("run_qe_ic_real_hybrid_vivado_impl", script_path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    args = module.parse_args(["--architecture-id", "hybrid_integrated_streaming_pipeline_sidecar_v3"])
+
+    assert args.architecture_id == "hybrid_integrated_streaming_pipeline_sidecar_v3"
