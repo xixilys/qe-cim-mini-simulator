@@ -45,7 +45,7 @@
   "csynth_report_hash": "sha256:8a46bc489237bfe55f679b83ddcdd9cb1743237ebcd5f2a3e34d11c3cdff7424",
   "csynth_report_path": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_sum_band_density_accumulator_v1/hybrid_sum_band_density_accumulator_v1/csynth.rpt",
   "end_timestamp": "2026-06-08T11:08:54Z",
-  "evidence_json_hash": "sha256:b290853079bcd04ca737bd35f998efce7efc69947c0aaaa394b37081ea9ed6e8",
+  "evidence_json_hash": "sha256:7310a3d64af020c07fc98768acfb70f31751691f3e831ddea11a76128ed0b464",
   "evidence_json_path": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_sum_band_density_accumulator_v1/hybrid_sum_band_density_accumulator_v1/real_hybrid_hls_evidence.json",
   "evidence_level": "vivado_hls_csim_csynth_cosim_attempt",
   "fpga_part": "xc7z020clg400-1",
@@ -120,14 +120,17 @@
         "full_qe_kernel_equivalent_missing"
       ],
       "case_id": "ic_sio2_dielectric_6atom_scf_v0",
-      "claim_boundary": "Optimistic trace replay of measured QE timers using real HLS C/RTL cosim latency; compact miniapp/routine evidence still requires full QE integration before final claims.",
+      "claim_boundary": "Optimistic trace replay of measured QE timers using real HLS C/RTL cosim or C-synth latency; compact miniapp/routine evidence still requires full QE integration before final claims.",
       "cpu_retained_seconds": 1.6705756829919605,
+      "fpga_clock_ns": 8.75,
       "fpga_compute_seconds": 0.0013303500000000001,
       "fpga_kernel_seconds_per_transaction": 4.4345e-05,
+      "fpga_latency_cycles_per_transaction": 5068,
       "fpga_transaction_count_estimate": 30.0,
       "host_device_transfer_seconds": 0.0015,
       "hybrid_workflow_runtime_seconds": 1.6764060329919606,
       "implementation_coverage": "qe_routine_equivalent_miniapp",
+      "latency_source": "vivado_hls_cosim",
       "launch_overhead_seconds": 0.0015,
       "mapped_timer_call_count_mean": {
         "sum_band": 30.0
@@ -154,15 +157,56 @@
       "blockers": [
         "full_qe_kernel_equivalent_missing"
       ],
+      "case_id": "ic_sio2_dielectric_6atom_scf_v0",
+      "claim_boundary": "VCS RTL latency sensitivity over measured QE timer traces; standalone handwritten RTL miniapp evidence is not full-QE integration, board measurement, or final FPGA superiority evidence.",
+      "cpu_retained_seconds": 1.6705756829919605,
+      "fpga_clock_ns": 8.75,
+      "fpga_compute_seconds": 3.3600000000000004e-05,
+      "fpga_kernel_seconds_per_transaction": 1.12e-06,
+      "fpga_latency_cycles_per_transaction": 128,
+      "fpga_transaction_count_estimate": 30.0,
+      "host_device_transfer_seconds": 0.0015,
+      "hybrid_workflow_runtime_seconds": 1.6751092829919607,
+      "implementation_coverage": "qe_routine_equivalent_miniapp",
+      "latency_source": "vcs_rtl",
+      "launch_overhead_seconds": 0.0015,
+      "mapped_timer_call_count_mean": {
+        "sum_band": 30.0
+      },
+      "mapped_timer_names": [
+        "sum_band"
+      ],
+      "mapped_timer_wall_seconds_mean": {
+        "sum_band": 0.25666666666666665
+      },
+      "qe_pwscf_wall_seconds_mean": 1.6866666666666668,
+      "replaceable_seconds_mean": 0.25666666666666665,
+      "scf_control_seconds": 0.4672423496586271,
+      "source_gpu_runtime_seconds_mean": 1.927242349658627,
+      "status": "trace_replay_vcs_rtl_sensitivity",
+      "synchronization_seconds": 0.0015,
+      "timer_trace_paths": [
+        "artifacts/qe_ic_7day_prelim/runs/ic_sio2_dielectric_6atom_scf_v0/gpu_only_baseline/run_001.stdout.log",
+        "artifacts/qe_ic_7day_prelim/runs/ic_sio2_dielectric_6atom_scf_v0/gpu_only_baseline/run_002.stdout.log",
+        "artifacts/qe_ic_7day_prelim/runs/ic_sio2_dielectric_6atom_scf_v0/gpu_only_baseline/run_003.stdout.log"
+      ]
+    },
+    {
+      "blockers": [
+        "full_qe_kernel_equivalent_missing"
+      ],
       "case_id": "ic_al_interconnect_4atom_scf_v0",
-      "claim_boundary": "Optimistic trace replay of measured QE timers using real HLS C/RTL cosim latency; compact miniapp/routine evidence still requires full QE integration before final claims.",
+      "claim_boundary": "Optimistic trace replay of measured QE timers using real HLS C/RTL cosim or C-synth latency; compact miniapp/routine evidence still requires full QE integration before final claims.",
       "cpu_retained_seconds": 0.6665280110047509,
+      "fpga_clock_ns": 8.75,
       "fpga_compute_seconds": 0.00026607000000000003,
       "fpga_kernel_seconds_per_transaction": 4.4345e-05,
+      "fpga_latency_cycles_per_transaction": 5068,
       "fpga_transaction_count_estimate": 6.0,
       "host_device_transfer_seconds": 0.00030000000000000003,
       "hybrid_workflow_runtime_seconds": 0.6676940810047508,
       "implementation_coverage": "qe_routine_equivalent_miniapp",
+      "latency_source": "vivado_hls_cosim",
       "launch_overhead_seconds": 0.00030000000000000003,
       "mapped_timer_call_count_mean": {
         "sum_band": 6.0
@@ -189,15 +233,56 @@
       "blockers": [
         "full_qe_kernel_equivalent_missing"
       ],
+      "case_id": "ic_al_interconnect_4atom_scf_v0",
+      "claim_boundary": "VCS RTL latency sensitivity over measured QE timer traces; standalone handwritten RTL miniapp evidence is not full-QE integration, board measurement, or final FPGA superiority evidence.",
+      "cpu_retained_seconds": 0.6665280110047509,
+      "fpga_clock_ns": 8.75,
+      "fpga_compute_seconds": 6.72e-06,
+      "fpga_kernel_seconds_per_transaction": 1.12e-06,
+      "fpga_latency_cycles_per_transaction": 128,
+      "fpga_transaction_count_estimate": 6.0,
+      "host_device_transfer_seconds": 0.00030000000000000003,
+      "hybrid_workflow_runtime_seconds": 0.6674347310047508,
+      "implementation_coverage": "qe_routine_equivalent_miniapp",
+      "latency_source": "vcs_rtl",
+      "launch_overhead_seconds": 0.00030000000000000003,
+      "mapped_timer_call_count_mean": {
+        "sum_band": 6.0
+      },
+      "mapped_timer_names": [
+        "sum_band"
+      ],
+      "mapped_timer_wall_seconds_mean": {
+        "sum_band": 0.03333333333333333
+      },
+      "qe_pwscf_wall_seconds_mean": 0.4633333333333333,
+      "replaceable_seconds_mean": 0.03333333333333333,
+      "scf_control_seconds": 0.3898613443380842,
+      "source_gpu_runtime_seconds_mean": 0.6998613443380842,
+      "status": "trace_replay_vcs_rtl_sensitivity",
+      "synchronization_seconds": 0.00030000000000000003,
+      "timer_trace_paths": [
+        "artifacts/qe_ic_7day_prelim/runs/ic_al_interconnect_4atom_scf_v0/gpu_only_baseline/run_001.stdout.log",
+        "artifacts/qe_ic_7day_prelim/runs/ic_al_interconnect_4atom_scf_v0/gpu_only_baseline/run_002.stdout.log",
+        "artifacts/qe_ic_7day_prelim/runs/ic_al_interconnect_4atom_scf_v0/gpu_only_baseline/run_003.stdout.log"
+      ]
+    },
+    {
+      "blockers": [
+        "full_qe_kernel_equivalent_missing"
+      ],
       "case_id": "ic_si_bulk_2atom_scf_v0",
-      "claim_boundary": "Optimistic trace replay of measured QE timers using real HLS C/RTL cosim latency; compact miniapp/routine evidence still requires full QE integration before final claims.",
+      "claim_boundary": "Optimistic trace replay of measured QE timers using real HLS C/RTL cosim or C-synth latency; compact miniapp/routine evidence still requires full QE integration before final claims.",
       "cpu_retained_seconds": 0.5549973420011035,
+      "fpga_clock_ns": 8.75,
       "fpga_compute_seconds": 0.000221725,
       "fpga_kernel_seconds_per_transaction": 4.4345e-05,
+      "fpga_latency_cycles_per_transaction": 5068,
       "fpga_transaction_count_estimate": 5.0,
       "host_device_transfer_seconds": 0.00025,
       "hybrid_workflow_runtime_seconds": 0.5559690670011034,
       "implementation_coverage": "qe_routine_equivalent_miniapp",
+      "latency_source": "vivado_hls_cosim",
       "launch_overhead_seconds": 0.00025,
       "mapped_timer_call_count_mean": {
         "sum_band": 5.0
@@ -213,6 +298,44 @@
       "scf_control_seconds": 0.4149973420011035,
       "source_gpu_runtime_seconds_mean": 0.5683306753344368,
       "status": "trace_replay_optimistic",
+      "synchronization_seconds": 0.00025,
+      "timer_trace_paths": [
+        "artifacts/qe_ic_7day_prelim/runs/ic_si_bulk_2atom_scf_v0/gpu_only_baseline/run_001.stdout.log",
+        "artifacts/qe_ic_7day_prelim/runs/ic_si_bulk_2atom_scf_v0/gpu_only_baseline/run_002.stdout.log",
+        "artifacts/qe_ic_7day_prelim/runs/ic_si_bulk_2atom_scf_v0/gpu_only_baseline/run_003.stdout.log"
+      ]
+    },
+    {
+      "blockers": [
+        "full_qe_kernel_equivalent_missing"
+      ],
+      "case_id": "ic_si_bulk_2atom_scf_v0",
+      "claim_boundary": "VCS RTL latency sensitivity over measured QE timer traces; standalone handwritten RTL miniapp evidence is not full-QE integration, board measurement, or final FPGA superiority evidence.",
+      "cpu_retained_seconds": 0.5549973420011035,
+      "fpga_clock_ns": 8.75,
+      "fpga_compute_seconds": 5.600000000000001e-06,
+      "fpga_kernel_seconds_per_transaction": 1.12e-06,
+      "fpga_latency_cycles_per_transaction": 128,
+      "fpga_transaction_count_estimate": 5.0,
+      "host_device_transfer_seconds": 0.00025,
+      "hybrid_workflow_runtime_seconds": 0.5557529420011035,
+      "implementation_coverage": "qe_routine_equivalent_miniapp",
+      "latency_source": "vcs_rtl",
+      "launch_overhead_seconds": 0.00025,
+      "mapped_timer_call_count_mean": {
+        "sum_band": 5.0
+      },
+      "mapped_timer_names": [
+        "sum_band"
+      ],
+      "mapped_timer_wall_seconds_mean": {
+        "sum_band": 0.013333333333333334
+      },
+      "qe_pwscf_wall_seconds_mean": 0.31333333333333335,
+      "replaceable_seconds_mean": 0.013333333333333334,
+      "scf_control_seconds": 0.4149973420011035,
+      "source_gpu_runtime_seconds_mean": 0.5683306753344368,
+      "status": "trace_replay_vcs_rtl_sensitivity",
       "synchronization_seconds": 0.00025,
       "timer_trace_paths": [
         "artifacts/qe_ic_7day_prelim/runs/ic_si_bulk_2atom_scf_v0/gpu_only_baseline/run_001.stdout.log",

@@ -1330,16 +1330,54 @@ def _mean(values: Sequence[float]) -> float | None:
     return sum(clean) / len(clean)
 
 
-def _microkernel_seconds(row: Mapping[str, Any]) -> float | None:
+def _clock_ns_from_row(row: Mapping[str, Any]) -> float | None:
     parsed = row.get("csynth_parsed") if isinstance(row.get("csynth_parsed"), Mapping) else {}
-    cosim = row.get("cosim_parsed") if isinstance(row.get("cosim_parsed"), Mapping) else {}
     clock_ns = parsed.get("estimated_clock_ns") or parsed.get("target_clock_ns") if isinstance(parsed, Mapping) else None
-    latency = cosim.get("latency_cycles_max") if isinstance(cosim, Mapping) else None
-    if latency is None and isinstance(parsed, Mapping):
-        latency = parsed.get("latency_cycles_max")
-    if not isinstance(clock_ns, (int, float)) or not isinstance(latency, (int, float)):
+    if not isinstance(clock_ns, (int, float)):
         return None
-    return float(clock_ns) * float(latency) * 1.0e-9
+    return float(clock_ns)
+
+
+def _trace_replay_latency_candidates(row: Mapping[str, Any]) -> list[dict[str, Any]]:
+    clock_ns = _clock_ns_from_row(row)
+    if clock_ns is None:
+        return []
+    candidates: list[dict[str, Any]] = []
+    fields = _performance_latency_fields(row)
+    latency = fields.get("performance_latency_cycles_max")
+    source = str(fields.get("performance_latency_source") or "missing")
+    if isinstance(latency, (int, float)) and source != "missing":
+        candidates.append(
+            {
+                "latency_source": source,
+                "latency_cycles": int(latency),
+                "clock_ns": clock_ns,
+                "kernel_seconds": float(clock_ns) * float(latency) * 1.0e-9,
+                "status": "trace_replay_optimistic",
+                "claim_boundary": "Optimistic trace replay of measured QE timers using real HLS C/RTL cosim or C-synth latency; compact miniapp/routine evidence still requires full QE integration before final claims.",
+            }
+        )
+    vcs = row.get("vcs_parsed") if isinstance(row.get("vcs_parsed"), Mapping) else {}
+    vcs_latency = vcs.get("latency_cycles") if isinstance(vcs, Mapping) else None
+    if row.get("vcs_passed") is True and isinstance(vcs_latency, (int, float)):
+        candidates.append(
+            {
+                "latency_source": "vcs_rtl",
+                "latency_cycles": int(vcs_latency),
+                "clock_ns": clock_ns,
+                "kernel_seconds": float(clock_ns) * float(vcs_latency) * 1.0e-9,
+                "status": "trace_replay_vcs_rtl_sensitivity",
+                "claim_boundary": "VCS RTL latency sensitivity over measured QE timer traces; standalone handwritten RTL miniapp evidence is not full-QE integration, board measurement, or final FPGA superiority evidence.",
+            }
+        )
+    return candidates
+
+
+def _microkernel_seconds(row: Mapping[str, Any]) -> float | None:
+    candidates = _trace_replay_latency_candidates(row)
+    if not candidates:
+        return None
+    return float(candidates[0]["kernel_seconds"])
 
 
 def _performance_latency_fields(row: Mapping[str, Any]) -> dict[str, Any]:
@@ -1423,18 +1461,18 @@ def render_real_hybrid_hls_report(summary: Mapping[str, Any]) -> str:
     lines.append("## Workflow accounting result")
     lines.append("")
     lines.append(
-        "Trace replay used measured QE full-SCF timer logs from `artifacts/qe_ic_7day_prelim/runs/<case>/gpu_only_baseline/run_*.stdout.log` plus real HLS C/RTL cosim latency. Rows marked `partial_sidecar_motif` or `qe_routine_equivalent_miniapp` are not final full-QE integration evidence."
+        "Trace replay used measured QE full-SCF timer logs from `artifacts/qe_ic_7day_prelim/runs/<case>/gpu_only_baseline/run_*.stdout.log` plus real HLS C/RTL cosim latency; rows with handwritten RTL evidence also include a VCS RTL latency-sensitivity channel. Rows marked `partial_sidecar_motif` or `qe_routine_equivalent_miniapp` are not final full-QE integration evidence."
     )
     lines.append("")
     comparisons = [row for row in _as_list(classification.get("architecture_comparisons")) if isinstance(row, Mapping)]
     if comparisons:
-        lines.append("| Architecture | Case | Mapped QE timers | Optimistic speedup | Coverage |")
-        lines.append("| --- | --- | --- | ---: | --- |")
+        lines.append("| Architecture | Case | Latency source | Mapped QE timers | Speedup | Status | Coverage |")
+        lines.append("| --- | --- | --- | --- | ---: | --- | --- |")
         for comparison in comparisons:
             timers = ", ".join(str(item) for item in _as_list(comparison.get("mapped_timer_names")))
             speedup = float(comparison.get("speedup_vs_gpu_mean") or 0.0)
             lines.append(
-                f"| `{comparison.get('architecture_id')}` | `{comparison.get('case_id')}` | `{timers}` | {speedup:.4f}x | `{comparison.get('implementation_coverage')}` |"
+                f"| `{comparison.get('architecture_id')}` | `{comparison.get('case_id')}` | `{comparison.get('latency_source')}` | `{timers}` | {speedup:.4f}x | `{comparison.get('workflow_accounting_status')}` | `{comparison.get('implementation_coverage')}` |"
             )
     else:
         lines.append("No claimable case-matched workflow comparison rows survived the hard gates.")
@@ -1468,7 +1506,7 @@ def build_trace_replay_workflow_accounting(
     motif_id = str(row.get("motif_id") or "")
     timer_names = list(row.get("mapped_qe_timer_names") or _MOTIF_TIMER_MAP.get(motif_id, []))
     implementation_coverage = str(row.get("implementation_coverage") or "partial_sidecar_motif")
-    kernel_seconds = _microkernel_seconds(row)
+    latency_candidates = _trace_replay_latency_candidates(row)
     records = [record for record in _as_list(gpu_baseline.get("baseline_records")) if isinstance(record, Mapping)]
     accountings: list[dict[str, Any]] = []
     for record in records:
@@ -1509,7 +1547,7 @@ def build_trace_replay_workflow_accounting(
                 routine_call_means[timer_name] = mean_calls
         mapped_timer_names = [name for name in timer_names if name in routine_means]
         replaceable_seconds = sum(routine_means.values())
-        if not mapped_timer_names or kernel_seconds is None:
+        if not mapped_timer_names or not latency_candidates:
             accountings.append(
                 {
                     "status": "missing_trace_replay_inputs",
@@ -1521,12 +1559,6 @@ def build_trace_replay_workflow_accounting(
             )
             continue
         transaction_count = max(1.0, sum(routine_call_means.get(name, 1.0) for name in mapped_timer_names))
-        fpga_compute_seconds = kernel_seconds * transaction_count
-        launch_overhead = 0.00005 * transaction_count
-        host_device_transfer = 0.00005 * transaction_count
-        synchronization = 0.00005 * transaction_count
-        cpu_retained = max(float(gpu_runtime) - replaceable_seconds, 0.0)
-        hybrid_runtime = cpu_retained + fpga_compute_seconds + launch_overhead + host_device_transfer + synchronization
         pwscf_wall = _mean(
             [parsed_log.get("pwscf_wall_seconds") for parsed_log in parsed_logs if isinstance(parsed_log.get("pwscf_wall_seconds"), (int, float))]
         )
@@ -1538,31 +1570,42 @@ def build_trace_replay_workflow_accounting(
             ]
         )
         scf_control = max(float(gpu_runtime) - float(electrons_wall), 0.0) if electrons_wall is not None else max(float(gpu_runtime) - float(pwscf_wall or gpu_runtime), 0.0)
-        accountings.append(
-            {
-                "status": "trace_replay_optimistic",
-                "case_id": case_id,
-                "source_gpu_runtime_seconds_mean": float(gpu_runtime),
-                "qe_pwscf_wall_seconds_mean": pwscf_wall,
-                "mapped_timer_names": mapped_timer_names,
-                "mapped_timer_wall_seconds_mean": routine_means,
-                "mapped_timer_call_count_mean": routine_call_means,
-                "replaceable_seconds_mean": replaceable_seconds,
-                "fpga_kernel_seconds_per_transaction": kernel_seconds,
-                "fpga_transaction_count_estimate": transaction_count,
-                "fpga_compute_seconds": fpga_compute_seconds,
-                "scf_control_seconds": scf_control,
-                "cpu_retained_seconds": cpu_retained,
-                "host_device_transfer_seconds": host_device_transfer,
-                "synchronization_seconds": synchronization,
-                "launch_overhead_seconds": launch_overhead,
-                "hybrid_workflow_runtime_seconds": hybrid_runtime,
-                "implementation_coverage": implementation_coverage,
-                "blockers": [] if implementation_coverage == "full_qe_kernel_equivalent" else ["full_qe_kernel_equivalent_missing"],
-                "timer_trace_paths": [str(path) for path in stdout_paths],
-                "claim_boundary": "Optimistic trace replay of measured QE timers using real HLS C/RTL cosim latency; compact miniapp/routine evidence still requires full QE integration before final claims.",
-            }
-        )
+        for latency_candidate in latency_candidates:
+            kernel_seconds = float(latency_candidate["kernel_seconds"])
+            fpga_compute_seconds = kernel_seconds * transaction_count
+            launch_overhead = 0.00005 * transaction_count
+            host_device_transfer = 0.00005 * transaction_count
+            synchronization = 0.00005 * transaction_count
+            cpu_retained = max(float(gpu_runtime) - replaceable_seconds, 0.0)
+            hybrid_runtime = cpu_retained + fpga_compute_seconds + launch_overhead + host_device_transfer + synchronization
+            accountings.append(
+                {
+                    "status": latency_candidate["status"],
+                    "case_id": case_id,
+                    "source_gpu_runtime_seconds_mean": float(gpu_runtime),
+                    "qe_pwscf_wall_seconds_mean": pwscf_wall,
+                    "mapped_timer_names": mapped_timer_names,
+                    "mapped_timer_wall_seconds_mean": routine_means,
+                    "mapped_timer_call_count_mean": routine_call_means,
+                    "replaceable_seconds_mean": replaceable_seconds,
+                    "latency_source": latency_candidate["latency_source"],
+                    "fpga_latency_cycles_per_transaction": latency_candidate["latency_cycles"],
+                    "fpga_clock_ns": latency_candidate["clock_ns"],
+                    "fpga_kernel_seconds_per_transaction": kernel_seconds,
+                    "fpga_transaction_count_estimate": transaction_count,
+                    "fpga_compute_seconds": fpga_compute_seconds,
+                    "scf_control_seconds": scf_control,
+                    "cpu_retained_seconds": cpu_retained,
+                    "host_device_transfer_seconds": host_device_transfer,
+                    "synchronization_seconds": synchronization,
+                    "launch_overhead_seconds": launch_overhead,
+                    "hybrid_workflow_runtime_seconds": hybrid_runtime,
+                    "implementation_coverage": implementation_coverage,
+                    "blockers": [] if implementation_coverage == "full_qe_kernel_equivalent" else ["full_qe_kernel_equivalent_missing"],
+                    "timer_trace_paths": [str(path) for path in stdout_paths],
+                    "claim_boundary": latency_candidate["claim_boundary"],
+                }
+            )
     return accountings
 
 
@@ -1584,7 +1627,7 @@ def _workflow_accounting_is_claimable(row: Mapping[str, Any]) -> bool:
         "hybrid_workflow_runtime_seconds",
     ]
     for accounting in _workflow_accounting_items(row):
-        if accounting.get("status") not in {"measured", "trace_replay", "trace_replay_optimistic", "full_scf_accounted", "claimable_estimate"}:
+        if accounting.get("status") not in {"measured", "trace_replay", "trace_replay_optimistic", "trace_replay_vcs_rtl_sensitivity", "full_scf_accounted", "claimable_estimate"}:
             continue
         if all(isinstance(accounting.get(key), (int, float)) for key in required):
             return True
@@ -1594,8 +1637,10 @@ def _workflow_accounting_is_claimable(row: Mapping[str, Any]) -> bool:
 def _microkernel_row(row: Mapping[str, Any]) -> dict[str, Any]:
     parsed = row.get("csynth_parsed") if isinstance(row.get("csynth_parsed"), Mapping) else {}
     cosim = row.get("cosim_parsed") if isinstance(row.get("cosim_parsed"), Mapping) else {}
+    vcs = row.get("vcs_parsed") if isinstance(row.get("vcs_parsed"), Mapping) else {}
     csynth_latency = parsed.get("latency_cycles_max") if isinstance(parsed, Mapping) else None
     cosim_latency = cosim.get("latency_cycles_max") if isinstance(cosim, Mapping) else None
+    vcs_latency = vcs.get("latency_cycles") if row.get("vcs_passed") is True and isinstance(vcs, Mapping) else None
     clock_ns = None
     if isinstance(parsed, Mapping):
         clock_ns = parsed.get("estimated_clock_ns") or parsed.get("target_clock_ns")
@@ -1603,12 +1648,17 @@ def _microkernel_row(row: Mapping[str, Any]) -> dict[str, Any]:
     kernel_seconds = None
     if isinstance(latency_cycles, (int, float)) and isinstance(clock_ns, (int, float)):
         kernel_seconds = float(latency_cycles) * float(clock_ns) * 1.0e-9
+    vcs_kernel_seconds = None
+    if isinstance(vcs_latency, (int, float)) and isinstance(clock_ns, (int, float)):
+        vcs_kernel_seconds = float(vcs_latency) * float(clock_ns) * 1.0e-9
     return {
         "architecture_id": row.get("architecture_id"),
         "csynth_latency_cycles_max": csynth_latency,
         "rtl_cosim_latency_cycles_max": cosim_latency,
+        "vcs_rtl_latency_cycles": vcs_latency,
         "estimated_clock_ns": clock_ns,
         "microkernel_seconds": kernel_seconds,
+        "vcs_rtl_microkernel_seconds": vcs_kernel_seconds,
         "resource": parsed.get("resource") if isinstance(parsed, Mapping) else None,
         "resource_available": parsed.get("resource_available") if isinstance(parsed, Mapping) else None,
         "resource_feasible": parsed.get("resource_feasible") if isinstance(parsed, Mapping) else None,
@@ -1682,7 +1732,7 @@ def classify_real_hybrid_vs_gpu(gpu_baseline: Mapping[str, Any], evidence_rows: 
     has_partial_sidecar = False
     for row in feasible_rows:
         for accounting in _workflow_accounting_items(row):
-            if accounting.get("status") not in {"measured", "trace_replay", "trace_replay_optimistic", "full_scf_accounted", "claimable_estimate"}:
+            if accounting.get("status") not in {"measured", "trace_replay", "trace_replay_optimistic", "trace_replay_vcs_rtl_sensitivity", "full_scf_accounted", "claimable_estimate"}:
                 continue
             case_id = str(accounting.get("case_id") or row.get("case_id") or "")
             gpu_seconds = baseline_by_case.get(case_id)
@@ -1700,6 +1750,8 @@ def classify_real_hybrid_vs_gpu(gpu_baseline: Mapping[str, Any], evidence_rows: 
                     "hybrid_workflow_runtime_seconds": float(hybrid_value),
                     "speedup_vs_gpu_mean": gpu_seconds / float(hybrid_value),
                     "workflow_accounting_status": accounting.get("status"),
+                    "latency_source": accounting.get("latency_source"),
+                    "fpga_latency_cycles_per_transaction": accounting.get("fpga_latency_cycles_per_transaction"),
                     "implementation_coverage": coverage,
                     "replaceable_seconds_mean": accounting.get("replaceable_seconds_mean"),
                     "mapped_timer_names": accounting.get("mapped_timer_names"),

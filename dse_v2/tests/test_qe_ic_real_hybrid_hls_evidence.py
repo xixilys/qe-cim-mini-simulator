@@ -534,6 +534,42 @@ def test_trace_replay_accounting_uses_qe_timers_and_marks_partial_sidecar(tmp_pa
     assert item["hybrid_workflow_runtime_seconds"] > 0.8
 
 
+
+def test_trace_replay_accounting_adds_vcs_rtl_sensitivity_when_available(tmp_path: Path):
+    run_dir = tmp_path / "runs" / "case-a" / "gpu_only_baseline"
+    run_dir.mkdir(parents=True)
+    (run_dir / "run_001.stdout.log").write_text(
+        """
+     sum_band     :      0.01s CPU      0.20s WALL (       5 calls)
+     PWSCF        :      0.90s CPU      1.00s WALL
+""",
+        encoding="utf-8",
+    )
+    gpu_baseline = {
+        "measurements_are_real": True,
+        "baseline_records": [{"case_id": "case-a", "runtime_seconds_mean": 1.0}],
+    }
+    row = {
+        "architecture_id": "hybrid_sum_band_density_accumulator_v1",
+        "motif_id": "sum_band_density_accumulation",
+        "csynth_parsed": {"estimated_clock_ns": 10.0},
+        "cosim_parsed": {"latency_cycles_max": 100},
+        "vcs_passed": True,
+        "vcs_parsed": {"status": "parsed", "rtl_status": "Pass", "latency_cycles": 25, "samples": 20, "blockers": []},
+    }
+
+    accounting = build_trace_replay_workflow_accounting(gpu_baseline, tmp_path / "runs", row)
+
+    assert {item["latency_source"] for item in accounting} == {"vivado_hls_cosim", "vcs_rtl"}
+    hls_item = next(item for item in accounting if item["latency_source"] == "vivado_hls_cosim")
+    vcs_item = next(item for item in accounting if item["latency_source"] == "vcs_rtl")
+    assert hls_item["status"] == "trace_replay_optimistic"
+    assert vcs_item["status"] == "trace_replay_vcs_rtl_sensitivity"
+    assert abs(vcs_item["fpga_kernel_seconds_per_transaction"] - 25 * 10.0e-9) < 1.0e-15
+    assert vcs_item["hybrid_workflow_runtime_seconds"] < hls_item["hybrid_workflow_runtime_seconds"]
+    assert "VCS RTL" in vcs_item["claim_boundary"]
+
+
 def test_classify_trace_replay_partial_sidecars_reports_current_weaker_not_superior():
     gpu_baseline = {
         "measurements_are_real": True,
@@ -695,7 +731,17 @@ def test_render_real_hybrid_hls_report_includes_vcs_rtl_evidence():
             "best_speedup_vs_gpu_mean": 1.01,
             "blockers": ["full_qe_kernel_integration_missing"],
             "claim_boundary": "boundary",
-            "architecture_comparisons": [],
+            "architecture_comparisons": [
+                {
+                    "architecture_id": "hybrid_hpsi_local_potential_v1",
+                    "case_id": "case-a",
+                    "latency_source": "vcs_rtl",
+                    "mapped_timer_names": ["h_psi"],
+                    "speedup_vs_gpu_mean": 1.01,
+                    "workflow_accounting_status": "trace_replay_vcs_rtl_sensitivity",
+                    "implementation_coverage": "qe_routine_equivalent_miniapp",
+                }
+            ],
         },
         "evidence_rows": [
             {
@@ -727,6 +773,8 @@ def test_render_real_hybrid_hls_report_includes_vcs_rtl_evidence():
     assert "VCS RTL sim" in report
     assert "DSE_REAL_RTL" not in report
     assert "latency `192` cycles" in report
+    assert "`vcs_rtl`" in report
+    assert "`trace_replay_vcs_rtl_sensitivity`" in report
 
 def test_parse_vivado_hls_cosim_report_extracts_verilog_pass_latency():
     report = """
@@ -784,7 +832,10 @@ def test_classify_real_hybrid_requires_full_scf_accounting_after_cosim():
                     "latency_cycles_max": 70,
                     "blockers": [],
                 },
-                "vcs_passed": False,
+                "vcs_passed": arch == "hybrid_streaming_reduction_accumulator_v1",
+                "vcs_parsed": {"status": "parsed", "rtl_status": "Pass", "latency_cycles": 50, "samples": 50, "blockers": []}
+                if arch == "hybrid_streaming_reduction_accumulator_v1"
+                else {},
                 "implementation_maturity": "real_hls_kernel",
                 "workflow_accounting": {"status": "not_available_microkernel_only"},
             }
@@ -795,6 +846,8 @@ def test_classify_real_hybrid_requires_full_scf_accounting_after_cosim():
     assert result["preliminary_label"] == "insufficient_evidence"
     assert "full_scf_workflow_accounting_required" in result["blockers"]
     assert result["microkernel_evidence"][0]["rtl_cosim_latency_cycles_max"] == 70
+    assert result["microkernel_evidence"][0]["vcs_rtl_latency_cycles"] == 50
+    assert abs(result["microkernel_evidence"][0]["vcs_rtl_microkernel_seconds"] - 50 * 7.0e-9) < 1.0e-15
     assert result["final_claim_allowed"] is False
 
 

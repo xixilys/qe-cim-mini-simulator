@@ -4,7 +4,7 @@
 - Confidence: `medium`
 - Final hardware claim allowed: `False`
 - Best architecture: `hybrid_hpsi_local_potential_v1`
-- Best optimistic trace-replay speedup vs GPU: `1.1856x`
+- Best optimistic trace-replay speedup vs GPU: `1.18627x`
 - Resource-infeasible architectures filtered: `hybrid_fft_twiddle_stream_v1`
 
 ## Direct answer
@@ -55,22 +55,28 @@ The current non-stub hybrid FPGA/HLS evidence supports **FPGA/hybrid weaker / no
 
 ## Workflow accounting result
 
-Trace replay used measured QE full-SCF timer logs from `artifacts/qe_ic_7day_prelim/runs/<case>/gpu_only_baseline/run_*.stdout.log` plus real HLS C/RTL cosim latency. Rows marked `partial_sidecar_motif` or `qe_routine_equivalent_miniapp` are not final full-QE integration evidence.
+Trace replay used measured QE full-SCF timer logs from `artifacts/qe_ic_7day_prelim/runs/<case>/gpu_only_baseline/run_*.stdout.log` plus real HLS C/RTL cosim latency; rows with handwritten RTL evidence also include a VCS RTL latency-sensitivity channel. Rows marked `partial_sidecar_motif` or `qe_routine_equivalent_miniapp` are not final full-QE integration evidence.
 
-| Architecture | Case | Mapped QE timers | Optimistic speedup | Coverage |
-| --- | --- | --- | ---: | --- |
-| `hybrid_streaming_reduction_accumulator_v1` | `ic_sio2_dielectric_6atom_scf_v0` | `sum_band` | 1.1505x | `partial_sidecar_motif` |
-| `hybrid_streaming_reduction_accumulator_v1` | `ic_al_interconnect_4atom_scf_v0` | `sum_band` | 1.0486x | `partial_sidecar_motif` |
-| `hybrid_streaming_reduction_accumulator_v1` | `ic_si_bulk_2atom_scf_v0` | `sum_band` | 1.0226x | `partial_sidecar_motif` |
-| `hybrid_tiled_complex_axpy_v1` | `ic_sio2_dielectric_6atom_scf_v0` | `mix_rho, h_psi:calbec, calbec` | 1.1359x | `partial_sidecar_motif` |
-| `hybrid_tiled_complex_axpy_v1` | `ic_al_interconnect_4atom_scf_v0` | `mix_rho, h_psi:calbec, calbec` | 1.0917x | `partial_sidecar_motif` |
-| `hybrid_tiled_complex_axpy_v1` | `ic_si_bulk_2atom_scf_v0` | `mix_rho, h_psi:calbec, calbec` | 1.1164x | `partial_sidecar_motif` |
-| `hybrid_sum_band_density_accumulator_v1` | `ic_sio2_dielectric_6atom_scf_v0` | `sum_band` | 1.1496x | `qe_routine_equivalent_miniapp` |
-| `hybrid_sum_band_density_accumulator_v1` | `ic_al_interconnect_4atom_scf_v0` | `sum_band` | 1.0482x | `qe_routine_equivalent_miniapp` |
-| `hybrid_sum_band_density_accumulator_v1` | `ic_si_bulk_2atom_scf_v0` | `sum_band` | 1.0222x | `qe_routine_equivalent_miniapp` |
-| `hybrid_hpsi_local_potential_v1` | `ic_sio2_dielectric_6atom_scf_v0` | `h_psi` | 1.1163x | `qe_routine_equivalent_miniapp` |
-| `hybrid_hpsi_local_potential_v1` | `ic_al_interconnect_4atom_scf_v0` | `h_psi` | 1.1856x | `qe_routine_equivalent_miniapp` |
-| `hybrid_hpsi_local_potential_v1` | `ic_si_bulk_2atom_scf_v0` | `h_psi` | 1.1250x | `qe_routine_equivalent_miniapp` |
+| Architecture | Case | Latency source | Mapped QE timers | Speedup | Status | Coverage |
+| --- | --- | --- | --- | ---: | --- | --- |
+| `hybrid_streaming_reduction_accumulator_v1` | `ic_sio2_dielectric_6atom_scf_v0` | `vivado_hls_cosim` | `sum_band` | 1.1505x | `trace_replay_optimistic` | `partial_sidecar_motif` |
+| `hybrid_streaming_reduction_accumulator_v1` | `ic_al_interconnect_4atom_scf_v0` | `vivado_hls_cosim` | `sum_band` | 1.0486x | `trace_replay_optimistic` | `partial_sidecar_motif` |
+| `hybrid_streaming_reduction_accumulator_v1` | `ic_si_bulk_2atom_scf_v0` | `vivado_hls_cosim` | `sum_band` | 1.0226x | `trace_replay_optimistic` | `partial_sidecar_motif` |
+| `hybrid_tiled_complex_axpy_v1` | `ic_sio2_dielectric_6atom_scf_v0` | `vivado_hls_cosim` | `mix_rho, h_psi:calbec, calbec` | 1.1359x | `trace_replay_optimistic` | `partial_sidecar_motif` |
+| `hybrid_tiled_complex_axpy_v1` | `ic_al_interconnect_4atom_scf_v0` | `vivado_hls_cosim` | `mix_rho, h_psi:calbec, calbec` | 1.0917x | `trace_replay_optimistic` | `partial_sidecar_motif` |
+| `hybrid_tiled_complex_axpy_v1` | `ic_si_bulk_2atom_scf_v0` | `vivado_hls_cosim` | `mix_rho, h_psi:calbec, calbec` | 1.1164x | `trace_replay_optimistic` | `partial_sidecar_motif` |
+| `hybrid_sum_band_density_accumulator_v1` | `ic_sio2_dielectric_6atom_scf_v0` | `vivado_hls_cosim` | `sum_band` | 1.1496x | `trace_replay_optimistic` | `qe_routine_equivalent_miniapp` |
+| `hybrid_sum_band_density_accumulator_v1` | `ic_sio2_dielectric_6atom_scf_v0` | `vcs_rtl` | `sum_band` | 1.1505x | `trace_replay_vcs_rtl_sensitivity` | `qe_routine_equivalent_miniapp` |
+| `hybrid_sum_band_density_accumulator_v1` | `ic_al_interconnect_4atom_scf_v0` | `vivado_hls_cosim` | `sum_band` | 1.0482x | `trace_replay_optimistic` | `qe_routine_equivalent_miniapp` |
+| `hybrid_sum_band_density_accumulator_v1` | `ic_al_interconnect_4atom_scf_v0` | `vcs_rtl` | `sum_band` | 1.0486x | `trace_replay_vcs_rtl_sensitivity` | `qe_routine_equivalent_miniapp` |
+| `hybrid_sum_band_density_accumulator_v1` | `ic_si_bulk_2atom_scf_v0` | `vivado_hls_cosim` | `sum_band` | 1.0222x | `trace_replay_optimistic` | `qe_routine_equivalent_miniapp` |
+| `hybrid_sum_band_density_accumulator_v1` | `ic_si_bulk_2atom_scf_v0` | `vcs_rtl` | `sum_band` | 1.0226x | `trace_replay_vcs_rtl_sensitivity` | `qe_routine_equivalent_miniapp` |
+| `hybrid_hpsi_local_potential_v1` | `ic_sio2_dielectric_6atom_scf_v0` | `vivado_hls_cosim` | `h_psi` | 1.1163x | `trace_replay_optimistic` | `qe_routine_equivalent_miniapp` |
+| `hybrid_hpsi_local_potential_v1` | `ic_sio2_dielectric_6atom_scf_v0` | `vcs_rtl` | `h_psi` | 1.1168x | `trace_replay_vcs_rtl_sensitivity` | `qe_routine_equivalent_miniapp` |
+| `hybrid_hpsi_local_potential_v1` | `ic_al_interconnect_4atom_scf_v0` | `vivado_hls_cosim` | `h_psi` | 1.1856x | `trace_replay_optimistic` | `qe_routine_equivalent_miniapp` |
+| `hybrid_hpsi_local_potential_v1` | `ic_al_interconnect_4atom_scf_v0` | `vcs_rtl` | `h_psi` | 1.1863x | `trace_replay_vcs_rtl_sensitivity` | `qe_routine_equivalent_miniapp` |
+| `hybrid_hpsi_local_potential_v1` | `ic_si_bulk_2atom_scf_v0` | `vivado_hls_cosim` | `h_psi` | 1.1250x | `trace_replay_optimistic` | `qe_routine_equivalent_miniapp` |
+| `hybrid_hpsi_local_potential_v1` | `ic_si_bulk_2atom_scf_v0` | `vcs_rtl` | `h_psi` | 1.1255x | `trace_replay_vcs_rtl_sensitivity` | `qe_routine_equivalent_miniapp` |
 
 ## Claim boundary
 
