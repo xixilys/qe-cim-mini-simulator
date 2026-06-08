@@ -1787,6 +1787,207 @@ def build_trace_replay_workflow_accounting(
     return accountings
 
 
+def build_combined_vcs_sidecar_accounting(
+    gpu_baseline: Mapping[str, Any],
+    gpu_runs_root: Path,
+    evidence_rows: Sequence[Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    """Build a combined VCS-RTL sidecar trace replay across multiple motifs."""
+
+    components: list[dict[str, Any]] = []
+    for row in evidence_rows:
+        if row.get("vcs_passed") is not True:
+            continue
+        clock_ns = _clock_ns_from_row(row)
+        vcs = row.get("vcs_parsed") if isinstance(row.get("vcs_parsed"), Mapping) else {}
+        latency = vcs.get("latency_cycles") if isinstance(vcs, Mapping) else None
+        if not isinstance(clock_ns, (int, float)) or not isinstance(latency, (int, float)):
+            continue
+        timer_names = list(row.get("mapped_qe_timer_names") or _MOTIF_TIMER_MAP.get(str(row.get("motif_id") or ""), []))
+        if not timer_names:
+            continue
+        components.append(
+            {
+                "architecture_id": row.get("architecture_id"),
+                "mapped_timer_names": timer_names,
+                "latency_cycles": int(latency),
+                "clock_ns": float(clock_ns),
+                "kernel_seconds": float(clock_ns) * float(latency) * 1.0e-9,
+            }
+        )
+    if len(components) < 2:
+        return []
+
+    records = [record for record in _as_list(gpu_baseline.get("baseline_records")) if isinstance(record, Mapping)]
+    accountings: list[dict[str, Any]] = []
+    for record in records:
+        case_id = str(record.get("case_id") or "")
+        gpu_runtime = record.get("runtime_seconds_mean")
+        if not case_id or not isinstance(gpu_runtime, (int, float)):
+            continue
+        stdout_paths = sorted((gpu_runs_root / case_id / "gpu_only_baseline").glob("run_*.stdout.log"))
+        if not stdout_paths:
+            accountings.append(
+                {
+                    "architecture_id": "hybrid_combined_vcs_sidecar_v1",
+                    "status": "missing_qe_timer_trace",
+                    "case_id": case_id,
+                    "blockers": ["qe_stdout_timer_logs_missing"],
+                    "implementation_coverage": "combined_partial_sidecar_motif",
+                }
+            )
+            continue
+        parsed_logs = [parse_qe_timer_stdout(path.read_text(encoding="utf-8", errors="replace")) for path in stdout_paths]
+        routine_means: dict[str, float] = {}
+        routine_call_means: dict[str, float] = {}
+        component_rows: list[dict[str, Any]] = []
+        used_timers: set[str] = set()
+        replaceable_seconds = 0.0
+        fpga_compute_seconds = 0.0
+        transaction_count_total = 0.0
+        for component in components:
+            mapped_timer_names: list[str] = []
+            component_replaceable = 0.0
+            component_transaction_count = 0.0
+            for timer_name in component["mapped_timer_names"]:
+                if timer_name in used_timers:
+                    continue
+                walls: list[float] = []
+                calls: list[float] = []
+                for parsed_log in parsed_logs:
+                    routine = parsed_log["routines"].get(timer_name)
+                    if not isinstance(routine, Mapping):
+                        continue
+                    if isinstance(routine.get("wall_seconds"), (int, float)):
+                        walls.append(float(routine["wall_seconds"]))
+                    if isinstance(routine.get("calls"), (int, float)):
+                        calls.append(float(routine["calls"]))
+                mean_wall = _mean(walls)
+                if mean_wall is None:
+                    continue
+                mean_calls = _mean(calls) or 1.0
+                used_timers.add(timer_name)
+                mapped_timer_names.append(timer_name)
+                routine_means[timer_name] = mean_wall
+                routine_call_means[timer_name] = mean_calls
+                component_replaceable += mean_wall
+                component_transaction_count += mean_calls
+            if not mapped_timer_names:
+                continue
+            component_compute = float(component["kernel_seconds"]) * max(1.0, component_transaction_count)
+            replaceable_seconds += component_replaceable
+            fpga_compute_seconds += component_compute
+            transaction_count_total += max(1.0, component_transaction_count)
+            component_rows.append(
+                {
+                    "architecture_id": component["architecture_id"],
+                    "mapped_timer_names": mapped_timer_names,
+                    "latency_cycles": component["latency_cycles"],
+                    "clock_ns": component["clock_ns"],
+                    "kernel_seconds_per_transaction": component["kernel_seconds"],
+                    "transaction_count_estimate": max(1.0, component_transaction_count),
+                    "fpga_compute_seconds": component_compute,
+                    "replaceable_seconds_mean": component_replaceable,
+                }
+            )
+        if len(component_rows) < 2 or replaceable_seconds <= 0.0:
+            accountings.append(
+                {
+                    "architecture_id": "hybrid_combined_vcs_sidecar_v1",
+                    "status": "missing_trace_replay_inputs",
+                    "case_id": case_id,
+                    "mapped_timer_names": sorted(used_timers),
+                    "blockers": ["combined_vcs_timer_or_latency_missing"],
+                    "implementation_coverage": "combined_partial_sidecar_motif",
+                }
+            )
+            continue
+        launch_overhead = 0.00005 * transaction_count_total
+        host_device_transfer = 0.00005 * transaction_count_total
+        synchronization = 0.00005 * transaction_count_total
+        cpu_retained = max(float(gpu_runtime) - replaceable_seconds, 0.0)
+        hybrid_runtime = cpu_retained + fpga_compute_seconds + launch_overhead + host_device_transfer + synchronization
+        accountings.append(
+            {
+                "architecture_id": "hybrid_combined_vcs_sidecar_v1",
+                "status": "trace_replay_combined_vcs_sidecar_sensitivity",
+                "case_id": case_id,
+                "source_gpu_runtime_seconds_mean": float(gpu_runtime),
+                "mapped_timer_names": sorted(used_timers),
+                "mapped_timer_wall_seconds_mean": routine_means,
+                "mapped_timer_call_count_mean": routine_call_means,
+                "replaceable_seconds_mean": replaceable_seconds,
+                "latency_source": "combined_vcs_rtl",
+                "fpga_component_count": len(component_rows),
+                "fpga_components": component_rows,
+                "fpga_transaction_count_estimate": transaction_count_total,
+                "fpga_compute_seconds": fpga_compute_seconds,
+                "scf_control_seconds": 0.0,
+                "cpu_retained_seconds": cpu_retained,
+                "host_device_transfer_seconds": host_device_transfer,
+                "synchronization_seconds": synchronization,
+                "launch_overhead_seconds": launch_overhead,
+                "hybrid_workflow_runtime_seconds": hybrid_runtime,
+                "implementation_coverage": "combined_partial_sidecar_motif",
+                "blockers": ["full_qe_kernel_equivalent_missing", "full_qe_kernel_integration_missing"],
+                "timer_trace_paths": [str(path) for path in stdout_paths],
+                "claim_boundary": "Combined VCS RTL sidecar sensitivity over measured QE timer traces; not full-QE integration, board measurement, or final FPGA superiority evidence.",
+            }
+        )
+    return accountings
+
+
+def merge_combined_vcs_sidecar_comparisons(
+    gpu_baseline: Mapping[str, Any],
+    classification: Mapping[str, Any],
+    combined_accounting: Sequence[Mapping[str, Any]],
+) -> dict[str, Any]:
+    """Return classification with combined VCS sidecar accounting rows appended."""
+
+    merged = json.loads(json.dumps(classification))
+    baseline_records = [row for row in _as_list(gpu_baseline.get("baseline_records")) if isinstance(row, Mapping)]
+    baseline_by_case = {
+        str(row.get("case_id")): float(row["runtime_seconds_mean"])
+        for row in baseline_records
+        if row.get("case_id") is not None and row.get("runtime_seconds_mean") is not None
+    }
+    rows = [row for row in _as_list(merged.get("architecture_comparisons")) if isinstance(row, Mapping)]
+    for accounting in combined_accounting:
+        if accounting.get("status") != "trace_replay_combined_vcs_sidecar_sensitivity":
+            continue
+        case_id = str(accounting.get("case_id") or "")
+        gpu_seconds = baseline_by_case.get(case_id)
+        hybrid_value = accounting.get("hybrid_workflow_runtime_seconds")
+        if gpu_seconds is None or not isinstance(hybrid_value, (int, float)) or float(hybrid_value) <= 0:
+            continue
+        rows.append(
+            {
+                "architecture_id": accounting.get("architecture_id"),
+                "case_id": case_id,
+                "gpu_runtime_seconds_mean": gpu_seconds,
+                "hybrid_workflow_runtime_seconds": float(hybrid_value),
+                "speedup_vs_gpu_mean": gpu_seconds / float(hybrid_value),
+                "workflow_accounting_status": accounting.get("status"),
+                "latency_source": accounting.get("latency_source"),
+                "implementation_coverage": accounting.get("implementation_coverage"),
+                "replaceable_seconds_mean": accounting.get("replaceable_seconds_mean"),
+                "mapped_timer_names": accounting.get("mapped_timer_names"),
+                "microkernel": {"fpga_components": accounting.get("fpga_components"), "fpga_component_count": accounting.get("fpga_component_count")},
+            }
+        )
+    merged["architecture_comparisons"] = rows
+    if rows:
+        best = max(rows, key=lambda item: float(item.get("speedup_vs_gpu_mean") or 0.0))
+        merged["best_architecture_id"] = best.get("architecture_id")
+        merged["best_speedup_vs_gpu_mean"] = best.get("speedup_vs_gpu_mean")
+    blockers = sorted(set(str(item) for item in _as_list(merged.get("blockers"))) | {"full_qe_kernel_equivalent_missing", "full_qe_kernel_integration_missing"})
+    merged["blockers"] = blockers
+    merged["preliminary_label"] = "fpga_hybrid_weaker" if merged.get("preliminary_label") != "insufficient_evidence" else merged.get("preliminary_label")
+    merged["final_claim_allowed"] = False
+    merged["claim_boundary"] = "Combined VCS RTL sidecar trace replay can improve optimistic sensitivity, but it is still partial-sidecar evidence rather than full QE kernel integration; report current implementation as weaker/not superior."
+    return merged
+
+
 def _workflow_accounting_items(row: Mapping[str, Any]) -> list[Mapping[str, Any]]:
     accounting = row.get("workflow_accounting")
     if isinstance(accounting, Mapping):
@@ -2104,11 +2305,13 @@ def classify_real_hybrid_vs_gpu(gpu_baseline: Mapping[str, Any], evidence_rows: 
 __all__ = [
     "build_real_hybrid_architecture_specs",
     "build_evidence_row_static_metadata",
+    "build_combined_vcs_sidecar_accounting",
     "build_real_hybrid_claim_closure",
     "build_trace_replay_workflow_accounting",
     "classify_real_hybrid_vs_gpu",
     "materialize_hls_project",
     "materialize_vcs_rtl_project",
+    "merge_combined_vcs_sidecar_comparisons",
     "merge_vcs_rtl_evidence_into_summary",
     "parse_qe_timer_stdout",
     "parse_vcs_rtl_run_log",

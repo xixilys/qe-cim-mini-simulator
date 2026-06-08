@@ -146,6 +146,18 @@ or when nonblocking mode generates minimal candidate stubs. The runner sets
 default remote `C.UTF-8` locale. Tool availability or generated-stub syntax
 success is not itself synthesis, timing, PPA, or superiority evidence.
 
+The scoped real-hybrid HLS/VCS follow-up campaign writes
+`artifacts/qe_ic_real_hybrid_hls/real_hybrid_hls_summary.json`,
+`real_hybrid_hls_report.md`, and `real_hybrid_claim_closure.json`. It may
+combine multiple VCS-passed handwritten RTL miniapps into
+`hybrid_combined_vcs_sidecar_v1` trace-replay accounting by summing the measured
+QE timer regions each miniapp maps to and adding explicit launch, transfer, and
+synchronization overheads. That combined sidecar row is still
+`combined_partial_sidecar_motif` evidence: it is useful for preliminary
+sensitivity and architecture ranking, but it does not satisfy full QE kernel
+integration or physical FPGA board measurement gates and must not be reported
+as final GPU-vs-FPGA superiority.
+
 `execute_real` emits additional small evidence summaries:
 
 - `qe_ic_cpu_baseline_measurements_real_run.json`

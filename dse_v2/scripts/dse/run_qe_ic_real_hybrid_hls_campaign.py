@@ -20,12 +20,14 @@ if str(REPO_ROOT) not in sys.path:
 
 from dse_v2.experiments.qe_ic_real_opportunity.real_hybrid_hls_evidence import (  # noqa: E402
     DEFAULT_FPGA_PART,
+    build_combined_vcs_sidecar_accounting,
     build_real_hybrid_architecture_specs,
     build_evidence_row_static_metadata,
     build_real_hybrid_claim_closure,
     build_trace_replay_workflow_accounting,
     classify_real_hybrid_vs_gpu,
     materialize_hls_project,
+    merge_combined_vcs_sidecar_comparisons,
     parse_vivado_hls_cosim_report,
     parse_vivado_hls_csynth_report,
     render_real_hybrid_hls_report,
@@ -217,14 +219,18 @@ def run_campaign(args: argparse.Namespace) -> dict[str, Any]:
             _write_json(row_path, row)
             row["evidence_json_hash"] = _sha256_file(row_path)
     classification = classify_real_hybrid_vs_gpu(baseline, rows)
+    combined_vcs_sidecar_accounting = build_combined_vcs_sidecar_accounting(baseline, gpu_runs_root, rows)
+    classification = merge_combined_vcs_sidecar_comparisons(baseline, classification, combined_vcs_sidecar_accounting)
     claim_closure = build_real_hybrid_claim_closure(baseline, rows, classification)
     claim_closure_path = out_dir / "real_hybrid_claim_closure.json"
     summary = {
         "schema_version": SCHEMA_VERSION,
         "run_timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "gpu_baseline_path": str(args.gpu_baseline),
+        "gpu_runs_root": str(gpu_runs_root),
         "architecture_specs": specs,
         "evidence_rows": rows,
+        "combined_vcs_sidecar_accounting": combined_vcs_sidecar_accounting,
         "classification": classification,
         "claim_closure_path": str(claim_closure_path),
         "claim_boundary": "Non-stub HLS kernels with real Vivado-HLS attempts; final hardware superiority still requires full QE integration and board/implementation closure.",

@@ -3,16 +3,19 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from dse_v2.experiments.qe_ic_real_opportunity.real_hybrid_hls_evidence import (
     build_real_hybrid_architecture_specs,
     build_evidence_row_static_metadata,
+    build_combined_vcs_sidecar_accounting,
     build_real_hybrid_claim_closure,
     build_trace_replay_workflow_accounting,
     classify_real_hybrid_vs_gpu,
     materialize_hls_project,
     materialize_vcs_rtl_project,
+    merge_combined_vcs_sidecar_comparisons,
     merge_vcs_rtl_evidence_into_summary,
     parse_qe_timer_stdout,
     parse_vcs_rtl_run_log,
@@ -155,6 +158,124 @@ def test_real_hybrid_campaign_default_includes_all_current_architectures():
 
     assert args.max_architectures == len(build_real_hybrid_architecture_specs())
     assert args.max_architectures >= 4
+
+
+def test_real_hybrid_campaign_summary_includes_combined_vcs_sidecar_accounting(tmp_path: Path, monkeypatch):
+    import importlib.util
+    import argparse
+
+    script_path = Path(__file__).resolve().parents[1] / "scripts" / "dse" / "run_qe_ic_real_hybrid_hls_campaign.py"
+    spec = importlib.util.spec_from_file_location("run_qe_ic_real_hybrid_hls_campaign", script_path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    baseline_path = tmp_path / "baseline.json"
+    baseline_path.write_text(
+        json.dumps(
+            {
+                "measurements_are_real": True,
+                "baseline_records": [{"case_id": "case-a", "runtime_seconds_mean": 1.0}],
+            }
+        ),
+        encoding="utf-8",
+    )
+    gpu_runs_root = tmp_path / "runs"
+    run_dir = gpu_runs_root / "case-a" / "gpu_only_baseline"
+    run_dir.mkdir(parents=True)
+    (run_dir / "run_001.stdout.log").write_text(
+        """
+     h_psi        :      0.10s CPU      0.30s WALL (       4 calls)
+     sum_band     :      0.01s CPU      0.20s WALL (       5 calls)
+     mix_rho      :      0.02s CPU      0.10s WALL (       3 calls)
+     h_psi:calbec :      0.01s CPU      0.04s WALL (       3 calls)
+     calbec       :      0.01s CPU      0.03s WALL (       3 calls)
+     PWSCF        :      0.90s CPU      1.00s WALL
+""",
+        encoding="utf-8",
+    )
+
+    def fake_run_one_architecture(spec_row, *, out_dir, fpga_part, timeout_seconds):
+        vcs_latency_by_architecture = {
+            "hybrid_hpsi_local_potential_v1": 96,
+            "hybrid_sum_band_density_accumulator_v1": 128,
+            "hybrid_tiled_complex_axpy_v1": 64,
+        }
+        architecture_id = spec_row["architecture_id"]
+        row = {
+            **build_evidence_row_static_metadata(spec_row),
+            "architecture_id": architecture_id,
+            "kernel_name": spec_row["kernel_name"],
+            "target_type": spec_row["target_type"],
+            "motif_id": spec_row["motif_id"],
+            "implementation_maturity": spec_row["implementation_maturity"],
+            "evidence_level": spec_row["evidence_level"],
+            "status": "executed",
+            "tool": "vivado_hls",
+            "fpga_part": fpga_part,
+            "csim_passed": True,
+            "csynth_parsed": {
+                "status": "parsed",
+                "latency_cycles_max": 100,
+                "estimated_clock_ns": 8.75,
+                "resource": {"bram_18k": 1, "dsp48e": 1, "ff": 1, "lut": 1, "uram": 0},
+                "resource_available": {"bram_18k": 280, "dsp48e": 220, "ff": 106400, "lut": 53200, "uram": 0},
+                "resource_feasible": True,
+                "blockers": [],
+            },
+            "cosim_passed": True,
+            "cosim_parsed": {
+                "status": "parsed",
+                "rtl_status": "Pass",
+                "latency_cycles_min": 100,
+                "latency_cycles_avg": 100,
+                "latency_cycles_max": 100,
+                "blockers": [],
+            },
+            "performance_latency_source": "vivado_hls_cosim",
+            "performance_latency_cycles_max": 100,
+            "vcs_attempted": architecture_id in vcs_latency_by_architecture,
+            "vcs_passed": architecture_id in vcs_latency_by_architecture,
+            "vcs_parsed": {
+                "status": "parsed",
+                "rtl_status": "Pass",
+                "latency_cycles": vcs_latency_by_architecture.get(architecture_id),
+                "samples": 64,
+                "blockers": [],
+            }
+            if architecture_id in vcs_latency_by_architecture
+            else {},
+            "blockers": [],
+        }
+        row_path = out_dir / "runs" / architecture_id / "real_hybrid_hls_evidence.json"
+        row_path.parent.mkdir(parents=True, exist_ok=True)
+        row["evidence_json_path"] = str(row_path)
+        return row
+
+    monkeypatch.setattr(module, "run_one_architecture", fake_run_one_architecture)
+    args = argparse.Namespace(
+        gpu_baseline=baseline_path,
+        out=tmp_path / "out",
+        max_architectures=len(build_real_hybrid_architecture_specs()),
+        fpga_part="xc7z020clg400-1",
+        gpu_runs_root=gpu_runs_root,
+        timeout_seconds=1,
+    )
+
+    summary = module.run_campaign(args)
+
+    combined = summary["combined_vcs_sidecar_accounting"]
+    assert combined
+    assert combined[0]["status"] == "trace_replay_combined_vcs_sidecar_sensitivity"
+    assert combined[0]["fpga_component_count"] == 3
+    combined_rows = [
+        row
+        for row in summary["classification"]["architecture_comparisons"]
+        if row["architecture_id"] == "hybrid_combined_vcs_sidecar_v1"
+    ]
+    assert combined_rows
+    assert combined_rows[0]["latency_source"] == "combined_vcs_rtl"
+
 
 def test_hls_project_materialization_contains_golden_correctness_and_cosim(tmp_path: Path):
     spec = build_real_hybrid_architecture_specs()[0]
@@ -1012,3 +1133,90 @@ def test_build_real_hybrid_claim_closure_records_hard_gate_statuses():
     assert gates["physical_fpga_board_measurement"]["status"] == "missing"
     assert "full_qe_kernel_integration" in closure["missing_gate_ids"]
     assert closure["claim_verdict"] == "not_superior_current_evidence"
+
+
+def test_build_combined_vcs_sidecar_accounting_sums_multiple_timer_replacements(tmp_path: Path):
+    run_dir = tmp_path / "runs" / "case-a" / "gpu_only_baseline"
+    run_dir.mkdir(parents=True)
+    (run_dir / "run_001.stdout.log").write_text(
+        """
+     h_psi        :      0.10s CPU      0.30s WALL (       4 calls)
+     sum_band     :      0.01s CPU      0.20s WALL (       5 calls)
+     mix_rho      :      0.02s CPU      0.10s WALL (       3 calls)
+     PWSCF        :      0.90s CPU      1.00s WALL
+""",
+        encoding="utf-8",
+    )
+    gpu_baseline = {
+        "measurements_are_real": True,
+        "baseline_records": [{"case_id": "case-a", "runtime_seconds_mean": 1.0}],
+    }
+    rows = [
+        {
+            "architecture_id": "hybrid_hpsi_local_potential_v1",
+            "mapped_qe_timer_names": ["h_psi"],
+            "vcs_passed": True,
+            "vcs_parsed": {"status": "parsed", "rtl_status": "Pass", "latency_cycles": 96, "samples": 96, "blockers": []},
+            "csynth_parsed": {"estimated_clock_ns": 8.75, "resource_feasible": True, "blockers": []},
+        },
+        {
+            "architecture_id": "hybrid_sum_band_density_accumulator_v1",
+            "mapped_qe_timer_names": ["sum_band"],
+            "vcs_passed": True,
+            "vcs_parsed": {"status": "parsed", "rtl_status": "Pass", "latency_cycles": 128, "samples": 128, "blockers": []},
+            "csynth_parsed": {"estimated_clock_ns": 8.75, "resource_feasible": True, "blockers": []},
+        },
+        {
+            "architecture_id": "hybrid_tiled_complex_axpy_v1",
+            "mapped_qe_timer_names": ["mix_rho"],
+            "vcs_passed": True,
+            "vcs_parsed": {"status": "parsed", "rtl_status": "Pass", "latency_cycles": 64, "samples": 64, "blockers": []},
+            "csynth_parsed": {"estimated_clock_ns": 8.75, "resource_feasible": True, "blockers": []},
+        },
+    ]
+
+    accounting = build_combined_vcs_sidecar_accounting(gpu_baseline, tmp_path / "runs", rows)
+
+    assert len(accounting) == 1
+    item = accounting[0]
+    assert item["architecture_id"] == "hybrid_combined_vcs_sidecar_v1"
+    assert item["status"] == "trace_replay_combined_vcs_sidecar_sensitivity"
+    assert set(item["mapped_timer_names"]) == {"h_psi", "sum_band", "mix_rho"}
+    assert item["replaceable_seconds_mean"] == 0.60
+    assert item["fpga_component_count"] == 3
+    assert item["hybrid_workflow_runtime_seconds"] < 1.0
+    assert item["implementation_coverage"] == "combined_partial_sidecar_motif"
+    assert "not full-QE integration" in item["claim_boundary"]
+
+
+def test_merge_combined_vcs_sidecar_comparisons_appends_combined_candidate():
+    gpu_baseline = {"baseline_records": [{"case_id": "case-a", "runtime_seconds_mean": 1.0}]}
+    classification = {
+        "preliminary_label": "fpga_hybrid_weaker",
+        "final_claim_allowed": False,
+        "blockers": ["physical_fpga_board_measurement_missing"],
+        "architecture_comparisons": [],
+    }
+    combined = [
+        {
+            "architecture_id": "hybrid_combined_vcs_sidecar_v1",
+            "status": "trace_replay_combined_vcs_sidecar_sensitivity",
+            "case_id": "case-a",
+            "latency_source": "combined_vcs_rtl",
+            "mapped_timer_names": ["h_psi", "sum_band"],
+            "hybrid_workflow_runtime_seconds": 0.75,
+            "replaceable_seconds_mean": 0.30,
+            "implementation_coverage": "combined_partial_sidecar_motif",
+            "fpga_component_count": 2,
+            "fpga_components": [{"architecture_id": "a"}, {"architecture_id": "b"}],
+        }
+    ]
+
+    merged = merge_combined_vcs_sidecar_comparisons(gpu_baseline, classification, combined)
+
+    assert merged["best_architecture_id"] == "hybrid_combined_vcs_sidecar_v1"
+    assert merged["best_speedup_vs_gpu_mean"] == 1.0 / 0.75
+    assert merged["architecture_comparisons"][0]["latency_source"] == "combined_vcs_rtl"
+    assert merged["architecture_comparisons"][0]["workflow_accounting_status"] == "trace_replay_combined_vcs_sidecar_sensitivity"
+    assert "full_qe_kernel_integration_missing" in merged["blockers"]
+    assert merged["final_claim_allowed"] is False

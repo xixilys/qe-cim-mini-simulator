@@ -19,9 +19,13 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from dse_v2.experiments.qe_ic_real_opportunity.real_hybrid_hls_evidence import (  # noqa: E402
+    build_combined_vcs_sidecar_accounting,
     build_real_hybrid_claim_closure,
     build_real_hybrid_architecture_specs,
+    build_trace_replay_workflow_accounting,
+    classify_real_hybrid_vs_gpu,
     materialize_vcs_rtl_project,
+    merge_combined_vcs_sidecar_comparisons,
     merge_vcs_rtl_evidence_into_summary,
     parse_vcs_rtl_run_log,
     render_real_hybrid_hls_report,
@@ -63,6 +67,13 @@ def _load_gpu_baseline(path: Path) -> dict[str, Any] | None:
     if not isinstance(payload, dict):
         raise ValueError(f"GPU baseline is not a JSON object: {path}")
     return payload
+
+
+def _gpu_runs_root_from_summary(summary: Mapping[str, Any], baseline_path: Path) -> Path:
+    value = summary.get("gpu_runs_root")
+    if isinstance(value, str) and value:
+        return Path(value)
+    return baseline_path.parent / "runs"
 
 
 def _fetch_remote_file(remote_path: str, local_path: Path, *, timeout_seconds: int = 60) -> bool:
@@ -198,10 +209,26 @@ def run_campaign(args: argparse.Namespace) -> dict[str, Any]:
             row["evidence_json_hash"] = _sha256_file(row_path)
         break
     _write_json(summary_path, merged)
-    baseline = _load_gpu_baseline(Path("artifacts/qe_ic_7day_prelim/qe_ic_7day_gpu_baseline.json"))
+    baseline_path = Path(str(merged.get("gpu_baseline_path") or "artifacts/qe_ic_7day_prelim/qe_ic_7day_gpu_baseline.json"))
+    baseline = _load_gpu_baseline(baseline_path)
     if baseline is not None and isinstance(merged.get("classification"), Mapping):
+        gpu_runs_root = _gpu_runs_root_from_summary(merged, baseline_path)
+        rows = [row for row in merged.get("evidence_rows", []) if isinstance(row, Mapping)]
+        for row in rows:
+            row["workflow_accounting"] = build_trace_replay_workflow_accounting(baseline, gpu_runs_root, row)
+            row_path_value = row.get("evidence_json_path")
+            if row_path_value:
+                row_path = Path(str(row_path_value))
+                _write_json(row_path, row)
+                row["evidence_json_hash"] = _sha256_file(row_path)
+        classification = classify_real_hybrid_vs_gpu(baseline, rows)
+        combined_vcs_sidecar_accounting = build_combined_vcs_sidecar_accounting(baseline, gpu_runs_root, rows)
+        classification = merge_combined_vcs_sidecar_comparisons(baseline, classification, combined_vcs_sidecar_accounting)
+        merged["evidence_rows"] = rows
+        merged["combined_vcs_sidecar_accounting"] = combined_vcs_sidecar_accounting
+        merged["classification"] = classification
         claim_closure_path = Path(str(merged.get("claim_closure_path") or out_dir / "real_hybrid_claim_closure.json"))
-        claim_closure = build_real_hybrid_claim_closure(baseline, [row for row in merged.get("evidence_rows", []) if isinstance(row, Mapping)], merged["classification"])
+        claim_closure = build_real_hybrid_claim_closure(baseline, rows, classification)
         _write_json(claim_closure_path, claim_closure)
         merged["claim_closure_path"] = str(claim_closure_path)
         _write_json(summary_path, merged)

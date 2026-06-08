@@ -3,8 +3,8 @@
 - Preliminary label: `fpga_hybrid_weaker`
 - Confidence: `medium`
 - Final hardware claim allowed: `False`
-- Best architecture: `hybrid_hpsi_local_potential_v1`
-- Best optimistic trace-replay speedup vs GPU: `1.18627x`
+- Best architecture: `hybrid_combined_vcs_sidecar_v1`
+- Best optimistic trace-replay speedup vs GPU: `1.5511x`
 - Resource-infeasible architectures filtered: `hybrid_fft_twiddle_stream_v1`
 - Claim closure audit: `artifacts/qe_ic_real_hybrid_hls/real_hybrid_claim_closure.json`
 
@@ -82,10 +82,13 @@ Trace replay used measured QE full-SCF timer logs from `artifacts/qe_ic_7day_pre
 | `hybrid_hpsi_local_potential_v1` | `ic_al_interconnect_4atom_scf_v0` | `vcs_rtl` | `h_psi` | 1.1863x | `trace_replay_vcs_rtl_sensitivity` | `qe_routine_equivalent_miniapp` |
 | `hybrid_hpsi_local_potential_v1` | `ic_si_bulk_2atom_scf_v0` | `vivado_hls_cosim` | `h_psi` | 1.1250x | `trace_replay_optimistic` | `qe_routine_equivalent_miniapp` |
 | `hybrid_hpsi_local_potential_v1` | `ic_si_bulk_2atom_scf_v0` | `vcs_rtl` | `h_psi` | 1.1255x | `trace_replay_vcs_rtl_sensitivity` | `qe_routine_equivalent_miniapp` |
+| `hybrid_combined_vcs_sidecar_v1` | `ic_sio2_dielectric_6atom_scf_v0` | `combined_vcs_rtl` | `calbec, h_psi, h_psi:calbec, mix_rho, sum_band` | 1.5511x | `trace_replay_combined_vcs_sidecar_sensitivity` | `combined_partial_sidecar_motif` |
+| `hybrid_combined_vcs_sidecar_v1` | `ic_al_interconnect_4atom_scf_v0` | `combined_vcs_rtl` | `calbec, h_psi, h_psi:calbec, mix_rho, sum_band` | 1.4036x | `trace_replay_combined_vcs_sidecar_sensitivity` | `combined_partial_sidecar_motif` |
+| `hybrid_combined_vcs_sidecar_v1` | `ic_si_bulk_2atom_scf_v0` | `combined_vcs_rtl` | `calbec, h_psi, h_psi:calbec, mix_rho, sum_band` | 1.3124x | `trace_replay_combined_vcs_sidecar_sensitivity` | `combined_partial_sidecar_motif` |
 
 ## Claim boundary
 
-Real HLS C/RTL cosim passed, and optimistic trace replay shows sidecar microkernel potential, but the implemented kernels are partial motifs rather than full QE kernel-equivalent replacements; report current implementation as weaker/not superior.
+Combined VCS RTL sidecar trace replay can improve optimistic sensitivity, but it is still partial-sidecar evidence rather than full QE kernel integration; report current implementation as weaker/not superior.
 
 Blockers:
 - `full_qe_kernel_equivalent_missing`
