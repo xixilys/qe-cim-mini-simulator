@@ -1,0 +1,563 @@
+kernel.cpp
+run_hls.tcl
+tb.cpp
+
+****** Vivado(TM) HLS - High-Level Synthesis from C, C++ and SystemC v2019.1 (64-bit)
+  **** SW Build 2552052 on Fri May 24 14:47:09 MDT 2019
+  **** IP Build 2548770 on Fri May 24 18:01:18 MDT 2019
+    ** Copyright 1986-2019 Xilinx, Inc. All Rights Reserved.
+
+source /home/Xilinx/Vivado/2019.1/scripts/vivado_hls/hls.tcl -notrace
+INFO: [HLS 200-10] Running '/home/Xilinx/Vivado/2019.1/bin/unwrapped/lnx64.o/vivado_hls'
+INFO: [HLS 200-10] For user 'ICer' on host 'IC_EDA' (Linux_x86_64 version 3.10.0-1160.53.1.el7.x86_64) on Mon Jun 08 18:30:08 CST 2026
+INFO: [HLS 200-10] On os "CentOS Linux release 7.9.2009 (Core)"
+INFO: [HLS 200-10] In directory '/tmp/dse_real_hybrid_hls_hybrid_tiled_complex_axpy_v1_c7354cc6'
+Sourcing Tcl script 'run_hls.tcl'
+INFO: [HLS 200-10] Creating and opening project '/tmp/dse_real_hybrid_hls_hybrid_tiled_complex_axpy_v1_c7354cc6/real_hybrid_hls'.
+INFO: [HLS 200-10] Adding design file 'kernel.cpp' to the project
+INFO: [HLS 200-10] Adding test bench file 'tb.cpp' to the project
+INFO: [HLS 200-10] Creating and opening solution '/tmp/dse_real_hybrid_hls_hybrid_tiled_complex_axpy_v1_c7354cc6/real_hybrid_hls/sol1'.
+INFO: [HLS 200-10] Cleaning up the solution database.
+INFO: [HLS 200-10] Setting target device to 'xc7z020-clg400-1'
+INFO: [SYN 201-201] Setting up clock 'default' with a period of 10ns.
+INFO: [SIM 211-2] *************** CSIM start ***************
+INFO: [SIM 211-4] CSIM will launch GCC as the compiler.
+   Compiling ../../../../tb.cpp in debug mode
+   Compiling ../../../../kernel.cpp in debug mode
+   Generating csim.exe
+DSE_REAL_HLS_PASS qeic_real_tiled_complex_axpy 64
+INFO: [SIM 211-1] CSim done with 0 errors.
+INFO: [SIM 211-3] *************** CSIM finish ***************
+INFO: [SCHED 204-61] Option 'relax_ii_for_timing' is enabled, will increase II to preserve clock frequency constraints.
+INFO: [HLS 200-10] Analyzing design file 'kernel.cpp' ... 
+INFO: [HLS 200-111] Finished Linking Time (s): cpu = 00:00:03 ; elapsed = 00:00:03 . Memory (MB): peak = 815.234 ; gain = 128.000 ; free physical = 7902 ; free virtual = 23159
+INFO: [HLS 200-111] Finished Checking Pragmas Time (s): cpu = 00:00:03 ; elapsed = 00:00:03 . Memory (MB): peak = 815.234 ; gain = 128.000 ; free physical = 7902 ; free virtual = 23159
+INFO: [HLS 200-10] Starting code transformations ...
+INFO: [HLS 200-111] Finished Standard Transforms Time (s): cpu = 00:00:03 ; elapsed = 00:00:03 . Memory (MB): peak = 815.234 ; gain = 128.000 ; free physical = 7902 ; free virtual = 23159
+INFO: [HLS 200-10] Checking synthesizability ...
+INFO: [HLS 200-111] Finished Checking Synthesizability Time (s): cpu = 00:00:03 ; elapsed = 00:00:03 . Memory (MB): peak = 815.234 ; gain = 128.000 ; free physical = 7902 ; free virtual = 23159
+INFO: [HLS 200-111] Finished Pre-synthesis Time (s): cpu = 00:00:03 ; elapsed = 00:00:03 . Memory (MB): peak = 815.234 ; gain = 128.000 ; free physical = 7889 ; free virtual = 23146
+INFO: [HLS 200-444] Inferring multiple bus burst read of variable length on port 'gmem0' (kernel.cpp:20:21). These data requests might be further partitioned to multiple requests during RTL generation, based on max_read_burst_length or max_write_burst_length settings.
+INFO: [HLS 200-444] Inferring multiple bus burst read of variable length on port 'gmem1' (kernel.cpp:21:28). These data requests might be further partitioned to multiple requests during RTL generation, based on max_read_burst_length or max_write_burst_length settings.
+INFO: [HLS 200-444] Inferring multiple bus burst read of variable length on port 'gmem2' (kernel.cpp:22:9). These data requests might be further partitioned to multiple requests during RTL generation, based on max_read_burst_length or max_write_burst_length settings.
+INFO: [HLS 200-444] Inferring multiple bus burst read of variable length on port 'gmem3' (kernel.cpp:23:9). These data requests might be further partitioned to multiple requests during RTL generation, based on max_read_burst_length or max_write_burst_length settings.
+INFO: [HLS 200-444] Inferring multiple bus burst write of variable length on port 'gmem4' (kernel.cpp:22:9). These data requests might be further partitioned to multiple requests during RTL generation, based on max_read_burst_length or max_write_burst_length settings.
+INFO: [HLS 200-444] Inferring multiple bus burst write of variable length on port 'gmem5' (kernel.cpp:23:9). These data requests might be further partitioned to multiple requests during RTL generation, based on max_read_burst_length or max_write_burst_length settings.
+INFO: [HLS 200-111] Finished Architecture Synthesis Time (s): cpu = 00:00:03 ; elapsed = 00:00:04 . Memory (MB): peak = 815.234 ; gain = 128.000 ; free physical = 7887 ; free virtual = 23144
+INFO: [HLS 200-10] Starting hardware synthesis ...
+INFO: [HLS 200-10] Synthesizing 'qeic_real_tiled_complex_axpy' ...
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [HLS 200-42] -- Implementing module 'qeic_real_tiled_complex_axpy' 
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [SCHED 204-11] Starting scheduling ...
+INFO: [SCHED 204-61] Pipelining loop 'Loop 1'.
+INFO: [SCHED 204-61] Pipelining result : Target II = 1, Final II = 1, Depth = 19.
+INFO: [SCHED 204-11] Finished scheduling.
+INFO: [HLS 200-111]  Elapsed time: 3.62 seconds; current allocated memory: 92.606 MB.
+INFO: [BIND 205-100] Starting micro-architecture generation ...
+INFO: [BIND 205-101] Performing variable lifetime analysis.
+INFO: [BIND 205-101] Exploring resource sharing.
+INFO: [BIND 205-101] Binding ...
+INFO: [BIND 205-100] Finished micro-architecture generation.
+INFO: [HLS 200-111]  Elapsed time: 0.06 seconds; current allocated memory: 93.228 MB.
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [HLS 200-10] -- Generating RTL for module 'qeic_real_tiled_complex_axpy' 
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [RTGEN 206-500] Setting interface mode on port 'qeic_real_tiled_complex_axpy/gmem0' to 'm_axi'.
+INFO: [RTGEN 206-500] Setting interface mode on port 'qeic_real_tiled_complex_axpy/gmem1' to 'm_axi'.
+INFO: [RTGEN 206-500] Setting interface mode on port 'qeic_real_tiled_complex_axpy/gmem2' to 'm_axi'.
+INFO: [RTGEN 206-500] Setting interface mode on port 'qeic_real_tiled_complex_axpy/gmem3' to 'm_axi'.
+INFO: [RTGEN 206-500] Setting interface mode on port 'qeic_real_tiled_complex_axpy/gmem4' to 'm_axi'.
+INFO: [RTGEN 206-500] Setting interface mode on port 'qeic_real_tiled_complex_axpy/gmem5' to 'm_axi'.
+INFO: [RTGEN 206-500] Setting interface mode on port 'qeic_real_tiled_complex_axpy/x_re' to 's_axilite & ap_none'.
+INFO: [RTGEN 206-500] Setting interface mode on port 'qeic_real_tiled_complex_axpy/x_im' to 's_axilite & ap_none'.
+INFO: [RTGEN 206-500] Setting interface mode on port 'qeic_real_tiled_complex_axpy/y_re' to 's_axilite & ap_none'.
+INFO: [RTGEN 206-500] Setting interface mode on port 'qeic_real_tiled_complex_axpy/y_im' to 's_axilite & ap_none'.
+INFO: [RTGEN 206-500] Setting interface mode on port 'qeic_real_tiled_complex_axpy/out_re' to 's_axilite & ap_none'.
+INFO: [RTGEN 206-500] Setting interface mode on port 'qeic_real_tiled_complex_axpy/out_im' to 's_axilite & ap_none'.
+INFO: [RTGEN 206-500] Setting interface mode on port 'qeic_real_tiled_complex_axpy/n' to 's_axilite & ap_none'.
+INFO: [RTGEN 206-500] Setting interface mode on function 'qeic_real_tiled_complex_axpy' to 's_axilite & ap_ctrl_hs'.
+INFO: [RTGEN 206-100] Bundling port 'return', 'x_re', 'x_im', 'y_re', 'y_im', 'out_re', 'out_im' and 'n' to AXI-Lite port control.
+INFO: [RTGEN 206-100] Generating core module 'qeic_real_tiled_complex_axpy_dadd_64ns_64ns_64_5_full_dsp_1': 3 instance(s).
+INFO: [RTGEN 206-100] Generating core module 'qeic_real_tiled_complex_axpy_dmul_64ns_64ns_64_6_max_dsp_1': 4 instance(s).
+INFO: [RTGEN 206-100] Generating core module 'qeic_real_tiled_complex_axpy_dsub_64ns_64ns_64_5_full_dsp_1': 1 instance(s).
+INFO: [RTGEN 206-100] Finished creating RTL model for 'qeic_real_tiled_complex_axpy'.
+INFO: [HLS 200-111]  Elapsed time: 0.09 seconds; current allocated memory: 95.969 MB.
+INFO: [HLS 200-111] Finished generating all RTL models Time (s): cpu = 00:00:04 ; elapsed = 00:00:05 . Memory (MB): peak = 815.234 ; gain = 128.000 ; free physical = 7873 ; free virtual = 23136
+INFO: [VHDL 208-304] Generating VHDL RTL for qeic_real_tiled_complex_axpy.
+INFO: [VLOG 209-307] Generating Verilog RTL for qeic_real_tiled_complex_axpy.
+INFO: [COSIM 212-47] Using XSIM for RTL simulation.
+INFO: [COSIM 212-14] Instrumenting C test bench ...
+WARNING: [COSIM 212-369] AXI_master port 'gmem0' has a depth of '64'. Insufficient depth may result in simulation mismatch or freeze.
+WARNING: [COSIM 212-369] AXI_master port 'gmem1' has a depth of '64'. Insufficient depth may result in simulation mismatch or freeze.
+WARNING: [COSIM 212-369] AXI_master port 'gmem2' has a depth of '64'. Insufficient depth may result in simulation mismatch or freeze.
+WARNING: [COSIM 212-369] AXI_master port 'gmem3' has a depth of '64'. Insufficient depth may result in simulation mismatch or freeze.
+WARNING: [COSIM 212-369] AXI_master port 'gmem4' has a depth of '64'. Insufficient depth may result in simulation mismatch or freeze.
+WARNING: [COSIM 212-369] AXI_master port 'gmem5' has a depth of '64'. Insufficient depth may result in simulation mismatch or freeze.
+   Build using "/home/Xilinx/Vivado/2019.1/tps/lnx64/gcc-6.2.0/bin/g++"
+   Compiling kernel.cpp_pre.cpp.tb.cpp
+   Compiling apatb_qeic_real_tiled_complex_axpy.cpp
+   Compiling tb.cpp_pre.cpp.tb.cpp
+   Generating cosim.tv.exe
+INFO: [COSIM 212-302] Starting C TB testing ... 
+DSE_REAL_HLS_PASS qeic_real_tiled_complex_axpy 64
+INFO: [COSIM 212-333] Generating C post check test bench ...
+INFO: [COSIM 212-12] Generating RTL test bench ...
+INFO: [COSIM 212-1] *** C/RTL co-simulation file generation completed. ***
+INFO: [COSIM 212-323] Starting verilog simulation. 
+INFO: [COSIM 212-15] Starting XSIM ...
+INFO: [XSIM 43-3496] Using init file passed via -initfile option "/home/Xilinx/Vivado/2019.1/data/xsim/ip/xsim_ip.ini".
+Vivado Simulator 2019.1
+Copyright 1986-1999, 2001-2019 Xilinx, Inc. All Rights Reserved.
+Running: /home/Xilinx/Vivado/2019.1/bin/unwrapped/lnx64.o/xelab xil_defaultlib.apatb_qeic_real_tiled_complex_axpy_top glbl -prj qeic_real_tiled_complex_axpy.prj -L smartconnect_v1_0 -L axi_protocol_checker_v1_1_12 -L axi_protocol_checker_v1_1_13 -L axis_protocol_checker_v1_1_11 -L axis_protocol_checker_v1_1_12 -L xil_defaultlib -L unisims_ver -L xpm --initfile /home/Xilinx/Vivado/2019.1/data/xsim/ip/xsim_ip.ini --lib ieee_proposed=./ieee_proposed -s qeic_real_tiled_complex_axpy 
+Multi-threading is on. Using 14 slave threads.
+Determining compilation order of HDL files.
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_tiled_complex_axpy_v1_c7354cc6/real_hybrid_hls/sol1/sim/verilog/glbl.v" into library work
+INFO: [VRFC 10-311] analyzing module glbl
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_tiled_complex_axpy_v1_c7354cc6/real_hybrid_hls/sol1/sim/verilog/qeic_real_tiled_complex_axpy.autotb.v" into library xil_defaultlib
+INFO: [VRFC 10-311] analyzing module apatb_qeic_real_tiled_complex_axpy_top
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_tiled_complex_axpy_v1_c7354cc6/real_hybrid_hls/sol1/sim/verilog/AESL_axi_master_gmem0.v" into library xil_defaultlib
+INFO: [VRFC 10-311] analyzing module AESL_axi_master_gmem0
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_tiled_complex_axpy_v1_c7354cc6/real_hybrid_hls/sol1/sim/verilog/AESL_axi_master_gmem1.v" into library xil_defaultlib
+INFO: [VRFC 10-311] analyzing module AESL_axi_master_gmem1
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_tiled_complex_axpy_v1_c7354cc6/real_hybrid_hls/sol1/sim/verilog/AESL_axi_master_gmem2.v" into library xil_defaultlib
+INFO: [VRFC 10-311] analyzing module AESL_axi_master_gmem2
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_tiled_complex_axpy_v1_c7354cc6/real_hybrid_hls/sol1/sim/verilog/AESL_axi_master_gmem3.v" into library xil_defaultlib
+INFO: [VRFC 10-311] analyzing module AESL_axi_master_gmem3
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_tiled_complex_axpy_v1_c7354cc6/real_hybrid_hls/sol1/sim/verilog/AESL_axi_master_gmem4.v" into library xil_defaultlib
+INFO: [VRFC 10-311] analyzing module AESL_axi_master_gmem4
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_tiled_complex_axpy_v1_c7354cc6/real_hybrid_hls/sol1/sim/verilog/AESL_axi_master_gmem5.v" into library xil_defaultlib
+INFO: [VRFC 10-311] analyzing module AESL_axi_master_gmem5
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_tiled_complex_axpy_v1_c7354cc6/real_hybrid_hls/sol1/sim/verilog/AESL_axi_slave_control.v" into library xil_defaultlib
+INFO: [VRFC 10-311] analyzing module AESL_axi_slave_control
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_tiled_complex_axpy_v1_c7354cc6/real_hybrid_hls/sol1/sim/verilog/qeic_real_tiled_complex_axpy.v" into library xil_defaultlib
+INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_tiled_complex_axpy_v1_c7354cc6/real_hybrid_hls/sol1/sim/verilog/qeic_real_tiled_complex_axpy_dadd_64ns_64ns_64_5_full_dsp_1.v" into library xil_defaultlib
+INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_dadd_64ns_64ns_64_5_full_dsp_1
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_tiled_complex_axpy_v1_c7354cc6/real_hybrid_hls/sol1/sim/verilog/qeic_real_tiled_complex_axpy_dsub_64ns_64ns_64_5_full_dsp_1.v" into library xil_defaultlib
+INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_dsub_64ns_64ns_64_5_full_dsp_1
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_tiled_complex_axpy_v1_c7354cc6/real_hybrid_hls/sol1/sim/verilog/qeic_real_tiled_complex_axpy_dmul_64ns_64ns_64_6_max_dsp_1.v" into library xil_defaultlib
+INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_dmul_64ns_64ns_64_6_max_dsp_1
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_tiled_complex_axpy_v1_c7354cc6/real_hybrid_hls/sol1/sim/verilog/qeic_real_tiled_complex_axpy_control_s_axi.v" into library xil_defaultlib
+INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_control_s_axi
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_tiled_complex_axpy_v1_c7354cc6/real_hybrid_hls/sol1/sim/verilog/qeic_real_tiled_complex_axpy_gmem0_m_axi.v" into library xil_defaultlib
+INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_gmem0_m_axi
+INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_gmem0_m_axi_reg_slice
+INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_gmem0_m_axi_fifo
+INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_gmem0_m_axi_buffer
+INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_gmem0_m_axi_decoder
+INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_gmem0_m_axi_throttl
+INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_gmem0_m_axi_read
+INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_gmem0_m_axi_write
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_tiled_complex_axpy_v1_c7354cc6/real_hybrid_hls/sol1/sim/verilog/qeic_real_tiled_complex_axpy_gmem1_m_axi.v" into library xil_defaultlib
+INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_gmem1_m_axi
+INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_gmem1_m_axi_reg_slice
+INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_gmem1_m_axi_fifo
+INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_gmem1_m_axi_buffer
+INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_gmem1_m_axi_decoder
+INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_gmem1_m_axi_throttl
+INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_gmem1_m_axi_read
+INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_gmem1_m_axi_write
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_tiled_complex_axpy_v1_c7354cc6/real_hybrid_hls/sol1/sim/verilog/qeic_real_tiled_complex_axpy_gmem2_m_axi.v" into library xil_defaultlib
+INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_gmem2_m_axi
+INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_gmem2_m_axi_reg_slice
+INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_gmem2_m_axi_fifo
+INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_gmem2_m_axi_buffer
+INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_gmem2_m_axi_decoder
+INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_gmem2_m_axi_throttl
+INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_gmem2_m_axi_read
+INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_gmem2_m_axi_write
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_tiled_complex_axpy_v1_c7354cc6/real_hybrid_hls/sol1/sim/verilog/qeic_real_tiled_complex_axpy_gmem3_m_axi.v" into library xil_defaultlib
+INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_gmem3_m_axi
+INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_gmem3_m_axi_reg_slice
+INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_gmem3_m_axi_fifo
+INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_gmem3_m_axi_buffer
+INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_gmem3_m_axi_decoder
+INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_gmem3_m_axi_throttl
+INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_gmem3_m_axi_read
+INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_gmem3_m_axi_write
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_tiled_complex_axpy_v1_c7354cc6/real_hybrid_hls/sol1/sim/verilog/qeic_real_tiled_complex_axpy_gmem4_m_axi.v" into library xil_defaultlib
+INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_gmem4_m_axi
+INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_gmem4_m_axi_reg_slice
+INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_gmem4_m_axi_fifo
+INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_gmem4_m_axi_buffer
+INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_gmem4_m_axi_decoder
+INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_gmem4_m_axi_throttl
+INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_gmem4_m_axi_read
+INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_gmem4_m_axi_write
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/tmp/dse_real_hybrid_hls_hybrid_tiled_complex_axpy_v1_c7354cc6/real_hybrid_hls/sol1/sim/verilog/qeic_real_tiled_complex_axpy_gmem5_m_axi.v" into library xil_defaultlib
+INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_gmem5_m_axi
+INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_gmem5_m_axi_reg_slice
+INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_gmem5_m_axi_fifo
+INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_gmem5_m_axi_buffer
+INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_gmem5_m_axi_decoder
+INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_gmem5_m_axi_throttl
+INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_gmem5_m_axi_read
+INFO: [VRFC 10-311] analyzing module qeic_real_tiled_complex_axpy_gmem5_m_axi_write
+INFO: [VRFC 10-163] Analyzing VHDL file "/tmp/dse_real_hybrid_hls_hybrid_tiled_complex_axpy_v1_c7354cc6/real_hybrid_hls/sol1/sim/verilog/ip/xil_defaultlib/qeic_real_tiled_complex_axpy_ap_dadd_3_full_dsp_64.vhd" into library xil_defaultlib
+INFO: [VRFC 10-3107] analyzing entity 'qeic_real_tiled_complex_axpy_ap_dadd_3_full_dsp_64'
+INFO: [VRFC 10-163] Analyzing VHDL file "/tmp/dse_real_hybrid_hls_hybrid_tiled_complex_axpy_v1_c7354cc6/real_hybrid_hls/sol1/sim/verilog/ip/xil_defaultlib/qeic_real_tiled_complex_axpy_ap_dsub_3_full_dsp_64.vhd" into library xil_defaultlib
+INFO: [VRFC 10-3107] analyzing entity 'qeic_real_tiled_complex_axpy_ap_dsub_3_full_dsp_64'
+INFO: [VRFC 10-163] Analyzing VHDL file "/tmp/dse_real_hybrid_hls_hybrid_tiled_complex_axpy_v1_c7354cc6/real_hybrid_hls/sol1/sim/verilog/ip/xil_defaultlib/qeic_real_tiled_complex_axpy_ap_dmul_4_max_dsp_64.vhd" into library xil_defaultlib
+INFO: [VRFC 10-3107] analyzing entity 'qeic_real_tiled_complex_axpy_ap_dmul_4_max_dsp_64'
+Starting static elaboration
+WARNING: [VRFC 10-3499] library name 'floating_point_v7_1_8' of instantiated unit conflicts with visible identifier [ip/xil_defaultlib/qeic_real_tiled_complex_axpy_ap_dadd_3_full_dsp_64.vhd:201]
+WARNING: [VRFC 10-3499] library name 'floating_point_v7_1_8' of instantiated unit conflicts with visible identifier [ip/xil_defaultlib/qeic_real_tiled_complex_axpy_ap_dsub_3_full_dsp_64.vhd:201]
+WARNING: [VRFC 10-3499] library name 'floating_point_v7_1_8' of instantiated unit conflicts with visible identifier [ip/xil_defaultlib/qeic_real_tiled_complex_axpy_ap_dmul_4_max_dsp_64.vhd:201]
+Completed static elaboration
+Starting simulation data flow analysis
+Completed simulation data flow analysis
+Time Resolution for simulation is 1ps
+Compiling package std.standard
+Compiling package std.textio
+Compiling package ieee.std_logic_1164
+Compiling package ieee.numeric_std
+Compiling package floating_point_v7_1_8.floating_point_v7_1_8_viv_comp
+Compiling package xbip_utils_v3_0_10.xbip_utils_v3_0_10_pkg
+Compiling package axi_utils_v2_0_6.axi_utils_v2_0_6_pkg
+Compiling package floating_point_v7_1_8.floating_point_v7_1_8_consts
+Compiling package ieee.math_real
+Compiling package floating_point_v7_1_8.floating_point_v7_1_8_exp_table_...
+Compiling package mult_gen_v12_0_15.mult_gen_v12_0_15_pkg
+Compiling package ieee.std_logic_arith
+Compiling package ieee.std_logic_signed
+Compiling package floating_point_v7_1_8.floating_point_v7_1_8_pkg
+Compiling package floating_point_v7_1_8.flt_utils
+Compiling package xbip_pipe_v3_0_6.xbip_pipe_v3_0_6_viv_comp
+Compiling package unisim.vcomponents
+Compiling package ieee.vital_timing
+Compiling package ieee.vital_primitives
+Compiling package unisim.vpkg
+Compiling module xil_defaultlib.qeic_real_tiled_complex_axpy_con...
+Compiling module xil_defaultlib.qeic_real_tiled_complex_axpy_gme...
+Compiling module xil_defaultlib.qeic_real_tiled_complex_axpy_gme...
+Compiling module xil_defaultlib.qeic_real_tiled_complex_axpy_gme...
+Compiling module xil_defaultlib.qeic_real_tiled_complex_axpy_gme...
+Compiling module xil_defaultlib.qeic_real_tiled_complex_axpy_gme...
+Compiling module xil_defaultlib.qeic_real_tiled_complex_axpy_gme...
+Compiling module xil_defaultlib.qeic_real_tiled_complex_axpy_gme...
+Compiling module xil_defaultlib.qeic_real_tiled_complex_axpy_gme...
+Compiling module xil_defaultlib.qeic_real_tiled_complex_axpy_gme...
+Compiling module xil_defaultlib.qeic_real_tiled_complex_axpy_gme...
+Compiling module xil_defaultlib.qeic_real_tiled_complex_axpy_gme...
+Compiling module xil_defaultlib.qeic_real_tiled_complex_axpy_gme...
+Compiling module xil_defaultlib.qeic_real_tiled_complex_axpy_gme...
+Compiling module xil_defaultlib.qeic_real_tiled_complex_axpy_gme...
+Compiling module xil_defaultlib.qeic_real_tiled_complex_axpy_gme...
+Compiling module xil_defaultlib.qeic_real_tiled_complex_axpy_gme...
+Compiling module xil_defaultlib.qeic_real_tiled_complex_axpy_gme...
+Compiling module xil_defaultlib.qeic_real_tiled_complex_axpy_gme...
+Compiling module xil_defaultlib.qeic_real_tiled_complex_axpy_gme...
+Compiling module xil_defaultlib.qeic_real_tiled_complex_axpy_gme...
+Compiling module xil_defaultlib.qeic_real_tiled_complex_axpy_gme...
+Compiling module xil_defaultlib.qeic_real_tiled_complex_axpy_gme...
+Compiling module xil_defaultlib.qeic_real_tiled_complex_axpy_gme...
+Compiling module xil_defaultlib.qeic_real_tiled_complex_axpy_gme...
+Compiling module xil_defaultlib.qeic_real_tiled_complex_axpy_gme...
+Compiling module xil_defaultlib.qeic_real_tiled_complex_axpy_gme...
+Compiling module xil_defaultlib.qeic_real_tiled_complex_axpy_gme...
+Compiling module xil_defaultlib.qeic_real_tiled_complex_axpy_gme...
+Compiling module xil_defaultlib.qeic_real_tiled_complex_axpy_gme...
+Compiling module xil_defaultlib.qeic_real_tiled_complex_axpy_gme...
+Compiling module xil_defaultlib.qeic_real_tiled_complex_axpy_gme...
+Compiling module xil_defaultlib.qeic_real_tiled_complex_axpy_gme...
+Compiling module xil_defaultlib.qeic_real_tiled_complex_axpy_gme...
+Compiling module xil_defaultlib.qeic_real_tiled_complex_axpy_gme...
+Compiling module xil_defaultlib.qeic_real_tiled_complex_axpy_gme...
+Compiling module xil_defaultlib.qeic_real_tiled_complex_axpy_gme...
+Compiling module xil_defaultlib.qeic_real_tiled_complex_axpy_gme...
+Compiling module xil_defaultlib.qeic_real_tiled_complex_axpy_gme...
+Compiling module xil_defaultlib.qeic_real_tiled_complex_axpy_gme...
+Compiling module xil_defaultlib.qeic_real_tiled_complex_axpy_gme...
+Compiling module xil_defaultlib.qeic_real_tiled_complex_axpy_gme...
+Compiling module xil_defaultlib.qeic_real_tiled_complex_axpy_gme...
+Compiling module xil_defaultlib.qeic_real_tiled_complex_axpy_gme...
+Compiling module xil_defaultlib.qeic_real_tiled_complex_axpy_gme...
+Compiling module xil_defaultlib.qeic_real_tiled_complex_axpy_gme...
+Compiling module xil_defaultlib.qeic_real_tiled_complex_axpy_gme...
+Compiling module xil_defaultlib.qeic_real_tiled_complex_axpy_gme...
+Compiling module xil_defaultlib.qeic_real_tiled_complex_axpy_gme...
+Compiling module xil_defaultlib.qeic_real_tiled_complex_axpy_gme...
+Compiling module xil_defaultlib.qeic_real_tiled_complex_axpy_gme...
+Compiling module xil_defaultlib.qeic_real_tiled_complex_axpy_gme...
+Compiling module xil_defaultlib.qeic_real_tiled_complex_axpy_gme...
+Compiling module xil_defaultlib.qeic_real_tiled_complex_axpy_gme...
+Compiling module xil_defaultlib.qeic_real_tiled_complex_axpy_gme...
+Compiling module xil_defaultlib.qeic_real_tiled_complex_axpy_gme...
+Compiling module xil_defaultlib.qeic_real_tiled_complex_axpy_gme...
+Compiling module xil_defaultlib.qeic_real_tiled_complex_axpy_gme...
+Compiling module xil_defaultlib.qeic_real_tiled_complex_axpy_gme...
+Compiling module xil_defaultlib.qeic_real_tiled_complex_axpy_gme...
+Compiling module xil_defaultlib.qeic_real_tiled_complex_axpy_gme...
+Compiling module xil_defaultlib.qeic_real_tiled_complex_axpy_gme...
+Compiling module xil_defaultlib.qeic_real_tiled_complex_axpy_gme...
+Compiling module xil_defaultlib.qeic_real_tiled_complex_axpy_gme...
+Compiling module xil_defaultlib.qeic_real_tiled_complex_axpy_gme...
+Compiling module xil_defaultlib.qeic_real_tiled_complex_axpy_gme...
+Compiling module xil_defaultlib.qeic_real_tiled_complex_axpy_gme...
+Compiling module xil_defaultlib.qeic_real_tiled_complex_axpy_gme...
+Compiling module xil_defaultlib.qeic_real_tiled_complex_axpy_gme...
+Compiling module xil_defaultlib.qeic_real_tiled_complex_axpy_gme...
+Compiling module xil_defaultlib.qeic_real_tiled_complex_axpy_gme...
+Compiling module xil_defaultlib.qeic_real_tiled_complex_axpy_gme...
+Compiling module xil_defaultlib.qeic_real_tiled_complex_axpy_gme...
+Compiling architecture synth of entity xbip_pipe_v3_0_6.xbip_pipe_v3_0_6_viv [\xbip_pipe_v3_0_6_viv(c_latency=...]
+Compiling architecture rtl of entity floating_point_v7_1_8.delay [\delay(width=52)\]
+Compiling architecture synth of entity xbip_pipe_v3_0_6.xbip_pipe_v3_0_6_viv [\xbip_pipe_v3_0_6_viv(c_latency=...]
+Compiling architecture rtl of entity floating_point_v7_1_8.delay [delay_default]
+Compiling architecture synth of entity xbip_pipe_v3_0_6.xbip_pipe_v3_0_6_viv [\xbip_pipe_v3_0_6_viv(c_has_ce=1...]
+Compiling architecture rtl of entity floating_point_v7_1_8.delay [\delay(width=14,length=0)\]
+Compiling architecture synth of entity xbip_pipe_v3_0_6.xbip_pipe_v3_0_6_viv [\xbip_pipe_v3_0_6_viv(c_has_ce=1...]
+Compiling architecture rtl of entity floating_point_v7_1_8.delay [\delay(width=3,length=0,fast_inp...]
+Compiling architecture synth of entity xbip_pipe_v3_0_6.xbip_pipe_v3_0_6_viv [\xbip_pipe_v3_0_6_viv(c_has_ce=1...]
+Compiling architecture rtl of entity floating_point_v7_1_8.delay [\delay(length=0)\]
+Compiling architecture synth of entity xbip_pipe_v3_0_6.xbip_pipe_v3_0_6_viv [\xbip_pipe_v3_0_6_viv(c_has_ce=1...]
+Compiling architecture rtl of entity floating_point_v7_1_8.delay [\delay(width=54,length=0)\]
+Compiling architecture synth of entity xbip_pipe_v3_0_6.xbip_pipe_v3_0_6_viv [\xbip_pipe_v3_0_6_viv(c_has_ce=1...]
+Compiling architecture rtl of entity floating_point_v7_1_8.delay [\delay(width=11,length=0,fast_in...]
+Compiling architecture synth of entity xbip_pipe_v3_0_6.xbip_pipe_v3_0_6_viv [\xbip_pipe_v3_0_6_viv(c_has_ce=1...]
+Compiling architecture rtl of entity floating_point_v7_1_8.delay [\delay(length=0,fast_input=true)...]
+Compiling architecture synth of entity xbip_pipe_v3_0_6.xbip_pipe_v3_0_6_viv [\xbip_pipe_v3_0_6_viv(c_has_ce=1...]
+Compiling architecture rtl of entity floating_point_v7_1_8.delay [\delay(width=2,length=0)\]
+Compiling architecture synth of entity xbip_pipe_v3_0_6.xbip_pipe_v3_0_6_viv [\xbip_pipe_v3_0_6_viv(c_has_ce=1...]
+Compiling architecture rtl of entity floating_point_v7_1_8.delay [\delay(width=16,length=0)\]
+Compiling architecture muxf7_v of entity unisim.MUXF7 [muxf7_default]
+Compiling architecture muxf8_v of entity unisim.MUXF8 [muxf8_default]
+Compiling architecture muxcy_v of entity unisim.MUXCY [muxcy_default]
+Compiling architecture struct of entity floating_point_v7_1_8.carry_chain [\carry_chain(c_xdevicefamily="zy...]
+Compiling architecture synth of entity floating_point_v7_1_8.compare_eq_im [\compare_eq_im(c_xdevicefamily="...]
+Compiling architecture rtl of entity floating_point_v7_1_8.zero_det_sel [\zero_det_sel(c_xdevicefamily="z...]
+Compiling architecture synth of entity xbip_pipe_v3_0_6.xbip_pipe_v3_0_6_viv [\xbip_pipe_v3_0_6_viv(c_has_ce=1...]
+Compiling architecture rtl of entity floating_point_v7_1_8.delay [\delay(width=55,length=0)\]
+Compiling architecture rtl of entity floating_point_v7_1_8.shift_msb_first [\shift_msb_first(a_width=54,regi...]
+Compiling architecture rtl of entity floating_point_v7_1_8.alignment [\alignment(c_xdevicefamily="zynq...]
+Compiling architecture synth of entity xbip_pipe_v3_0_6.xbip_pipe_v3_0_6_viv [\xbip_pipe_v3_0_6_viv(c_latency=...]
+Compiling architecture rtl of entity floating_point_v7_1_8.delay [\delay(fast_input=true)\]
+Compiling architecture synth of entity xbip_pipe_v3_0_6.xbip_pipe_v3_0_6_viv [\xbip_pipe_v3_0_6_viv(c_has_ce=1...]
+Compiling architecture rtl of entity floating_point_v7_1_8.delay [\delay(width=47,length=0)\]
+Compiling architecture synth of entity xbip_pipe_v3_0_6.xbip_pipe_v3_0_6_viv [\xbip_pipe_v3_0_6_viv(c_has_ce=1...]
+Compiling architecture rtl of entity floating_point_v7_1_8.delay [\delay(width=7,length=0)\]
+Compiling architecture synth of entity xbip_pipe_v3_0_6.xbip_pipe_v3_0_6_viv [\xbip_pipe_v3_0_6_viv(c_has_ce=1...]
+Compiling architecture rtl of entity floating_point_v7_1_8.delay [\delay(width=4,length=0)\]
+Compiling architecture synth of entity xbip_pipe_v3_0_6.xbip_pipe_v3_0_6_viv [\xbip_pipe_v3_0_6_viv(c_has_ce=1...]
+Compiling architecture rtl of entity floating_point_v7_1_8.delay [\delay(width=30,length=0)\]
+Compiling architecture synth of entity xbip_pipe_v3_0_6.xbip_pipe_v3_0_6_viv [\xbip_pipe_v3_0_6_viv(c_has_ce=1...]
+Compiling architecture rtl of entity floating_point_v7_1_8.delay [\delay(width=18,length=0)\]
+Compiling architecture synth of entity xbip_pipe_v3_0_6.xbip_pipe_v3_0_6_viv [\xbip_pipe_v3_0_6_viv(c_has_ce=1...]
+Compiling architecture rtl of entity floating_point_v7_1_8.delay [\delay(width=25,length=0)\]
+Compiling architecture dsp48e1_v of entity unisim.DSP48E1 [\DSP48E1(acascreg=0,adreg=0,alum...]
+Compiling architecture rtl of entity floating_point_v7_1_8.dsp48e1_wrapper [\dsp48e1_wrapper(a_width=30,b_wi...]
+Compiling architecture synth of entity xbip_pipe_v3_0_6.xbip_pipe_v3_0_6_viv [\xbip_pipe_v3_0_6_viv(c_has_ce=1...]
+Compiling architecture rtl of entity floating_point_v7_1_8.delay [\delay(width=48,length=0)\]
+Compiling architecture dsp48e1_v of entity unisim.DSP48E1 [\DSP48E1(acascreg=0,adreg=0,alum...]
+Compiling architecture rtl of entity floating_point_v7_1_8.dsp48e1_wrapper [\dsp48e1_wrapper(a_width=30,b_wi...]
+Compiling architecture synth of entity xbip_pipe_v3_0_6.xbip_pipe_v3_0_6_viv [\xbip_pipe_v3_0_6_viv(c_has_ce=1...]
+Compiling architecture rtl of entity floating_point_v7_1_8.delay [\delay(width=9,length=0)\]
+Compiling architecture xorcy_v of entity unisim.XORCY [xorcy_default]
+Compiling architecture synth of entity xbip_pipe_v3_0_6.xbip_pipe_v3_0_6_viv [\xbip_pipe_v3_0_6_viv(c_has_ce=1...]
+Compiling architecture rtl of entity floating_point_v7_1_8.delay [\delay(width=8,length=0)\]
+Compiling architecture synth of entity xbip_pipe_v3_0_6.xbip_pipe_v3_0_6_viv [\xbip_pipe_v3_0_6_viv(c_latency=...]
+Compiling architecture rtl of entity floating_point_v7_1_8.delay [\delay(width=9)\]
+Compiling architecture struct of entity floating_point_v7_1_8.carry_chain [\carry_chain(c_xdevicefamily="zy...]
+Compiling architecture synth of entity xbip_pipe_v3_0_6.xbip_pipe_v3_0_6_viv [\xbip_pipe_v3_0_6_viv(c_has_ce=1...]
+Compiling architecture rtl of entity floating_point_v7_1_8.delay [\delay(width=56,length=0)\]
+Compiling architecture synth of entity floating_point_v7_1_8.addsub_dsp [\addsub_dsp(c_xdevicefamily="zyn...]
+Compiling architecture rtl of entity floating_point_v7_1_8.addsub [\addsub(c_xdevicefamily="zynq",c...]
+Compiling architecture rtl of entity floating_point_v7_1_8.align_add [\align_add(c_xdevicefamily="zynq...]
+Compiling architecture synth of entity xbip_pipe_v3_0_6.xbip_pipe_v3_0_6_viv [\xbip_pipe_v3_0_6_viv(c_has_ce=1...]
+Compiling architecture rtl of entity floating_point_v7_1_8.delay [\delay(width=6,length=0,fast_inp...]
+Compiling architecture struct of entity floating_point_v7_1_8.carry_chain [\carry_chain(c_xdevicefamily="zy...]
+Compiling architecture rtl of entity floating_point_v7_1_8.mux4 [\mux4(c_xdevicefamily="zynq",wid...]
+Compiling architecture synth of entity xbip_pipe_v3_0_6.xbip_pipe_v3_0_6_viv [\xbip_pipe_v3_0_6_viv(c_has_ce=1...]
+Compiling architecture rtl of entity floating_point_v7_1_8.delay [\delay(width=4,length=0,fast_inp...]
+Compiling architecture rtl of entity floating_point_v7_1_8.mux4 [\mux4(c_xdevicefamily="zynq",wid...]
+Compiling architecture synth of entity xbip_pipe_v3_0_6.xbip_pipe_v3_0_6_viv [\xbip_pipe_v3_0_6_viv(c_latency=...]
+Compiling architecture rtl of entity floating_point_v7_1_8.delay [\delay(width=2)\]
+Compiling architecture synth of entity xbip_pipe_v3_0_6.xbip_pipe_v3_0_6_viv [\xbip_pipe_v3_0_6_viv(c_has_ce=1...]
+Compiling architecture rtl of entity floating_point_v7_1_8.delay [\delay(width=2,length=0,fast_inp...]
+Compiling architecture rtl of entity floating_point_v7_1_8.mux4 [\mux4(c_xdevicefamily="zynq",wid...]
+Compiling architecture rtl of entity floating_point_v7_1_8.mux4 [\mux4(c_xdevicefamily="zynq",wid...]
+Compiling architecture synth of entity xbip_pipe_v3_0_6.xbip_pipe_v3_0_6_viv [\xbip_pipe_v3_0_6_viv(c_has_ce=1...]
+Compiling architecture rtl of entity floating_point_v7_1_8.delay [\delay(width=8,length=0,fast_inp...]
+Compiling architecture struct of entity floating_point_v7_1_8.carry_chain [\carry_chain(c_xdevicefamily="zy...]
+Compiling architecture rtl of entity floating_point_v7_1_8.lead_zero_encode [\lead_zero_encode(c_xdevicefamil...]
+Compiling architecture synth of entity xbip_pipe_v3_0_6.xbip_pipe_v3_0_6_viv [\xbip_pipe_v3_0_6_viv(c_latency=...]
+Compiling architecture rtl of entity floating_point_v7_1_8.delay [\delay(width=56)\]
+Compiling architecture rtl of entity floating_point_v7_1_8.shift_msb_first [\shift_msb_first(a_width=56,resu...]
+Compiling architecture rtl of entity floating_point_v7_1_8.dsp48e1_wrapper [\dsp48e1_wrapper(b_width=18,c_wi...]
+Compiling architecture synth of entity xbip_pipe_v3_0_6.xbip_pipe_v3_0_6_viv [\xbip_pipe_v3_0_6_viv(c_has_ce=1...]
+Compiling architecture rtl of entity floating_point_v7_1_8.delay [\delay(width=19,length=0)\]
+Compiling architecture struct of entity floating_point_v7_1_8.carry_chain [\carry_chain(c_xdevicefamily="zy...]
+Compiling architecture synth of entity xbip_pipe_v3_0_6.xbip_pipe_v3_0_6_viv [\xbip_pipe_v3_0_6_viv(c_has_ce=1...]
+Compiling architecture rtl of entity floating_point_v7_1_8.delay [\delay(width=28,length=0)\]
+Compiling architecture synth of entity xbip_pipe_v3_0_6.xbip_pipe_v3_0_6_viv [\xbip_pipe_v3_0_6_viv(c_has_ce=1...]
+Compiling architecture rtl of entity floating_point_v7_1_8.delay [\delay(width=29,length=0)\]
+Compiling architecture synth of entity xbip_pipe_v3_0_6.xbip_pipe_v3_0_6_viv [\xbip_pipe_v3_0_6_viv(c_has_ce=1...]
+Compiling architecture rtl of entity floating_point_v7_1_8.delay [\delay(width=3,length=0)\]
+Compiling architecture struct of entity floating_point_v7_1_8.carry_chain [\carry_chain(c_xdevicefamily="zy...]
+Compiling architecture rtl of entity floating_point_v7_1_8.flt_round_bit [\flt_round_bit(c_xdevicefamily="...]
+Compiling architecture rtl of entity floating_point_v7_1_8.renorm_and_round_logic [\renorm_and_round_logic(c_xdevic...]
+Compiling architecture rtl of entity floating_point_v7_1_8.norm_and_round_logic [\norm_and_round_logic(c_xdevicef...]
+Compiling architecture synth of entity xbip_pipe_v3_0_6.xbip_pipe_v3_0_6_viv [\xbip_pipe_v3_0_6_viv(c_latency=...]
+Compiling architecture rtl of entity floating_point_v7_1_8.delay [\delay(length=2)\]
+Compiling architecture synth of entity xbip_pipe_v3_0_6.xbip_pipe_v3_0_6_viv [\xbip_pipe_v3_0_6_viv(c_has_ce=1...]
+Compiling architecture rtl of entity floating_point_v7_1_8.delay [\delay(width=12,length=0)\]
+Compiling architecture struct of entity floating_point_v7_1_8.carry_chain [\carry_chain(c_xdevicefamily="zy...]
+Compiling architecture synth of entity xbip_pipe_v3_0_6.xbip_pipe_v3_0_6_viv [\xbip_pipe_v3_0_6_viv(c_has_ce=1...]
+Compiling architecture rtl of entity floating_point_v7_1_8.delay [\delay(width=12,length=0,fast_in...]
+Compiling architecture synth of entity xbip_pipe_v3_0_6.xbip_pipe_v3_0_6_viv [\xbip_pipe_v3_0_6_viv(c_latency=...]
+Compiling architecture rtl of entity floating_point_v7_1_8.delay [\delay(width=12,length=2)\]
+Compiling architecture fdre_v of entity unisim.FDRE [fdre_default]
+Compiling architecture fde_v of entity unisim.FDE [fde_default]
+Compiling architecture struct of entity floating_point_v7_1_8.carry_chain [\carry_chain(c_xdevicefamily="zy...]
+Compiling architecture synth of entity floating_point_v7_1_8.compare_eq_im [\compare_eq_im(c_xdevicefamily="...]
+Compiling architecture rtl of entity floating_point_v7_1_8.special_detect [\special_detect(c_xdevicefamily=...]
+Compiling architecture struct of entity floating_point_v7_1_8.carry_chain [\carry_chain(c_xdevicefamily="zy...]
+Compiling architecture synth of entity floating_point_v7_1_8.compare_gt [\compare_gt(c_xdevicefamily="zyn...]
+Compiling architecture synth of entity xbip_pipe_v3_0_6.xbip_pipe_v3_0_6_viv [\xbip_pipe_v3_0_6_viv(c_has_ce=1...]
+Compiling architecture rtl of entity floating_point_v7_1_8.delay [\delay(width=11,length=0)\]
+Compiling architecture struct of entity floating_point_v7_1_8.carry_chain [\carry_chain(c_xdevicefamily="zy...]
+Compiling architecture synth of entity floating_point_v7_1_8.compare_eq [\compare_eq(c_xdevicefamily="zyn...]
+Compiling architecture synth of entity floating_point_v7_1_8.compare [\compare(c_xdevicefamily="zynq",...]
+Compiling architecture synth of entity xbip_pipe_v3_0_6.xbip_pipe_v3_0_6_viv [\xbip_pipe_v3_0_6_viv(c_latency=...]
+Compiling architecture rtl of entity floating_point_v7_1_8.delay [\delay(width=11)\]
+Compiling architecture synth of entity xbip_pipe_v3_0_6.xbip_pipe_v3_0_6_viv [\xbip_pipe_v3_0_6_viv(c_latency=...]
+Compiling architecture rtl of entity floating_point_v7_1_8.delay [\delay(width=12)\]
+Compiling architecture synth of entity xbip_pipe_v3_0_6.xbip_pipe_v3_0_6_viv [\xbip_pipe_v3_0_6_viv(c_latency=...]
+Compiling architecture rtl of entity floating_point_v7_1_8.delay [\delay(width=2,length=2,fast_inp...]
+Compiling architecture synth of entity xbip_pipe_v3_0_6.xbip_pipe_v3_0_6_viv [\xbip_pipe_v3_0_6_viv(c_latency=...]
+Compiling architecture rtl of entity floating_point_v7_1_8.delay [\delay(length=2,fast_input=true)...]
+Compiling architecture rtl of entity floating_point_v7_1_8.flt_add_exp [\flt_add_exp(c_xdevicefamily="zy...]
+Compiling architecture synth of entity floating_point_v7_1_8.flt_dec_op [\flt_dec_op(c_xdevicefamily="zyn...]
+Compiling architecture rtl of entity floating_point_v7_1_8.flt_add_logic [\flt_add_logic(c_xdevicefamily="...]
+Compiling architecture rtl of entity floating_point_v7_1_8.flt_add [\flt_add(c_xdevicefamily="zynq",...]
+Compiling architecture synth of entity xbip_pipe_v3_0_6.xbip_pipe_v3_0_6_viv [\xbip_pipe_v3_0_6_viv(c_latency=...]
+Compiling architecture synth of entity xbip_pipe_v3_0_6.xbip_pipe_v3_0_6_viv [\xbip_pipe_v3_0_6_viv(c_has_ce=1...]
+Compiling architecture rtl of entity floating_point_v7_1_8.delay [\delay(width=64,length=0)\]
+Compiling architecture xilinx of entity floating_point_v7_1_8.floating_point_v7_1_8_viv [\floating_point_v7_1_8_viv(c_xde...]
+Compiling architecture xilinx of entity floating_point_v7_1_8.floating_point_v7_1_8 [\floating_point_v7_1_8(c_xdevice...]
+Compiling architecture qeic_real_tiled_complex_axpy_ap_dadd_3_full_dsp_64_arch of entity xil_defaultlib.qeic_real_tiled_complex_axpy_ap_dadd_3_full_dsp_64 [qeic_real_tiled_complex_axpy_ap_...]
+Compiling module xil_defaultlib.qeic_real_tiled_complex_axpy_dad...
+Compiling architecture rtl of entity floating_point_v7_1_8.flt_add [\flt_add(c_xdevicefamily="zynq",...]
+Compiling architecture xilinx of entity floating_point_v7_1_8.floating_point_v7_1_8_viv [\floating_point_v7_1_8_viv(c_xde...]
+Compiling architecture xilinx of entity floating_point_v7_1_8.floating_point_v7_1_8 [\floating_point_v7_1_8(c_xdevice...]
+Compiling architecture qeic_real_tiled_complex_axpy_ap_dsub_3_full_dsp_64_arch of entity xil_defaultlib.qeic_real_tiled_complex_axpy_ap_dsub_3_full_dsp_64 [qeic_real_tiled_complex_axpy_ap_...]
+Compiling module xil_defaultlib.qeic_real_tiled_complex_axpy_dsu...
+Compiling architecture dsp48e1_v of entity unisim.DSP48E1 [\DSP48E1(acascreg=0,adreg=0,alum...]
+Compiling architecture rtl of entity floating_point_v7_1_8.dsp48e1_wrapper [\dsp48e1_wrapper(a_width=19,b_wi...]
+Compiling architecture synth of entity xbip_pipe_v3_0_6.xbip_pipe_v3_0_6_viv [\xbip_pipe_v3_0_6_viv(c_has_ce=1...]
+Compiling architecture rtl of entity floating_point_v7_1_8.delay [\delay(width=17,length=0)\]
+Compiling architecture dsp48e1_v of entity unisim.DSP48E1 [\DSP48E1(acascreg=0,adreg=0,alum...]
+Compiling architecture rtl of entity floating_point_v7_1_8.dsp48e1_wrapper [\dsp48e1_wrapper(a_width=17,b_wi...]
+Compiling architecture dsp48e1_v of entity unisim.DSP48E1 [\DSP48E1(acascreg=0,adreg=0,alum...]
+Compiling architecture rtl of entity floating_point_v7_1_8.dsp48e1_wrapper [\dsp48e1_wrapper(a_width=17,b_wi...]
+Compiling architecture dsp48e1_v of entity unisim.DSP48E1 [\DSP48E1(acascreg=0,adreg=0,alum...]
+Compiling architecture rtl of entity floating_point_v7_1_8.dsp48e1_wrapper [\dsp48e1_wrapper(a_width=17,b_wi...]
+Compiling architecture dsp48e1_v of entity unisim.DSP48E1 [\DSP48E1(adreg=0,alumodereg=0,b_...]
+Compiling architecture rtl of entity floating_point_v7_1_8.dsp48e1_wrapper [\dsp48e1_wrapper(a_width=17,b_wi...]
+Compiling architecture dsp48e1_v of entity unisim.DSP48E1 [\DSP48E1(adreg=0,alumodereg=0,ca...]
+Compiling architecture rtl of entity floating_point_v7_1_8.dsp48e1_wrapper [\dsp48e1_wrapper(a_width=19,b_wi...]
+Compiling architecture dsp48e1_v of entity unisim.DSP48E1 [\DSP48E1(adreg=0,alumodereg=0,ca...]
+Compiling architecture rtl of entity floating_point_v7_1_8.dsp48e1_wrapper [\dsp48e1_wrapper(a_width=19,b_wi...]
+Compiling architecture dsp48e1_v of entity unisim.DSP48E1 [\DSP48E1(acascreg=0,adreg=0,alum...]
+Compiling architecture rtl of entity floating_point_v7_1_8.dsp48e1_wrapper [\dsp48e1_wrapper(a_width=19,b_wi...]
+Compiling architecture dsp48e1_v of entity unisim.DSP48E1 [\DSP48E1(acascreg=2,adreg=0,alum...]
+Compiling architecture rtl of entity floating_point_v7_1_8.dsp48e1_wrapper [\dsp48e1_wrapper(a_width=19,b_wi...]
+Compiling architecture synth of entity xbip_pipe_v3_0_6.xbip_pipe_v3_0_6_viv [\xbip_pipe_v3_0_6_viv(c_latency=...]
+Compiling architecture rtl of entity floating_point_v7_1_8.delay [\delay(width=17)\]
+Compiling architecture dsp48e1_v of entity unisim.DSP48E1 [\DSP48E1(acascreg=0,adreg=0,alum...]
+Compiling architecture rtl of entity floating_point_v7_1_8.dsp48e1_wrapper [\dsp48e1_wrapper(a_width=19,b_wi...]
+Compiling architecture struct of entity floating_point_v7_1_8.fix_mult_dsp48e1_dbl [\fix_mult_dsp48e1_dbl(mult_usage...]
+Compiling architecture rtl of entity floating_point_v7_1_8.fix_mult [\fix_mult(c_xdevicefamily="zynq"...]
+Compiling architecture struct of entity floating_point_v7_1_8.carry_chain [\carry_chain(c_xdevicefamily="zy...]
+Compiling architecture struct of entity floating_point_v7_1_8.carry_chain [\carry_chain(c_xdevicefamily="zy...]
+Compiling architecture synth of entity floating_point_v7_1_8.compare_eq_im [\compare_eq_im(c_xdevicefamily="...]
+Compiling architecture rtl of entity floating_point_v7_1_8.special_detect [\special_detect(c_xdevicefamily=...]
+Compiling architecture synth of entity xbip_pipe_v3_0_6.xbip_pipe_v3_0_6_viv [\xbip_pipe_v3_0_6_viv(c_latency=...]
+Compiling architecture rtl of entity floating_point_v7_1_8.delay [\delay(length=3)\]
+Compiling architecture synth of entity xbip_pipe_v3_0_6.xbip_pipe_v3_0_6_viv [\xbip_pipe_v3_0_6_viv(c_latency=...]
+Compiling architecture rtl of entity floating_point_v7_1_8.delay [\delay(width=2,length=3,fast_inp...]
+Compiling architecture rtl of entity floating_point_v7_1_8.delay [\delay(length=3,fast_input=true)...]
+Compiling architecture synth of entity xbip_pipe_v3_0_6.xbip_pipe_v3_0_6_viv [\xbip_pipe_v3_0_6_viv(c_latency=...]
+Compiling architecture rtl of entity floating_point_v7_1_8.delay [\delay(width=4,length=3,fast_inp...]
+Compiling architecture synth of entity xbip_pipe_v3_0_6.xbip_pipe_v3_0_6_viv [\xbip_pipe_v3_0_6_viv(c_latency=...]
+Compiling architecture rtl of entity floating_point_v7_1_8.delay [\delay(width=11,length=3)\]
+Compiling architecture rtl of entity floating_point_v7_1_8.flt_mult_exp [\flt_mult_exp(c_xdevicefamily="z...]
+Compiling architecture synth of entity xbip_pipe_v3_0_6.xbip_pipe_v3_0_6_viv [\xbip_pipe_v3_0_6_viv(c_has_ce=1...]
+Compiling architecture rtl of entity floating_point_v7_1_8.delay [\delay(width=54,length=0,fast_in...]
+Compiling architecture struct of entity floating_point_v7_1_8.carry_chain [\carry_chain(c_xdevicefamily="zy...]
+Compiling architecture rtl of entity floating_point_v7_1_8.flt_round_bit [\flt_round_bit(c_xdevicefamily="...]
+Compiling architecture rtl of entity floating_point_v7_1_8.renorm_and_round_logic [\renorm_and_round_logic(c_xdevic...]
+Compiling architecture rtl of entity floating_point_v7_1_8.flt_mult_round [\flt_mult_round(c_xdevicefamily=...]
+Compiling architecture synth of entity floating_point_v7_1_8.flt_dec_op_lat [\flt_dec_op_lat(c_xdevicefamily=...]
+Compiling architecture rtl of entity floating_point_v7_1_8.flt_mult [\flt_mult(c_xdevicefamily="zynq"...]
+Compiling architecture synth of entity xbip_pipe_v3_0_6.xbip_pipe_v3_0_6_viv [\xbip_pipe_v3_0_6_viv(c_latency=...]
+Compiling architecture xilinx of entity floating_point_v7_1_8.floating_point_v7_1_8_viv [\floating_point_v7_1_8_viv(c_xde...]
+Compiling architecture xilinx of entity floating_point_v7_1_8.floating_point_v7_1_8 [\floating_point_v7_1_8(c_xdevice...]
+Compiling architecture qeic_real_tiled_complex_axpy_ap_dmul_4_max_dsp_64_arch of entity xil_defaultlib.qeic_real_tiled_complex_axpy_ap_dmul_4_max_dsp_64 [qeic_real_tiled_complex_axpy_ap_...]
+Compiling module xil_defaultlib.qeic_real_tiled_complex_axpy_dmu...
+Compiling module xil_defaultlib.qeic_real_tiled_complex_axpy
+Compiling module xil_defaultlib.AESL_axi_master_gmem0
+Compiling module xil_defaultlib.AESL_axi_master_gmem1
+Compiling module xil_defaultlib.AESL_axi_master_gmem2
+Compiling module xil_defaultlib.AESL_axi_master_gmem3
+Compiling module xil_defaultlib.AESL_axi_master_gmem4
+Compiling module xil_defaultlib.AESL_axi_master_gmem5
+Compiling module xil_defaultlib.AESL_axi_slave_control
+Compiling module xil_defaultlib.apatb_qeic_real_tiled_complex_ax...
+Compiling module work.glbl
+Built simulation snapshot qeic_real_tiled_complex_axpy
+
+****** Webtalk v2019.1 (64-bit)
+  **** SW Build 2552052 on Fri May 24 14:47:09 MDT 2019
+  **** IP Build 2548770 on Fri May 24 18:01:18 MDT 2019
+    ** Copyright 1986-2019 Xilinx, Inc. All Rights Reserved.
+
+source /tmp/dse_real_hybrid_hls_hybrid_tiled_complex_axpy_v1_c7354cc6/real_hybrid_hls/sol1/sim/verilog/xsim.dir/qeic_real_tiled_complex_axpy/webtalk/xsim_webtalk.tcl -notrace
+INFO: [Common 17-206] Exiting Webtalk at Mon Jun  8 18:30:33 2026...
+
+****** xsim v2019.1 (64-bit)
+  **** SW Build 2552052 on Fri May 24 14:47:09 MDT 2019
+  **** IP Build 2548770 on Fri May 24 18:01:18 MDT 2019
+    ** Copyright 1986-2019 Xilinx, Inc. All Rights Reserved.
+
+source xsim.dir/qeic_real_tiled_complex_axpy/xsim_script.tcl
+# xsim {qeic_real_tiled_complex_axpy} -autoloadwcfg -tclbatch {qeic_real_tiled_complex_axpy.tcl}
+Vivado Simulator 2019.1
+Time resolution is 1 ps
+source qeic_real_tiled_complex_axpy.tcl
+## run all
+////////////////////////////////////////////////////////////////////////////////////
+// Inter-Transaction Progress: Completed Transaction / Total Transaction
+// Intra-Transaction Progress: Measured Latency / Latency Estimation * 100%
+//
+// RTL Simulation : "Inter-Transaction Progress" ["Intra-Transaction Progress"] @ "Simulation Time"
+////////////////////////////////////////////////////////////////////////////////////
+// RTL Simulation : 0 / 1 [n/a] @ "125000"
+Warning: OPMODE Input Warning : The OPMODE 001XXXX with CARRYINSEL  000 to DSP48E1 instance is invalid.
+Time: 855 ns  Iteration: 14  Process: /apatb_qeic_real_tiled_complex_axpy_top/AESL_inst_qeic_real_tiled_complex_axpy/qeic_real_tiled_complex_axpy_dadd_64ns_64ns_64_5_full_dsp_1_U1/qeic_real_tiled_complex_axpy_ap_dadd_3_full_dsp_64_u/U0/i_synth/addsub_op/ADDSUB/logic_speed/OP/ALIGN_BLK/FRAC_ADDSUB/dsp_add/FRAC_ADDSUB/dsp48e1_add/DSP48E1_ADD/DSP/prcs_opmode_drc  File: /home/Xilinx/Vivado/2019.1/data/vhdl/src/unisims/primitive/DSP48E1.vhd
+Warning: OPMODE Input Warning : The OPMODE 001XXXX with CARRYINSEL  000 to DSP48E1 instance is invalid.
+Time: 855 ns  Iteration: 14  Process: /apatb_qeic_real_tiled_complex_axpy_top/AESL_inst_qeic_real_tiled_complex_axpy/qeic_real_tiled_complex_axpy_dadd_64ns_64ns_64_5_full_dsp_1_U2/qeic_real_tiled_complex_axpy_ap_dadd_3_full_dsp_64_u/U0/i_synth/addsub_op/ADDSUB/logic_speed/OP/ALIGN_BLK/FRAC_ADDSUB/dsp_add/FRAC_ADDSUB/dsp48e1_add/DSP48E1_ADD/DSP/prcs_opmode_drc  File: /home/Xilinx/Vivado/2019.1/data/vhdl/src/unisims/primitive/DSP48E1.vhd
+Warning: OPMODE Input Warning : The OPMODE 001XXXX with CARRYINSEL  000 to DSP48E1 instance is invalid.
+Time: 855 ns  Iteration: 14  Process: /apatb_qeic_real_tiled_complex_axpy_top/AESL_inst_qeic_real_tiled_complex_axpy/qeic_real_tiled_complex_axpy_dsub_64ns_64ns_64_5_full_dsp_1_U3/qeic_real_tiled_complex_axpy_ap_dsub_3_full_dsp_64_u/U0/i_synth/addsub_op/ADDSUB/logic_speed/OP/ALIGN_BLK/FRAC_ADDSUB/dsp_add/FRAC_ADDSUB/dsp48e1_add/DSP48E1_ADD/DSP/prcs_opmode_drc  File: /home/Xilinx/Vivado/2019.1/data/vhdl/src/unisims/primitive/DSP48E1.vhd
+Warning: OPMODE Input Warning : The OPMODE 001XXXX with CARRYINSEL  000 to DSP48E1 instance is invalid.
+Time: 855 ns  Iteration: 14  Process: /apatb_qeic_real_tiled_complex_axpy_top/AESL_inst_qeic_real_tiled_complex_axpy/qeic_real_tiled_complex_axpy_dadd_64ns_64ns_64_5_full_dsp_1_U4/qeic_real_tiled_complex_axpy_ap_dadd_3_full_dsp_64_u/U0/i_synth/addsub_op/ADDSUB/logic_speed/OP/ALIGN_BLK/FRAC_ADDSUB/dsp_add/FRAC_ADDSUB/dsp48e1_add/DSP48E1_ADD/DSP/prcs_opmode_drc  File: /home/Xilinx/Vivado/2019.1/data/vhdl/src/unisims/primitive/DSP48E1.vhd
+Warning: OPMODE Input Warning : The OPMODE 011XX11 with CARRYINSEL  000 to DSP48E1 instance is invalid.
+Time: 925100 ps  Iteration: 10  Process: /apatb_qeic_real_tiled_complex_axpy_top/AESL_inst_qeic_real_tiled_complex_axpy/qeic_real_tiled_complex_axpy_dmul_64ns_64ns_64_6_max_dsp_1_U5/qeic_real_tiled_complex_axpy_ap_dmul_4_max_dsp_64_u/U0/i_synth/mult/OP/i_non_prim/R_AND_R/logic/R_AND_R/dsp48_e1/dsp48e1_add/DSP48E1_ADD/DSP/prcs_opmode_drc  File: /home/Xilinx/Vivado/2019.1/data/vhdl/src/unisims/primitive/DSP48E1.vhd
+Warning: OPMODE Input Warning : The OPMODE 011XX11 with CARRYINSEL  000 to DSP48E1 instance is invalid.
+Time: 925100 ps  Iteration: 10  Process: /apatb_qeic_real_tiled_complex_axpy_top/AESL_inst_qeic_real_tiled_complex_axpy/qeic_real_tiled_complex_axpy_dmul_64ns_64ns_64_6_max_dsp_1_U6/qeic_real_tiled_complex_axpy_ap_dmul_4_max_dsp_64_u/U0/i_synth/mult/OP/i_non_prim/R_AND_R/logic/R_AND_R/dsp48_e1/dsp48e1_add/DSP48E1_ADD/DSP/prcs_opmode_drc  File: /home/Xilinx/Vivado/2019.1/data/vhdl/src/unisims/primitive/DSP48E1.vhd
+Warning: OPMODE Input Warning : The OPMODE 011XX11 with CARRYINSEL  000 to DSP48E1 instance is invalid.
+Time: 925100 ps  Iteration: 10  Process: /apatb_qeic_real_tiled_complex_axpy_top/AESL_inst_qeic_real_tiled_complex_axpy/qeic_real_tiled_complex_axpy_dmul_64ns_64ns_64_6_max_dsp_1_U7/qeic_real_tiled_complex_axpy_ap_dmul_4_max_dsp_64_u/U0/i_synth/mult/OP/i_non_prim/R_AND_R/logic/R_AND_R/dsp48_e1/dsp48e1_add/DSP48E1_ADD/DSP/prcs_opmode_drc  File: /home/Xilinx/Vivado/2019.1/data/vhdl/src/unisims/primitive/DSP48E1.vhd
+Warning: OPMODE Input Warning : The OPMODE 011XX11 with CARRYINSEL  000 to DSP48E1 instance is invalid.
+Time: 925100 ps  Iteration: 10  Process: /apatb_qeic_real_tiled_complex_axpy_top/AESL_inst_qeic_real_tiled_complex_axpy/qeic_real_tiled_complex_axpy_dmul_64ns_64ns_64_6_max_dsp_1_U8/qeic_real_tiled_complex_axpy_ap_dmul_4_max_dsp_64_u/U0/i_synth/mult/OP/i_non_prim/R_AND_R/logic/R_AND_R/dsp48_e1/dsp48e1_add/DSP48E1_ADD/DSP/prcs_opmode_drc  File: /home/Xilinx/Vivado/2019.1/data/vhdl/src/unisims/primitive/DSP48E1.vhd
+// RTL Simulation : 1 / 1 [n/a] @ "1895000"
+////////////////////////////////////////////////////////////////////////////////////
+$finish called at time : 1935 ns : File "/tmp/dse_real_hybrid_hls_hybrid_tiled_complex_axpy_v1_c7354cc6/real_hybrid_hls/sol1/sim/verilog/qeic_real_tiled_complex_axpy.autotb.v" Line 1219
+## quit
+INFO: [Common 17-206] Exiting xsim at Mon Jun  8 18:30:39 2026...
+INFO: [COSIM 212-316] Starting C post checking ...
+DSE_REAL_HLS_PASS qeic_real_tiled_complex_axpy 64
+INFO: [COSIM 212-1000] *** C/RTL co-simulation finished: PASS ***
+INFO: [COSIM 212-211] II is measurable only when transaction number is greater than 1 in RTL simulation. Otherwise, they will be marked as all NA. If user wants to calculate them, please make sure there are at least 2 transactions in RTL simulation.
+INFO: [HLS 200-112] Total elapsed time: 30.96 seconds; peak allocated memory: 99.086 MB.
+INFO: [Common 17-206] Exiting vivado_hls at Mon Jun  8 18:30:39 2026...
