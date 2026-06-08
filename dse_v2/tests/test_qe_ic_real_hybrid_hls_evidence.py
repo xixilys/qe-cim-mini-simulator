@@ -604,6 +604,30 @@ def test_materialize_vcs_rtl_project_for_hpsi_contains_non_stub_stencil_and_late
     assert "expected_re" in tb
 
 
+
+def test_materialize_vcs_rtl_project_for_sum_band_contains_non_stub_density_accumulator(tmp_path: Path):
+    spec = next(
+        item
+        for item in build_real_hybrid_architecture_specs()
+        if item["architecture_id"] == "hybrid_sum_band_density_accumulator_v1"
+    )
+
+    project = materialize_vcs_rtl_project(spec, tmp_path)
+
+    rtl = Path(project["rtl_sv"]).read_text()
+    tb = Path(project["tb_sv"]).read_text()
+    assert "module qeic_real_sum_band_density_accumulator_rtl" in rtl
+    assert "sample_valid" in rtl
+    assert "band_last" in rtl
+    assert "rho_acc_next" in rtl
+    assert "rho_out <= rho_acc_next" in rtl
+    assert "stub" not in rtl.lower()
+    assert "DSE_REAL_RTL_PASS" in tb
+    assert "DSE_REAL_RTL_LATENCY_CYCLES" in tb
+    assert "@(negedge clk);" in tb
+    assert "expected_rho" in tb
+    assert project["samples"] == spec["golden_grid_points"] * spec["golden_band_count"]
+
 def test_parse_vcs_rtl_run_log_extracts_pass_and_latency():
     log = """
 DSE_REAL_RTL_PASS qeic_real_hpsi_local_potential_rtl samples=96
@@ -640,9 +664,12 @@ def test_merge_vcs_rtl_evidence_into_summary_updates_matching_architecture_row()
         "vcs_attempted": True,
         "vcs_passed": True,
         "vcs_parsed": {"status": "parsed", "rtl_status": "Pass", "latency_cycles": 192, "samples": 96, "blockers": []},
+        "vcs_command": "ssh ic-eda vcs -full64 ...",
+        "vcs_returncode": 0,
         "vcs_run_log_path": "runs/hpsi/vcs_rtl/vcs_run.log",
         "vcs_evidence_json_path": "runs/hpsi/vcs_rtl/real_hybrid_vcs_rtl_evidence.json",
         "vcs_evidence_json_hash": "sha256:" + "1" * 64,
+        "claim_boundary": "Standalone handwritten RTL/VCS miniapp evidence for h_psi; not full QE integration.",
     }
 
     merged = merge_vcs_rtl_evidence_into_summary(summary, vcs_result)
@@ -651,9 +678,12 @@ def test_merge_vcs_rtl_evidence_into_summary_updates_matching_architecture_row()
     assert row["vcs_attempted"] is True
     assert row["vcs_passed"] is True
     assert row["vcs_parsed"]["latency_cycles"] == 192
+    assert row["vcs_command"].startswith("ssh ic-eda")
+    assert row["vcs_returncode"] == 0
     assert row["vcs_run_log_path"].endswith("vcs_run.log")
     assert row["vcs_evidence_json_path"].endswith("real_hybrid_vcs_rtl_evidence.json")
     assert row["vcs_evidence_json_hash"].startswith("sha256:")
+    assert "not full QE integration" in row["claim_boundary"]
 
 def test_render_real_hybrid_hls_report_includes_vcs_rtl_evidence():
     summary = {

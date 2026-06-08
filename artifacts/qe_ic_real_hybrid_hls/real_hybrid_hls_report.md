@@ -40,6 +40,7 @@ The current non-stub hybrid FPGA/HLS evidence supports **FPGA/hybrid weaker / no
   - C-sim golden: `True`
   - C-synth parsed: `partial`, latency `None` cycles, estimated clock `8.75` ns
   - Verilog C/RTL cosim: `True`, latency `5068` cycles
+  - VCS RTL sim: `True`, latency `128` cycles, samples `128`
   - Performance latency source: `vivado_hls_cosim`, latency `5068` cycles
   - Resource feasible on target: `True`; BRAM18K `16`, DSP `25`, FF `4652`, LUT `6465`, URAM `0`
   - HLS blockers: `hls_latency_summary_missing`

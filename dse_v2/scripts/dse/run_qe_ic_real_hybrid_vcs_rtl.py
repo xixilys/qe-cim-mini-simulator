@@ -130,6 +130,11 @@ def run_vcs_rtl_for_architecture(
     run_text = run_log_path.read_text(encoding="utf-8", errors="replace") if run_available else ""
     parsed = parse_vcs_rtl_run_log(run_text)
     vcs_passed = parsed.get("status") == "parsed" and parsed.get("rtl_status") == "Pass" and result.returncode == 0
+    command = f"ssh {REMOTE_ALIAS} {remote_cmd}"
+    claim_boundary = (
+        f"Standalone handwritten RTL/VCS miniapp evidence for {spec.get('kernel_name')}; "
+        "not full-QE integration, board measurement, or final FPGA superiority evidence."
+    )
     row: dict[str, Any] = {
         "schema_version": SCHEMA_VERSION,
         "architecture_id": spec.get("architecture_id"),
@@ -137,8 +142,10 @@ def run_vcs_rtl_for_architecture(
         "status": "executed" if compile_available or run_available else "failed",
         "reason": None if vcs_passed else "vcs_returned_nonzero_or_rtl_test_failed",
         "tool": "vcs",
-        "command": f"ssh {REMOTE_ALIAS} {remote_cmd}",
+        "command": command,
         "returncode": result.returncode,
+        "vcs_command": command,
+        "vcs_returncode": result.returncode,
         "vcs_attempted": True,
         "vcs_passed": vcs_passed,
         "vcs_parsed": parsed,
@@ -154,7 +161,7 @@ def run_vcs_rtl_for_architecture(
         "vcs_compile_log_hash": _sha256_file(compile_log_path),
         "vcs_run_log_hash": _sha256_file(run_log_path),
         "blockers": [] if vcs_passed else list(parsed.get("blockers") or ["vcs_rtl_sim_failed"]),
-        "claim_boundary": "Standalone handwritten RTL/VCS miniapp evidence for h_psi local-potential stencil; not full-QE integration or final FPGA superiority evidence.",
+        "claim_boundary": claim_boundary,
     }
     _write_json(project_dir / "real_hybrid_vcs_rtl_evidence.json", row)
     row["vcs_evidence_json_path"] = str(project_dir / "real_hybrid_vcs_rtl_evidence.json")

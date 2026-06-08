@@ -1,0 +1,7 @@
+qeic_real_sum_band_density_accumulator_rtl.sv
+real_hybrid_vcs_rtl_evidence.json
+tb_qeic_real_sum_band_density_accumulator_rtl.sv
+vcs.stderr.log
+vcs.stdout.log
+vcs_compile.log
+vcs_run.log

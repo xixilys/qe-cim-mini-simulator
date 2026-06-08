@@ -707,19 +707,225 @@ endmodule
 """
 
 
+def _sum_band_vcs_rtl_source() -> str:
+    return r"""module qeic_real_sum_band_density_accumulator_rtl #(
+    parameter integer SAMPLES = 128,
+    parameter integer WIDTH = 18,
+    parameter integer ACC_WIDTH = 48
+) (
+    input  wire clk,
+    input  wire reset_n,
+    input  wire start,
+    input  wire sample_valid,
+    input  wire band_first,
+    input  wire band_last,
+    input  wire signed [WIDTH-1:0] psi_re,
+    input  wire signed [WIDTH-1:0] psi_im,
+    input  wire signed [WIDTH-1:0] weight,
+    output reg  signed [ACC_WIDTH-1:0] rho_out,
+    output reg  valid,
+    output reg  done
+);
+    reg active;
+    integer sample_count;
+    reg signed [ACC_WIDTH-1:0] rho_acc;
+    wire signed [(2*WIDTH)-1:0] re_sq = psi_re * psi_re;
+    wire signed [(2*WIDTH)-1:0] im_sq = psi_im * psi_im;
+    wire signed [ACC_WIDTH-1:0] abs_sq = {{(ACC_WIDTH-(2*WIDTH)){1'b0}}, re_sq + im_sq};
+    wire signed [(ACC_WIDTH+WIDTH)-1:0] weighted_wide = abs_sq * weight;
+    wire signed [ACC_WIDTH-1:0] contribution = weighted_wide[ACC_WIDTH+WIDTH-1:WIDTH];
+    wire signed [ACC_WIDTH-1:0] rho_acc_next = band_first ? contribution : (rho_acc + contribution);
+
+    always @(posedge clk or negedge reset_n) begin
+        if (!reset_n) begin
+            active <= 1'b0;
+            sample_count <= 0;
+            rho_acc <= 0;
+            rho_out <= 0;
+            valid <= 1'b0;
+            done <= 1'b0;
+        end else begin
+            valid <= 1'b0;
+            if (start) begin
+                active <= 1'b1;
+                sample_count <= 0;
+                rho_acc <= 0;
+                rho_out <= 0;
+                done <= 1'b0;
+            end else if (active && sample_valid) begin
+                rho_acc <= rho_acc_next;
+                rho_out <= rho_acc_next;
+                valid <= band_last;
+                if (sample_count == SAMPLES - 1) begin
+                    active <= 1'b0;
+                    done <= 1'b1;
+                end
+                sample_count <= sample_count + 1;
+            end
+        end
+    end
+endmodule
+"""
+
+
+def _sum_band_vcs_tb_source(ngrid: int, nbands: int) -> str:
+    samples = ngrid * nbands
+    return f"""module tb_qeic_real_sum_band_density_accumulator_rtl;
+    localparam integer NGRID = {ngrid};
+    localparam integer NBANDS = {nbands};
+    localparam integer SAMPLES = {samples};
+    localparam integer WIDTH = 18;
+    localparam integer ACC_WIDTH = 48;
+    reg clk;
+    reg reset_n;
+    reg start;
+    reg sample_valid;
+    reg band_first;
+    reg band_last;
+    reg signed [WIDTH-1:0] psi_re [0:SAMPLES-1];
+    reg signed [WIDTH-1:0] psi_im [0:SAMPLES-1];
+    reg signed [WIDTH-1:0] weight [0:NBANDS-1];
+    reg signed [WIDTH-1:0] psi_re_in;
+    reg signed [WIDTH-1:0] psi_im_in;
+    reg signed [WIDTH-1:0] weight_in;
+    wire signed [ACC_WIDTH-1:0] rho_out;
+    wire valid;
+    wire done;
+    reg signed [ACC_WIDTH-1:0] expected_rho [0:NGRID-1];
+    reg signed [ACC_WIDTH-1:0] acc;
+    reg signed [(2*WIDTH)-1:0] re_sq;
+    reg signed [(2*WIDTH)-1:0] im_sq;
+    reg signed [ACC_WIDTH-1:0] abs_sq;
+    integer g;
+    integer b;
+    integer idx;
+    integer valid_count;
+    integer latency_cycles;
+
+    qeic_real_sum_band_density_accumulator_rtl #(.SAMPLES(SAMPLES), .WIDTH(WIDTH), .ACC_WIDTH(ACC_WIDTH)) dut (
+        .clk(clk),
+        .reset_n(reset_n),
+        .start(start),
+        .sample_valid(sample_valid),
+        .band_first(band_first),
+        .band_last(band_last),
+        .psi_re(psi_re_in),
+        .psi_im(psi_im_in),
+        .weight(weight_in),
+        .rho_out(rho_out),
+        .valid(valid),
+        .done(done)
+    );
+
+    initial begin
+        clk = 1'b0;
+        forever #5 clk = ~clk;
+    end
+
+    initial begin
+        reset_n = 1'b0;
+        start = 1'b0;
+        sample_valid = 1'b0;
+        band_first = 1'b0;
+        band_last = 1'b0;
+        psi_re_in = 0;
+        psi_im_in = 0;
+        weight_in = 0;
+        valid_count = 0;
+        latency_cycles = 0;
+        for (b = 0; b < NBANDS; b = b + 1) begin
+            weight[b] = 18'sd64 + b * 18'sd11;
+        end
+        for (g = 0; g < NGRID; g = g + 1) begin
+            expected_rho[g] = 0;
+        end
+        for (b = 0; b < NBANDS; b = b + 1) begin
+            for (g = 0; g < NGRID; g = g + 1) begin
+                idx = b * NGRID + g;
+                psi_re[idx] = 18'sd32 + idx * 18'sd2 + (g & 3);
+                psi_im[idx] = -18'sd21 - idx;
+            end
+        end
+        for (g = 0; g < NGRID; g = g + 1) begin
+            acc = 0;
+            for (b = 0; b < NBANDS; b = b + 1) begin
+                idx = b * NGRID + g;
+                re_sq = psi_re[idx] * psi_re[idx];
+                im_sq = psi_im[idx] * psi_im[idx];
+                abs_sq = re_sq + im_sq;
+                acc = acc + ((abs_sq * weight[b]) >>> WIDTH);
+            end
+            expected_rho[g] = acc;
+        end
+        repeat (3) @(posedge clk);
+        reset_n = 1'b1;
+        @(posedge clk);
+        start = 1'b1;
+        @(posedge clk);
+        start = 1'b0;
+        for (g = 0; g < NGRID; g = g + 1) begin
+            for (b = 0; b < NBANDS; b = b + 1) begin
+                @(negedge clk);
+                idx = b * NGRID + g;
+                psi_re_in = psi_re[idx];
+                psi_im_in = psi_im[idx];
+                weight_in = weight[b];
+                band_first = (b == 0);
+                band_last = (b == NBANDS - 1);
+                sample_valid = 1'b1;
+                @(posedge clk);
+                #1;
+                latency_cycles = latency_cycles + 1;
+                if (band_last) begin
+                    if (valid !== 1'b1 || rho_out !== expected_rho[g]) begin
+                        $display("DSE_REAL_RTL_FAIL grid=%0d expected=%0d got=%0d valid=%0d", g, expected_rho[g], rho_out, valid);
+                        $finish(1);
+                    end
+                    valid_count = valid_count + 1;
+                end
+            end
+        end
+        @(negedge clk);
+        sample_valid = 1'b0;
+        band_first = 1'b0;
+        band_last = 1'b0;
+        #1;
+        if (done !== 1'b1 || valid_count != NGRID) begin
+            $display("DSE_REAL_RTL_FAIL done=%0d valid_count=%0d", done, valid_count);
+            $finish(1);
+        end
+        $display("DSE_REAL_RTL_PASS qeic_real_sum_band_density_accumulator_rtl samples=%0d", SAMPLES);
+        $display("DSE_REAL_RTL_LATENCY_CYCLES %0d", latency_cycles);
+        $finish(0);
+    end
+endmodule
+"""
+
+
 def materialize_vcs_rtl_project(spec: Mapping[str, Any], out_dir: Path) -> dict[str, Any]:
-    """Materialize a non-HLS RTL/VCS project for the h_psi miniapp."""
+    """Materialize a non-HLS RTL/VCS project for a supported QE miniapp."""
 
     architecture_id = str(spec["architecture_id"])
-    if "hpsi" not in architecture_id:
-        raise ValueError(f"VCS RTL materialization currently supports hpsi miniapp only, got {architecture_id}")
     project_dir = Path(out_dir) / _safe_name(architecture_id) / "vcs_rtl"
     project_dir.mkdir(parents=True, exist_ok=True)
-    samples = int(spec.get("golden_grid_points") or spec.get("golden_vector_length") or 96)
-    rtl_source = _hpsi_vcs_rtl_source()
-    tb_source = _hpsi_vcs_tb_source(samples)
-    rtl_sv = project_dir / "qeic_real_hpsi_local_potential_rtl.sv"
-    tb_sv = project_dir / "tb_qeic_real_hpsi_local_potential_rtl.sv"
+    if "hpsi" in architecture_id:
+        samples = int(spec.get("golden_grid_points") or spec.get("golden_vector_length") or 96)
+        rtl_source = _hpsi_vcs_rtl_source()
+        tb_source = _hpsi_vcs_tb_source(samples)
+        rtl_name = "qeic_real_hpsi_local_potential_rtl.sv"
+        tb_name = "tb_qeic_real_hpsi_local_potential_rtl.sv"
+    elif "sum_band" in architecture_id:
+        ngrid = int(spec.get("golden_grid_points") or 32)
+        nbands = int(spec.get("golden_band_count") or 4)
+        samples = ngrid * nbands
+        rtl_source = _sum_band_vcs_rtl_source()
+        tb_source = _sum_band_vcs_tb_source(ngrid, nbands)
+        rtl_name = "qeic_real_sum_band_density_accumulator_rtl.sv"
+        tb_name = "tb_qeic_real_sum_band_density_accumulator_rtl.sv"
+    else:
+        raise ValueError(f"VCS RTL materialization does not support architecture {architecture_id}")
+    rtl_sv = project_dir / rtl_name
+    tb_sv = project_dir / tb_name
     rtl_sv.write_text(rtl_source, encoding="utf-8")
     tb_sv.write_text(tb_source, encoding="utf-8")
     return {
@@ -794,6 +1000,7 @@ def merge_vcs_rtl_evidence_into_summary(summary: Mapping[str, Any], vcs_result: 
             "vcs_evidence_json_path",
             "vcs_evidence_json_hash",
             "vcs_rtl_project",
+            "claim_boundary",
         ):
             if key in vcs_result:
                 row[key] = vcs_result[key]

@@ -1300,6 +1300,7 @@
     {
       "architecture_id": "hybrid_sum_band_density_accumulator_v1",
       "blockers": [],
+      "claim_boundary": "Standalone handwritten RTL/VCS miniapp evidence for qeic_real_sum_band_density_accumulator; not full-QE integration, board measurement, or final FPGA superiority evidence.",
       "command": "ssh ic-eda export LC_ALL=C LANG=C; cd /tmp/dse_real_hybrid_hls_hybrid_sum_band_density_accumulator_v1_8267cebb && /home/Xilinx/Vivado/2019.1/bin/vivado_hls -f run_hls.tcl",
       "cosim_attempted": true,
       "cosim_parsed": {
@@ -1343,7 +1344,7 @@
       "csynth_report_hash": "sha256:8a46bc489237bfe55f679b83ddcdd9cb1743237ebcd5f2a3e34d11c3cdff7424",
       "csynth_report_path": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_sum_band_density_accumulator_v1/hybrid_sum_band_density_accumulator_v1/csynth.rpt",
       "end_timestamp": "2026-06-08T11:08:54Z",
-      "evidence_json_hash": "sha256:8a5e8f23945912041ad0e81bacd36acafa308b0fafe5e6c25bba1698e6a30b70",
+      "evidence_json_hash": "sha256:467a37b9575908ce04736981433d55dbbecab8b8a5b7acdc4cdc0508a08180dc",
       "evidence_json_path": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_sum_band_density_accumulator_v1/hybrid_sum_band_density_accumulator_v1/real_hybrid_hls_evidence.json",
       "evidence_level": "vivado_hls_csim_csynth_cosim_attempt",
       "fpga_part": "xc7z020clg400-1",
@@ -1382,8 +1383,36 @@
       "tool": "vivado_hls",
       "tool_path": "ssh://ic-eda/home/Xilinx/Vivado/2019.1/bin/vivado_hls",
       "transfer_overhead_seconds": 5e-05,
-      "vcs_attempted": false,
-      "vcs_passed": false,
+      "vcs_attempted": true,
+      "vcs_command": "ssh ic-eda source ~/.bashrc; export LC_ALL=C LANG=C; cd /tmp/dse_real_hybrid_vcs_rtl_hybrid_sum_band_density_accumulator_v1_85f942e8 && vcs -full64 -sverilog qeic_real_sum_band_density_accumulator_rtl.sv tb_qeic_real_sum_band_density_accumulator_rtl.sv -o simv > vcs_compile.log 2>&1 && ./simv > vcs_run.log 2>&1",
+      "vcs_compile_log_hash": "sha256:85fa3f00102075e571b75220a5ab9ac386e37afa26ac403ba9a8508fe6f068c6",
+      "vcs_compile_log_path": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_sum_band_density_accumulator_v1/vcs_rtl/vcs_compile.log",
+      "vcs_evidence_json_hash": "sha256:c090a8558520b3b27a9eb38d88e29653e4787b6f0a6727a4b11f1e83d604047a",
+      "vcs_evidence_json_path": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_sum_band_density_accumulator_v1/vcs_rtl/real_hybrid_vcs_rtl_evidence.json",
+      "vcs_parsed": {
+        "blockers": [],
+        "latency_cycles": 128,
+        "rtl_status": "Pass",
+        "samples": 128,
+        "status": "parsed"
+      },
+      "vcs_passed": true,
+      "vcs_returncode": 0,
+      "vcs_rtl_project": {
+        "architecture_id": "hybrid_sum_band_density_accumulator_v1",
+        "project_dir": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_sum_band_density_accumulator_v1/vcs_rtl",
+        "rtl_hash": "sha256:5b9a2105aa1c53990cf357dbff2ca6a25453b1f6f64c02abca5f1d99102c4d3d",
+        "rtl_sv": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_sum_band_density_accumulator_v1/vcs_rtl/qeic_real_sum_band_density_accumulator_rtl.sv",
+        "samples": 128,
+        "tb_sv": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_sum_band_density_accumulator_v1/vcs_rtl/tb_qeic_real_sum_band_density_accumulator_rtl.sv",
+        "testbench_hash": "sha256:d75300f44a17021693dd915753fdb2c8022bf8b54e2b429aee0ca0ca81921d80"
+      },
+      "vcs_run_log_hash": "sha256:b2cc92eeee55b26b25ec78cb12280a2689095d99cff85e7ae81e5569df1f0431",
+      "vcs_run_log_path": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_sum_band_density_accumulator_v1/vcs_rtl/vcs_run.log",
+      "vcs_stderr_log_hash": "sha256:913221ef02bbf14a2fad766f6c60a155b6f067196e1fe5c725001ac9831689b0",
+      "vcs_stderr_log_path": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_sum_band_density_accumulator_v1/vcs_rtl/vcs.stderr.log",
+      "vcs_stdout_log_hash": "sha256:fe6b1bd859a58cbf4754975fea863f76f2f1bdef8f65caf53c6d193c09d5a77a",
+      "vcs_stdout_log_path": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_sum_band_density_accumulator_v1/vcs_rtl/vcs.stdout.log",
       "workflow_accounting": [
         {
           "blockers": [
@@ -1496,6 +1525,7 @@
     {
       "architecture_id": "hybrid_hpsi_local_potential_v1",
       "blockers": [],
+      "claim_boundary": "Standalone handwritten RTL/VCS miniapp evidence for qeic_real_hpsi_local_potential; not full-QE integration, board measurement, or final FPGA superiority evidence.",
       "command": "ssh ic-eda export LC_ALL=C LANG=C; cd /tmp/dse_real_hybrid_hls_hybrid_hpsi_local_potential_v1_53ab067a && /home/Xilinx/Vivado/2019.1/bin/vivado_hls -f run_hls.tcl",
       "cosim_attempted": true,
       "cosim_parsed": {
@@ -1545,7 +1575,7 @@
       "csynth_report_hash": "sha256:801af6f46793b1e497913bc44bcb43b5129a61b5cbd6a0d4fb87d2a1cc3cc834",
       "csynth_report_path": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_hpsi_local_potential_v1/hybrid_hpsi_local_potential_v1/csynth.rpt",
       "end_timestamp": "2026-06-08T11:09:27Z",
-      "evidence_json_hash": "sha256:45c0485a363d56f1138c585c6c29769cf8d829749ccbe6a5645b40eb00e88ae1",
+      "evidence_json_hash": "sha256:b266df37e06a2284155c021db9032257eebbff45bf0916c0e6db00d2977dbf85",
       "evidence_json_path": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_hpsi_local_potential_v1/hybrid_hpsi_local_potential_v1/real_hybrid_hls_evidence.json",
       "evidence_level": "vivado_hls_csim_csynth_cosim_attempt",
       "fpga_part": "xc7z020clg400-1",
@@ -1585,9 +1615,10 @@
       "tool_path": "ssh://ic-eda/home/Xilinx/Vivado/2019.1/bin/vivado_hls",
       "transfer_overhead_seconds": 5e-05,
       "vcs_attempted": true,
-      "vcs_compile_log_hash": "sha256:a1107c0f79a366fc8422c78ebc44a6097ff67682fa885bb46f7c547de1e7a6e8",
+      "vcs_command": "ssh ic-eda source ~/.bashrc; export LC_ALL=C LANG=C; cd /tmp/dse_real_hybrid_vcs_rtl_hybrid_hpsi_local_potential_v1_8fc184f6 && vcs -full64 -sverilog qeic_real_hpsi_local_potential_rtl.sv tb_qeic_real_hpsi_local_potential_rtl.sv -o simv > vcs_compile.log 2>&1 && ./simv > vcs_run.log 2>&1",
+      "vcs_compile_log_hash": "sha256:f6abc28082aa36a706a776566b90e134935e4558ba550f2597a5124a78a3e935",
       "vcs_compile_log_path": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_hpsi_local_potential_v1/vcs_rtl/vcs_compile.log",
-      "vcs_evidence_json_hash": "sha256:afbe71717212106e6204102ee82f32e5f508bb2d12f6ed0d1b2cf6a73011a5aa",
+      "vcs_evidence_json_hash": "sha256:0ad999b9e01c72cb36d59922f938607f6d3efdfe6da4bd17e961c91db164fc0f",
       "vcs_evidence_json_path": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_hpsi_local_potential_v1/vcs_rtl/real_hybrid_vcs_rtl_evidence.json",
       "vcs_parsed": {
         "blockers": [],
@@ -1597,6 +1628,7 @@
         "status": "parsed"
       },
       "vcs_passed": true,
+      "vcs_returncode": 0,
       "vcs_rtl_project": {
         "architecture_id": "hybrid_hpsi_local_potential_v1",
         "project_dir": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_hpsi_local_potential_v1/vcs_rtl",
@@ -1606,7 +1638,7 @@
         "tb_sv": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_hpsi_local_potential_v1/vcs_rtl/tb_qeic_real_hpsi_local_potential_rtl.sv",
         "testbench_hash": "sha256:0bae498ca4fc8e6f898831f4f4fe82889f775333bcb39f1ff456e90a7bb0af27"
       },
-      "vcs_run_log_hash": "sha256:411ce6f8456f96e1440f173fbd405f6dbbcad839ef7992dfd68ed873748d73b1",
+      "vcs_run_log_hash": "sha256:f16b08108c05feb6ec7e550b8dbf309535e60d8762d93732abc035d7b5115f33",
       "vcs_run_log_path": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_hpsi_local_potential_v1/vcs_rtl/vcs_run.log",
       "vcs_stderr_log_hash": "sha256:913221ef02bbf14a2fad766f6c60a155b6f067196e1fe5c725001ac9831689b0",
       "vcs_stderr_log_path": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_hpsi_local_potential_v1/vcs_rtl/vcs.stderr.log",
