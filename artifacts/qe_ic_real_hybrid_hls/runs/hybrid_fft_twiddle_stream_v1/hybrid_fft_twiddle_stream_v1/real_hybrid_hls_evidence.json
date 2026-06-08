@@ -68,6 +68,8 @@
     "fftw"
   ],
   "motif_id": "fft_transpose",
+  "performance_latency_cycles_max": 288,
+  "performance_latency_source": "vivado_hls_cosim",
   "project": {
     "architecture_id": "hybrid_fft_twiddle_stream_v1",
     "kernel_cpp": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_fft_twiddle_stream_v1/hybrid_fft_twiddle_stream_v1/kernel.cpp",

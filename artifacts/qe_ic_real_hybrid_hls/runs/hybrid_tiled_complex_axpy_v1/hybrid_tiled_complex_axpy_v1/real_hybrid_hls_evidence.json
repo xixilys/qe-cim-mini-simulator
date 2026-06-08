@@ -66,6 +66,8 @@
     "calbec"
   ],
   "motif_id": "wavefunction_memory",
+  "performance_latency_cycles_max": 175,
+  "performance_latency_source": "vivado_hls_cosim",
   "project": {
     "architecture_id": "hybrid_tiled_complex_axpy_v1",
     "kernel_cpp": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_tiled_complex_axpy_v1/hybrid_tiled_complex_axpy_v1/kernel.cpp",

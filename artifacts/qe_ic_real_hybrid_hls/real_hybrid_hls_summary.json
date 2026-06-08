@@ -555,7 +555,7 @@
       "csynth_report_hash": "sha256:247951871041d522c929b898b764d601b34b5bb0e25fcc684c853fc6916418c4",
       "csynth_report_path": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_streaming_reduction_accumulator_v1/hybrid_streaming_reduction_accumulator_v1/csynth.rpt",
       "end_timestamp": "2026-06-08T10:41:23Z",
-      "evidence_json_hash": "sha256:ad15e6cfbf3a1269e746ccb743b1a078d6443a14a53a0631772b0b067ec89a56",
+      "evidence_json_hash": "sha256:9b1690cfbab8e068a07d9c48dd964c0977890d81126714e69990ca4d7d79fc71",
       "evidence_json_path": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_streaming_reduction_accumulator_v1/hybrid_streaming_reduction_accumulator_v1/real_hybrid_hls_evidence.json",
       "evidence_level": "vivado_hls_csim_csynth_cosim_attempt",
       "fpga_part": "xc7z020clg400-1",
@@ -569,6 +569,8 @@
         "sum_band"
       ],
       "motif_id": "reduction_collective",
+      "performance_latency_cycles_max": 431,
+      "performance_latency_source": "vivado_hls_cosim",
       "project": {
         "architecture_id": "hybrid_streaming_reduction_accumulator_v1",
         "kernel_cpp": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_streaming_reduction_accumulator_v1/hybrid_streaming_reduction_accumulator_v1/kernel.cpp",
@@ -754,7 +756,7 @@
       "csynth_report_hash": "sha256:64c663929ca53d3d11712f5dce3fb1c8dbe8d621cf1a87089ca6d18f3c1375fc",
       "csynth_report_path": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_tiled_complex_axpy_v1/hybrid_tiled_complex_axpy_v1/csynth.rpt",
       "end_timestamp": "2026-06-08T10:41:56Z",
-      "evidence_json_hash": "sha256:a94ca00cd67726be764d79ddfdd0099d868287a164f721fbd29ffee83edeb17b",
+      "evidence_json_hash": "sha256:d2f82b0048d55fb0b2a4fb7e3e93ff14d448191ded64cf03ba98a4ec90fd6350",
       "evidence_json_path": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_tiled_complex_axpy_v1/hybrid_tiled_complex_axpy_v1/real_hybrid_hls_evidence.json",
       "evidence_level": "vivado_hls_csim_csynth_cosim_attempt",
       "fpga_part": "xc7z020clg400-1",
@@ -770,6 +772,8 @@
         "calbec"
       ],
       "motif_id": "wavefunction_memory",
+      "performance_latency_cycles_max": 175,
+      "performance_latency_source": "vivado_hls_cosim",
       "project": {
         "architecture_id": "hybrid_tiled_complex_axpy_v1",
         "kernel_cpp": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_tiled_complex_axpy_v1/hybrid_tiled_complex_axpy_v1/kernel.cpp",
@@ -975,7 +979,7 @@
       "csynth_report_hash": "sha256:e218d899ca234f7bf37a11524aba813f37ebabdfc7624a1ab86148e8fda9bcf3",
       "csynth_report_path": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_fft_twiddle_stream_v1/hybrid_fft_twiddle_stream_v1/csynth.rpt",
       "end_timestamp": "2026-06-08T10:42:36Z",
-      "evidence_json_hash": "sha256:60b165729de569fa5e0eb3ae0dd42650e91668db0c1344ea897a202688dd33fe",
+      "evidence_json_hash": "sha256:9a834b664798620e34ed06d2eefd1fb718ce85007a7a533394997a9bcf63e4d2",
       "evidence_json_path": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_fft_twiddle_stream_v1/hybrid_fft_twiddle_stream_v1/real_hybrid_hls_evidence.json",
       "evidence_level": "vivado_hls_csim_csynth_cosim_attempt",
       "fpga_part": "xc7z020clg400-1",
@@ -991,6 +995,8 @@
         "fftw"
       ],
       "motif_id": "fft_transpose",
+      "performance_latency_cycles_max": 288,
+      "performance_latency_source": "vivado_hls_cosim",
       "project": {
         "architecture_id": "hybrid_fft_twiddle_stream_v1",
         "kernel_cpp": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_fft_twiddle_stream_v1/hybrid_fft_twiddle_stream_v1/kernel.cpp",
@@ -1188,7 +1194,7 @@
       "csynth_report_hash": "sha256:ba8d3936b66b9d147e9422137221c06dfe0f7ab836cd1ec260ff0d8c05259ba2",
       "csynth_report_path": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_sum_band_density_accumulator_v1/hybrid_sum_band_density_accumulator_v1/csynth.rpt",
       "end_timestamp": "2026-06-08T10:43:07Z",
-      "evidence_json_hash": "sha256:dfd1c100775dd2e976ec7f09b971bcae9ddc649ae7fd8e79a89f2c360e141f14",
+      "evidence_json_hash": "sha256:887b71a6f73852b29e28e614d6c6b18606ee35eeb45582ce51792eb9977985cf",
       "evidence_json_path": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_sum_band_density_accumulator_v1/hybrid_sum_band_density_accumulator_v1/real_hybrid_hls_evidence.json",
       "evidence_level": "vivado_hls_csim_csynth_cosim_attempt",
       "fpga_part": "xc7z020clg400-1",
@@ -1203,6 +1209,8 @@
         "sum_band"
       ],
       "motif_id": "sum_band_density_accumulation",
+      "performance_latency_cycles_max": 5068,
+      "performance_latency_source": "vivado_hls_cosim",
       "project": {
         "architecture_id": "hybrid_sum_band_density_accumulator_v1",
         "kernel_cpp": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_sum_band_density_accumulator_v1/hybrid_sum_band_density_accumulator_v1/kernel.cpp",

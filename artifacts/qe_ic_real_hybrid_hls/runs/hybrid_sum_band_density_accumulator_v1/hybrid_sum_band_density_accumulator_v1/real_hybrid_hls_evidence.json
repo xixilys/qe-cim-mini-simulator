@@ -59,6 +59,8 @@
     "sum_band"
   ],
   "motif_id": "sum_band_density_accumulation",
+  "performance_latency_cycles_max": 5068,
+  "performance_latency_source": "vivado_hls_cosim",
   "project": {
     "architecture_id": "hybrid_sum_band_density_accumulator_v1",
     "kernel_cpp": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_sum_band_density_accumulator_v1/hybrid_sum_band_density_accumulator_v1/kernel.cpp",

@@ -64,6 +64,8 @@
     "sum_band"
   ],
   "motif_id": "reduction_collective",
+  "performance_latency_cycles_max": 431,
+  "performance_latency_source": "vivado_hls_cosim",
   "project": {
     "architecture_id": "hybrid_streaming_reduction_accumulator_v1",
     "kernel_cpp": "artifacts/qe_ic_real_hybrid_hls/runs/hybrid_streaming_reduction_accumulator_v1/hybrid_streaming_reduction_accumulator_v1/kernel.cpp",
