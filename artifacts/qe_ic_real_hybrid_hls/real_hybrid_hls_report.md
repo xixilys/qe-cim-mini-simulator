@@ -25,6 +25,7 @@ The current non-stub hybrid FPGA/HLS evidence supports **FPGA/hybrid weaker / no
   - C-sim golden: `True`
   - C-synth parsed: `parsed`, latency `82` cycles, estimated clock `8.75` ns
   - Verilog C/RTL cosim: `True`, latency `175` cycles
+  - VCS RTL sim: `True`, latency `64` cycles, samples `64`
   - Performance latency source: `vivado_hls_cosim`, latency `175` cycles
   - Resource feasible on target: `True`; BRAM18K `28`, DSP `56`, FF `7858`, LUT `12337`, URAM `0`
 - `hybrid_fft_twiddle_stream_v1`
@@ -63,8 +64,11 @@ Trace replay used measured QE full-SCF timer logs from `artifacts/qe_ic_7day_pre
 | `hybrid_streaming_reduction_accumulator_v1` | `ic_al_interconnect_4atom_scf_v0` | `vivado_hls_cosim` | `sum_band` | 1.0486x | `trace_replay_optimistic` | `partial_sidecar_motif` |
 | `hybrid_streaming_reduction_accumulator_v1` | `ic_si_bulk_2atom_scf_v0` | `vivado_hls_cosim` | `sum_band` | 1.0226x | `trace_replay_optimistic` | `partial_sidecar_motif` |
 | `hybrid_tiled_complex_axpy_v1` | `ic_sio2_dielectric_6atom_scf_v0` | `vivado_hls_cosim` | `mix_rho, h_psi:calbec, calbec` | 1.1359x | `trace_replay_optimistic` | `partial_sidecar_motif` |
+| `hybrid_tiled_complex_axpy_v1` | `ic_sio2_dielectric_6atom_scf_v0` | `vcs_rtl` | `mix_rho, h_psi:calbec, calbec` | 1.1362x | `trace_replay_vcs_rtl_sensitivity` | `partial_sidecar_motif` |
 | `hybrid_tiled_complex_axpy_v1` | `ic_al_interconnect_4atom_scf_v0` | `vivado_hls_cosim` | `mix_rho, h_psi:calbec, calbec` | 1.0917x | `trace_replay_optimistic` | `partial_sidecar_motif` |
+| `hybrid_tiled_complex_axpy_v1` | `ic_al_interconnect_4atom_scf_v0` | `vcs_rtl` | `mix_rho, h_psi:calbec, calbec` | 1.0919x | `trace_replay_vcs_rtl_sensitivity` | `partial_sidecar_motif` |
 | `hybrid_tiled_complex_axpy_v1` | `ic_si_bulk_2atom_scf_v0` | `vivado_hls_cosim` | `mix_rho, h_psi:calbec, calbec` | 1.1164x | `trace_replay_optimistic` | `partial_sidecar_motif` |
+| `hybrid_tiled_complex_axpy_v1` | `ic_si_bulk_2atom_scf_v0` | `vcs_rtl` | `mix_rho, h_psi:calbec, calbec` | 1.1166x | `trace_replay_vcs_rtl_sensitivity` | `partial_sidecar_motif` |
 | `hybrid_sum_band_density_accumulator_v1` | `ic_sio2_dielectric_6atom_scf_v0` | `vivado_hls_cosim` | `sum_band` | 1.1496x | `trace_replay_optimistic` | `qe_routine_equivalent_miniapp` |
 | `hybrid_sum_band_density_accumulator_v1` | `ic_sio2_dielectric_6atom_scf_v0` | `vcs_rtl` | `sum_band` | 1.1505x | `trace_replay_vcs_rtl_sensitivity` | `qe_routine_equivalent_miniapp` |
 | `hybrid_sum_band_density_accumulator_v1` | `ic_al_interconnect_4atom_scf_v0` | `vivado_hls_cosim` | `sum_band` | 1.0482x | `trace_replay_optimistic` | `qe_routine_equivalent_miniapp` |

@@ -641,6 +641,29 @@ def test_materialize_vcs_rtl_project_for_hpsi_contains_non_stub_stencil_and_late
 
 
 
+
+def test_materialize_vcs_rtl_project_for_axpy_contains_non_stub_complex_update(tmp_path: Path):
+    spec = next(
+        item
+        for item in build_real_hybrid_architecture_specs()
+        if item["architecture_id"] == "hybrid_tiled_complex_axpy_v1"
+    )
+
+    project = materialize_vcs_rtl_project(spec, tmp_path)
+
+    rtl = Path(project["rtl_sv"]).read_text()
+    tb = Path(project["tb_sv"]).read_text()
+    assert "module qeic_real_tiled_complex_axpy_rtl" in rtl
+    assert "alpha_re" in rtl
+    assert "out_re <=" in rtl
+    assert "out_im <=" in rtl
+    assert "stub" not in rtl.lower()
+    assert "DSE_REAL_RTL_PASS" in tb
+    assert "DSE_REAL_RTL_LATENCY_CYCLES" in tb
+    assert "expected_re" in tb
+    assert project["samples"] == spec["golden_vector_length"]
+
+
 def test_materialize_vcs_rtl_project_for_sum_band_contains_non_stub_density_accumulator(tmp_path: Path):
     spec = next(
         item

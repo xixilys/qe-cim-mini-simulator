@@ -902,6 +902,176 @@ endmodule
 """
 
 
+def _axpy_vcs_rtl_source() -> str:
+    return r"""module qeic_real_tiled_complex_axpy_rtl #(
+    parameter integer N = 64,
+    parameter integer WIDTH = 18,
+    parameter integer ACC_WIDTH = 48,
+    parameter signed [WIDTH-1:0] ALPHA_RE = 18'sd192,
+    parameter signed [WIDTH-1:0] ALPHA_IM = -18'sd32
+) (
+    input  wire clk,
+    input  wire reset_n,
+    input  wire start,
+    input  wire sample_valid,
+    input  wire signed [WIDTH-1:0] x_re,
+    input  wire signed [WIDTH-1:0] x_im,
+    input  wire signed [WIDTH-1:0] y_re,
+    input  wire signed [WIDTH-1:0] y_im,
+    output reg  signed [ACC_WIDTH-1:0] out_re,
+    output reg  signed [ACC_WIDTH-1:0] out_im,
+    output reg  valid,
+    output reg  done
+);
+    reg active;
+    integer sample_count;
+    wire signed [WIDTH-1:0] alpha_re = ALPHA_RE;
+    wire signed [WIDTH-1:0] alpha_im = ALPHA_IM;
+    wire signed [(2*WIDTH)-1:0] ar_xr = alpha_re * x_re;
+    wire signed [(2*WIDTH)-1:0] ai_xi = alpha_im * x_im;
+    wire signed [(2*WIDTH)-1:0] ar_xi = alpha_re * x_im;
+    wire signed [(2*WIDTH)-1:0] ai_xr = alpha_im * x_re;
+    wire signed [ACC_WIDTH-1:0] y_re_ext = {{(ACC_WIDTH-WIDTH){y_re[WIDTH-1]}}, y_re} <<< 8;
+    wire signed [ACC_WIDTH-1:0] y_im_ext = {{(ACC_WIDTH-WIDTH){y_im[WIDTH-1]}}, y_im} <<< 8;
+    wire signed [ACC_WIDTH-1:0] alpha_x_re = ar_xr - ai_xi;
+    wire signed [ACC_WIDTH-1:0] alpha_x_im = ar_xi + ai_xr;
+
+    always @(posedge clk or negedge reset_n) begin
+        if (!reset_n) begin
+            active <= 1'b0;
+            sample_count <= 0;
+            out_re <= 0;
+            out_im <= 0;
+            valid <= 1'b0;
+            done <= 1'b0;
+        end else begin
+            valid <= 1'b0;
+            if (start) begin
+                active <= 1'b1;
+                sample_count <= 0;
+                out_re <= 0;
+                out_im <= 0;
+                done <= 1'b0;
+            end else if (active && sample_valid) begin
+                out_re <= y_re_ext + alpha_x_re;
+                out_im <= y_im_ext + alpha_x_im;
+                valid <= 1'b1;
+                if (sample_count == N - 1) begin
+                    active <= 1'b0;
+                    done <= 1'b1;
+                end
+                sample_count <= sample_count + 1;
+            end
+        end
+    end
+endmodule
+"""
+
+
+def _axpy_vcs_tb_source(samples: int) -> str:
+    return f"""module tb_qeic_real_tiled_complex_axpy_rtl;
+    localparam integer N = {samples};
+    localparam integer WIDTH = 18;
+    localparam integer ACC_WIDTH = 48;
+    localparam signed [WIDTH-1:0] ALPHA_RE = 18'sd192;
+    localparam signed [WIDTH-1:0] ALPHA_IM = -18'sd32;
+    reg clk;
+    reg reset_n;
+    reg start;
+    reg sample_valid;
+    reg signed [WIDTH-1:0] x_re_mem [0:N-1];
+    reg signed [WIDTH-1:0] x_im_mem [0:N-1];
+    reg signed [WIDTH-1:0] y_re_mem [0:N-1];
+    reg signed [WIDTH-1:0] y_im_mem [0:N-1];
+    reg signed [WIDTH-1:0] x_re;
+    reg signed [WIDTH-1:0] x_im;
+    reg signed [WIDTH-1:0] y_re;
+    reg signed [WIDTH-1:0] y_im;
+    wire signed [ACC_WIDTH-1:0] out_re;
+    wire signed [ACC_WIDTH-1:0] out_im;
+    wire valid;
+    wire done;
+    reg signed [ACC_WIDTH-1:0] expected_re [0:N-1];
+    reg signed [ACC_WIDTH-1:0] expected_im [0:N-1];
+    integer i;
+    integer valid_count;
+    integer latency_cycles;
+
+    qeic_real_tiled_complex_axpy_rtl #(.N(N), .WIDTH(WIDTH), .ACC_WIDTH(ACC_WIDTH), .ALPHA_RE(ALPHA_RE), .ALPHA_IM(ALPHA_IM)) dut (
+        .clk(clk),
+        .reset_n(reset_n),
+        .start(start),
+        .sample_valid(sample_valid),
+        .x_re(x_re),
+        .x_im(x_im),
+        .y_re(y_re),
+        .y_im(y_im),
+        .out_re(out_re),
+        .out_im(out_im),
+        .valid(valid),
+        .done(done)
+    );
+
+    initial begin
+        clk = 1'b0;
+        forever #5 clk = ~clk;
+    end
+
+    initial begin
+        reset_n = 1'b0;
+        start = 1'b0;
+        sample_valid = 1'b0;
+        x_re = 0;
+        x_im = 0;
+        y_re = 0;
+        y_im = 0;
+        valid_count = 0;
+        latency_cycles = 0;
+        for (i = 0; i < N; i = i + 1) begin
+            x_re_mem[i] = 18'sd16 + i * 18'sd3;
+            x_im_mem[i] = -18'sd11 - i * 18'sd2;
+            y_re_mem[i] = 18'sd7 + (i & 7);
+            y_im_mem[i] = -18'sd5 - (i & 5);
+            expected_re[i] = (y_re_mem[i] <<< 8) + (ALPHA_RE * x_re_mem[i]) - (ALPHA_IM * x_im_mem[i]);
+            expected_im[i] = (y_im_mem[i] <<< 8) + (ALPHA_RE * x_im_mem[i]) + (ALPHA_IM * x_re_mem[i]);
+        end
+        repeat (3) @(posedge clk);
+        reset_n = 1'b1;
+        @(posedge clk);
+        start = 1'b1;
+        @(posedge clk);
+        start = 1'b0;
+        for (i = 0; i < N; i = i + 1) begin
+            @(negedge clk);
+            x_re = x_re_mem[i];
+            x_im = x_im_mem[i];
+            y_re = y_re_mem[i];
+            y_im = y_im_mem[i];
+            sample_valid = 1'b1;
+            @(posedge clk);
+            #1;
+            latency_cycles = latency_cycles + 1;
+            if (valid !== 1'b1 || out_re !== expected_re[i] || out_im !== expected_im[i]) begin
+                $display("DSE_REAL_RTL_FAIL sample=%0d expected=%0d,%0d got=%0d,%0d valid=%0d", i, expected_re[i], expected_im[i], out_re, out_im, valid);
+                $finish(1);
+            end
+            valid_count = valid_count + 1;
+        end
+        @(negedge clk);
+        sample_valid = 1'b0;
+        #1;
+        if (done !== 1'b1 || valid_count != N) begin
+            $display("DSE_REAL_RTL_FAIL done=%0d valid_count=%0d", done, valid_count);
+            $finish(1);
+        end
+        $display("DSE_REAL_RTL_PASS qeic_real_tiled_complex_axpy_rtl samples=%0d", valid_count);
+        $display("DSE_REAL_RTL_LATENCY_CYCLES %0d", latency_cycles);
+        $finish(0);
+    end
+endmodule
+"""
+
+
 def materialize_vcs_rtl_project(spec: Mapping[str, Any], out_dir: Path) -> dict[str, Any]:
     """Materialize a non-HLS RTL/VCS project for a supported QE miniapp."""
 
@@ -922,6 +1092,12 @@ def materialize_vcs_rtl_project(spec: Mapping[str, Any], out_dir: Path) -> dict[
         tb_source = _sum_band_vcs_tb_source(ngrid, nbands)
         rtl_name = "qeic_real_sum_band_density_accumulator_rtl.sv"
         tb_name = "tb_qeic_real_sum_band_density_accumulator_rtl.sv"
+    elif "axpy" in architecture_id:
+        samples = int(spec.get("golden_vector_length") or 64)
+        rtl_source = _axpy_vcs_rtl_source()
+        tb_source = _axpy_vcs_tb_source(samples)
+        rtl_name = "qeic_real_tiled_complex_axpy_rtl.sv"
+        tb_name = "tb_qeic_real_tiled_complex_axpy_rtl.sv"
     else:
         raise ValueError(f"VCS RTL materialization does not support architecture {architecture_id}")
     rtl_sv = project_dir / rtl_name
