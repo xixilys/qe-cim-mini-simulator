@@ -94,6 +94,7 @@
     }
   ],
   "claim_boundary": "Non-stub HLS kernels with real Vivado-HLS attempts; final hardware superiority still requires full QE integration and board/implementation closure.",
+  "claim_closure_path": "artifacts/qe_ic_real_hybrid_hls/real_hybrid_claim_closure.json",
   "classification": {
     "architecture_comparisons": [
       {

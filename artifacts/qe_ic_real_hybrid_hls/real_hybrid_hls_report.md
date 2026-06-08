@@ -6,6 +6,7 @@
 - Best architecture: `hybrid_hpsi_local_potential_v1`
 - Best optimistic trace-replay speedup vs GPU: `1.18627x`
 - Resource-infeasible architectures filtered: `hybrid_fft_twiddle_stream_v1`
+- Claim closure audit: `artifacts/qe_ic_real_hybrid_hls/real_hybrid_claim_closure.json`
 
 ## Direct answer
 

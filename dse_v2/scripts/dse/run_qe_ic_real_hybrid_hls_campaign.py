@@ -22,6 +22,7 @@ from dse_v2.experiments.qe_ic_real_opportunity.real_hybrid_hls_evidence import (
     DEFAULT_FPGA_PART,
     build_real_hybrid_architecture_specs,
     build_evidence_row_static_metadata,
+    build_real_hybrid_claim_closure,
     build_trace_replay_workflow_accounting,
     classify_real_hybrid_vs_gpu,
     materialize_hls_project,
@@ -216,6 +217,8 @@ def run_campaign(args: argparse.Namespace) -> dict[str, Any]:
             _write_json(row_path, row)
             row["evidence_json_hash"] = _sha256_file(row_path)
     classification = classify_real_hybrid_vs_gpu(baseline, rows)
+    claim_closure = build_real_hybrid_claim_closure(baseline, rows, classification)
+    claim_closure_path = out_dir / "real_hybrid_claim_closure.json"
     summary = {
         "schema_version": SCHEMA_VERSION,
         "run_timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
@@ -223,8 +226,10 @@ def run_campaign(args: argparse.Namespace) -> dict[str, Any]:
         "architecture_specs": specs,
         "evidence_rows": rows,
         "classification": classification,
+        "claim_closure_path": str(claim_closure_path),
         "claim_boundary": "Non-stub HLS kernels with real Vivado-HLS attempts; final hardware superiority still requires full QE integration and board/implementation closure.",
     }
+    _write_json(claim_closure_path, claim_closure)
     _write_json(out_dir / "real_hybrid_hls_summary.json", summary)
     (out_dir / "real_hybrid_hls_report.md").write_text(render_real_hybrid_hls_report(summary), encoding="utf-8")
     return summary

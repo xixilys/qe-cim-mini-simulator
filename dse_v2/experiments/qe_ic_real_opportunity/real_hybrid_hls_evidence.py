@@ -1596,6 +1596,8 @@ def render_real_hybrid_hls_report(summary: Mapping[str, Any]) -> str:
             + ", ".join(str(item) for item in _as_list(classification.get("resource_infeasible_architecture_ids")))
             + "`"
         )
+    if summary.get("claim_closure_path"):
+        lines.append(f"- Claim closure audit: `{summary.get('claim_closure_path')}`")
     lines.append("")
     lines.append("## Direct answer")
     lines.append("")
@@ -1851,6 +1853,131 @@ def _row_resource_feasible(row: Mapping[str, Any]) -> bool:
     return "hls_resource_infeasible" not in blockers
 
 
+def _gate(gate_id: str, status: str, evidence: Mapping[str, Any], required_for: str) -> dict[str, Any]:
+    return {
+        "gate_id": gate_id,
+        "status": status,
+        "evidence": dict(evidence),
+        "required_for": required_for,
+    }
+
+
+def build_real_hybrid_claim_closure(
+    gpu_baseline: Mapping[str, Any],
+    evidence_rows: Sequence[Mapping[str, Any]],
+    classification: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Build an auditable hard-gate closure record for GPU-vs-hybrid claims."""
+
+    baseline_records = [row for row in _as_list(gpu_baseline.get("baseline_records")) if isinstance(row, Mapping)]
+    architecture_ids = sorted({str(row.get("architecture_id")) for row in evidence_rows if row.get("architecture_id")})
+    real_kernel_architectures = sorted(
+        {str(row.get("architecture_id")) for row in evidence_rows if row.get("implementation_maturity") == "real_hls_kernel" and row.get("architecture_id")}
+    )
+    resource_feasible_architectures = sorted(
+        {str(row.get("architecture_id")) for row in evidence_rows if row.get("architecture_id") and _row_resource_feasible(row)}
+    )
+    vcs_passed_architectures = sorted({str(row.get("architecture_id")) for row in evidence_rows if row.get("architecture_id") and row.get("vcs_passed") is True})
+    cosim_passed_architectures = sorted({str(row.get("architecture_id")) for row in evidence_rows if row.get("architecture_id") and row.get("cosim_passed") is True})
+    workflow_accounted_architectures = sorted(
+        {str(row.get("architecture_id")) for row in evidence_rows if row.get("architecture_id") and _workflow_accounting_is_claimable(row)}
+    )
+    full_qe_kernel_architectures = sorted(
+        {
+            str(row.get("architecture_id"))
+            for row in evidence_rows
+            if row.get("architecture_id")
+            and any(accounting.get("implementation_coverage") == "full_qe_kernel_equivalent" for accounting in _workflow_accounting_items(row))
+        }
+    )
+    board_measured_architectures = sorted(
+        {
+            str(row.get("architecture_id"))
+            for row in evidence_rows
+            if row.get("architecture_id")
+            and any(
+                str(accounting.get("status") or "") in {"measured", "board_measured", "full_scf_board_measured"}
+                for accounting in _workflow_accounting_items(row)
+            )
+        }
+    )
+
+    gates = [
+        _gate(
+            "measured_gpu_baseline",
+            "satisfied" if gpu_baseline.get("measurements_are_real") is True and baseline_records else "missing",
+            {"measurements_are_real": gpu_baseline.get("measurements_are_real"), "baseline_record_count": len(baseline_records)},
+            "preliminary_and_final_gpu_comparison",
+        ),
+        _gate(
+            "multiple_real_architectures",
+            "satisfied" if len(real_kernel_architectures) >= 2 else "missing",
+            {"architecture_count": len(architecture_ids), "real_kernel_architecture_count": len(real_kernel_architectures), "architecture_ids": real_kernel_architectures},
+            "preliminary_multi_architecture_screening",
+        ),
+        _gate(
+            "resource_feasible_hls",
+            "satisfied" if len(resource_feasible_architectures) >= 2 else "missing",
+            {"resource_feasible_architecture_count": len(resource_feasible_architectures), "architecture_ids": resource_feasible_architectures},
+            "preliminary_fpga_feasibility",
+        ),
+        _gate(
+            "golden_csim",
+            "satisfied" if evidence_rows and all(row.get("csim_passed") is True for row in evidence_rows) else "missing",
+            {"csim_passed_count": sum(1 for row in evidence_rows if row.get("csim_passed") is True), "row_count": len(evidence_rows)},
+            "correctness_before_performance",
+        ),
+        _gate(
+            "vcs_or_cosim_performance",
+            "satisfied" if vcs_passed_architectures or cosim_passed_architectures else "missing",
+            {
+                "vcs_passed_architecture_count": len(vcs_passed_architectures),
+                "vcs_passed_architecture_ids": vcs_passed_architectures,
+                "cosim_passed_architecture_count": len(cosim_passed_architectures),
+                "cosim_passed_architecture_ids": cosim_passed_architectures,
+            },
+            "non_stub_latency_evidence",
+        ),
+        _gate(
+            "full_scf_workflow_accounting",
+            "satisfied" if workflow_accounted_architectures else "missing",
+            {"workflow_accounted_architecture_count": len(workflow_accounted_architectures), "architecture_ids": workflow_accounted_architectures},
+            "preliminary_full_workflow_comparison",
+        ),
+        _gate(
+            "full_qe_kernel_integration",
+            "satisfied" if full_qe_kernel_architectures else "missing",
+            {"full_qe_kernel_architecture_count": len(full_qe_kernel_architectures), "architecture_ids": full_qe_kernel_architectures},
+            "strong_hybrid_superiority_claim",
+        ),
+        _gate(
+            "physical_fpga_board_measurement",
+            "satisfied" if board_measured_architectures else "missing",
+            {"board_measured_architecture_count": len(board_measured_architectures), "architecture_ids": board_measured_architectures},
+            "final_hardware_superiority_claim",
+        ),
+    ]
+    missing_gate_ids = [gate["gate_id"] for gate in gates if gate["status"] != "satisfied"]
+    final_claim_allowed = bool(classification.get("final_claim_allowed")) and not missing_gate_ids
+    label = str(classification.get("preliminary_label") or "insufficient_evidence")
+    if final_claim_allowed and label == "fpga_hybrid_stronger":
+        verdict = "superior_final_claim_allowed"
+    elif label == "insufficient_evidence":
+        verdict = "insufficient_evidence"
+    else:
+        verdict = "not_superior_current_evidence"
+    return {
+        "schema_version": "dse.qe_ic.real_hybrid_claim_closure.v1",
+        "preliminary_label": label,
+        "claim_verdict": verdict,
+        "final_claim_allowed": final_claim_allowed,
+        "gates": gates,
+        "missing_gate_ids": missing_gate_ids,
+        "blockers": sorted(set(str(item) for item in _as_list(classification.get("blockers")))),
+        "claim_boundary": classification.get("claim_boundary"),
+    }
+
+
 def classify_real_hybrid_vs_gpu(gpu_baseline: Mapping[str, Any], evidence_rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
     """Classify real hybrid evidence against GPU baseline with hard gates.
 
@@ -1977,6 +2104,7 @@ def classify_real_hybrid_vs_gpu(gpu_baseline: Mapping[str, Any], evidence_rows: 
 __all__ = [
     "build_real_hybrid_architecture_specs",
     "build_evidence_row_static_metadata",
+    "build_real_hybrid_claim_closure",
     "build_trace_replay_workflow_accounting",
     "classify_real_hybrid_vs_gpu",
     "materialize_hls_project",

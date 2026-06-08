@@ -8,6 +8,7 @@ from pathlib import Path
 from dse_v2.experiments.qe_ic_real_opportunity.real_hybrid_hls_evidence import (
     build_real_hybrid_architecture_specs,
     build_evidence_row_static_metadata,
+    build_real_hybrid_claim_closure,
     build_trace_replay_workflow_accounting,
     classify_real_hybrid_vs_gpu,
     materialize_hls_project,
@@ -948,3 +949,66 @@ def test_classify_real_hybrid_requires_multiple_architectures_and_not_synthesis_
     assert "at_least_two_architecture_families_required" in result["blockers"]
     assert "cosim_or_vcs_required_for_strong_conclusion" in result["blockers"]
     assert result["final_claim_allowed"] is False
+
+
+def test_build_real_hybrid_claim_closure_records_hard_gate_statuses():
+    gpu_baseline = {
+        "measurements_are_real": True,
+        "baseline_records": [{"case_id": "case-a", "runtime_seconds_mean": 1.0}],
+    }
+    rows = []
+    for arch, coverage, vcs_latency in (
+        ("hybrid_tiled_complex_axpy_v1", "partial_sidecar_motif", 64),
+        ("hybrid_sum_band_density_accumulator_v1", "qe_routine_equivalent_miniapp", 128),
+        ("hybrid_hpsi_local_potential_v1", "qe_routine_equivalent_miniapp", 96),
+    ):
+        rows.append(
+            {
+                "architecture_id": arch,
+                "implementation_maturity": "real_hls_kernel",
+                "implementation_coverage": coverage,
+                "csim_passed": True,
+                "cosim_passed": True,
+                "vcs_passed": True,
+                "vcs_parsed": {"status": "parsed", "rtl_status": "Pass", "latency_cycles": vcs_latency, "samples": vcs_latency, "blockers": []},
+                "csynth_parsed": {
+                    "status": "parsed",
+                    "latency_cycles_max": 70,
+                    "estimated_clock_ns": 7.0,
+                    "resource": {"bram_18k": 1, "dsp48e": 1, "ff": 1, "lut": 1, "uram": 0},
+                    "resource_available": {"bram_18k": 280, "dsp48e": 220, "ff": 106400, "lut": 53200, "uram": 0},
+                    "resource_feasible": True,
+                    "blockers": [],
+                },
+                "workflow_accounting": [
+                    {
+                        "status": "trace_replay_vcs_rtl_sensitivity",
+                        "case_id": "case-a",
+                        "latency_source": "vcs_rtl",
+                        "mapped_timer_names": ["sum_band"],
+                        "scf_control_seconds": 0.1,
+                        "cpu_retained_seconds": 0.8,
+                        "host_device_transfer_seconds": 0.00005,
+                        "synchronization_seconds": 0.00005,
+                        "launch_overhead_seconds": 0.00005,
+                        "hybrid_workflow_runtime_seconds": 0.8001,
+                        "implementation_coverage": coverage,
+                    }
+                ],
+            }
+        )
+    classification = classify_real_hybrid_vs_gpu(gpu_baseline, rows)
+
+    closure = build_real_hybrid_claim_closure(gpu_baseline, rows, classification)
+
+    gates = {gate["gate_id"]: gate for gate in closure["gates"]}
+    assert closure["preliminary_label"] == "fpga_hybrid_weaker"
+    assert closure["final_claim_allowed"] is False
+    assert gates["measured_gpu_baseline"]["status"] == "satisfied"
+    assert gates["multiple_real_architectures"]["status"] == "satisfied"
+    assert gates["vcs_or_cosim_performance"]["status"] == "satisfied"
+    assert gates["vcs_or_cosim_performance"]["evidence"]["vcs_passed_architecture_count"] == 3
+    assert gates["full_qe_kernel_integration"]["status"] == "missing"
+    assert gates["physical_fpga_board_measurement"]["status"] == "missing"
+    assert "full_qe_kernel_integration" in closure["missing_gate_ids"]
+    assert closure["claim_verdict"] == "not_superior_current_evidence"

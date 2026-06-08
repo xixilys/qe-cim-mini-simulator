@@ -19,6 +19,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from dse_v2.experiments.qe_ic_real_opportunity.real_hybrid_hls_evidence import (  # noqa: E402
+    build_real_hybrid_claim_closure,
     build_real_hybrid_architecture_specs,
     materialize_vcs_rtl_project,
     merge_vcs_rtl_evidence_into_summary,
@@ -52,6 +53,15 @@ def _load_summary(path: Path) -> dict[str, Any]:
     payload = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(payload, dict):
         raise ValueError(f"summary is not a JSON object: {path}")
+    return payload
+
+
+def _load_gpu_baseline(path: Path) -> dict[str, Any] | None:
+    if not path.exists():
+        return None
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError(f"GPU baseline is not a JSON object: {path}")
     return payload
 
 
@@ -188,6 +198,13 @@ def run_campaign(args: argparse.Namespace) -> dict[str, Any]:
             row["evidence_json_hash"] = _sha256_file(row_path)
         break
     _write_json(summary_path, merged)
+    baseline = _load_gpu_baseline(Path("artifacts/qe_ic_7day_prelim/qe_ic_7day_gpu_baseline.json"))
+    if baseline is not None and isinstance(merged.get("classification"), Mapping):
+        claim_closure_path = Path(str(merged.get("claim_closure_path") or out_dir / "real_hybrid_claim_closure.json"))
+        claim_closure = build_real_hybrid_claim_closure(baseline, [row for row in merged.get("evidence_rows", []) if isinstance(row, Mapping)], merged["classification"])
+        _write_json(claim_closure_path, claim_closure)
+        merged["claim_closure_path"] = str(claim_closure_path)
+        _write_json(summary_path, merged)
     (out_dir / "real_hybrid_hls_report.md").write_text(render_real_hybrid_hls_report(merged), encoding="utf-8")
     return {"status": "passed" if result.get("vcs_passed") else "failed", "summary": str(summary_path), "vcs_result": result}
 
